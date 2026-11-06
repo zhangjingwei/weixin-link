@@ -4,7 +4,6 @@
 !/README.md
 !/package.json
 !/package-lock.json
-!/codegraph.config.json
 !/install.sh
 
 !/wechat-setup
@@ -76,3 +75,7 @@
 !/tests/
 **/__pycache__/
 **/*.pyc
+
+# Local CodeGraph configuration and generated indexes.
+/codegraph.config.json
+**/.codegraph/
