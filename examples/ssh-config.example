@@ -1,5 +1,5 @@
 # Copy into your private SSH config and replace every placeholder.
-Host remote-linux backup-host monitor-host
+Host remote-linux backup-host
     HostName host.example.com
     User example
     IdentityFile ~/.ssh/wechat_ed25519
@@ -8,4 +8,3 @@ Host remote-linux backup-host monitor-host
     BatchMode yes
     StrictHostKeyChecking yes
     ConnectTimeout 8
-# For the monitor use a dedicated forced-command IdentityFile in its own Host block.

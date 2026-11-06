@@ -16,7 +16,7 @@
 - 后续三个系统统一使用 `node setup.mjs doctor`、`node account-manager.mjs list` 以及账号管理命令。后台服务在用户登录时启动；Mac/Windows 不保证用户注销后继续工作。
 - 独立账号首次启动时分别生成 launchd 任务/Windows 计划任务；配对有十分钟本地上限。账号归属和已有凭据隔离规则不变。控制端使用 Unix socket 或带私有令牌的 Windows 命名管道。
 - FFmpeg 按系统和架构选择。图片/PDF 使用现有原生依赖；Office 文本解析额外需要 Python 3（Mac/Linux 命令 `python3`，Windows 命令 `python`），缺少时保留原件并明确解析失败。
-- Podman 隔离容器、既有 systemd 新闻定时器、NAS 备份和树莓派监控仍是 Linux 专用功能，本轮不将其宣称为三平台已验收功能。新闻手动生成还依赖 Python、浏览器和中文字体，应另作专项验收。
+- Podman 隔离容器、既有 systemd 新闻定时器、NAS 备份仍是 Linux 专用功能，本轮不将其宣称为三平台已验收功能。新闻手动生成还依赖 Python、浏览器和中文字体，应另作专项验收。
 
 跨平台核心检查：`node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs`，含真实文件锁竞争、SQLite WAL、控制连接、图像和 FFmpeg 加载。`.github/workflows/platform.yml` 配置了三系统检查，但本地尚未运行 Mac/Windows CI。完整上线仍需在每个目标机上检查安装诊断、用户后台任务、独立扫码、文字/图片/文件收发、/stop 和服务停止。
 
@@ -403,24 +403,6 @@ ScheduledDelivery持久化实际发送包与分段/附件检查点，用于交�
 
 新闻长图默认以JPEG质量80（4:4:4、不缩尺寸）从固定HTML导出。长PNG/JPEG以原字节作为微信图片上传，发送层不再二次缩小或转码。80是编码质量参数，不承诺文件体积固定为80%。
 
-### lisa 节点探针
-
-统一入口是 `lisa-port-watch.timer` 和 `lisa-port-watch.service`。计时器每轮基础间隔 10 分钟，并随机延后 0–90 秒；旧的 `lisa-monitor.timer` 已停用并移除，避免两个 5 分钟任务重复探测同一节点。
-
-每轮先通过受限 SSH 密钥读取 Lisa 当前端口快照。远端不可达、服务未激活或远端事务未完成时，不继续探测国外目标，也不累计故障。随后用国内 HTTPS 建立基线；基线失败时同样不向 Lisa 发起代理探测。只有基线正常时，才通过真实 REALITY 通道随机访问 Cloudflare trace、Apple HTTPS 或 gstatic 204 中的一个目标。脚本不再先做裸 TCP 端口连接，常规一轮只产生一次远端快照，并为每个端口执行一次真实应用层验证。
-
-同一端口连续 3 轮完整 REALITY/HTTPS 验证失败才判定异常。远端服务 active、无 pending 事务且距上次切换超过 30 分钟时，才进入事务式换端口：stage 后使用两个不同的国外目标验证候选，全部通过才 commit；候选失败或结果不确定时 rollback，不盲目再次切换。探测基础设施错误、国内断网和远端 SSH 不可达只记录跳过原因，不累计为端口故障。
-
-故障/恢复/换端口通知复用已有 `/scheduled-text` 和持久化发送队列。发送前检查微信通道与机器人就绪状态；发送不确定时不重放。通知事件与恢复补报保存在账号私有 `lisa-monitor/state.json`，本机轮转日志为 `lisa-monitor/events.jsonl`，换端口冷却状态在 `lisa-port-watch/state.json`。专用 SSH 密钥 `~/.ssh/lisa_port_agent_ed25519` 在服务端以 `restrict,command=` 限定，只接受固定的快照、stage、commit 和 rollback 请求。
-
-`Persistent=true` 不适用于当前单调计时器；整机离线期间无法由树莓派自身告警，单纯远端服务正常也不能证明本机到节点的路径可达。当前仍需要周期性主动确认，尚未接入 OpenClash 的真实连接失败统计作为被动触发器；实际代理流量统计可作为下一阶段触发源，进一步降低空闲时的探测频率。
-
-### 本机供电与温度告警
-
-`system-health-monitor.timer` 每30秒运行 `system-monitor.mjs`，读取 vcgencmd 温度、当前/历史欠压标志，以及可用时的 PMIC EXT5V_V 输入电压。75℃连续两轮或80℃单轮发高温通知；70℃以下连续三轮恢复。固件bit0当前欠压立即通知，恢复三轮后通知恢复；bit16历史欠压每个boot只记录一次，不把历史黏滞标志误报为持续欠压。电压数值仅为瞬时采样，告警依据固件欠压检测，不采用CPU核心电压。读取失败退出报错，不能视为健康；极短欠压可能仅留下每boot历史标志，不能保证逐次捕获。
-
-状态和1MiB双份轮转日志在账号私有 `system-monitor/`。通知复用scheduled-text发送队列，微信不可达时pending保留；发送未知不重放，恢复可达后合并一份新摘要。阈值状态机测试通过，实际通道测试获接口接受；未通过真实过热/欠压损坏性演练。与lisa探针共用flock串行锁避免同时修改通知任务配置。停用：`systemctl --user disable --now system-health-monitor.timer`。整机断电或透明代理断网时不能保证即时微信通知，仍需要独立外部通道。
-
 ### 新闻正文结构整理
 
 `news-job.mjs` 在混合去重之后调用 `news-organize.mjs`，通过现有官方 Codex CLI、low 推理档位和 `news-organize.schema.json` 一批调用完成结构整理。仅把本批完整原句与标题放入内存传给模型，链接不进入模型输入，不保存正文中间JSON。模型只能选择固定小节标签、排序及分段，并返回文章和原句编号；正文由程序从原句重建，不接受模型改写。所有文章、所有原句必须恰好覆盖一次，正文数字、条件、期限、不确定性及来源冲突均随原句保留。重复表述由上游去重负责，结构整理不擅自删句。
@@ -597,7 +579,7 @@ Node 引导、系统依赖和微信首次扫码不可在尚未建立的微信通
 - `src/remote/`：远程停止协调；`agent-workspace/` 仍是独立部署的远程适配器。
 - `src/media/`：附件准备、文档、图片、音视频和输出交付。
 - `src/setup/`：安装向导、平台服务、诊断和后端选择。
-- `src/integrations/`：新闻、HA、备份和监控等可选集成。
+- `src/integrations/`：新闻、HA、备份等可选集成。
 - `src/tools/`：SDK 补丁、发布检查和维护工具。
 - `tests/`：按模块组织的测试；远程适配器测试仍与独立适配器一起保存。
 - `assets/news/`：新闻模板、结构化输出 schema 和渲染图片。
