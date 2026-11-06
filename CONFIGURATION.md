@@ -4,13 +4,13 @@
 
 ## 远程主机与项目
 
-复制 agent-workspace/remote-hosts.example.json 为工作目录的 remote-hosts.json，填写实际 SSH 别名、Codex 绝对路径与允许的项目根目录。缺省不注册任何主机；格式错误会明确拒绝加载。可用 WECHAT_REMOTE_HOSTS 指向外部 JSON。不要将凭据放入主机 JSON。
+启用远程连接时，在私有工作目录创建 remote-hosts.json：每个键是实际 SSH 别名，配置包含 platform、binary、root、transport，ssh-websocket 另需 port。填写真实系统类型、Codex 绝对路径和允许访问的项目根目录。缺省不注册任何主机；格式错误会明确拒绝加载。可用 WECHAT_REMOTE_HOSTS 指向外部 JSON。不要将凭据放入主机 JSON。
 
 项目定位由智能体底座自行管理。接入层不读取项目别名文件，也不向原始请求注入项目/主机候选。远程连接配置的主机注册和允许根目录属于执行边界，不用于推断用户要操作哪个项目。
 
 SSH 使用 WECHAT_SSH_CONFIG 指定的文件，默认 ~/.ssh/wechat_hosts_config。examples/ssh-config.example 展示严格密钥校验；需自行验证主机密钥，不自动接受未知密钥。
 
-源码内 agent-workspace/AGENTS.md 是通用模板；部署时复制到工作目录，再在该私有副本中填写助手名称、地点和个人要求。已有工作目录的 AGENTS.md 不覆盖。远程连接位于 src/remote/，共享协议位于 src/base/codex/，任务协调位于 src/core/remote-tasks/；不再复制实现到工作目录。新入口为 node src/remote/remote-codex.mjs，默认使用安装配置中的工作目录；WECHAT_REMOTE_WORKSPACE 可指定实际工作目录。旧工作目录如需保留 remote-*.mjs 调用方式，仅复制 agent-workspace/ 中的兼容入口与 remote-loader.mjs，并设置 WECHAT_BOT_ROOT 为机器人源码的绝对路径。
+安装器创建或复用实际工作目录；缺少 AGENTS.md 时生成简版规则，已有文件保持不变。用户可在该私有文件中补充工作要求，仓库不提供独立工作目录模板。远程连接位于 src/remote/，共享协议位于 src/base/codex/，任务协调位于 src/core/remote-tasks/。统一使用 node src/remote/remote-codex.mjs，默认读取安装配置中的工作目录；WECHAT_REMOTE_WORKSPACE 可指定实际工作目录。无需向工作目录复制执行脚本。
 
 ## 可选集成
 

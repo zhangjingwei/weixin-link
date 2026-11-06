@@ -8,11 +8,6 @@
 !/package.json
 !/package-lock.json
 !/codegraph.config.json
-!/agent-workspace/
-/agent-workspace/*
-!/agent-workspace/AGENTS.md
-!/agent-workspace/remote-hosts.example.json
-!/agent-workspace/REMOTE-HOSTS.md
 !/install.sh
 !/wechat-ping-bot.service
 !/wechat-ping-bot@.service

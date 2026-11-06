@@ -6,8 +6,8 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {execFileSync} from 'node:child_process'
 test('release refuses nested credentials, SSH keys and account state',()=>{
- for(const path of ['.ssh/config','examples/ha.json','agent-workspace/.private/hosts.json','accounts/bot2/account.json','x/credentials.json','x/id_ed25519','x/backup-public.pem','x/state.sqlite-wal','x/.env.production','x/remote-hosts.json'])assert.ok(checkReleaseFile(path,Buffer.from('{}')).length,path)
- for(const path of ['accounts.mjs','examples/ha.example.json','examples/ssh-config.example','agent-workspace/remote-hosts.example.json'])assert.deepEqual(checkReleaseFile(path,Buffer.from('{}')),[],path)
+ for(const path of ['.ssh/config','examples/ha.json','workspace/.private/hosts.json','accounts/bot2/account.json','x/credentials.json','x/id_ed25519','x/backup-public.pem','x/state.sqlite-wal','x/.env.production','x/remote-hosts.json'])assert.ok(checkReleaseFile(path,Buffer.from('{}')).length,path)
+ for(const path of ['accounts.mjs','examples/ha.example.json','examples/ssh-config.example','examples/backup.example.json'])assert.deepEqual(checkReleaseFile(path,Buffer.from('{}')),[],path)
 })
 test('force-added secrets are rejected without exposing their values',()=>{
  const samples=['-----BEGIN '+'OPENSSH PRIVATE KEY-----','sk-'+'A'.repeat(32),'eyJ'+'a'.repeat(24)+'.'+'b'.repeat(24)+'.'+'c'.repeat(24),'token: "'+'d'.repeat(40)+'"']

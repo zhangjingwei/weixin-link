@@ -24,7 +24,6 @@
 
 - `bot.mjs`：微信登录、授权账号检查、分段收发。
 - `codex-session.mjs`：官方 thread/turn 协议、恢复、去重、排队、中断、交互请求和错误反馈。
-- `agent-workspace/AGENTS.md`：通用行为与安全规则；个人主机配置不随代码发布。
 - `ha-read.mjs`：独立 HA 只读数据接口；由 Codex 调用，令牌不进入模型参数。
 - `wechat_hosts_config`：标准 SSH 别名与密钥校验配置。
 - `wechat-ping-bot.service`：用户级 systemd 服务。
@@ -323,7 +322,7 @@ refresh-qr ACCOUNT 会只重启指定账号的配对流程，等待新二维码�
 
 ## NAS 源码仓库与恢复布局
 
-Git 远端由部署者自行设置。顶层是机器人源码；`agent-workspace/`是当前独立工作目录中远程兼容入口、远程连接配置示例和AGENTS.md模板，运行目录仍为`~/work/wechat-assistant`，远程连接维护在 src/remote/，任务协调维护在 src/core/remote-tasks/。全新恢复时可将兼容入口和模板放回工作目录，并配置 WECHAT_BOT_ROOT；不要覆盖已有remote-sessions.json、私有目录或outputs。凭据、会话、SQLite数据库、聊天附件、日志、备份、依赖和CodeGraph索引不纳入Git。
+Git 远端由部署者自行设置。仓库保存通用源码和文档；实际工作目录由安装配置中的 workspace 决定，默认 ~/work/wechat-assistant。远程连接维护在 src/remote/，协议维护在 src/base/codex/，任务协调维护在 src/core/remote-tasks/。恢复时保留已有 AGENTS.md、remote-sessions.json、私有配置和 outputs。凭据、会话、SQLite 数据库、聊天附件、日志、备份、依赖和 CodeGraph 索引不纳入 Git。
 
 ## 微信文字排版
 
@@ -487,7 +486,7 @@ Node 引导、系统依赖和微信首次扫码不可在尚未建立的微信通
 - `src/tools/`：SDK 补丁、发布检查和维护工具。
 - `tests/`：按模块组织的测试；远程适配器测试位于 tests/remote/。
 
-根目录的 bot.mjs、setup.mjs、account-manager.mjs 等文件仅保留兼容命令入口；现有安装命令、systemd/launchd/Windows 服务路径和用户私有状态目录继续有效。不要仅复制根目录入口，部署和发布须包含 src/ 与 agent-workspace/。
+根目录的 bot.mjs、setup.mjs、account-manager.mjs 等文件仅保留兼容命令入口；现有安装命令、systemd/launchd/Windows 服务路径和用户私有状态目录继续有效。不要仅复制根目录入口，部署和发布须包含完整 src/ 和所需依赖。
 
 运行 `npm test` 执行测试（其中的 Office 文档解析测试需要 Python）。真实微信收发、登录和远程执行验收仍需独立授权的测试环境。
 
