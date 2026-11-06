@@ -8,7 +8,7 @@
 
 仓库已公开，Linux/macOS 使用 `bootstrap.sh`，Windows x64 使用 `bootstrap.ps1`。README 提供可匿名下载的一行安装命令；也可克隆 `main` 后运行 `./install.sh` 或 `.\install.ps1`。
 
-两个引导脚本默认下载 `main`，支持 `WEIXIN_LINK_DIR` 指定源码保存目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。目标目录已存在时拒绝覆盖，用于首次安装，不自动更新已有部署。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
+两个引导脚本默认下载 `main`，支持 `WEIXIN_LINK_DIR` 指定源码保存目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。目标目录已存在时先识别已有安装：未登录则刷新并显示二维码，已在线则提示已登录；不覆盖源码、不重装。无法识别的目录仍拒绝覆盖，不自动更新已有部署。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
 
 旧版 `ZERO_LINK_DIR`、`ZERO_LINK_REF` 仍兼容，新变量优先。改名不迁移现有工作区、账号数据或服务；旧源码目录若已存在，先核实原安装再更新。
 

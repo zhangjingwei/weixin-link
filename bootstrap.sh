@@ -11,15 +11,35 @@ for bootstrap_cmd in curl tar mktemp; do
 done
 bootstrap_ref="${WEIXIN_LINK_REF:-${ZERO_LINK_REF:-main}}"
 bootstrap_dest="${WEIXIN_LINK_DIR:-${ZERO_LINK_DIR:-$HOME/.local/share/weixin-link/source}}"
-# Existing installations stay in place; do not silently create a parallel source tree.
+# Reuse a legacy source directory rather than creating a parallel installation.
 if [[ -z "${WEIXIN_LINK_DIR:-}" && -z "${ZERO_LINK_DIR:-}" && ( -e "$HOME/.local/share/zero-link/source" || -L "$HOME/.local/share/zero-link/source" ) ]]; then
-  echo 'An earlier installation exists at ~/.local/share/zero-link/source; inspect it before installing again.' >&2
-  exit 1
+  if [[ -e "$bootstrap_dest" || -L "$bootstrap_dest" ]]; then
+    echo 'Multiple source directories exist; select one with WEIXIN_LINK_DIR.' >&2; exit 1
+  fi
+  bootstrap_dest="$HOME/.local/share/zero-link/source"
 fi
 if [[ -e "$bootstrap_dest" || -L "$bootstrap_dest" ]]; then
-  echo "Installation directory already exists: $bootstrap_dest" >&2
-  echo 'To reinstall, inspect the existing installation or choose another WEIXIN_LINK_DIR.' >&2
-  exit 1
+  if [[ -L "$bootstrap_dest" || ! -d "$bootstrap_dest" || ! -f "$bootstrap_dest/package.json" || ! -f "$bootstrap_dest/src/wechat/account-manager.mjs" || ! -f "$bootstrap_dest/src/setup/setup.mjs" ]]; then
+    echo "Installation directory already exists but is not a supported installation: $bootstrap_dest" >&2; exit 1
+  fi
+  bootstrap_node="$HOME/.local/share/wechat-ping-bot/tools/node/bin/node"
+  if [[ ! -x "$bootstrap_node" ]]; then bootstrap_node=$(command -v node || true); fi
+  if [[ -z "$bootstrap_node" ]] || ! "$bootstrap_node" -e 'process.exit(Number(process.versions.node.split(".")[0])>=24?0:1)'; then
+    echo 'Existing installation needs Node.js 24+ before pairing can resume.' >&2; exit 1
+  fi
+  "$bootstrap_node" -e 'const p=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8"));if(!["weixin-link","wechat-ping-bot"].includes(p.name))process.exit(1)' "$bootstrap_dest/package.json" || { echo 'Unrecognized existing source directory.' >&2; exit 1; }
+  bootstrap_accounts=$("$bootstrap_node" "$bootstrap_dest/src/wechat/account-manager.mjs" list)
+  bootstrap_status=$("$bootstrap_node" -e 'const d=JSON.parse(process.argv[1]);const a=d.accounts?.find(a=>a.account==="default");if(!a)throw Error("DEFAULT_ACCOUNT_NOT_FOUND");console.log(a.ready?"online":a.service_active?"running":"offline")' "$bootstrap_accounts")
+  if [[ "$bootstrap_status" = online ]]; then
+    echo 'Already logged in. Send 安装状态 in WeChat to continue.'; exit 0
+  fi
+  if [[ "$bootstrap_status" = running ]]; then
+    echo 'The account service is running but not ready; inspect its status before re-pairing.' >&2; exit 1
+  fi
+  echo 'Existing installation found; refreshing the login QR code without reinstalling.'
+  "$bootstrap_node" "$bootstrap_dest/src/wechat/account-manager.mjs" refresh-qr default
+  "$bootstrap_node" "$bootstrap_dest/src/setup/setup.mjs" qr default
+  exit 0
 fi
 mkdir -p "$(dirname -- "$bootstrap_dest")"
 bootstrap_tmp=$(mktemp -d "$(dirname -- "$bootstrap_dest")/.weixin-link-download.XXXXXX")

@@ -77,7 +77,7 @@ The repository is public. For a first installation, run the command for your pla
 
 The Windows bootstrap uses `ExecutionPolicy Bypass` only for the installer child process. It does not change the persistent user or system execution policy.
 
-Both scripts save source code to `~/.local/share/weixin-link/source` by default (the `.local\share\weixin-link\source` directory under your Windows user profile), then invoke `install.sh` or `install.ps1`. Set `WEIXIN_LINK_DIR` to choose a source directory or `WEIXIN_LINK_REF` to select a branch, tag, or commit. They refuse to overwrite an existing destination. These commands are for first installations, not for directly updating an existing deployment. Source code, the workspace, and account data are stored separately.
+Both scripts save source code to `~/.local/share/weixin-link/source` by default (the `.local\share\weixin-link\source` directory under your Windows user profile), then invoke `install.sh` or `install.ps1`. Set `WEIXIN_LINK_DIR` to choose a source directory or `WEIXIN_LINK_REF` to select a branch, tag, or commit. On repeat runs, a recognized existing installation resumes pairing: offline accounts get a fresh QR code, while online accounts are left running. Source files are not overwritten and installation is not repeated. Unrecognized existing destinations are refused. These commands do not update existing source code. Source code, the workspace, and account data are stored separately.
 
 Legacy `ZERO_LINK_DIR` and `ZERO_LINK_REF` remain supported; the new variables take precedence. Renaming does not move existing workspaces, account data, or services. Inspect an existing old source directory before updating.
 
@@ -105,7 +105,7 @@ Windows PowerShell:
 
 The installer prepares private directories, the workspace, dependencies, and a background service, then starts pairing and displays a QR code. Scan and confirm it in WeChat. The person who confirms becomes the account profile's initial authorized user.
 
-To display the QR code again on Linux or macOS, run `./wechat-setup qr` from the installation directory. With the default bootstrap layout, first change to `~/.local/share/weixin-link/source`; use your chosen directory for a custom installation. See [QR code maintenance](CONFIGURATION.md#二维码维护) for refreshing an expired code.
+If a QR code expires, rerun the one-line bootstrap command to refresh it. To display a currently valid QR code on Linux or macOS, run `./wechat-setup qr` from the installation directory. With the default bootstrap layout, first change to `~/.local/share/weixin-link/source`; use your chosen directory for a custom installation. See [QR code maintenance](CONFIGURATION.md#二维码维护) for refreshing an expired code.
 
 ### 3. Complete Codex setup in WeChat
 

@@ -50,6 +50,40 @@ test('new bootstrap variables take precedence while legacy variables remain usab
 })
 test('renamed default does not create a parallel source tree beside an old default installation',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t);await mkdir(join(f.root,'.local/share/zero-link/source'),{recursive:true})
- await assert.rejects(exec('bash',[bootstrap],{env:{...f.env,HOME:f.root,ZERO_LINK_DIR:'',WEIXIN_LINK_DIR:''}}),/earlier installation exists/)
+ await assert.rejects(exec('bash',[bootstrap],{env:{...f.env,HOME:f.root,ZERO_LINK_DIR:'',WEIXIN_LINK_DIR:''}}),/not a supported installation/)
  assert.equal((await readdir(join(f.root,'.local/share'))).includes('weixin-link'),false)
+})
+async function existingInstallation(f,{ready=false,running=false}={}){
+ await mkdir(join(f.dest,'src/wechat'),{recursive:true});await mkdir(join(f.dest,'src/setup'),{recursive:true})
+ await writeFile(join(f.dest,'package.json'),JSON.stringify({name:'weixin-link'}))
+ await writeFile(join(f.dest,'keep'),'original')
+ await writeFile(join(f.dest,'src/wechat/account-manager.mjs'),`import {writeFileSync} from 'node:fs';if(process.argv[2]==='list')console.log(JSON.stringify({accounts:[{account:'default',ready:${ready},service_active:${running}}]}));else if(process.argv[2]==='refresh-qr'){writeFileSync(new URL('../../refreshed',import.meta.url),'fresh');console.log('{}')}else process.exit(2)`)
+ await writeFile(join(f.dest,'src/setup/setup.mjs'),`import {writeFileSync} from 'node:fs';if(process.argv[2]!=='qr')process.exit(3);writeFileSync(new URL('../../displayed',import.meta.url),'qr');console.log('FRESH_QR_DISPLAYED')`)
+}
+test('repeating bootstrap refreshes an offline existing installation without downloading or reinstalling',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t);await existingInstallation(f)
+ const r=await exec('bash',[bootstrap],{env:{...f.env,FIXTURE_ARCHIVE:join(f.root,'must-not-download')}})
+ assert(r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(f.dest,'refreshed'),'utf8'),'fresh')
+ assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original');assert.equal((await readdir(f.dest)).includes('installed.txt'),false)
+})
+test('repeating bootstrap leaves an online account running and does not refresh its QR',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t);await existingInstallation(f,{ready:true,running:true})
+ const r=await exec('bash',[bootstrap],{env:f.env});assert(r.stdout.includes('Already logged in'))
+ assert.equal((await readdir(f.dest)).includes('refreshed'),false)
+})
+test('running but unready accounts are not forcibly re-paired',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t);await existingInstallation(f,{running:true})
+ await assert.rejects(exec('bash',[bootstrap],{env:f.env}),/service is running but not ready/)
+ assert.equal((await readdir(f.dest)).includes('refreshed'),false)
+})
+test('recognized legacy default sources resume pairing in place',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t);const dest=join(f.root,'.local/share/zero-link/source');await existingInstallation({...f,dest})
+ const r=await exec('bash',[bootstrap],{env:{...f.env,HOME:f.root,ZERO_LINK_DIR:'',WEIXIN_LINK_DIR:''}})
+ assert(r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(dest,'keep'),'utf8'),'original')
+ assert.equal((await readdir(join(f.root,'.local/share'))).includes('weixin-link'),false)
+})
+test('existing installations also resume through a relative custom directory',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t);await existingInstallation(f)
+ const r=await exec('bash',[bootstrap],{cwd:f.root,env:{...f.env,WEIXIN_LINK_DIR:'source with spaces'}})
+ assert(r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
 })
