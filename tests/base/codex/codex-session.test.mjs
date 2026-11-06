@@ -27,7 +27,6 @@ test('only session controls are intercepted; business requests go to Codex verba
   assert.equal(controlCommand('请连接 spark 然后进入项目'), null)
   assert.equal(controlCommand('搜索今天天气和新闻'), null)
   assert.equal(controlCommand('/codex spark'), null)
-  for(const input of ['/balance','/codex balance','/余额','API还剩多少钱','查询 DeepSeek 账户余额'])assert.equal(controlCommand(input).action,'balance')
   assert.equal(controlCommand('/balance extra'),null)
 })
 
@@ -206,14 +205,6 @@ test('state persistence failure does not suppress final delivery or leave the se
  assert.equal(session.finishing,false);assert.equal(session.busy,false);assert.ok(output[0].startsWith('任务结果'));assert.ok(output[0].includes('会话状态保存失败'));assert.ok(events.includes('state.save_failed'));assert.ok(!output[0].includes('private-path'))
 })
 
-test('balance command reads the configured DeepSeek balance without starting Codex',async()=>{
- const output=[]
- const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],balanceReader:async()=>({isAvailable:true,balances:[{currency:'CNY',totalBalance:'42.13',grantedBalance:'0.00',toppedUpBalance:'42.13'}]})})
- manager.save=async()=>{};manager.state.users.owner={}
- await manager.handle('owner','/balance',async text=>output.push(text))
- assert.equal(output.length,1);assert.ok(output[0].includes('状态：可用'));assert.ok(output[0].includes('剩余总额：¥42.13'));assert.ok(!manager.sessions.has('owner'))
-})
-
 test('status and models are explicit controls; commands with other arguments remain user text',()=>{
  for(const input of ['/status','/codex status'])assert.equal(controlCommand(input).action,'status')
  for(const input of ['/states','/state','/codex states'])assert.equal(controlCommand(input),null)
@@ -316,7 +307,7 @@ test('rejected new conversation does not cancel current work or pending attachme
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{}
  const token=manager.lifecycle.capture('owner');let cancelled=false;manager.lifecycle.onCancel(()=>{cancelled=true})
  manager.sessions.set('owner',{userId:'owner',busy:true,queue:['retained'],rpc:{closed:false}})
- const output=[];await manager.handle('owner','/new',async t=>output.push(t));assert.equal(token.current(),true);assert.equal(cancelled,false);assert.deepEqual(manager.sessions.get('owner').queue,['retained']);assert.ok(output[0].includes('/stop'))
+ const output=[];await manager.handle('owner','/new',async t=>output.push(t));assert.equal(token.current(),true);assert.equal(cancelled,false);assert.deepEqual(manager.sessions.get('owner').queue,['retained']);assert.ok(output[0].includes('停止'))
 })
 
 test('stop seals remote submissions, interrupts local turn, then confirms remote cleanup',async()=>{

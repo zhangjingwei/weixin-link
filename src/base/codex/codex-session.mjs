@@ -13,7 +13,6 @@ import {CancellationScopes,transition} from '../../core/lifecycle.mjs'
 import {codexInput} from './codex-input.mjs'
 import {errorFields} from '../../core/diagnostic-log.mjs'
 import {deliveryError,deliveryFailureState} from '../../core/delivery-error.mjs'
-import {fetchDeepSeekBalance,formatDeepSeekBalance} from '../../core/deepseek-balance.mjs'
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
@@ -26,12 +25,11 @@ export {controlCommand} from './control-command.mjs'
 export {codexProviderOptions} from './provider-options.mjs'
 
 export class SessionManager {
-  constructor({ stateDir, cwd, owners, backend = null, rpcFactory = options => new CodexRpc(options), remoteControl = remoteScope, completionMarkers = false, balanceReader = fetchDeepSeekBalance, providerEnv = process.env, log = () => {} }) {
+  constructor({ stateDir, cwd, owners, backend = null, rpcFactory = options => new CodexRpc(options), remoteControl = remoteScope, completionMarkers = false, providerEnv = process.env, log = () => {} }) {
     this.log = log
     this.backend=backend
     this.instructions=ASSISTANT_INSTRUCTIONS+(backend?.instructions?'\n'+backend.instructions:'')
     this.completionMarkers = completionMarkers
-    this.balanceReader = balanceReader
     this.remoteControl = remoteControl
     this.lifecycle = new CancellationScopes()
     this.stateDir = stateDir
@@ -220,13 +218,13 @@ export class SessionManager {
       lines.push(`${index+1}. ${id===session.threadId?'[当前] ':''}${title}（${id}）`)
     }
     this.state.users[userId].conversationChoices=ids;await this.save()
-    await reply('本账号下你的对话（树莓派·微信主助手）：\n'+lines.join('\n')+'\n发送 /resume 编号 继续；也可指定列表中的完整会话ID。')
+    await reply('本账号下你的对话（树莓派·微信主助手）：\n'+lines.join('\n')+'\n发送“切换 编号” 继续；也可指定列表中的完整会话ID。')
   }
   async resumeConversation(userId,selection,reply,token) {
     if(!selection){await this.listConversations(userId,reply);return}
     const saved=this.state.users[userId]??{},ids=this.conversationIds(userId)
     const id=/^[0-9]+$/.test(selection)?saved.conversationChoices?.[Number(selection)-1]:selection
-    if(!id||!ids.includes(id))throw Error('只能选择本账号下属于你的对话，请先用 /sessions 查看。')
+    if(!id||!ids.includes(id))throw Error('只能选择本账号下属于你的对话，请先用“列表” 查看。')
     const busy=()=>{const r=this.sessions.get(userId);return r&&(r.busy||r.finishing||r.connecting||r.selecting||r.exiting||r.queue?.length||r.state==='stopping')}
     if(busy()||(this.submissions?.pending?.()??[]).some(j=>j.owner===userId)||this.submissions?.uncertainCount?.(userId))throw Error('仍有执行、排队或未确认任务，请先处理完再切换对话。')
     const session=await this.connect(userId,reply)
@@ -237,7 +235,7 @@ export class SessionManager {
     try{
       const scope=createHash('sha256').update(session.threadId).digest('hex').slice(0,24)
       let remote={};try{remote=JSON.parse(await readFile(join(this.cwd,'remote-sessions.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}
-      if(Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed))throw Error('当前对话仍有未确认停止的远程任务，请先用 /stop 核实，再切换。')
+      if(Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed))throw Error('当前对话仍有未确认停止的远程任务，请先用 “停止” 核实，再切换。')
       const meta=(await session.rpc.request('thread/read',{threadId:id,includeTurns:false})).thread
       if(meta?.id!==id||meta.cwd&&meta.cwd!==this.cwd)throw Error('历史对话目录不匹配，未切换。')
       if(meta.status?.type==='active')throw Error('目标对话正在执行任务，未切换。')
@@ -554,7 +552,7 @@ export class SessionManager {
     try {
       if(command?.action==='steer'){await this.steer(userId,command.text,reply,token);return}
       if(command?.action==='memory'){
-        const session=await this.connect(userId,reply);if(command.op==='auto'){await session.rpc.request('thread/memoryMode/set',{threadId:session.threadId,mode:command.on?'enabled':'disabled'});await reply('Codex已确认当前会话原生记忆模式：'+(command.on?'开启':'关闭')+'。');}else if(command.op==='list'){const status=await session.rpc.request('memory/status',{});await reply('当前使用Codex原生记忆。\n已整合会话：'+(status.v2ConsolidatedThreads??'未知')+'；就绪：'+(status.v2Ready?'是':'否')+'。\n当前不使用微信逐条记忆库；/memory auto on 或 off 控制当前会话原生记忆。');}else await reply('当前使用Codex原生记忆，未执行微信逐条记忆的修改或清空。可用 /memory 查看状态。');return
+        const session=await this.connect(userId,reply);if(command.op==='auto'){await session.rpc.request('thread/memoryMode/set',{threadId:session.threadId,mode:command.on?'enabled':'disabled'});await reply('Codex已确认当前会话原生记忆模式：'+(command.on?'开启':'关闭')+'。');}else if(command.op==='list'){const status=await session.rpc.request('memory/status',{});await reply('当前使用Codex原生记忆。\n已整合会话：'+(status.v2ConsolidatedThreads??'未知')+'；就绪：'+(status.v2Ready?'是':'否')+'。\n当前不使用微信逐条记忆库；“开启记忆”或“关闭记忆” 控制当前会话原生记忆。');}else await reply('当前使用Codex原生记忆，未执行微信逐条记忆的修改或清空。可用“记忆” 查看状态。');return
       }
       if (['approval', 'answer'].includes(command?.action)) {
         const question = this.questions.get(command.code)
@@ -574,7 +572,6 @@ export class SessionManager {
         await reply('已将答复发送给 Codex。')
         return
       }
-      if(command?.action==='balance'){await reply(formatDeepSeekBalance(await this.balanceReader()));return}
       if(command?.action==='sessions'){await this.listConversations(userId,reply);return}
       if(command?.action==='resume'){await this.resumeConversation(userId,command.selection,reply,token);return}
       if(command?.action==='models'){
@@ -592,13 +589,13 @@ export class SessionManager {
         const lines=entries.map(m=>`${m.model}${session.model===m.model?' [当前]':''}${m.isDefault?' [默认]':''}\n输入：${Array.isArray(m.inputModalities)?m.inputModalities.join('、'):'未提供'}；推理档位：${(m.supportedReasoningEfforts??[]).map(e=>e.reasoningEffort).join('、')||'未提供'}`)
         await reply('Codex 返回的模型列表（只查询，不切换）：\n'+(lines.join('\n\n')||'当前未返回可显示的模型。'));return
       }
-      if (command?.action === 'help') {await reply('直接发送需求即可。发送“使用说明”查看完整说明，“安装向导”完成首次设置。\n常用：状态、停止、结果、恢复、退出、列表、新建 名称。\n归档保留历史；删除是不可还原的永久删除。');return}
+      if (command?.action === 'help') {await reply('直接发送需求即可。发送“使用说明”查看完整说明，“安装向导”完成首次设置。\n常用：状态、停止、结果、恢复、退出、模型、记忆、开启记忆、关闭记忆、列表、新建 名称。\n配置远程主机、家庭设备或备份：直接说明需求，由智能体通过配置命令检查和处理；需要模型可用。\n归档保留历史；删除是不可还原的永久删除。');return}
       const runtime = this.sessions.get(userId)
       if (command?.action === 'status') { try{const root=join((process.env.HOME||platformHome()),'.local/share/wechat-assistant-backups');let b;try{b=JSON.parse(await readFile(join(root,'last-failure.json'),'utf8'));await reply('备份：最近一次失败或因忙碌延后，请检查备份服务。')}catch{b=JSON.parse(await readFile(join(root,'latest.json'),'utf8'));await reply(b.status==='verified'?'备份：'+b.generation+'，NAS校验及隔离恢复通过。':'备份：最近一次未验证成功。')}}catch{} const recovery=recoveryText(this.state.users[userId]?.recovery);if(recovery)await reply(recovery);await reply(`会话：${this.state.users[userId]?.threadId ?? '尚未创建'}\n状态：${({connecting:'正在连接',idle:'空闲',running:'处理中',stopping:'正在停止',delivering:'正在发送最终回复',closed:'已断开'})[runtime?.state] ?? (runtime?.connecting?'正在连接':runtime?.busy?'处理中':runtime?.finishing?'正在发送最终回复':'空闲')}，排队 ${(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)} 条，待答复 ${[...this.questions.values()].filter(q => q.session.userId === userId).length} 条。\n未确认任务：${this.submissions?.uncertainCount?.(userId)??0} 条，需核对后再决定是否重试。\n运行环境：${this.backend?.kind==='podman'?'独立容器 '+this.backend.id:'宿主机'}。`); return }
       if(command?.action==='recover'){
         const n=this.submissions?.recheck?.(userId)??0
         if(n)this.wakeRecovery?.(userId)
-        await reply(n?`已安排核对 ${n} 条未确认任务，只查询原任务，不重新执行。稍后用 /status 查看。`:'没有可自动核对的未确认任务；缺少会话关联的记录不能安全重提。')
+        await reply(n?`已安排核对 ${n} 条未确认任务，只查询原任务，不重新执行。稍后用 “状态” 查看。`:'没有可自动核对的未确认任务；缺少会话关联的记录不能安全重提。')
         return
       }
       if (command?.action === 'result') {
@@ -616,7 +613,7 @@ export class SessionManager {
         const scopeId=runtime?.threadId??this.state.users[userId]?.threadId
         // Seal remote submission before local interruption, then stop owned daemon work.
         let remoteStop
-        const stopRemote=async()=>{if(!remoteStop)remoteStop=this.remoteControl(this.cwd,scopeId,'stop');const result=await remoteStop;if(result.tasks?.length)await reply(result.stop_confirmed?'本对话委托的远程任务及对应命令已确认停止。':'远程任务尚未全部确认停止，请保留会话并重试 /stop。');if(!result.stop_confirmed)throw Error('远程停止未确认');return result}
+        const stopRemote=async()=>{if(!remoteStop)remoteStop=this.remoteControl(this.cwd,scopeId,'stop');const result=await remoteStop;if(result.tasks?.length)await reply(result.stop_confirmed?'本对话委托的远程任务及对应命令已确认停止。':'远程任务尚未全部确认停止，请保留会话并重试 “停止”。');if(!result.stop_confirmed)throw Error('远程停止未确认');return result}
         if (!runtime || runtime.rpc.closed) { await stopRemote(); await reply('当前没有运行中的本地 Codex 任务。'); return }
         const queued=runtime.queue.length;runtime.queue=[]
         const stopTrace=runtime.traceId
@@ -647,7 +644,7 @@ export class SessionManager {
       if (['new', 'reset'].includes(command?.action)) {
         if(runtime?.selecting)throw new Error('正在切换对话，请稍后再试。')
         if(runtime?.finishing)throw new Error('上一轮最终回复仍在发送，请稍后再新建对话。')
-        if (runtime?.busy) throw new Error('当前仍有任务，请先发 /stop。')
+        if (runtime?.busy) throw new Error('当前仍有任务，请先发 “停止”。')
         this.lifecycle.cancel(userId)
         if(runtime)transition(runtime,'closed')
         runtime?.rpc.close()
@@ -665,7 +662,7 @@ export class SessionManager {
     } catch (error) {
       if(!command&&!token.current()){this.log('turn.cancelled',{userId,reason:'cancelled_generation'});return}
       this.log('session.handle_failed',{userId,...errorFields(error)})
-      await reply(`${command?.action==='balance'?'余额查询失败':'Codex'}：${error.message}`)
+      await reply(`Codex：${error.message}`)
     }
   }
   async ask(userId, text, reply = async () => {}, timeout = 180_000, token = this.lifecycle.capture(userId)) {

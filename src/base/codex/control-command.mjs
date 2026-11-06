@@ -3,7 +3,7 @@ import {memoryCommand} from './native-memory.mjs'
 export function controlCommand(text) {
   const steer=text.trim().match(/^补充(?:[\s：:]+([\s\S]*))?$/)
   if(steer)return {action:'steer',text:(steer[1]??'').trim()}
-  const chinese={停止:'stop',结果:'result',恢复:'recover',退出:'exit',余额:'balance',模型:'models',状态:'status',任务状态:'status',停止任务:'stop',查看结果:'result',重看结果:'result',恢复任务:'recover',核对任务:'recover',退出会话:'exit',帮助:'help'}
+  const chinese={停止:'stop',结果:'result',恢复:'recover',退出:'exit',模型:'models',状态:'status',任务状态:'status',停止任务:'stop',查看结果:'result',重看结果:'result',恢复任务:'recover',核对任务:'recover',退出会话:'exit',帮助:'help'}
   const alias=text.trim().replace(/^\//,'').replace(/[。！!]$/,'')
   if(alias==='记忆')return {action:'memory',op:'list'}
   if(chinese[alias])return {action:chinese[alias]}
@@ -12,9 +12,8 @@ export function controlCommand(text) {
   if(/^\/sessions$/i.test(text.trim()))return {action:'sessions'}
   const resume=text.trim().match(/^\/resume(?:\s+([A-Za-z0-9-]+))?$/i)
   if(resume)return {action:'resume',selection:resume[1]}
-  const command = text.trim().match(/^\/(?:codex\s+)?(status|stop|exit|reset|new|result|recover|help|models|balance)$/i)
+  const command = text.trim().match(/^\/(?:codex\s+)?(status|stop|exit|reset|new|result|recover|help|models)$/i)
   if (command) return {action:command[1].toLowerCase()}
-  if (/^\/(?:余额|api余额)$/i.test(text.trim()) || /^(?:查看|查询|检查)?\s*(?:当前)?\s*(?:API|DeepSeek)\s*(?:账户)?\s*(?:余额|还剩多少钱|剩余费用)[。！!，,]?$/i.test(text.trim())) return {action:'balance'}
   if (/^(?:停止|中断)(?:当前)?任务[。！!，,]?$/.test(text)) return { action: 'stop' }
   if (/^(?:退出|停止|关闭|结束)\s*codex[。！!，,]?$/i.test(text) || text === '退出当前对话') return { action: 'exit' }
   const decision = text.match(/^\/?(批准|拒绝)\s+([a-f\d]{6})$/i)

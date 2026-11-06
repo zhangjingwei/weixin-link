@@ -24,7 +24,7 @@ test('result reports current task, does not replay stale result or start inferen
  m.state.users.u.recovery={execution:'completed',delivery:'unknown'};await m.handle('u','/result',async t=>{out.push(t);return {status:'accepted'}});assert.equal(m.state.users.u.recovery.delivery,'accepted')
  assert.equal(await m.emit({userId:'u',reply:async()=>({status:'partial'})},'x'),false)
  assert.match(recoveryText({execution:'failed',delivery:'recovered'}),/执行失败/)
- assert.match(recoveryText({execution:'completed',delivery:'failed'}),/发送失败.*\/result/)
+ assert.match(recoveryText({execution:'completed',delivery:'failed'}),/发送失败.*结果/)
  assert.equal(controlCommand('/recover').action,'recover')
  }finally{await rm(dir,{recursive:true,force:true})}
 })

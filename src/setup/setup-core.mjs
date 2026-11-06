@@ -55,7 +55,7 @@ export async function doctor({home=(process.env.HOME||platformHome()),root=proje
  for(const command of (platform==='linux'?['npm','python3','flock']:['npm',platform==='win32'?'python':'python3'])){try{const c=command==='npm'?npmCommand(['--version'],{platform}):{binary:command,args:['--version']};await run(c.binary,c.args,{timeout:5000});add(command,true)}catch{add(command,false,'安装 '+command)}}
  try{const fs=await statfs(home);add('disk',fs.bavail*fs.bsize>=1024**3,'至少预留 1GiB 可用空间')}catch{add('disk',false,'无法检查可用空间')}
  const {installed,loggedIn}=await codexAvailability({home,run})
- add('codexInstalled',installed,'微信发送“安装Codex”或运行 src/setup/setup.mjs codex-install');add('codexLoggedIn',loggedIn,'微信发送“登录Codex”或运行 src/setup/setup.mjs codex-login')
+ add('codexInstalled',installed,'微信发送“安装智能体”或运行 src/setup/setup.mjs codex-install');add('codexLoggedIn',loggedIn,'微信发送“登录智能体”或运行 src/setup/setup.mjs codex-login')
  const {configStatus}=await import('./config-manager.mjs');const optionalConfigurations=await configStatus({home,workspace:p.workspace})
  return {checks,optionalConfigurations,channelPrerequisitesReady:checks.filter(c=>!['codexInstalled','codexLoggedIn','disk','python3','python','ffmpeg'].includes(c.name)).every(c=>c.ok),codexInstalled:installed,codexLoggedIn:loggedIn,ready:checks.every(c=>c.ok)}
 }

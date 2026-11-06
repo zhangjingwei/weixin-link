@@ -20,7 +20,7 @@ export class DurableIntake {
      await this.manager.ask(owner,input,reply,24*60*60*1000,token)
      if(token.current())this.jobs.mark(job.id,'done')
     }else await this.recover(job,reply,token)
-   }catch(error){if(this.closed)return;if(token.current()){this.jobs.mark(job.id,'uncertain');const record=this.manager.state.users[owner]??={};if(record.recovery?.execution==='running'||!record.recovery)record.recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:'unknown',delivery:'unknown'};await this.manager.save();await reply('该消息的执行或发送结果尚未确认，已保留记录；不会自动重复提交。可用 /status 或 /result 查询。')}}
+   }catch(error){if(this.closed)return;if(token.current()){this.jobs.mark(job.id,'uncertain');const record=this.manager.state.users[owner]??={};if(record.recovery?.execution==='running'||!record.recovery)record.recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:'unknown',delivery:'unknown'};await this.manager.save();await reply('该消息的执行或发送结果尚未确认，已保留记录；不会自动重复提交。可用 “状态” 或 /result 查询。')}}
   }
  }
  async recover(job,reply,token){
@@ -44,7 +44,7 @@ export class DurableIntake {
     if(waiting)record.waitingAttachment={task:session.localTask,request:session.requestText,threadId:session.threadId}
     else if(record.waitingAttachment?.task?.id===session.localTask.id)delete record.waitingAttachment
     // Delivery may have been accepted before a crash: preserve /result, never blindly resend.
-    if(this.manager.state.users[job.owner].lastTask?.id!==session.localTask.id)this.manager.state.users[job.owner].lastOutput=undefined;this.manager.state.users[job.owner].lastTask=session.localTask;this.manager.state.users[job.owner].recovery={task:session.localTask,execution:executionState(turn.status,waiting),delivery:'recovered'};this.manager.state.users[job.owner].lastReply=(turn.items??[]).filter(i=>i.type==='agentMessage'&&i.phase!=='commentary').map(i=>publicMemoryText(i.text)).join('\n\n');await this.manager.save();this.jobs.mark(job.id,'done');if(session.busy&&session.turnId===turn.id)transition(session,'idle');if(!session.busy&&!waiting)await reply(localCompletion('已恢复上一条消息的执行结果，可发 /result 查看。',session.localTask));return
+    if(this.manager.state.users[job.owner].lastTask?.id!==session.localTask.id)this.manager.state.users[job.owner].lastOutput=undefined;this.manager.state.users[job.owner].lastTask=session.localTask;this.manager.state.users[job.owner].recovery={task:session.localTask,execution:executionState(turn.status,waiting),delivery:'recovered'};this.manager.state.users[job.owner].lastReply=(turn.items??[]).filter(i=>i.type==='agentMessage'&&i.phase!=='commentary').map(i=>publicMemoryText(i.text)).join('\n\n');await this.manager.save();this.jobs.mark(job.id,'done');if(session.busy&&session.turnId===turn.id)transition(session,'idle');if(!session.busy&&!waiting)await reply(localCompletion('已恢复上一条消息的执行结果，可发 “结果” 查看。',session.localTask));return
    }
    const meta=await session.rpc.request('thread/read',{threadId:job.thread_id})
    if(meta.thread?.status?.type!=='active'){await this.recoverRemote(job,reply,token);return}
@@ -58,7 +58,7 @@ export class DurableIntake {
   if(!entries.length)throw Error('LOCAL_TURN_ABANDONED')
   for(;;){if(this.closed||!token.current())return;const results=[]
    for(const [id,t] of entries){if(!t.turn_id){const r=await controller.reconcile({task:id});if(!r.turn_id)throw Error('REMOTE_SUBMISSION_UNKNOWN')}results.push(await controller.status({task:id}))}
-   if(results.every(r=>['completed','failed','interrupted'].includes(r.turn_status))){this.manager.state.users[job.owner].lastTask=(job.context?.task??localTaskLabel(job.input,job.id));this.manager.state.users[job.owner].recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:results.some(r=>r.turn_status==='failed')?'failed':results.some(r=>r.turn_status==='interrupted')?'interrupted':'completed',delivery:'recovered'};this.manager.state.users[job.owner].lastReply=results.map(r=>r.host+'：'+r.turn_status+'\n'+r.answer.filter(a=>a.phase!=='commentary').map(a=>a.text).join('\n')).join('\n\n');this.manager.state.users[job.owner].lastOutput=undefined;await this.manager.save();this.jobs.mark(job.id,'done');await reply(localCompletion('远程任务状态已恢复并核对，结果已保存，可发 /result 查看。',(job.context?.task??localTaskLabel(job.input,job.id))));return}
+   if(results.every(r=>['completed','failed','interrupted'].includes(r.turn_status))){this.manager.state.users[job.owner].lastTask=(job.context?.task??localTaskLabel(job.input,job.id));this.manager.state.users[job.owner].recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:results.some(r=>r.turn_status==='failed')?'failed':results.some(r=>r.turn_status==='interrupted')?'interrupted':'completed',delivery:'recovered'};this.manager.state.users[job.owner].lastReply=results.map(r=>r.host+'：'+r.turn_status+'\n'+r.answer.filter(a=>a.phase!=='commentary').map(a=>a.text).join('\n')).join('\n\n');this.manager.state.users[job.owner].lastOutput=undefined;await this.manager.save();this.jobs.mark(job.id,'done');await reply(localCompletion('远程任务状态已恢复并核对，结果已保存，可发 “结果” 查看。',(job.context?.task??localTaskLabel(job.input,job.id))));return}
    await delay(2000,undefined,{signal:token.signal}).catch(()=>{})
   }
  }
