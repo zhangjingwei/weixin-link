@@ -1,7 +1,7 @@
 import {OutputStore} from '../media/outbound-media.mjs'
 import {diagnosticCommand,handleDiagnostic} from '../core/diagnostics/diagnostic-commands.mjs'
 import {randomUUID} from 'node:crypto'
-import {welcomeGuideOnce} from './welcome-guide.mjs'
+import {welcomeGuideOnce,isWelcomeGreeting} from './welcome-guide.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
 import {conversationCommand} from '../core/text-conversations.mjs'
 import {controlCommand} from '../base/codex/control-command.mjs'
@@ -20,13 +20,16 @@ return async function handleMessage(message) {
   const trace_id=randomUUID()
   log('message.received',{trace_id,userId:message.userId,messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text',chars:message.text?.length??0})
   if (!manager.owners.has(message.userId)) {log('message.rejected',{trace_id,reason:'unauthorized'});return}
-  if(welcomePending)await welcomeGuideOnce(stateDir,conversations.recipient(message.userId),value=>outgoing.deliver(message.userId,value,{conversationControl:true}))
   const diagnosticAction=!hasMedia(message)&&diagnosticCommand(message.text)
   const initialControl=!hasMedia(message)&&(diagnosticAction||message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
   if(runtime.sealed)return
   if(runtime.draining&&!(typeof initialControl==='string'&&/^wizardChoice:\d+:3$/.test(initialControl))&&!['stop','exit','status','result','help'].includes(initialControl?.action)){
     jobs.acknowledge([message._ingressId].filter(Boolean))
     await runtime.track('delivery',()=>bot.reply({...message,userId:conversations.recipient(message.userId)},'服务正在维护重启，请稍后重新发送。'));return
+  }
+  if(welcomePending&&!initialControl&&!hasMedia(message)&&isWelcomeGreeting(message.text)){
+   const welcomed=await welcomeGuideOnce(stateDir,conversations.recipient(message.userId),value=>outgoing.deliver(message.userId,value,{conversationControl:true}))
+   if(welcomed){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
   const setupAction=!hasMedia(message)&&message._setupAction;if(setupAction){const receipt=message._setupReceiptId?{id:message._setupReceiptId}:setupReceipts.capture(message);if(!receipt||!setupReceipts.claim(receipt.id)){if(message._recovered){await outgoing.deliver(message.userId,'上次安装操作的结果需要核对，未重复执行。发送“安装向导”重新检测并继续。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean))}return;}const setupToken=manager.lifecycle.capture(message.userId);const setupReply=(value,options={})=>{if(!setupToken.current())throw Error('SETUP_CANCELLED');return options.sensitive?runtime.track('delivery',()=>bot.sendSensitiveText(conversations.recipient(message.userId),value)):outgoing.deliver(message.userId,value,{current:()=>setupToken.current(),conversationControl:true})};await runtime.track('setup',()=>setupController.handle(setupAction,setupReply,{signal:setupToken.signal,scope:message._conversationOwner??message.userId,executionKey:message.userId}));setupReceipts.finish(receipt.id);jobs.acknowledge([message._ingressId].filter(Boolean));return}
   if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>outgoing.deliver(message.userId,diagnosticAction==='export'?await new OutputStore({stateDir,cwd:process.cwd()}).package(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
