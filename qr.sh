@@ -29,7 +29,39 @@ const {resolve} = require('node:path')
 const {existsSync,readFileSync} = require('node:fs')
 const root = resolve(process.argv[2]), account = process.argv[3], relogin = process.argv[4] === '1'
 const manager = resolve(root, 'src/wechat/account-manager.mjs')
+// Expand the existing SDK half-block rendering, so old installations need no upgrade.
+// Track ANSI colors: a white border glyph is not a black data module.
+function fullBlockQr(compact) {
+  const pixels=[]
+  for(const line of compact.split('\n')){
+    let foreground=0,background=1
+    const top=[],bottom=[]
+    for(const token of line.matchAll(/\x1b\[([0-9;]*)m|([^\x1b])/gu)){
+      if(token[1]!==undefined){
+        for(const code of (token[1]||'0').split(';').map(Number)){
+          if(code===0){foreground=0;background=1}
+          else if(code===30)foreground=0
+          else if(code===37)foreground=1
+          else if(code===40)background=0
+          else if(code===47)background=1
+          else throw Error('QR_TERMINAL_FORMAT_UNSUPPORTED')
+        }
+        continue
+      }
+      const character=token[2]
+      if(![' ','█','▀','▄'].includes(character))throw Error('QR_TERMINAL_FORMAT_UNSUPPORTED')
+      top.push(character==='█'||character==='▀'?foreground:background)
+      bottom.push(character==='█'||character==='▄'?foreground:background)
+    }
+    if(top.length)pixels.push(top,bottom)
+  }
+  if(!pixels.length||pixels.some(row=>row.length!==pixels[0].length))throw Error('QR_TERMINAL_FORMAT_UNSUPPORTED')
+  const width=pixels[0].length+6,white=()=>Array(width).fill(1)
+  const rows=[white(),white(),white(),...pixels.map(row=>[1,1,1,...row,1,1,1]),white(),white(),white()]
+  return rows.map(row=>row.map(pixel=>'\x1b[48;2;'+(pixel?'255;255;255':'0;0;0')+'m  ').join('')+'\x1b[0m').join('\n')+'\n'
+}
 try {
+  if (!['compact','full'].includes(process.env.WEIXIN_LINK_QR_STYLE||'compact')) throw Error('INVALID_QR_STYLE')
   if (!/^[a-z][a-z0-9-]{0,31}$/.test(account)) throw Error('INVALID_ACCOUNT_ID')
   const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
   if (!['weixin-link','wechat-ping-bot'].includes(pkg.name) || !existsSync(manager)) throw Error('INSTALLATION_NOT_FOUND')
@@ -88,13 +120,15 @@ try {
         const state=JSON.parse(readFileSync(resolve(stateDir,'pairing.json'),'utf8'))
         if(state.status!=='waiting_scan'||!Number.isFinite(state.valid_until)||Date.now()>=state.valid_until||
           !/^[a-f0-9-]{36}$/.test(state.qr_version)||!result.path.endsWith('-'+state.qr_version+'.png')) break
-        const terminal=readFileSync(resolve(stateDir,'login-'+state.qr_version+'.terminal'),'utf8')
+        let terminal=readFileSync(resolve(stateDir,'login-'+state.qr_version+'.terminal'),'utf8')
+        if(process.env.WEIXIN_LINK_QR_STYLE==='full')terminal=fullBlockQr(terminal)
         const lines=terminal.replace(/\x1b\[[0-9;]*m/g,'').split('\n')
         const width=Math.max(...lines.map(line=>Array.from(line).length))
         if(width>=(process.stdout.columns||80)){
-          console.log('终端宽度不足，请放大窗口后重试，或打开下方 PNG 文件。')
+          console.log('终端宽度不足：至少需要 '+(width+1)+' 列，请放大窗口或缩小字号后重试。')
           break
         }
+        if(process.env.WEIXIN_LINK_QR_STYLE==='full')console.log('完整色块模式：如二维码超出屏幕，请缩小字号以显示全图。')
         console.log('请直接用微信扫描下方二维码：')
         process.stdout.write(terminal+'\n')
         displayed=true
@@ -112,6 +146,7 @@ try {
   if (Number(code) === 113) code = 'MACOS_SERVICE_NOT_FOUND'
   if (!/^[A-Z0-9_]+$/.test(code)) code = 'QR_REFRESH_FAILED'
   const messages={
+    INVALID_QR_STYLE:'二维码样式仅支持 compact 或 full。',
     ACCOUNT_STOP_UNCONFIRMED:'未能确认服务安全停止，没有生成新二维码。请先检查服务状态。',
     ACCOUNT_NOT_FOUND:'未找到该账号，请先创建账号档案。',
     ACCOUNT_RUNNING_NOT_READY:'账号服务正在运行但尚未就绪，未重新配对。请先检查服务状态。',

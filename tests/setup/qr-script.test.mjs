@@ -1,4 +1,5 @@
 import test from 'node:test'
+import QRCode from 'qrcode'
 import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,readFile,readdir,rm} from 'node:fs/promises'
 import {join} from 'node:path'
@@ -22,7 +23,7 @@ async function fixture(t,{ready=false,running=false,account='default',legacy=fal
   console.log(JSON.stringify({ok:true,status:'scan_to_login',path}));
  }else process.exit(2);
  `)
- return {home,root,env:{...process.env,HOME:home,WEIXIN_LINK_DIR:'',ZERO_LINK_DIR:'',WEIXIN_LINK_ACCOUNT:'',WEIXIN_LINK_RELOGIN:'',SSH_CONNECTION:'fixture'}}
+ return {home,root,env:{...process.env,HOME:home,WEIXIN_LINK_DIR:'',ZERO_LINK_DIR:'',WEIXIN_LINK_ACCOUNT:'',WEIXIN_LINK_RELOGIN:'',WEIXIN_LINK_QR_STYLE:'',SSH_CONNECTION:'fixture'}}
 }
 test('QR script refreshes a legacy JSON-only installation without leaking JSON',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t,{legacy:true})
@@ -95,4 +96,25 @@ test('expired and mismatched terminal QR codes are never printed',{skip:process.
 test('narrow terminals explain how to avoid wrapping the QR code',{skip:process.platform==='win32'},async t=>{
  const f=await terminalFixture(t,{columns:10}),r=await exec('sh',[script],{env:f.env})
  assert(!r.stdout.includes('QR-FIXTURE'));assert(r.stdout.includes('终端宽度不足'))
+})
+
+test('full mode preserves every QR module and draws spaces with solid backgrounds',{skip:process.platform==='win32'},async t=>{
+ const f=await terminalFixture(t,{columns:200}),url='https://example.test/pair?fixture=qr-rendering'
+ const code=QRCode.create(url),size=code.modules.size
+ const terminal=await QRCode.toString(url,{type:'terminal',small:true})
+ await writeFile(join(f.home,'.local/share/wechat-ping-bot/login-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.terminal'),terminal)
+ const {stdout}=await exec('sh',[script],{env:{...f.env,WEIXIN_LINK_QR_STYLE:'full'}})
+ assert(stdout.includes('完整色块模式'));assert(!/[▀▄█]/u.test(stdout))
+ const rows=stdout.split('\n').filter(line=>line.includes('\x1b[48;2;')).map(line=>[...line.matchAll(/\x1b\[48;2;(255;255;255|0;0;0)m  /g)].map(match=>match[1]==='0;0;0'))
+ assert.equal(rows[0].length,size+8);assert(rows.length>=size+8)
+ for(let y=0;y<rows.length;y++)for(let x=0;x<rows[y].length;x++){
+  const expected=x>=4&&x<size+4&&y>=4&&y<size+4?Boolean(code.modules.data[(y-4)*size+x-4]):false
+  assert.equal(rows[y][x],expected,`module ${x},${y}`)
+ }
+})
+test('full mode reports required width instead of emitting a wrapped QR',{skip:process.platform==='win32'},async t=>{
+ const f=await terminalFixture(t,{columns:40})
+ await writeFile(join(f.home,'.local/share/wechat-ping-bot/login-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.terminal'),await QRCode.toString('fixture',{type:'terminal',small:true}))
+ const {stdout}=await exec('sh',[script],{env:{...f.env,WEIXIN_LINK_QR_STYLE:'full'}})
+ assert(stdout.includes('至少需要'));assert(!stdout.includes('\x1b[48;2;'))
 })

@@ -38,6 +38,14 @@ Git 手动安装的源码位置是克隆目录。工作区和 Codex 路径由安
 
 ## 二维码维护
 
+终端半格字符有断缝时，可试用完整色块模式。它使用黑白背景色与空格绘制，不依赖 `▀`、`▄` 字形，但需要更大的终端窗口：
+
+```sh
+WEIXIN_LINK_QR_STYLE=full /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+```
+
+若已解绑而服务仍在运行，可同时加 `WEIXIN_LINK_RELOGIN=1`。`WEIXIN_LINK_QR_STYLE=compact` 为原紧凑模式（默认）。完整模式同样兼容旧版安装，无需先升级服务；宽度不足时会显示需要的列数。请确保整个二维码及白边都在屏幕内。
+
 **已经在微信解绑，但脚本仍提示本地服务就绪？** 本地进程状态不能证明服务端绑定有效。使用显式重新登录入口，等待任务结束、安全停止账号后重新扫码：
 
 ```sh

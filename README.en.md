@@ -125,6 +125,8 @@ On Linux/macOS, refresh pairing for an installed but offline account without rei
 
 A local graphical terminal attempts to open the PNG. SSH and headless interactive terminals display a scannable QR code, with a PNG path as a fallback. Running accounts are not re-paired by default. Local readiness does not prove that WeChat binding is still valid. If you have unbound the bot, prefix the command with `WEIXIN_LINK_RELOGIN=1` to safely stop the account service and obtain a fresh login QR code. Use `WEIXIN_LINK_DIR` for a custom source directory and `WEIXIN_LINK_ACCOUNT` for another account. See [QR maintenance](CONFIGURATION.md#二维码维护).
 
+If terminal glyphs show gaps, prefix the refresh command with `WEIXIN_LINK_QR_STYLE=full` to use solid background-color cells. Enlarge the terminal or reduce the font size to fit the whole code.
+
 ## More capabilities and documentation
 
 **Codex** is the currently supported agent backend. Multiple WeChat accounts, remote hosts and isolated Linux containers can be configured later; they are not required for initial setup.
