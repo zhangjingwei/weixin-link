@@ -33,9 +33,14 @@ test('private Unix endpoint exposes current instance and readiness without consu
  }finally{await runtime.close();await rm(dir,{recursive:true,force:true})}
 })
 
-test('scheduled endpoints respect readiness and drain, and dispatch through their own callback',async()=>{
- const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');const dir=await mkdtemp(join(tmpdir(),'scheduled-control-'));let ready=false,calls=0
- const r=new RuntimeControl({ready:()=>ready,onScheduledStatus:async()=>({jobs:[{id:'news',state:'pending'}]}),onScheduledText:async body=>{calls++;return {accepted:body.jobId==='news'}}});const socket=join(dir,'runtime.sock')
- try{await r.listen(socket);await assert.rejects(controlRequest(socket,'POST','/scheduled-text',{jobId:'news'}));assert.equal(calls,0);ready=true;assert.equal((await controlRequest(socket,'GET','/scheduled-jobs')).jobs[0].id,'news');assert.equal((await controlRequest(socket,'POST','/scheduled-text',{jobId:'news'})).accepted,true);r.command('drain','scheduled-test-lease');await assert.rejects(controlRequest(socket,'POST','/scheduled-text',{jobId:'news'}));assert.equal(calls,1)}finally{await r.close();await rm(dir,{recursive:true,force:true})}
-})
 test('backend identity is observable without contaminating numeric idle counters',()=>{const r=new RuntimeControl({backend:{id:'pilot-a',kind:'podman'},ready:()=>true});assert.equal(r.status().backend.id,'pilot-a');assert.equal(r.status().idle,true);assert.deepEqual(r.status().counts,{})});
+
+test('retired scheduled delivery endpoints return not found',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'retired-delivery-')),runtime=new RuntimeControl({ready:()=>true}),socket=join(dir,'runtime.sock')
+ try{
+  await runtime.listen(socket)
+  await assert.rejects(controlRequest(socket,'GET','/scheduled-jobs'),error=>error.statusCode===404)
+  await assert.rejects(controlRequest(socket,'POST','/scheduled-text',{jobId:'retired'}),error=>error.statusCode===404)
+  assert.equal((await controlRequest(socket,'GET','/status')).ready,true)
+ }finally{await runtime.close();await rm(dir,{recursive:true,force:true})}
+})

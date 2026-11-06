@@ -1,9 +1,0 @@
-[Unit]
-Description=WeChat RSS news dispatch for account %i
-
-[Service]
-Type=oneshot
-WorkingDirectory=%h/wechat-ping-bot
-Environment=WECHAT_ACCOUNT=%i
-ExecStart=/usr/bin/node %h/wechat-ping-bot/news-job.mjs
-TimeoutStartSec=600

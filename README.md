@@ -16,7 +16,7 @@
 - 后续三个系统统一使用 `node setup.mjs doctor`、`node account-manager.mjs list` 以及账号管理命令。后台服务在用户登录时启动；Mac/Windows 不保证用户注销后继续工作。
 - 独立账号首次启动时分别生成 launchd 任务/Windows 计划任务；配对有十分钟本地上限。账号归属和已有凭据隔离规则不变。控制端使用 Unix socket 或带私有令牌的 Windows 命名管道。
 - FFmpeg 按系统和架构选择。图片/PDF 使用现有原生依赖；Office 文本解析额外需要 Python 3（Mac/Linux 命令 `python3`，Windows 命令 `python`），缺少时保留原件并明确解析失败。
-- Podman 隔离容器、既有 systemd 新闻定时器、NAS 备份仍是 Linux 专用功能，本轮不将其宣称为三平台已验收功能。新闻手动生成还依赖 Python、浏览器和中文字体，应另作专项验收。
+- Podman 隔离容器、NAS 备份仍是 Linux 专用功能，本轮不将其宣称为三平台已验收功能。
 
 跨平台核心检查：`node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs`，含真实文件锁竞争、SQLite WAL、控制连接、图像和 FFmpeg 加载。`.github/workflows/platform.yml` 配置了三系统检查，但本地尚未运行 Mac/Windows CI。完整上线仍需在每个目标机上检查安装诊断、用户后台任务、独立扫码、文字/图片/文件收发、/stop 和服务停止。
 
@@ -342,99 +342,6 @@ Git 远端由部署者自行设置。顶层是机器人源码；`agent-workspace
 - 本地任务执行、最终回复发送、排队或未确认任务时禁止切换。当前对话存在未确认停止的委托远程任务时先用 `/stop` 核实。目标会话活动中、目录不匹配或恢复失败时保留当前关联。
 - 切换不迁移附件等待、上一轮结果或取消规则；不重放任务，不自动恢复正在执行的工作。原生记忆按 Codex 数据目录隔离。
 
-### 每日 RSS 新闻（按账号配置，模块解耦）
-
-`wechat-news@<account>.timer` 在北京时间 09:00、12:00、18:00、21:00 触发短命的 `news-job.mjs`，不会每分钟空跑；它按账号私有 `notification-jobs.json` 的北京时间检查发送时刻，只读取指定时间窗口内的 RSS/Atom，不创建 Codex 会话。`rss-news.py` 负责受限下载、日期过滤、ID 去重和 HTML 转纯文本；`news-compose.mjs` 每批最多调用一次模型做语义去重与聚合，失败时保守保留完整采集正文。HA Feedreader 可独立订阅同一来源，不参与微信发送链路。
-
-配置在对应账号 stateDir 下（600 权限），格式：
-
-```json
-{"jobs":[{"id":"zaihua-daily","kind":"rss-news","enabled":true,"time":"09:00","startDate":"2026-10-20","recipient":"该账号授权的微信用户ID","title":"在花科技圈早报","url":"https://rss.example.com/telegram/channel/example","limit":8}]}
-```
-
-- 当前 timer 固定在北京时间 09:00、12:00、18:00、21:00 运行；若修改任务时刻，需要同步修改对应账号的 `wechat-news@<account>.timer` 并执行 `systemctl --user daemon-reload`。改任务配置本身无需重启。暂停：`enabled:false`，或停用对应 timer。配置不得提交 Git。
-- 安装模板到 `~/.config/systemd/user/` 后，`systemctl --user enable --now wechat-news@default.timer`；其他账号分别启用各自 timer，不复制收件人或授权配置。
-- `WECHAT_ACCOUNT=default node news-job.mjs --dry-run`：只读取和排版，不发送；会忽略时刻和 startDate 以便预览，仍需 enabled。
-- `WECHAT_ACCOUNT=default node news-job.mjs --force zaihua-0900`：按需预览指定且已启用的 RSS 任务，忽略定时时刻，窗口从该账号最近一个计划节点开始到当前时刻；生成 HTML/图片并输出交付路径，不发送微信、不占用当天的定时发送 claim。`--dry-run` 与 `--force` 互斥。
-- 调度器通过原有私有 runtime.sock 的 `/scheduled-jobs` 与 `/scheduled-text` 接口工作，发送端按配置解析收件人并再次校验授权，不信任请求中的收件人。消息仍由原 `OutputTransport` 排队发送。
-- `scheduled-delivery.sqlite` 仅保存 job+北京时间日期的发送 claim/status，SQLite WAL/FULL 保证并发和重启不重复。接口接受不代表用户已读。中途崩溃、部分失败、超时或未知状态不自动重发，避免重复打扰；应核对后人工处理，不通过改 job ID 绕过去重。
-- 接入程序维护或离线会拒绝当次发送；`Persistent=true` 可让 systemd 在计时器恢复时尝试补跑错过的一次触发，但运行失败、未知送达及超过窗口都不自动重发。来源失败不误报“无新闻”。此方案不保证每天必达：网络、微信接口、订阅源都可能失败；`journalctl --user -u wechat-news@default.service` 查看不含原文/凭据的执行结果。
-- 不新增常驻服务、MQ、发送引擎或 Telegram 登录；一个短命系统定时任务复用原发送能力。没有部署新闻列表卡片或配置 HA 自动播报。
-
-验证：`node --test *.test.mjs`；`python3 rss-news.test.py`。
-
-### 定时新闻聚合
-
-`news-job.mjs` 按配置的同一任务 `sources` 采集，先由 `news-compose.mjs` 做精确去重并进行一次受校验的语义聚合，再由 `news-digest.mjs` 渲染分类、聊天预览和完整 HTML。分类为 AI与科技、财经与商业、教育、国际动态、国内与社会、其他动态。模型失败、输出校验失败或输入超预算时保留完整采集正文；部分来源失败会在正文注明，全部失败不发送空白成功结果。去重范围为同一采集窗口，不代表跨时段已读去重。发送继续使用既有 ScheduledDelivery 和 OutputTransport。
-
-### 新闻完整性修复（2026-10-19）
-
-RSS `summary` 保留来源正文（单条安全上限16000字符，超过时标记 `summary_truncated`），优先读取 content:encoded/Atom content；旧 `excerpt` 仅作兼容输入，不作为 HTML 原文。采集默认每源最多80条，最多100条，仍只覆盖订阅源实际返回且满足任务窗口的消息，不保证全天完整归档。
-
-统一 `renderDigestHtml` 输出本批全部去重条目、完整句导读及可展开的采集正文/来源版本。HTML保留条件、预测措辞和具体数字；聊天仅预览并明确标注省略条数，不能拿预览继续生成完整报告。正文全部转义，禁用脚本与外部资源。相同标题但正文数字不同不会只因标题相同合并；同一链接的不同正文版本仍保留。标题分类优先，减少背景词导致的误分类。
-
-定时任务把HTML写入工作目录 outputs/news/用户哈希/，通过既有 ScheduledDelivery、OutputStore、OutputTransport发送，沿用原任务幂等记录，不另建发送服务。`NEWS_INSTRUCTIONS` 经共享 `ASSISTANT_INSTRUCTIONS` 注入新建/续接轮次，约束新闻默认走 RSS、事实保真、元数据分离和 HTML 直接交付；每批只调用一次新闻语义聚合，不启动常驻会话。
-
-### 新闻输入结构与固定模板
-
-当前采集结构为 `{id,title,summary,published,summary_truncated}`。`id` 是本地哈希；发布时间统一UTC ISO格式，脚本按24小时筛选并数值排序。summary是去除HTML后的来源内容，不是模型新写的摘要；沿用16000字符安全上限并显式标记截断，避免180字符硬切丢条件。链接不再输出。
-
-`modelInput` 只保留 `{title,summary}`，按时间筛选与保守去重后写入相邻 `.model-input.json`，不包含来源URL、时间、统计字段；当前只是准备下一步模型输入，不会偷偷调用Codex。`news-template.html`由Codex设计一次并固定复用，渲染器负责转义及插入数据；不再每批重写整份HTML样式。旧文档中“展示来源链接”已由本节明确替代。
-
-### 新闻不归档原始版本
-
-当前规则覆盖此前中间JSON和来源版本留存设计：来源内容仅本批内存处理，不再写 `.model-input.json`；历史自动生成的四份中间JSON已清理。HTML只展示一份完整合并内容，无采集正文/不同来源版本展开区，无重复导读。仅保留实际交付所需HTML及发送去重状态，不建立新闻原文档案库。既有用户已收到文件和会话历史不由此自动清除。
-
-### 顶部重点新闻与Codex技能
-
-固定模板顶部新增重点区。当前无模型调用时只展示金融、科技、教育每栏至多一条规则初选，并明确标注，空栏目不凑数。Codex技能 `~/.codex/skills/news-highlights/SKILL.md` 定义影响、时效、信息充分度的选题标准和事实/影响/后续/不确定性拆解。后续调用者可把符合技能schema的结果作为renderDigestHtml的highlights参数传入；标题须对应输入新闻，未知标题拒绝，所有文本转义。不会因创建技能自动增加定时模型调用。
-
-### 定时发送进度修复
-
-ScheduledDelivery持久化实际发送包与分段/附件检查点，用于交付恢复，不是新闻原文归档。沿用账号私有SQLite WAL/FULL数据库。定时发送启用continueTextFailure：某段正文失败仍处理后续未尝试文本与HTML；整体存在unknown/failed时返回partial，不虚报accepted。日志仅记录脱敏错误码、HTTP状态和数值API码，不保存原始错误正文或凭据。
-
-新闻定时消息缩为单条通知与HTML链接，完整新闻不再拆成多条长正文。显式恢复通过既有私有/scheduled-text接口（实际路径无空格）提交 `{jobId,occurrence,resume:true}`；仅处理本账号配置的任务，仅发持久化包中尚未尝试的部分，accepted/unknown/sending对应的不确定发送不会重发。旧任务没有检查点时返回SCHEDULE_PROGRESS_UNAVAILABLE，不能推断未送达。历史unknown任务不自动补发。
-
-每日新闻图片：news-job.mjs 调用 news-image.mjs，使用固定 HTML 模板及本地 Playwright Chromium 截图，不调用图片模型。依赖 playwright-core 1.64.1、其对应 Chromium、本机字体 ~/.cache/news-fonts/NotoSansCJKsc-Regular.otf；树莓派共享库复用 ~/.cache/mova-browser-libs。默认输出一张完整长图，另附完整HTML；仅显式mode=pages时按最多1800像素高分段、最多7张；不丢弃尾部内容，超过限制或渲染失败则仅交付HTML并提示。浏览器禁用页面脚本和网络，45秒关闭；定时服务超时240秒。测试不会发送微信。
-
-新闻混合去重：news-dedup.mjs 先复用确定性去重，再用标题相似度筛候选，一批最多调用一次本机官方 codex exec；同进程相同批次结果复用。仅传候选标题和完整摘要（去除链接，不传来源/时间），总输入超过80000字符则明确回退，不截断。Codex使用现有ChatGPT登录，ephemeral、只读、禁用shell/多智能体/搜索，90秒超时清理本次进程组；仅接受schema中的下标分组。候选外、重复/非法编号、数字不一致或非两两候选分组一律回退。未分组条目原样保留，合并只拼接原始摘要，不由模型改写。输出元数据记录批次指纹、采集数、算法数、AI状态和最终数，不归档输入JSON或模型会话。不重启机器人；news-job每次独立加载代码。
-
-新闻原图：宽度不超过2048且高度超过2048的PNG长图以原始字节作为微信图片上传，仍受4000万像素/50MB总量限制；不做2048长边缩图，不转文件。其它图片保持原有规范化。接口接受不保证微信客户端最终显示品质。
-
-新闻长图默认以JPEG质量80（4:4:4、不缩尺寸）从固定HTML导出。长PNG/JPEG以原字节作为微信图片上传，发送层不再二次缩小或转码。80是编码质量参数，不承诺文件体积固定为80%。
-
-### 新闻正文结构整理
-
-`news-job.mjs` 在混合去重之后调用 `news-organize.mjs`，通过现有官方 Codex CLI、low 推理档位和 `news-organize.schema.json` 一批调用完成结构整理。仅把本批完整原句与标题放入内存传给模型，链接不进入模型输入，不保存正文中间JSON。模型只能选择固定小节标签、排序及分段，并返回文章和原句编号；正文由程序从原句重建，不接受模型改写。所有文章、所有原句必须恰好覆盖一次，正文数字、条件、期限、不确定性及来源冲突均随原句保留。重复表述由上游去重负责，结构整理不擅自删句。
-
-输入超过预算、超时、无效编号、重复或遗漏均保守回退到完整正文；正文结构状态显示在HTML批次元数据。批次内缓存避免重复调用。HTML保留段落和小节，标题图片继续隐藏 `.original` 全部正文。验证：`node --test news-organize.test.mjs news-digest.test.mjs news-dedup.test.mjs news-window.test.mjs scheduled-news.test.mjs`。
-
-正文清理补充：结构整理前只清理明确匹配的频道前缀、投稿尾注和独立来源标签；相同原句或已被较完整原句逐字覆盖的句子只保留一份。模型可用 `duplicates: [{id, coveredBy}]` 标记重复，但每个输入编号仍必须有唯一去向。程序独立核对标记是否被保留句逐字覆盖（仅忽略空白和普通标点），无法证明的语义重复自动恢复到正文，不以模型判断直接删除条件、数字、归因或不同口径。原始采集正文不修改；组织失败依旧回退完整采集正文。
-
-可靠性补充：每次模型调用最多6篇，最多两个调用并发，避免大批输出的编号遗漏及超时。模型重复引用同一原句时只展示一次；未列出的原句以及无法核实的重复删除请求均原样补回。越界编号、文章ID错误、结构错误或任一调用失败仍回退整批完整正文，不宣称整理成功。
-
-原句输入改为显式 `{id,text}`，避免模型把数组下标误从1计数。无效原句引用不生成任何文字；真实原句若未被有效引用就自动补回，确保不会因编号异常丢内容。`restoredUnits`记录自动补回数量。文章ID/结构错误仍整批回退。正文整理只删除明确来源杂项、确定重复；不能证明的同义表述仍保留，避免数字、条件和归因损失。
-
-### 正文语义合并（当前策略）
-
-模型负责跨来源选择表述、自然分段并提出同义重复删除及对应保留句。对于非逐字重复，程序先检查数字与关键限制词，再由独立模型复核主体、时间地区口径、归因、条件、期限和不确定性是否完整覆盖；只有复核明确批准且程序检查通过才删除。无法核实、复核失败或超过预算时恢复原句，不擅自删除独有信息。不让模型改写正文或创造事实。`semanticRemoved`与`restoredUnits`记录处理结果。完整信息校验与模型复核均有局限，不代表独立核实新闻真实性。
-
-正文不展示模板小标题，长段按原句边界拆分；顶部重点区只列标题，避免重复展示未整理的原始摘要。原始正文只在内存处理。`outputs/preview-semantic-news.mjs`（微信工作目录）可复用已发布早报中的三篇问题文章进行验收，不重新采集、不改定时发送记录。
-
-模型输入按事实分句编号（保留原文标点，不含链接），使一条长句中的重复参数与新增容量/资格等信息可以分别选择。复核未批准或模型遗漏的分句补回邻近的原始上下文位置，而非统一追加到文末，避免形成第二个来源摘要尾巴。HTML最终仍仅显示连贯自然段，不展示内部标签或编号。
-
-## 当前生产新闻流程：模型全文聚合（替代旧拆句流程）
-
-`news-job.mjs` 现在只调用 `news-compose.mjs`，不再调用 `hybridDedup` 或 `organizeArticles`。程序只处理时间筛选、基础纯文本采集、完全相同标题和正文的去重，以及输出格式/文章编号/去向覆盖校验。它不再做相似度候选筛选、句子拆分、同义删句、数字门槛决定是否合并或二次模型删句复核。
-
-模型一次读取完整文章，自主进行事件聚合、同义去重、摘要与自然段组织，输出 `news-compose.schema.json`：`stories[{sourceIds,title,category,paragraphs}]`。每篇输入文章编号必须恰好归属一篇输出文章，不允许遗漏、重复归属或虚构编号。`stats.mapping`含原始采集下标去向，完全重复副本也包含在计数内。合并数量减少不等同于文章遗漏。
-
-原始 `summary` / `variants` 保持不变，仅在内存中保留；模型生成的展示摘要单独写入 `structuredBody`。来源链接和程序时间字段不进入模型输入，不另存原始正文中间JSON或来源版本。最终HTML展示一份聚合摘要，不展开原文版本；图片只展示标题。正文不用“概况”等模板小标题，段落由模型决定，HTML不再按长度拆句重组。
-
-提示词要求保留主体、日期、数字单位、地区口径、条件资格门槛期限及不确定性，禁止补写事实。程序不宣称自动证明摘要事实完整；覆盖校验只能证明文章有去向。模型失败、超时、超预算、结构错误或文章去向不完整时，整批回退完整采集正文并标注，不丢弃失败文章，不截断输入后再总结。完整正文最长输入120000字符，模型超时180秒，复用现有CLI low档位及批次内缓存。
-
-验证：`node --test news-compose.test.mjs news-digest.test.mjs news-window.test.mjs scheduled-news.test.mjs`。旧组织模块保留供历史测试，不属于生产主链路。
-
 ### 微信文字多会话
 
 发送“列表”（兼容“会话列表”）“新建 名称”“切换2”“历史”“历史2”“翻页”或“搜索 关键词”。`/sessions`、`/new 名称`、`/resume 编号`为对应别名。历史每页5轮，长消息显示节选；搜索范围为指定当前会话最近50轮，不冒称全库搜索。历史中的附件链接只显示标注，不重新发送。已有当前会话及记录中的历史thread迁移到个人编号列表。
@@ -579,13 +486,12 @@ Node 引导、系统依赖和微信首次扫码不可在尚未建立的微信通
 - `src/remote/`：远程停止协调；`agent-workspace/` 仍是独立部署的远程适配器。
 - `src/media/`：附件准备、文档、图片、音视频和输出交付。
 - `src/setup/`：安装向导、平台服务、诊断和后端选择。
-- `src/integrations/`：新闻、HA、备份等可选集成。
+- `src/integrations/`：HA、备份等可选集成。
 - `src/tools/`：SDK 补丁、发布检查和维护工具。
 - `tests/`：按模块组织的测试；远程适配器测试仍与独立适配器一起保存。
-- `assets/news/`：新闻模板、结构化输出 schema 和渲染图片。
 
-根目录的 bot.mjs、setup.mjs、account-manager.mjs 等文件仅保留兼容命令入口；现有安装命令、systemd/launchd/Windows 服务路径和用户私有状态目录继续有效。不要仅复制根目录入口，部署和发布须包含 src/、assets/ 与 agent-workspace/。
+根目录的 bot.mjs、setup.mjs、account-manager.mjs 等文件仅保留兼容命令入口；现有安装命令、systemd/launchd/Windows 服务路径和用户私有状态目录继续有效。不要仅复制根目录入口，部署和发布须包含 src/ 与 agent-workspace/。
 
-运行 `npm test` 执行 JavaScript 测试，`npm run test:python` 执行 Python 测试。真实微信收发、登录和远程执行验收仍需独立授权的测试环境。
+运行 `npm test` 执行测试（其中的 Office 文档解析测试需要 Python）。真实微信收发、登录和远程执行验收仍需独立授权的测试环境。
 
 Codex 会话入口保留兼容导出；内部拆为 provider-options.mjs（服务商配置与故障判定）、codex-rpc.mjs（进程/RPC 通信）、control-command.mjs（控制命令解析）和 codex-session.mjs（会话协调）。机器人使用 message-processor.mjs 处理消息，bot.mjs 负责初始化、接线及服务生命周期。

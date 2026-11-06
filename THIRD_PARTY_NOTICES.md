@@ -9,7 +9,6 @@
 - `@napi-rs/canvas` 1.0.11：MIT。
 - `@wechatbot/wechatbot` 2.2.0：MIT。
 - `pdfjs-dist` 6.4.299：Apache-2.0。
-- `playwright-core` 1.64.1：Apache-2.0。
 - `qrcode` 1.5.4：MIT。
 - `sharp` 0.35.5：Apache-2.0。
 - `silk-wasm` 3.7.1：MIT。

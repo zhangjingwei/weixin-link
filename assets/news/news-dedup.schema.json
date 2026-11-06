@@ -1,1 +1,0 @@
-{"type":"object","additionalProperties":false,"properties":{"groups":{"type":"array","items":{"type":"array","minItems":2,"items":{"type":"integer","minimum":0}}}},"required":["groups"]}

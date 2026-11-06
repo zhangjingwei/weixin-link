@@ -15,8 +15,6 @@
 !/agent-workspace/remote-*.mjs
 !/agent-workspace/remote-hosts.example.json
 !/agent-workspace/REMOTE-HOSTS.md
-!/wechat-news@.service
-!/wechat-news@.timer
 !/install.sh
 !/wechat-ping-bot.service
 !/wechat-ping-bot@.service
@@ -85,9 +83,8 @@
 !/CONTRIBUTING.md
 !/SECURITY.md
 
-# Modular source, tests and runtime rendering resources.
+# Modular source and tests.
 !/src/
 !/tests/
-!/assets/
 **/__pycache__/
 **/*.pyc

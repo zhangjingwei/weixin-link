@@ -16,7 +16,7 @@ SSH 使用 WECHAT_SSH_CONFIG 指定的文件，默认 ~/.ssh/wechat_hosts_config
 
 - HA：复制 examples/ha.example.json 到 ~/.config/wechat-assistant/ha.json，替换 URL 与令牌，权限设为 0600；保持只读。
 - 加密备份（Linux）：复制 examples/backup.example.json 到 ~/.config/wechat-assistant/backup.json；WECHAT_BACKUP_CONFIG 可覆盖位置。目标必须显式配置；公钥及远端私钥仍按原备份协议单独准备。工作目录从 installation.json 读取，源码目录自动推导。没有配置不连接默认 NAS。
-- RSS、通知接收人和账号授权：仍在账号私有 stateDir 中配置，不能放入示例或源码。
+- 微信账号授权：仍在账号私有 stateDir 中配置，不能放入示例或源码。
 - 安装目录和 Codex 路径：沿用用户私有 installation.json，通过安装器生成；服务由安装器按真实路径生成。
 
 ## 迁移与验证

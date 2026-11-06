@@ -73,19 +73,19 @@ test('plain-text formatting occurs after image and file capture, preserving actu
  const text=sent.filter(x=>typeof x==='string').join('\n');assert.ok(text.includes('状态图'));assert.ok(text.includes('官网：https://example.com'));assert.ok(!text.includes(cwd));assert.ok(!text.includes('**'))
 }))
 test('HTML is sent as a file with exact bytes and filename, not zipped or interpreted',()=>fixture(async({cwd,store})=>{
- const path=join(cwd,'news.html'),html='<!doctype html><html lang="zh-CN"><body>完整条件：TOP50、审核、最高20万元。</body></html>';await writeFile(path,html)
+ const path=join(cwd,'document.html'),html='<!doctype html><html lang="zh-CN"><body>完整条件：TOP50、审核、最高20万元。</body></html>';await writeFile(path,html)
  const packet=await store.package('owner',`[新闻HTML](${path})`);assert.equal(packet.errors.length,0);assert.equal(packet.attachments.length,1)
  const calls=[],transport=new OutputTransport({store,send:async(_u,c)=>calls.push(c)})
- assert.equal((await transport.deliver('owner',packet)).status,'accepted');assert.equal(calls[1].fileName,'news.html');assert.equal(calls[1].file.toString(),html)
+ assert.equal((await transport.deliver('owner',packet)).status,'accepted');assert.equal(calls[1].fileName,'document.html');assert.equal(calls[1].file.toString(),html)
 }))
 
-test('long PNG news is delivered as an image with original bytes and resolution',()=>fixture(async({cwd,store})=>{
- const path=join(cwd,'news-long.png');const original=await sharp({create:{width:880,height:6000,channels:3,background:'#e5f4ea'}}).png().toBuffer();await writeFile(path,original)
+test('long PNG image is delivered as an image with original bytes and resolution',()=>fixture(async({cwd,store})=>{
+ const path=join(cwd,'long-image.png');const original=await sharp({create:{width:880,height:6000,channels:3,background:'#e5f4ea'}}).png().toBuffer();await writeFile(path,original)
  const packet=await store.package('a',`![长图](${path})`);assert.equal(packet.errors.length,0);assert.equal(packet.attachments[0].kind,'image');const data=await store.bytes('a',packet.attachments[0]);assert.deepEqual(data,original);assert.equal((await sharp(data).metadata()).height,6000)
 }))
 
-test('compressed JPEG long news stays byte-identical and does not get resized or re-encoded',()=>fixture(async({cwd,store})=>{
- const path=join(cwd,'news-80.jpg');const original=await sharp({create:{width:880,height:3000,channels:3,background:'#f0faf3'}}).jpeg({quality:80}).toBuffer();await writeFile(path,original);const packet=await store.package('a',`![新闻](${path})`);assert.equal(packet.errors.length,0);assert.equal(packet.attachments[0].kind,'image');assert.ok(packet.attachments[0].fileName.endsWith('.jpg'));assert.deepEqual(await store.bytes('a',packet.attachments[0]),original)
+test('compressed JPEG long image stays byte-identical and does not get resized or re-encoded',()=>fixture(async({cwd,store})=>{
+ const path=join(cwd,'long-image.jpg');const original=await sharp({create:{width:880,height:3000,channels:3,background:'#f0faf3'}}).jpeg({quality:80}).toBuffer();await writeFile(path,original);const packet=await store.package('a',`![长图](${path})`);assert.equal(packet.errors.length,0);assert.equal(packet.attachments[0].kind,'image');assert.ok(packet.attachments[0].fileName.endsWith('.jpg'));assert.deepEqual(await store.bytes('a',packet.attachments[0]),original)
 }))
 
 test('audio delivery defaults to an ordinary file; native bubbles require explicit opt-in',async()=>{

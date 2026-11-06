@@ -10,8 +10,7 @@
     "postinstall": "node sdk-upload-timeout.mjs && node sdk-protocol-patch.mjs",
     "setup": "node setup.mjs",
     "doctor": "node setup.mjs doctor",
-    "check:release": "node release-check.mjs",
-    "test:python": "node src/tools/test-python.mjs"
+    "check:release": "node release-check.mjs"
   },
   "keywords": [],
   "author": "",
@@ -21,7 +20,6 @@
     "@napi-rs/canvas": "1.0.11",
     "@wechatbot/wechatbot": "2.2.0",
     "pdfjs-dist": "6.4.299",
-    "playwright-core": "1.64.1",
     "qrcode": "1.5.4",
     "sharp": "0.35.5",
     "silk-wasm": "3.7.1",

@@ -1,1 +1,0 @@
-{"type": "object", "additionalProperties": false, "required": ["approved"], "properties": {"approved": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["article", "id"], "properties": {"article": {"type": "integer", "minimum": 0}, "id": {"type": "integer", "minimum": 0}}}}}}
