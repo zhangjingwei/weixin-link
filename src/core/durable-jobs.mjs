@@ -13,7 +13,6 @@ export class DurableJobs {
  context(id,context){this.db.prepare('UPDATE jobs SET context=? WHERE id=?').run(JSON.stringify(context),id)}
  bind(id,threadId){this.db.prepare("UPDATE jobs SET state='bound',thread_id=? WHERE id=? AND state='pending'").run(threadId,id)}
  submitted(id,turnId){this.db.prepare("UPDATE jobs SET state='submitted',turn_id=? WHERE id=? AND state='bound'").run(turnId,id)}
- retargetSubmission(id,turnId){return this.db.prepare("UPDATE jobs SET state='submitted',turn_id=? WHERE id=? AND state='uncertain'").run(turnId,id).changes===1}
  mark(id,state){if(!['done','uncertain','cancelled'].includes(state))throw Error('INVALID_STATE');this.db.prepare("UPDATE jobs SET state=? WHERE id=? AND state NOT IN ('done','cancelled')").run(state,id)}
  findCaptured(message){const real=message._conversationOwner??message.raw?.from_user_id??message.userId,key=message.raw?.message_id??message.raw?.client_id;if(key===undefined)return null
  const row=this.db.prepare("SELECT id,payload,state FROM ingress WHERE COALESCE(json_extract(payload,'$._conversationOwner'),json_extract(payload,'$.raw.from_user_id'),owner)=? AND CAST(COALESCE(json_extract(payload,'$.raw.message_id'),json_extract(payload,'$.raw.client_id')) AS TEXT)=? ORDER BY created LIMIT 1").get(real,String(key));return row?{...JSON.parse(row.payload),_ingressId:row.id,_captureState:row.state}:null}

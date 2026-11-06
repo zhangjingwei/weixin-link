@@ -10,10 +10,10 @@ import { SessionManager as ActualSessionManager, controlCommand, codexProviderOp
 class SessionManager extends ActualSessionManager { constructor(options){super({providerEnv:{},remoteControl:async()=>({stop_confirmed:true,tasks:[]}),...options})} }
 
 test('custom provider profile overrides resumed model and disables unsupported search', () => {
-  const options=codexProviderOptions({WECHAT_CODEX_BASE_URL:'https://api.deepseek.com',WECHAT_CODEX_MODEL:'deepseek-flash',WECHAT_CODEX_PROVIDER:'deepseek',WECHAT_CODEX_REASONING_EFFORT:'high',WECHAT_CODEX_WEB_SEARCH:'disabled'})
-  assert.deepEqual(options.thread,{model:'deepseek-flash',modelProvider:'deepseek',reasoningEffort:'high'})
+  const options=codexProviderOptions({WECHAT_CODEX_BASE_URL:'https://provider.example.com',WECHAT_CODEX_MODEL:'configured-model',WECHAT_CODEX_PROVIDER:'custom',WECHAT_CODEX_API_KEY_ENV:'CUSTOM_API_KEY',WECHAT_CODEX_REASONING_EFFORT:'high',WECHAT_CODEX_WEB_SEARCH:'disabled'})
+  assert.deepEqual(options.thread,{model:'configured-model',modelProvider:'custom',reasoningEffort:'high'})
   assert.ok(options.args.includes('web_search="disabled"'))
-  assert.ok(options.args.includes('model_provider="deepseek"'))
+  assert.ok(options.args.includes('model_provider="custom"'))
   assert.ok(options.args.includes('model_reasoning_effort="high"'))
   assert.throws(()=>codexProviderOptions({WECHAT_CODEX_REASONING_EFFORT:'unsafe value'}))
   assert.deepEqual(codexProviderOptions({}).thread,{})
@@ -38,7 +38,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
   let threadCount = 0
   const options = {
     stateDir: dir, cwd: join(dir, 'work'), owners: ['owner', 'other'],
-    providerEnv: {}, // Isolate from this machine's configured live fallback.
+    providerEnv: {}, // Isolate from this machine's live provider settings.
     // This is a fake-RPC unit test; never call the live remote stop adapter.
     remoteControl: async()=>({stop_confirmed:true,tasks:[]}),
     rpcFactory({ onEvent, onClose }) {

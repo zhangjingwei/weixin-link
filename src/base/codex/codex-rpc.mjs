@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process'
 import {createInterface} from 'node:readline'
 import {installConfig} from '../../setup/install-config.mjs'
 import {errorFields} from '../../core/diagnostic-log.mjs'
-import {codexProviderOptions,codexFallbackProviderOptions} from './provider-options.mjs'
+import {codexProviderOptions} from './provider-options.mjs'
 
 function rpcFailure(message,fields={}) {
   const error=new Error(message)
@@ -11,7 +11,7 @@ function rpcFailure(message,fields={}) {
 }
 
 export class CodexRpc {
-  constructor({ cwd, onEvent, onClose, log = () => {}, binary = installConfig().codexBinary, provider = 'primary', providerOptions: resolvedProviderOptions }) {
+  constructor({ cwd, onEvent, onClose, log = () => {}, binary = installConfig().codexBinary, provider = 'configured', providerOptions: resolvedProviderOptions }) {
     this.log = log
     this.provider = provider
     this.nextId = 0
@@ -19,8 +19,7 @@ export class CodexRpc {
     this.closed = false
     const env = { ...process.env, TZ: 'Asia/Shanghai' }
     for (const key of ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL', 'CODEX_API_KEY', 'HA_TOKEN', 'HA_BASE_URL']) delete env[key]
-    const selectedOptions=resolvedProviderOptions ?? (provider==='fallback'?codexFallbackProviderOptions(env):codexProviderOptions(env))
-    if(!selectedOptions)throw Error('Codex fallback provider 未配置。')
+    const selectedOptions=resolvedProviderOptions ?? codexProviderOptions(env)
     this.providerOptions=selectedOptions
     this.child = spawn(binary, selectedOptions.args, { cwd, env })
     this.child.stdin.on('error', () => {})

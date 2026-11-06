@@ -147,13 +147,9 @@ FONTCONFIG_FILE=/tmp/mova-fonts.conf npm run test:media-live
 
 模型接口依据：https://developers.openai.com/codex/app-server#list-models-modellist 。本机实测model/list返回7项，仅代表当前目录和账号环境返回的模型；未更改模型配置。
 
-### GPT 主模型与 DeepSeek 自动降级
+### Codex 模型配置
 
-普通消息继续使用本机 Codex 配置的默认 GPT 海外模型。只有主模型连接、认证或任务启动明确失败时，才在同一对话中切换到 DeepSeek 备用配置。`turn/start` 已被接受后，正常的思考、排队或首个输出等待不会仅因超时就被判为 GPT 不可用。普通参数错误、工具失败和任务内容失败不会触发降级；已开始执行的主轮次也不会被盲目重放。每次新的用户消息开始前都会重新尝试 GPT 主模型，恢复后自动回到 GPT，避免一次降级永久粘住。
-
-备用配置只通过 `WECHAT_CODEX_FALLBACK_*` 环境变量提供，不与主模型的 Codex 配置混用。切换后的最终回复会附加固定提示“⚠️ GPT 当前不可用，本次对话使用 DeepSeek 生成。”，诊断日志只记录 provider、model、阶段和结构化错误代码，不记录正文、URL 或密钥。主轮已接受但未能启动时，持久化账本先标为不确定，备用轮提交成功后再绑定备用 turn，避免崩溃恢复误重放。
-
-快捷命令验证：42项测试通过；独立真实Codex会话中`/models`与`/status`均通过，未调用`turn/start`、未发起模型推理。部署通过实时控制接口检查 RPC、附件处理、微信发送和状态保存。
+使用部署者在 Codex 中配置的模型，也可用 WECHAT_CODEX_* 显式指定单个提供商。自定义提供商需填写 HTTPS BASE_URL 及 API_KEY_ENV（密钥所在的环境变量名），不预设第三方密钥名。连接或任务启动失败按原错误反馈，不自动更换提供商或重放任务；结果不明时沿用原持久化账本对账。
 
 ### 会话结束、取消与部署边界
 

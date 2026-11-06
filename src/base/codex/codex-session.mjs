@@ -19,11 +19,10 @@ import { randomBytes, createHash } from 'node:crypto'
 
 import {CodexRpc} from './codex-rpc.mjs'
 import {controlCommand} from './control-command.mjs'
-import {codexProviderOptions,codexFallbackProviderOptions,isProviderAvailabilityFailure,providerEventCode,isIncompatibleThreadProvider,providerEventFailure,DEEPSEEK_FALLBACK_NOTICE} from './provider-options.mjs'
+import {codexProviderOptions,providerEventCode} from './provider-options.mjs'
 export {CodexRpc} from './codex-rpc.mjs'
 export {controlCommand} from './control-command.mjs'
-export {codexProviderOptions,codexFallbackProviderOptions,isProviderAvailabilityFailure,DEEPSEEK_FALLBACK_NOTICE} from './provider-options.mjs'
-const TURN_START_FAILURE = '__provider_turn_start_failure__'
+export {codexProviderOptions} from './provider-options.mjs'
 
 export class SessionManager {
   constructor({ stateDir, cwd, owners, backend = null, rpcFactory = options => new CodexRpc(options), remoteControl = remoteScope, completionMarkers = false, balanceReader = fetchDeepSeekBalance, providerEnv = process.env, log = () => {} }) {
@@ -41,8 +40,6 @@ export class SessionManager {
     this.owners = new Set(owners)
     this.rpcFactory = rpcFactory
     this.providerEnv = providerEnv
-    const configuredStartTimeout=Number(providerEnv.WECHAT_CODEX_PRIMARY_START_TIMEOUT_MS)
-    this.primaryStartTimeoutMs=Number.isFinite(configuredStartTimeout)&&configuredStartTimeout>0?configuredStartTimeout:15_000
     this.state = { version: 1, users: {} }
     this.sessions = new Map()
     this.questions = new Map()
@@ -103,65 +100,18 @@ export class SessionManager {
     for (const resolve of session.waiters ?? []) resolve(result)
     session.waiters?.clear()
   }
-  hasConfiguredFallback() {
-    try{return Boolean(this.providerOptions('fallback'))}catch{return false}
-  }
-  waitForTurnStart(session,{traceId,turnId}) {
-    if(session.turnStarted||!session.busy||session.traceId!==traceId)return Promise.resolve(true)
-    if(session.turnStartFailure?.definitiveRpcError)return Promise.resolve(false)
-    return new Promise(resolve=>{
-      let settled=false
-      const finish=started=>{
-        if(settled)return
-        settled=true
-        clearTimeout(timer)
-        if(session.turnStartSignal===signal)delete session.turnStartSignal
-        resolve(started)
-      }
-      const signal=startedTurnId=>{
-        if(startedTurnId===TURN_START_FAILURE)return finish(false)
-        if(session.traceId!==traceId)return finish(true)
-        if(startedTurnId&&startedTurnId!==turnId)return
-        finish(true)
-      }
-      const timer=setTimeout(()=>finish(false),this.primaryStartTimeoutMs)
-      session.turnStartSignal=signal
-    })
-  }
-  async retryPrimaryBeforeTurn(session) {
-    if(session.provider!=='fallback'||session.busy||session.finishing||session.exiting)return false
-    this.diagnostic(session,'provider.primary_retry.started',{stage:'next_turn',from_provider:'fallback',to_provider:'primary'})
-    this.detachRpc(session,session.rpcAttempt)
-    try{
-      await this.startProvider(session,'primary')
-      session.retryPrimaryOnNextSend=false
-      this.diagnostic(session,'provider.primary_recovered',{stage:'next_turn',provider:'primary',model:session.model,model_provider:session.modelProvider,fallback_active:false})
-      return true
-    }catch(primaryError){
-      this.diagnostic(session,'provider.primary_retry.failed',{stage:'next_turn',provider:'primary',rpc_code:primaryError?.rpcCode,provider_failure:isProviderAvailabilityFailure(primaryError,{stage:'connect'}),...errorFields(primaryError)})
-      try{
-        await this.startProvider(session,'fallback')
-        this.diagnostic(session,'provider.primary_retry.fallback_kept',{stage:'next_turn',provider:'fallback',model:session.model,model_provider:session.modelProvider,fallback_active:true})
-        return false
-      }catch(fallbackError){
-        throw Object.assign(Error(`GPT 恢复检查失败，DeepSeek 备用模型也无法重新连接：${fallbackError.message}`),{cause:fallbackError,fallbackEligible:false})
-      }
-    }
-  }
   clearQuestions(session) {
     for (const [code, question] of this.questions) if (question.session === session) {
       clearTimeout(question.timer)
       this.questions.delete(code)
     }
   }
-  createCatalogRpc(){return this.rpcFactory({cwd:this.cwd,provider:'primary',providerOptions:this.providerOptions('primary'),onEvent:()=>{},onClose:()=>{},log:this.log})}
-  providerOptions(provider) {
-    if(provider==='fallback')return codexFallbackProviderOptions(this.providerEnv)
+  createCatalogRpc(){return this.rpcFactory({cwd:this.cwd,provider:'configured',providerOptions:this.providerOptions(),onEvent:()=>{},onClose:()=>{},log:this.log})}
+  providerOptions() {
     return codexProviderOptions(this.providerEnv)
   }
-  attachRpc(session, provider) {
-    const providerOptions=this.providerOptions(provider)
-    if(provider==='fallback'&&!providerOptions)throw Error('Codex 备用模型未配置。')
+  attachRpc(session) {
+    const provider='configured',providerOptions=this.providerOptions()
     const attempt={provider,current:true,rpc:null,providerOptions}
     session.rpcAttempt=attempt
     const rpc=this.rpcFactory({
@@ -182,17 +132,11 @@ export class SessionManager {
         this.resolveWaiters(session, { status: 'unknown', reply: 'Codex 连接中断，任务结果尚未确认。' })
         if (session.exiting) this.finishExit(session, '未收到任务停止确认，连接已断开。').catch(() => {})
         else if (session.busy) {
-          if(session.provider==='primary'&&!session.turnActivitySeen&&(session.turnStartSignal||session.turnActivitySignal)&&this.hasConfiguredFallback()){
-            session.turnStartFailure=Object.assign(Error('GPT 主模型连接在产生任务活动前断开。'),{connectionClosed:true,primaryAcceptedUncertain:true})
-            this.diagnostic(session,'provider.primary_failed',{stage:session.turnStarted?'turn_activity_disconnect':'turn_start_disconnect',provider:'primary',provider_failure:true})
-            ;(session.turnActivitySignal??session.turnStartSignal)(TURN_START_FAILURE)
-          }else{
-            const record=this.state.users[session.userId]
-            if(record?.recovery?.execution==='running'){record.recovery.execution='unknown';void this.save().catch(()=>{})}
-            transition(session,'idle')
-            session.queue = []
-            this.emit(session, 'Codex 连接中断，任务结果尚未确认。再次发消息可恢复对话。')
-          }
+          const record=this.state.users[session.userId]
+          if(record?.recovery?.execution==='running'){record.recovery.execution='unknown';void this.save().catch(()=>{})}
+          transition(session,'idle')
+          session.queue = []
+          this.emit(session, 'Codex 连接中断，任务结果尚未确认。再次发消息可恢复对话。')
         }
       },
     })
@@ -206,61 +150,35 @@ export class SessionManager {
     if(session.rpcAttempt===attempt)session.rpcAttempt=null
     try{attempt.rpc?.close()}catch{}
   }
-  async startProvider(session, provider) {
-    const attempt=this.attachRpc(session,provider)
+  async startProvider(session) {
+    const provider='configured',attempt=this.attachRpc(session)
     const saved=this.state.users[session.userId]??={}
     try {
       await attempt.rpc.request('initialize', { clientInfo: { name: 'wechat_codex', title: 'WeChat', version: '3.0.0' }, capabilities:{experimentalApi:true} })
-      if(session.exited||attempt.rpc.closed)throw Object.assign(Error('会话已取消连接。'),{fallbackEligible:false})
+      if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
       attempt.rpc.write({ method: 'initialized', params: {} })
       const params={config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:this.instructions,...attempt.providerOptions.thread}
       let result
       if(saved.threadId){
         try{result=await attempt.rpc.request('thread/resume',{...params,threadId:saved.threadId,excludeTurns:true})}
         catch(error){
-          if(isIncompatibleThreadProvider(error)){
-            const incompatibleThread=saved.threadId
-            saved.previous=[...(saved.previous??[]).filter(id=>id!==incompatibleThread),incompatibleThread].slice(-20)
-            delete saved.threadId
-            delete saved.hasMessages
-            this.diagnostic(session,'provider.thread_incompatible',{stage:'resume',provider,rpc_code:error.rpcCode,reason:'previous_provider_unavailable'})
-          }else if(saved.hasMessages||!error.message.includes('no rollout found for thread id'))throw error
+          if(saved.hasMessages||!error.message.includes('no rollout found for thread id'))throw error
         }
       }
       result??=await attempt.rpc.request('thread/start',params)
-      if(session.exited||attempt.rpc.closed)throw Object.assign(Error('会话已取消连接。'),{fallbackEligible:false})
-      if(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never')throw Object.assign(Error('Codex 未应用配置的会话权限。'),{fallbackEligible:false})
+      if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
+      if(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never')throw Error('Codex 未应用配置的会话权限。')
       await enableThreadMemory(attempt.rpc,result.thread.id)
-      if(session.exited||attempt.rpc.closed)throw Object.assign(Error('会话已取消连接。'),{fallbackEligible:false})
+      if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
       session.provider=provider
-      session.fallbackActive=provider==='fallback'
       session.model=result.model
-      session.modelProvider=result.modelProvider??attempt.providerOptions.provider??(provider==='fallback'?'deepseek':'openai')
+      session.modelProvider=result.modelProvider??attempt.providerOptions.provider??null
       session.threadId=saved.threadId=result.thread.id
-      this.diagnostic(session,'provider.connected',{provider,model:session.model,model_provider:session.modelProvider,fallback_active:session.fallbackActive})
+      this.diagnostic(session,'provider.connected',{provider,model:session.model,model_provider:session.modelProvider})
       return session
     } catch(error) {
       this.detachRpc(session,attempt)
       throw error
-    }
-  }
-  async failoverToFallback(session,{stage,error}) {
-    if(session.provider==='fallback')return false
-    let providerOptions
-    try{providerOptions=this.providerOptions('fallback')}catch(configError){
-      this.diagnostic(session,'provider.fallback_config_invalid',{stage,from_provider:session.provider??'primary',to_provider:'fallback',...errorFields(configError)})
-      return false
-    }
-    if(!providerOptions)return false
-    this.diagnostic(session,'provider.failover.started',{stage,from_provider:session.provider??'primary',to_provider:'fallback',rpc_code:error?.rpcCode,provider_failure:isProviderAvailabilityFailure(error,{stage}),...errorFields(error)})
-    this.detachRpc(session,session.rpcAttempt)
-    try{
-      await this.startProvider(session,'fallback')
-      this.diagnostic(session,'provider.failover.connected',{stage,provider:'fallback',model:session.model,model_provider:session.modelProvider,fallback_active:true})
-      return true
-    }catch(fallbackError){
-      this.diagnostic(session,'provider.failover.failed',{stage,provider:'fallback',rpc_code:fallbackError?.rpcCode,provider_failure:isProviderAvailabilityFailure(fallbackError,{stage:'connect'}),...errorFields(fallbackError)})
-      throw Object.assign(Error(`GPT 当前不可用，DeepSeek 备用模型也无法使用：${fallbackError.message}`),{cause:fallbackError,fallbackEligible:false})
     }
   }
   async connect(userId, reply) {
@@ -276,16 +194,10 @@ export class SessionManager {
     void session.connectionReady.catch(()=>{})
     this.sessions.set(userId, session)
     try {
-      try{
-        await this.startProvider(session,'primary')
-      }catch(primaryError){
-        this.diagnostic(session,'provider.primary_failed',{stage:'connect',provider:'primary',rpc_code:primaryError?.rpcCode,provider_failure:isProviderAvailabilityFailure(primaryError,{stage:'connect'}),...errorFields(primaryError)})
-        if(!isProviderAvailabilityFailure(primaryError,{stage:'connect'}))throw primaryError
-        await this.failoverToFallback(session,{stage:'connect',error:primaryError})
-      }
+      await this.startProvider(session)
       await this.save()
       transition(session,'idle');resolveReady(session)
-      this.diagnostic(session,'session.connected',{provider:session.provider,model:session.model,model_provider:session.modelProvider,fallback_active:session.fallbackActive??false})
+      this.diagnostic(session,'session.connected',{provider:session.provider,model:session.model,model_provider:session.modelProvider})
       return session
     } catch (error) {
       transition(session,'closed');rejectReady(error);this.detachRpc(session,session.rpcAttempt)
@@ -329,7 +241,7 @@ export class SessionManager {
       const meta=(await session.rpc.request('thread/read',{threadId:id,includeTurns:false})).thread
       if(meta?.id!==id||meta.cwd&&meta.cwd!==this.cwd)throw Error('历史对话目录不匹配，未切换。')
       if(meta.status?.type==='active')throw Error('目标对话正在执行任务，未切换。')
-      const selectedProvider=this.providerOptions(session.provider??'primary')
+      const selectedProvider=this.providerOptions()
       const result=await session.rpc.request('thread/resume',{config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:this.instructions,threadId:id,excludeTurns:true,...selectedProvider.thread})
       if(result.thread?.id!==id||result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never')throw Error('Codex 未确认目标对话与权限，未切换。')
       await enableThreadMemory(session.rpc,id)
@@ -356,11 +268,6 @@ export class SessionManager {
       await this.emit(session, `消息已排队（第 ${session.queue.length} 条）。`)
       return
     }
-    if(session.provider==='fallback'&&session.retryPrimaryOnNextSend){
-      await this.retryPrimaryBeforeTurn(session)
-      if(!token.current())return
-      if(session.exited||session.rpc.closed)throw Error('GPT 主模型恢复后连接已关闭，请稍后重试。')
-    }
     transition(session,'running')
     session.workToken=token
     session.traceId = randomBytes(8).toString('hex')
@@ -377,8 +284,6 @@ export class SessionManager {
     this.diagnostic(session,'turn.requested')
     session.turnReady = false
     session.turnStarted = false
-    session.turnStartFailure = null
-    session.turnActivitySeen = false
     session.finalReceived = false
     session.finals = []
     session.generatedOutputs=[]
@@ -397,38 +302,8 @@ export class SessionManager {
       this.diagnostic(session,'materials.context',{count:materials.length,queue_depth:pendingMaterials,reason:session.attachmentContinuation?'continuation':materials.length?'current':'unbound'})
       const runtimeInput=this.backend?.prepareInput?await this.backend.prepareInput(text,{signal:token.signal}):text
       const turnParams={threadId:session.threadId,input:[...codexInput(runtimeInput),flowInput(session.traceId),materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
-      let failoverReason,primaryTurnId,submissionMarkedUncertain=false
-      try{
-        result=await session.rpc.request('turn/start',turnParams)
-        primaryTurnId=result.turn.id
-      }catch(error){
-        if(session.provider==='fallback'||!isProviderAvailabilityFailure(error,{stage:'turn'}))throw error
-        this.diagnostic(session,'provider.primary_failed',{stage:'turn_start',provider:'primary',rpc_code:error?.rpcCode,provider_failure:true,...errorFields(error)})
-        failoverReason=Object.assign(error,{primaryAcceptedUncertain:Boolean(error.connectionClosed||error.requestTimeout)})
-      }
-      if(!failoverReason&&session.provider==='primary'&&this.hasConfiguredFallback()){
-        const started=await this.waitForTurnStart(session,{traceId,turnId:result.turn.id})
-        if(!started&&token.current()&&session.busy&&session.traceId===traceId&&session.provider==='primary'){
-          failoverReason=Object.assign(session.turnStartFailure??Error('GPT 主模型在限定时间内未开始任务。'),{requestTimeout:!session.turnStartFailure,providerStartTimeout:true,primaryAcceptedUncertain:true})
-          this.diagnostic(session,'provider.primary_failed',{stage:'turn_start_timeout',provider:'primary',reason:'turn_not_started',provider_failure:true})
-        }
-      }
-      if(failoverReason){
-        if(failoverReason.primaryAcceptedUncertain&&deliveryId&&this.submissions?.mark){
-          this.submissions.mark(deliveryId,'uncertain')
-          submissionMarkedUncertain=true
-          this.diagnostic(session,'provider.primary_submission_uncertain',{stage:'turn_start',provider:'primary',turn_id:primaryTurnId??result?.turn?.id})
-        }
-        const switched=await this.failoverToFallback(session,{stage:failoverReason.providerStartTimeout?'turn_start_timeout':'turn_start',error:failoverReason})
-        if(!switched)throw failoverReason
-        this.diagnostic(session,'provider.failover.retry',{stage:'turn_start',provider:'fallback',attempt:1})
-        const retryParams=failoverReason.primaryAcceptedUncertain&&deliveryId?{...turnParams,clientUserMessageId:`${deliveryId}:fallback:${traceId}`}:turnParams
-        result=await session.rpc.request('turn/start',retryParams)
-      }
-      if(deliveryId){
-        if(submissionMarkedUncertain)this.submissions?.retargetSubmission?.(deliveryId,result.turn.id)
-        else this.submissions?.submitted(deliveryId,result.turn.id)
-      }
+      result=await session.rpc.request('turn/start',turnParams)
+      if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment
     } catch(error) {
       if(session.exited || session.traceId!==traceId)return
@@ -530,19 +405,11 @@ export class SessionManager {
       return
     }
     if(message.method==='error'){
-      const code=providerEventCode(p),failure=providerEventFailure(p)
-      if(code)this.diagnostic(session,'provider.event_error',{provider:session.provider,stage:session.turnStarted?'turn':'turn_start',reason:code,provider_failure:Boolean(failure),rpc_code:code})
-      if(failure&&!session.turnActivitySeen&&session.provider==='primary'&&session.busy&&this.hasConfiguredFallback()){
-        session.turnStartFailure=failure
-        ;(session.turnActivitySignal??session.turnStartSignal)?.(TURN_START_FAILURE)
-      }
+      const code=providerEventCode(p)
+      if(code)this.diagnostic(session,'provider.event_error',{provider:session.provider,stage:session.turnStarted?'turn':'turn_start',reason:code,rpc_code:code})
       return
     }
-    if (message.method === 'turn/started' && session.busy) { session.turnReady = true; session.turnStarted = true; session.turnId = p.turn.id; session.turnStartSignal?.(p.turn.id); this.diagnostic(session,'turn.started',{provider:session.provider,model:session.model,model_provider:session.modelProvider}) }
-    if(session.busy&&session.turnStarted&&(message.method==='item/started'||message.method==='item/completed')&&p.item?.type&&p.item.type!=='userMessage'&&(!p.turnId||p.turnId===session.turnId)){
-      session.turnActivitySeen=true
-      session.turnActivitySignal?.(session.turnId)
-    }
+    if (message.method === 'turn/started' && session.busy) { session.turnReady = true; session.turnStarted = true; session.turnId = p.turn.id; this.diagnostic(session,'turn.started',{provider:session.provider,model:session.model,model_provider:session.modelProvider}) }
     // Ignore delayed item notifications from a completed or superseded turn.
     if (['item/started', 'item/completed','item/agentMessage/delta'].includes(message.method)) {
       if (!session.busy || !session.turnReady || (session.finalReceived&&p.item?.type!=='imageGeneration')) { this.diagnostic(session,'event.ignored',{reason:'inactive_or_final',method:message.method}); return }
@@ -580,9 +447,6 @@ export class SessionManager {
     }
     if (message.method === 'turn/completed' && session.busy) {
       if (p.turn?.id && p.turn.id !== session.turnId) return
-      session.turnActivitySeen=true
-      session.turnStartSignal?.(p.turn?.id)
-      session.turnActivitySignal?.(p.turn?.id)
       transition(session,'delivering')
       this.clearQuestions(session)
       const awaitingAttachment=p.turn.status==='completed'&&session.waitingAttachment&&(session.workToken?.current()??true)
@@ -594,7 +458,6 @@ export class SessionManager {
       if (p.turn.status === 'failed') reply += `\nCodex 任务失败：${p.turn.error?.message ?? '未返回错误详情。'}`
       else if (p.turn.status === 'interrupted') reply += '\n当前任务已停止。'
       else if (!reply) reply = '本轮任务已结束，但未返回文字回复。'
-      if(session.provider==='fallback')reply += `\n\n${DEEPSEEK_FALLBACK_NOTICE}`
       // The footer describes execution completion, not delivery acceptance.
       const mergedCompletion=this.completionMarkers&&!awaitingAttachment&&(session.workToken?.current()??true)
       if(mergedCompletion){
@@ -615,7 +478,7 @@ export class SessionManager {
       this.state.users[session.userId].lastTask=session.localTask
       this.state.users[session.userId].lastReply = reply
       try { await this.save() } catch(error) { this.diagnostic(session,'state.save_failed',errorFields(error));reply+='\n（微信会话状态保存失败，本轮回复可能无法在重启后恢复。）';this.state.users[session.userId].lastReply=reply }
-      this.diagnostic(session,'turn.completed',{status:p.turn.status,provider:session.provider,model:session.model,model_provider:session.modelProvider,fallback_active:session.provider==='fallback',duration_ms:Date.now()-(session.startedAt??Date.now()),chars:Array.from(reply).length})
+      this.diagnostic(session,'turn.completed',{status:p.turn.status,provider:session.provider,model:session.model,model_provider:session.modelProvider,duration_ms:Date.now()-(session.startedAt??Date.now()),chars:Array.from(reply).length})
       if (session.exited) return
       if (session.exiting) { await this.finishExit(session, p.turn.status === 'interrupted' ? '当前任务已停止。' : '本轮任务已结束。'); return }
       const display=receivedWhileWaiting?reply:(session.displayFinals??session.finals).join('\n\n')+reply.slice(session.finals.join('\n\n').length)
@@ -634,7 +497,6 @@ export class SessionManager {
       }
       this.resolveWaiters(session, { status: p.turn.status, reply })
       if(session.exited)return
-      session.retryPrimaryOnNextSend=session.provider==='fallback'
       transition(session,'idle')
       if (session.queue.length) {
         try { await (()=>{const next=session.queue.shift();return typeof next==='string'?this.send(session,next):this.send(session,next.input,next.token)})() }
