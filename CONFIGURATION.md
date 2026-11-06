@@ -8,13 +8,15 @@
 
 仓库已公开，Linux/macOS 使用 `bootstrap.sh`，Windows x64 使用 `bootstrap.ps1`。README 提供可匿名下载的一行安装命令；也可克隆 `main` 后运行 `./install.sh` 或 `.\install.ps1`。
 
-两个引导脚本默认下载 `main`，支持 `ZERO_LINK_DIR` 指定源码保存目录、`ZERO_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/zero-link/source`；Windows 对应用户目录下的 `.local\share\zero-link\source`。目标目录已存在时拒绝覆盖，用于首次安装，不自动更新已有部署。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
+两个引导脚本默认下载 `main`，支持 `WEIXIN_LINK_DIR` 指定源码保存目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。目标目录已存在时拒绝覆盖，用于首次安装，不自动更新已有部署。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
+
+旧版 `ZERO_LINK_DIR`、`ZERO_LINK_REF` 仍兼容，新变量优先。改名不迁移现有工作区、账号数据或服务；旧源码目录若已存在，先核实原安装再更新。
 
 不同目录分别承担不同用途：
 
 | 用途 | 默认位置 |
 | --- | --- |
-| 引导脚本下载的源码 | `~/.local/share/zero-link/source` |
+| 引导脚本下载的源码 | `~/.local/share/weixin-link/source` |
 | 智能体工作区 | `~/work/wechat-assistant` |
 | 安装配置 | `~/.local/share/wechat-ping-bot/installation.json` |
 | 默认微信账号数据 | `~/.local/share/wechat-ping-bot` |
@@ -34,7 +36,7 @@ Git 手动安装的源码位置是克隆目录。工作区和 Codex 路径由安
 
 ## 二维码维护
 
-Linux/macOS 在安装源码目录运行 `./wechat-setup qr`，再次显示当前二维码。使用引导脚本默认目录时先运行 `cd ~/.local/share/zero-link/source`。
+Linux/macOS 在安装源码目录运行 `./wechat-setup qr`，再次显示当前二维码。使用引导脚本默认目录时先运行 `cd ~/.local/share/weixin-link/source`。
 
 二维码过期且尚未建立微信通道时，由安装维护终端刷新默认账号：
 
