@@ -4,7 +4,7 @@
 
 首次安装入口：`./install.sh`；后续优先在微信发送“安装状态”“安装Codex”“登录Codex”“验收Codex”。不需要预先接入模型。完整步骤见文末“首次安装（当前入口）”；早期变更记录不作为新机器安装指南。
 
-微信消息通过本地主机上的 Codex app-server 进入持久对话。搜索、天气、SSH、项目选择和远程 Codex 由智能体完成，目标别名规则只提供候选，不直接执行；模型与工具循环仍由官方 Codex 负责。
+微信消息通过本地主机上的 Codex app-server 进入持久对话。搜索、天气、SSH、项目定位和远程 Codex 由智能体底座结合原始请求处理；接入层不维护项目别名表或注入目标候选，模型与工具循环仍由官方 Codex 负责。
 
 
 ## 跨平台适配（2026-11-06）
@@ -205,7 +205,7 @@ FONTCONFIG_FILE=/tmp/mova-fonts.conf npm run test:media-live
 
 `text-stream.mjs` 处理可见 assistant 文本增量，默认约 120–400 字、最多等待 2.5 秒、发送间隔至少 1.5 秒；沿用 OutputTransport。代码、链接和附件留待完整结果。最终正文仅发送未推送部分，/result 保留全文；取消后不发送未送片段。远程 `watch` 使用相同分段器，经私有 runtime.sock 回送当前拥有该任务的微信会话，按项目任务记录检查归属，保存片段发送偏移，未知发送结果不重放。
 
-`target-hints.mjs` 从工作目录 targets.json 获取别名，只给 Codex 追加候选提示，不改变原文、不自动切换主机、不触发危险操作，不省略模型调用。项目路径须先核实再登记。
+项目定位交由智能体底座结合用户原始请求、会话上下文和文件系统核实。接入层不维护主机/项目别名映射，也不向请求正文追加目标候选；远程执行仍校验连接配置的允许根目录与任务归属。
 
 验证命令：`node --test *.test.mjs`；远程适配工作目录执行 `node --test remote-*.test.mjs`。测试覆盖崩溃后 WAL 恢复、去重、取消、提交对账、分段最终回复一致性及远程片段检查点。
 
@@ -323,7 +323,7 @@ refresh-qr ACCOUNT 会只重启指定账号的配对流程，等待新二维码�
 
 ## NAS 源码仓库与恢复布局
 
-Git 远端由部署者自行设置。顶层是机器人源码；`agent-workspace/`是当前独立工作目录中远程兼容入口、目标配置示例和AGENTS.md模板，运行目录仍为`~/work/wechat-assistant`，远程连接维护在 src/remote/，任务协调维护在 src/core/remote-tasks/。全新恢复时可将兼容入口和模板放回工作目录，并配置 WECHAT_BOT_ROOT；不要覆盖已有remote-sessions.json、私有目录或outputs。凭据、会话、SQLite数据库、聊天附件、日志、备份、依赖和CodeGraph索引不纳入Git。
+Git 远端由部署者自行设置。顶层是机器人源码；`agent-workspace/`是当前独立工作目录中远程兼容入口、远程连接配置示例和AGENTS.md模板，运行目录仍为`~/work/wechat-assistant`，远程连接维护在 src/remote/，任务协调维护在 src/core/remote-tasks/。全新恢复时可将兼容入口和模板放回工作目录，并配置 WECHAT_BOT_ROOT；不要覆盖已有remote-sessions.json、私有目录或outputs。凭据、会话、SQLite数据库、聊天附件、日志、备份、依赖和CodeGraph索引不纳入Git。
 
 ## 微信文字排版
 

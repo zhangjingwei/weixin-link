@@ -11,7 +11,7 @@ Windows 主机需配置实际用户目录、Codex 路径和 loopback 端口。�
 
 `/stop` uses the original account/conversation scope: seal submissions, interrupt the owned turn, terminate only its owned background terminals, then verify they disappeared. It never stops the shared app-server. A tunnel disconnect is not proof of cancellation.
 
-Host name recognition remains in `targets.json`. Register aliases there after SSH and app-server verification. New hosts with an existing supported endpoint require configuration, not another cancellation implementation.
+Project discovery belongs to the agent backend and its conversation context. The intake layer does not maintain project aliases or inject target candidates. Host registration and allowed roots remain execution boundaries.
 
 
 ## Reusable deployment

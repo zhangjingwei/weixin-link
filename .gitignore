@@ -11,7 +11,6 @@
 !/agent-workspace/
 /agent-workspace/*
 !/agent-workspace/AGENTS.md
-!/agent-workspace/targets.example.json
 !/agent-workspace/remote-hosts.example.json
 !/agent-workspace/REMOTE-HOSTS.md
 !/install.sh

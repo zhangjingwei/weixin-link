@@ -1,7 +1,6 @@
 import {stripTaskFlow,executionState} from './task-flow.mjs'
 import {publicMemoryText} from '../base/codex/native-memory.mjs'
 import {localTaskLabel,localCompletion} from './task-label.mjs'
-import {addTargetHints} from './target-hints.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 import {transition} from './lifecycle.mjs'
 export class DurableIntake {
@@ -14,7 +13,7 @@ export class DurableIntake {
   for(;;){if(this.closed)return;const job=this.jobs.pending().find(j=>j.owner===owner);if(!job)return;const token=this.manager.lifecycle.capture(owner),reply=(v,o)=>this.reply(owner,v,o)
    try{
     if(job.state==='pending'){
-     const hinted=await addTargetHints(job.input,this.manager.cwd),input=typeof hinted==='string'?{text:hinted}:{...hinted};input.deliveryId=job.id
+     const input=typeof job.input==='string'?{text:job.input}:{...job.input};input.deliveryId=job.id
      while(this.manager.sessions?.get(owner)?.busy||this.manager.sessions?.get(owner)?.finishing){if(this.closed||!token.current())return;await delay(100)}
      if(this.closed||!token.current())return
      if(input.receiptDeferred&&this.jobs.claimReceipt(job.id)&&!this.manager.state.users[owner]?.waitingAttachment){void Promise.resolve().then(()=>reply('已收到，正在处理。')).catch(()=>this.log('receipt.delivery_unconfirmed',{}))}

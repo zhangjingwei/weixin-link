@@ -6,7 +6,7 @@
 
 复制 agent-workspace/remote-hosts.example.json 为工作目录的 remote-hosts.json，填写实际 SSH 别名、Codex 绝对路径与允许的项目根目录。缺省不注册任何主机；格式错误会明确拒绝加载。可用 WECHAT_REMOTE_HOSTS 指向外部 JSON。不要将凭据放入主机 JSON。
 
-复制 targets.example.json 为工作目录的 targets.json，填写已核实的主机和项目别名。可用 WECHAT_TARGETS_FILE 指向外部文件。候选识别不构成执行授权。
+项目定位由智能体底座自行管理。接入层不读取项目别名文件，也不向原始请求注入项目/主机候选。远程连接配置的主机注册和允许根目录属于执行边界，不用于推断用户要操作哪个项目。
 
 SSH 使用 WECHAT_SSH_CONFIG 指定的文件，默认 ~/.ssh/wechat_hosts_config。examples/ssh-config.example 展示严格密钥校验；需自行验证主机密钥，不自动接受未知密钥。
 
@@ -21,7 +21,7 @@ SSH 使用 WECHAT_SSH_CONFIG 指定的文件，默认 ~/.ssh/wechat_hosts_config
 
 ## 迁移与验证
 
-remote-hosts.json、targets.json、*.local.json、*.local.md 和 .private/ 不进入 Git。不要用 git add -f 强行加入私人配置。树莓派现有运行目录未改动。
+remote-hosts.json、*.local.json、*.local.md 和 .private/ 不进入 Git。不要用 git add -f 强行加入私人配置。树莓派现有运行目录未改动。
 
 本次准备前的个人主机清单和工作说明在 Mac mini 的 .private/original-config/ 保留，不进入提交。工作目录内已有的 AGENTS.md 应作为部署配置保留。
 
