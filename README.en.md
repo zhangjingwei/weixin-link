@@ -80,10 +80,13 @@ These are example requests. Execution depends on your configured workspace, tool
 
 ## Common commands
 
+Send **日常助手** to return to your fixed everyday conversation, including after service restarts. Use `新建 Project name` for a separate project, then `日常助手` to return. Existing users keep their original conversation.
+
 Send ordinary requests directly. These fixed commands control the bridge:
 
 | Command | Purpose |
 | --- | --- |
+| `日常助手` | Return to the fixed everyday conversation |
 | `状态` | Check the current task and queue |
 | `补充 Your instructions` | Add instructions to the active task |
 | `停止` | Cancel the current task and queued messages |
