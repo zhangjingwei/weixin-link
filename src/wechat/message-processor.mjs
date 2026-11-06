@@ -1,3 +1,5 @@
+import {OutputStore} from '../media/outbound-media.mjs'
+import {diagnosticCommand,handleDiagnostic} from '../core/diagnostic-commands.mjs'
 import {randomUUID} from 'node:crypto'
 import {welcomeGuideOnce} from './welcome-guide.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
@@ -19,13 +21,15 @@ return async function handleMessage(message) {
   log('message.received',{trace_id,userId:message.userId,messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text',chars:message.text?.length??0})
   if (!manager.owners.has(message.userId)) {log('message.rejected',{trace_id,reason:'unauthorized'});return}
   if(welcomePending)await welcomeGuideOnce(stateDir,conversations.recipient(message.userId),value=>outgoing.deliver(message.userId,value,{conversationControl:true}))
-  const initialControl=!hasMedia(message)&&(message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
+  const diagnosticAction=!hasMedia(message)&&diagnosticCommand(message.text)
+  const initialControl=!hasMedia(message)&&(diagnosticAction||message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
   if(runtime.sealed)return
   if(runtime.draining&&!(typeof initialControl==='string'&&/^wizardChoice:\d+:3$/.test(initialControl))&&!['stop','exit','status','result','help'].includes(initialControl?.action)){
     jobs.acknowledge([message._ingressId].filter(Boolean))
     await runtime.track('delivery',()=>bot.reply({...message,userId:conversations.recipient(message.userId)},'服务正在维护重启，请稍后重新发送。'));return
   }
   const setupAction=!hasMedia(message)&&message._setupAction;if(setupAction){const receipt=message._setupReceiptId?{id:message._setupReceiptId}:setupReceipts.capture(message);if(!receipt||!setupReceipts.claim(receipt.id)){if(message._recovered){await outgoing.deliver(message.userId,'上次安装操作的结果需要核对，未重复执行。发送“安装向导”重新检测并继续。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean))}return;}const setupToken=manager.lifecycle.capture(message.userId);const setupReply=(value,options={})=>{if(!setupToken.current())throw Error('SETUP_CANCELLED');return options.sensitive?runtime.track('delivery',()=>bot.sendSensitiveText(conversations.recipient(message.userId),value)):outgoing.deliver(message.userId,value,{current:()=>setupToken.current(),conversationControl:true})};await runtime.track('setup',()=>setupController.handle(setupAction,setupReply,{signal:setupToken.signal,scope:message._conversationOwner??message.userId,executionKey:message.userId}));setupReceipts.finish(receipt.id);jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>outgoing.deliver(message.userId,diagnosticAction==='export'?await new OutputStore({stateDir,cwd:process.cwd()}).package(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
   if(!initialControl&&backend.kind==='podman'&&!manager.sessions.has(message.userId)){try{await backend.preflight(owners);backendStartupIssue=null}catch{backendStartupIssue='CONTAINER_NOT_READY'}if(backendStartupIssue){await outgoing.deliver(message.userId,'微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。');jobs.acknowledge([message._ingressId].filter(Boolean));return}}
   if(!initialControl&&backend.kind==='host'&&!manager.sessions.has(message.userId)){
    const ready=await codexAvailability();if(!ready.installed||!ready.loggedIn){await outgoing.deliver(message.userId,!ready.installed?'微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。':'微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。');jobs.acknowledge([message._ingressId].filter(Boolean));return}

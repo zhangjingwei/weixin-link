@@ -1,3 +1,4 @@
+import {diagnosticCommand} from '../core/diagnostic-commands.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
 import {setupModelTest} from '../setup/setup-model-test.mjs'
 import {SetupReceipts} from '../setup/setup-receipts.mjs'
@@ -108,7 +109,7 @@ const weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:async wires=
  const received=[],setupReceived=[]
  for(const wire of wires){const parsed=originalParse(wire);if(!parsed||!conversations.realOwners.has(parsed.userId))continue
   const previous=jobs.findCaptured(parsed);const message=previous??conversations.bind(parsed);const frozenSetup=setupReceipts.get(parsed);if(frozenSetup){message._setupAction=frozenSetup.action;message._setupReceiptId=frozenSetup.id}if(!Object.hasOwn(message,'_setupAction'))message._setupAction=previous?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId);message.references??=weixin.quote(message);stagedWires.set(wire,message)
-  const control=!hasMedia(message)&&(message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
+  const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
   if(message._setupAction)setupReceived.push(message)
   if(!control)received.push(message)
  }
@@ -126,7 +127,7 @@ bot.on('error', error => log('wechat.error',errorFields(error)))
 const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable})
 const intakeHandler=nonBlockingHandler(async message => {
   try {
-    const control=!hasMedia(message)&&(message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
+    const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
     if(control)await handleMessage(message)
     else await pending.enqueue(message.userId,()=>handleMessage(message),message._intakeToken)
   }
@@ -143,7 +144,7 @@ bot.onMessage(message=>{
  if(!conversations.realOwners.has(message._conversationOwner??message.userId)||runtime.sealed)return
  if(!message._conversationOwner)message=conversations.bind(message)
  if(!Object.hasOwn(message,'_setupAction'))message._setupAction=message._recovered?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId)
- if(!hasMedia(message)&&(message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))){intakeHandler(message);return}
+ if(!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))){intakeHandler(message);return}
  const token=manager.lifecycle.capture(message.userId)
  void (async()=>{try{await manager.save();if(!token.current())return;const id=jobs.capture(message);if(id){log('ingress.persisted',{messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text'});intakeHandler({...message,_ingressId:id,_intakeToken:token})}}catch(error){log('ingress.persist_failed',errorFields(error));void bot.reply({...message,userId:conversations.recipient(message.userId)},'消息未能持久保存，请稍后重试。').catch(()=>{})}})()
 })
