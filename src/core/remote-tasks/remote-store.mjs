@@ -1,1 +1,1 @@
-export {RemoteStore} from '../registry-lock.mjs'
+export {RemoteStore} from '../storage/registry-lock.mjs'

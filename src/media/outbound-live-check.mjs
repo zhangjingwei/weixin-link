@@ -5,7 +5,7 @@ import {join} from 'node:path'
 import {execFileSync} from 'node:child_process'
 import sharp from 'sharp'
 import {OutputStore,OutputTransport} from './outbound-media.mjs'
-import {createDiagnosticLog,createSdkLogger,errorFields} from '../core/diagnostic-log.mjs'
+import {createDiagnosticLog,createSdkLogger,errorFields} from '../core/diagnostics/diagnostic-log.mjs'
 const root=join(process.env.HOME,'.local/share/wechat-ping-bot'),cwd=join(process.env.HOME,'work/wechat-assistant')
 const owners=JSON.parse(await readFile(join(root,'codex-owners.json'),'utf8'))
 if(owners.length!==1)throw Error('Live media check requires one explicitly selected authorized recipient')

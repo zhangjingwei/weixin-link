@@ -68,7 +68,7 @@ export async function runtimeEndpoints(home=currentHome()){
  return endpoints
 }
 export async function guardRemoteConfiguration({home=currentHome(),endpoints,control}={}){
- if(!control)control=(await import('../core/runtime-control.mjs')).controlRequest
+ if(!control)control=(await import('../core/runtime/runtime-control.mjs')).controlRequest
  endpoints??=await runtimeEndpoints(home)
  const lease='config-'+randomUUID(),attempted=[]
  const release=async()=>{const failed=[];for(const endpoint of attempted.slice().reverse()){try{await control(endpoint,'POST','/resume',{lease},5000)}catch{failed.push(endpoint)}}return {resumed:failed.length===0}}
@@ -103,7 +103,7 @@ export async function configure(kind,input,{home=currentHome(),workspace,env=pro
  try{
   const write=()=>atomicConfigWrite(path,JSON.stringify(config,null,2)+'\n',{expected,backup:!restoring})
   let result
-  if(kind==='remote-hosts'){const {RemoteStore}=await import('../core/registry-lock.mjs');result=await new RemoteStore(dirname(path)).locked('host-config',async()=>{const tasks=await checkRemoteTransition(previous,config,options);if(tasks.some(t=>!options.remoteTasks.some(old=>old.thread_id===t.thread_id&&old.turn_id===t.turn_id)))throw new ConfigError('CONFIG_REMOTE_STATE_CHANGED');return write()})}
+  if(kind==='remote-hosts'){const {RemoteStore}=await import('../core/storage/registry-lock.mjs');result=await new RemoteStore(dirname(path)).locked('host-config',async()=>{const tasks=await checkRemoteTransition(previous,config,options);if(tasks.some(t=>!options.remoteTasks.some(old=>old.thread_id===t.thread_id&&old.turn_id===t.turn_id)))throw new ConfigError('CONFIG_REMOTE_STATE_CHANGED');return write()})}
   else result=await write()
   committed=true
   let guidance
