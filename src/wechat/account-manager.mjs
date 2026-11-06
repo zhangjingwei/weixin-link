@@ -9,7 +9,7 @@ import {readFile,writeFile,copyFile,mkdir,chmod} from 'node:fs/promises'
 import {join} from 'node:path'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
-import {controlRequest} from '../core/runtime-control.mjs'
+import {controlRequest} from '../core/runtime/runtime-control.mjs'
 const services=new ServiceManager()
 const exec=promisify(execFile),action=process.argv[2],id=process.argv[3]
 async function active(service){return (await services.status(service)).active}

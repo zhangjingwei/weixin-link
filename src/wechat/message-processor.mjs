@@ -1,5 +1,5 @@
 import {OutputStore} from '../media/outbound-media.mjs'
-import {diagnosticCommand,handleDiagnostic} from '../core/diagnostic-commands.mjs'
+import {diagnosticCommand,handleDiagnostic} from '../core/diagnostics/diagnostic-commands.mjs'
 import {randomUUID} from 'node:crypto'
 import {welcomeGuideOnce} from './welcome-guide.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
@@ -7,10 +7,10 @@ import {conversationCommand} from '../core/text-conversations.mjs'
 import {controlCommand} from '../base/codex/control-command.mjs'
 import {hasMedia} from '../media/media-input.mjs'
 import {voiceTextMessage} from '../media/voice-text.mjs'
-import {receiptPolicy} from '../core/notification-policy.mjs'
+import {receiptPolicy} from '../core/delivery/notification-policy.mjs'
 import {singleMedia} from '../media/single-media.mjs'
 import {quoteInput} from './weixin-protocol.mjs'
-import {errorFields} from '../core/diagnostic-log.mjs'
+import {errorFields} from '../core/diagnostics/diagnostic-log.mjs'
 
 export function createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable}){
 return async function handleMessage(message) {

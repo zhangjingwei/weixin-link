@@ -7,7 +7,7 @@ import {writeFile,mkdir} from 'node:fs/promises'
 import {setTimeout as delay} from 'node:timers/promises'
 import {join} from 'node:path'
 import {randomUUID} from 'node:crypto'
-import {controlRequest} from '../core/runtime-control.mjs'
+import {controlRequest} from '../core/runtime/runtime-control.mjs'
 const exec=promisify(execFile),dir=accountPaths().stateDir,socket=accountPaths().socket,lease=randomUUID()
 const request=(method,path,body)=>controlRequest(socket,method,path,body)
 const services=new ServiceManager()

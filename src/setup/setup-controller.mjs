@@ -11,7 +11,7 @@ import {fileURLToPath} from 'node:url'
 const setupExec=promisify(execFile)
 import {doctor,installCodex,checkCodex} from './setup-core.mjs'
 import {deviceLogin} from './setup-login.mjs'
-import {RemoteStore} from '../core/registry-lock.mjs'
+import {RemoteStore} from '../core/storage/registry-lock.mjs'
 import {installConfig} from './install-config.mjs'
 export function setupCommand(text){const commands={'安装Codex':'install','登录Codex':'login','验收Codex':'check','使用说明':'manual','说明书':'manual','安装向导':'wizard','隔离参数':'containerParameters','使用宿主机':'hostChoice','安装状态':'status','安装智能体':'install','登录智能体':'login','验收智能体':'check','安装帮助':'help','创建容器':'containerCreate','登录容器':'containerLogin','使用容器':'containerBind','启动容器':'containerStart'};return typeof text==='string'?commands[text.trim()]??null:null}
 export class SetupController{
