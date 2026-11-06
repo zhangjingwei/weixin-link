@@ -49,6 +49,24 @@ try {
     try { & $bootstrapPath } catch { $refused = $_.Exception.Message -like '*already exists*' }
     Assert-True $refused 'Existing installation was not refused.'
     Assert-True ((Get-Content -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'installed.txt')).Trim() -eq 'installed') 'Existing content changed.'
+    # An already installed source tree resumes pairing without executing its installer.
+    Set-Content -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'package.json') -Value '{"name":"weixin-link"}' -Encoding ASCII
+    New-Item -ItemType Directory -Path (Join-Path $env:ZERO_LINK_DIR 'src\wechat') -Force | Out-Null
+    $managerFixture = @'
+import {writeFileSync,existsSync} from 'node:fs';
+const root=new URL('../../',import.meta.url);
+if(process.argv[2]==='list')console.log(JSON.stringify({accounts:[{account:'default',ready:existsSync(new URL('online',root)),service_active:existsSync(new URL('online',root))}]}));
+else if(process.argv[2]==='refresh-qr'){writeFileSync(new URL('refreshed',root),'fresh');console.log('{}')}
+else process.exit(2);
+'@
+    Set-Content -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'src\wechat\account-manager.mjs') -Value $managerFixture -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'src\setup\setup.mjs') -Value "console.log('FRESH_QR_DISPLAYED')" -Encoding ASCII
+    & $bootstrapPath
+    Assert-True (Test-Path -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'refreshed')) 'Existing offline account did not refresh.'
+    Remove-Item -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'refreshed')
+    Set-Content -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'online') -Value 'online'
+    & $bootstrapPath
+    Assert-True (!(Test-Path -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'refreshed'))) 'Online account was re-paired.'
     Make-Archive 'exit 0' $false
     $env:ZERO_LINK_DIR = Join-Path $fixtureRoot 'incomplete'
     $refused = $false

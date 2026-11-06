@@ -9,10 +9,34 @@ $bootstrapRef = if ($env:WEIXIN_LINK_REF) { $env:WEIXIN_LINK_REF } elseif ($env:
 $bootstrapDest = if ($env:WEIXIN_LINK_DIR) { $env:WEIXIN_LINK_DIR } elseif ($env:ZERO_LINK_DIR) { $env:ZERO_LINK_DIR } else { Join-Path $bootstrapHome '.local\share\weixin-link\source' }
 $bootstrapDest = [IO.Path]::GetFullPath($bootstrapDest)
 if (!$env:WEIXIN_LINK_DIR -and !$env:ZERO_LINK_DIR -and (Get-Item -LiteralPath (Join-Path $bootstrapHome '.local\share\zero-link\source') -Force -ErrorAction SilentlyContinue)) {
-    throw 'An earlier installation exists under .local\share\zero-link\source; inspect it before installing again.'
+    if (Get-Item -LiteralPath $bootstrapDest -Force -ErrorAction SilentlyContinue) { throw 'Multiple source directories exist; select one with WEIXIN_LINK_DIR.' }
+    $bootstrapDest = Join-Path $bootstrapHome '.local\share\zero-link\source'
 }
-if (Get-Item -LiteralPath $bootstrapDest -Force -ErrorAction SilentlyContinue) {
-    throw "Installation directory already exists: $bootstrapDest. Inspect it or choose another WEIXIN_LINK_DIR."
+$bootstrapExisting = Get-Item -LiteralPath $bootstrapDest -Force -ErrorAction SilentlyContinue
+if ($bootstrapExisting) {
+    if (!$bootstrapExisting.PSIsContainer -or ($bootstrapExisting.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Installation directory already exists but is not a supported installation.' }
+    foreach ($bootstrapRequired in @('package.json', 'src\wechat\account-manager.mjs', 'src\setup\setup.mjs')) {
+        if (!(Test-Path -LiteralPath (Join-Path $bootstrapDest $bootstrapRequired) -PathType Leaf)) { throw 'Installation directory already exists but is not a supported installation.' }
+    }
+    $bootstrapPackage = Get-Content -LiteralPath (Join-Path $bootstrapDest 'package.json') -Raw | ConvertFrom-Json
+    if ($bootstrapPackage.name -notin @('weixin-link', 'wechat-ping-bot')) { throw 'Unrecognized existing source directory.' }
+    $bootstrapNode = Join-Path $bootstrapHome '.local\share\wechat-ping-bot\tools\node\node.exe'
+    if (!(Test-Path -LiteralPath $bootstrapNode)) { $bootstrapNodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue; if (!$bootstrapNodeCommand) { throw 'Existing installation needs Node.js 24+ before pairing can resume.' }; $bootstrapNode = $bootstrapNodeCommand.Source }
+    & $bootstrapNode -e 'process.exit(Number(process.versions.node.split(String.fromCharCode(46))[0])>=24?0:1)'
+    if ($LASTEXITCODE -ne 0) { throw 'Existing installation needs Node.js 24+ before pairing can resume.' }
+    $bootstrapManager = Join-Path $bootstrapDest 'src\wechat\account-manager.mjs'
+    $bootstrapAccounts = & $bootstrapNode $bootstrapManager list
+    if ($LASTEXITCODE -ne 0) { throw 'ACCOUNT_STATUS_FAILED' }
+    $bootstrapAccount = (($bootstrapAccounts | Out-String | ConvertFrom-Json).accounts | Where-Object account -eq 'default' | Select-Object -First 1)
+    if (!$bootstrapAccount) { throw 'DEFAULT_ACCOUNT_NOT_FOUND' }
+    if ($bootstrapAccount.ready) { Write-Output 'Already logged in. Send installation status in WeChat to continue.'; return }
+    if ($bootstrapAccount.service_active) { throw 'The account service is running but not ready; inspect its status before re-pairing.' }
+    Write-Output 'Existing installation found; refreshing the login QR code without reinstalling.'
+    & $bootstrapNode $bootstrapManager refresh-qr default
+    if ($LASTEXITCODE -ne 0) { throw 'QR_REFRESH_FAILED' }
+    & $bootstrapNode (Join-Path $bootstrapDest 'src\setup\setup.mjs') qr default
+    if ($LASTEXITCODE -ne 0) { throw 'QR_DISPLAY_FAILED' }
+    return
 }
 $bootstrapParent = Split-Path -Parent $bootstrapDest
 New-Item -ItemType Directory -Path $bootstrapParent -Force | Out-Null
