@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink} from 'node:fs/promises'
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink,realpath} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {execFile} from 'node:child_process'
@@ -57,13 +57,13 @@ async function existingInstallation(f,{ready=false,running=false}={}){
  await mkdir(join(f.dest,'src/wechat'),{recursive:true});await mkdir(join(f.dest,'src/setup'),{recursive:true})
  await writeFile(join(f.dest,'package.json'),JSON.stringify({name:'weixin-link'}))
  await writeFile(join(f.dest,'keep'),'original')
- await writeFile(join(f.dest,'src/wechat/account-manager.mjs'),`import {writeFileSync} from 'node:fs';if(process.argv[2]==='list')console.log(JSON.stringify({accounts:[{account:'default',ready:${ready},service_active:${running}}]}));else if(process.argv[2]==='refresh-qr'){writeFileSync(new URL('../../refreshed',import.meta.url),'fresh');console.log('{}')}else process.exit(2)`)
+ await writeFile(join(f.dest,'src/wechat/account-manager.mjs'),`import {writeFileSync} from 'node:fs';if(process.argv[2]==='list')console.log(JSON.stringify({accounts:[{account:'default',ready:${ready},service_active:${running}}]}));else if(process.argv[2]==='refresh-qr'){writeFileSync(new URL('../../refreshed',import.meta.url),'fresh');const path=new URL('../../login.png',import.meta.url);writeFileSync(path,'fixture');console.log(JSON.stringify({ok:true,status:'scan_to_login',path:(await import('node:url')).fileURLToPath(path)}))}else process.exit(2)`)
  await writeFile(join(f.dest,'src/setup/setup.mjs'),`import {writeFileSync} from 'node:fs';if(process.argv[2]!=='qr')process.exit(3);writeFileSync(new URL('../../displayed',import.meta.url),'qr');console.log('FRESH_QR_DISPLAYED')`)
 }
 test('repeating bootstrap refreshes an offline existing installation without downloading or reinstalling',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t);await existingInstallation(f)
  const r=await exec('bash',[bootstrap],{env:{...f.env,FIXTURE_ARCHIVE:join(f.root,'must-not-download')}})
- assert(r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(f.dest,'refreshed'),'utf8'),'fresh')
+ assert(r.stdout.includes('请用微信扫描 PNG 图片'));assert(!r.stdout.includes('\"ok\"'));assert(!r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(f.dest,'refreshed'),'utf8'),'fresh')
  assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original');assert.equal((await readdir(f.dest)).includes('installed.txt'),false)
 })
 test('repeating bootstrap leaves an online account running and does not refresh its QR',{skip:process.platform==='win32'},async t=>{
@@ -79,11 +79,33 @@ test('running but unready accounts are not forcibly re-paired',{skip:process.pla
 test('recognized legacy default sources resume pairing in place',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t);const dest=join(f.root,'.local/share/zero-link/source');await existingInstallation({...f,dest})
  const r=await exec('bash',[bootstrap],{env:{...f.env,HOME:f.root,ZERO_LINK_DIR:'',WEIXIN_LINK_DIR:''}})
- assert(r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(dest,'keep'),'utf8'),'original')
+ assert(r.stdout.includes('请用微信扫描 PNG 图片'));assert(!r.stdout.includes('\"ok\"'));assert(!r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(dest,'keep'),'utf8'),'original')
  assert.equal((await readdir(join(f.root,'.local/share'))).includes('weixin-link'),false)
 })
 test('existing installations also resume through a relative custom directory',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t);await existingInstallation(f)
  const r=await exec('bash',[bootstrap],{cwd:f.root,env:{...f.env,WEIXIN_LINK_DIR:'source with spaces'}})
- assert(r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
+ assert(r.stdout.includes('请用微信扫描 PNG 图片'));assert(!r.stdout.includes('\"ok\"'));assert(!r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
+})
+test('legacy installation opens its PNG on a Mac terminal without executing old QR rendering',{skip:process.platform!=='darwin'},async t=>{
+ const f=await fixture(t);await existingInstallation(f)
+ await writeFile(join(f.root,'bin/open'),'#!/bin/sh\nprintf "%s" "$1" > "$OPEN_CAPTURE"\n',{mode:0o755})
+ const capture=join(f.root,'opened-path')
+ const tty=join(f.root,'tty.cjs');await writeFile(tty,'process.stdout.isTTY=true')
+ const r=await exec('bash',[bootstrap],{env:{...f.env,NODE_OPTIONS:`--require=${JSON.stringify(tty)}`,SSH_CONNECTION:'',SSH_CLIENT:'',SSH_TTY:'',OPEN_CAPTURE:capture}})
+ assert.equal(await realpath(await readFile(capture,'utf8')),await realpath(join(f.dest,'login.png')))
+ assert(r.stdout.includes('已打开二维码图片'))
+ assert(!r.stdout.includes('"ok"'))
+ assert.equal((await readdir(f.dest)).includes('displayed'),false)
+})
+test('legacy refresh failures retain a useful error code without dumping JSON',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t);await existingInstallation(f)
+ const manager=join(f.dest,'src/wechat/account-manager.mjs')
+ await writeFile(manager,(await readFile(manager,'utf8')).replace("writeFileSync(new URL('../../refreshed',import.meta.url),'fresh');", "console.log(JSON.stringify({ok:false,error:'QR_NOT_READY_RETRY'}));process.exit(1);"))
+ await assert.rejects(exec('bash',[bootstrap],{env:f.env}),error=>{
+  assert(error.stderr.includes('QR_NOT_READY_RETRY'))
+  assert(!error.stderr.includes('"ok"'))
+  assert(!error.stdout.includes('"ok"'))
+  return true
+ })
 })

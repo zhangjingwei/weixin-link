@@ -37,8 +37,38 @@ if [[ -e "$bootstrap_dest" || -L "$bootstrap_dest" ]]; then
     echo 'The account service is running but not ready; inspect its status before re-pairing.' >&2; exit 1
   fi
   echo '检测到已有安装，正在刷新微信登录二维码…'
-  "$bootstrap_node" "$bootstrap_dest/src/wechat/account-manager.mjs" refresh-qr default --human
-  "$bootstrap_node" "$bootstrap_dest/src/setup/setup.mjs" qr default --human
+  # Handle legacy JSON here: installed sources may predate --human and PNG opening.
+  "$bootstrap_node" - "$bootstrap_dest" <<'NODE'
+const {execFileSync} = require('node:child_process')
+const {resolve} = require('node:path')
+const {existsSync} = require('node:fs')
+const root = resolve(process.argv[2])
+try {
+  const result = JSON.parse(execFileSync(process.execPath,
+    [resolve(root, 'src/wechat/account-manager.mjs'), 'refresh-qr', 'default'],
+    {encoding:'utf8', timeout:60000}))
+  if (!result.ok || result.status !== 'scan_to_login' || typeof result.path !== 'string' || !existsSync(result.path)) {
+    throw Error('QR_IMAGE_UNAVAILABLE')
+  }
+  console.log('✓ 登录二维码已刷新。\n请用微信扫描 PNG 图片：\n' + result.path)
+  const remote = process.env.SSH_CONNECTION || process.env.SSH_CLIENT || process.env.SSH_TTY
+  const viewer = !remote && process.stdout.isTTY && (process.platform === 'darwin' ? 'open' :
+    process.env.DISPLAY || process.env.WAYLAND_DISPLAY ? 'xdg-open' : null)
+  if (viewer) {
+    try {
+      execFileSync(viewer, [result.path], {stdio:'ignore', timeout:5000})
+      console.log('已打开二维码图片，请及时扫码。')
+    } catch { console.log('无法自动打开图片，请手动打开上面的 PNG 文件。') }
+  }
+  console.log('扫码并在手机上确认后，请在微信发送「安装状态」继续配置。')
+} catch (error) {
+  let code = error.message
+  try { code = JSON.parse(String(error.stdout)).error || code } catch {}
+  if (!/^[A-Z0-9_]+$/.test(code)) code = 'QR_REFRESH_FAILED'
+  console.error('无法刷新二维码，请稍后重试。错误代码：' + code)
+  process.exitCode = 1
+}
+NODE
   exit 0
 fi
 mkdir -p "$(dirname -- "$bootstrap_dest")"

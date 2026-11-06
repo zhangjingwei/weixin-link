@@ -32,10 +32,17 @@ if ($bootstrapExisting) {
     if ($bootstrapAccount.ready) { Write-Output '微信已登录，请发送「安装状态」继续配置。'; return }
     if ($bootstrapAccount.service_active) { throw 'The account service is running but not ready; inspect its status before re-pairing.' }
     Write-Output '检测到已有安装，正在刷新微信登录二维码…'
-    & $bootstrapNode $bootstrapManager refresh-qr default --human
-    if ($LASTEXITCODE -ne 0) { throw 'QR_REFRESH_FAILED' }
-    & $bootstrapNode (Join-Path $bootstrapDest 'src\setup\setup.mjs') qr default --human
-    if ($LASTEXITCODE -ne 0) { throw 'QR_DISPLAY_FAILED' }
+    # Older installed sources do not understand --human; format their JSON here.
+    $bootstrapQrOutput = & $bootstrapNode $bootstrapManager refresh-qr default
+    if ($LASTEXITCODE -ne 0) { throw '无法刷新二维码，请稍后重试。错误代码：QR_REFRESH_FAILED' }
+    $bootstrapQr = $bootstrapQrOutput | Out-String | ConvertFrom-Json
+    if (!$bootstrapQr.ok -or $bootstrapQr.status -ne 'scan_to_login' -or !$bootstrapQr.path -or !(Test-Path -LiteralPath $bootstrapQr.path -PathType Leaf)) { throw '二维码图片不可用，请重试。错误代码：QR_IMAGE_UNAVAILABLE' }
+    Write-Output "✓ 登录二维码已刷新。`n请用微信扫描 PNG 图片：`n$($bootstrapQr.path)"
+    if (!$env:SSH_CONNECTION -and !$env:SSH_CLIENT -and !$env:SSH_TTY -and [Environment]::UserInteractive -and ![Console]::IsOutputRedirected) {
+        try { Start-Process -FilePath $bootstrapQr.path -ErrorAction Stop; Write-Output '已打开二维码图片，请及时扫码。' }
+        catch { Write-Output '无法自动打开图片，请手动打开上面的 PNG 文件。' }
+    }
+    Write-Output '扫码并在手机上确认后，请在微信发送「安装状态」继续配置。'
     return
 }
 $bootstrapParent = Split-Path -Parent $bootstrapDest

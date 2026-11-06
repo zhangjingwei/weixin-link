@@ -56,7 +56,7 @@ try {
 import {writeFileSync,existsSync} from 'node:fs';
 const root=new URL('../../',import.meta.url);
 if(process.argv[2]==='list')console.log(JSON.stringify({accounts:[{account:'default',ready:existsSync(new URL('online',root)),service_active:existsSync(new URL('online',root))}]}));
-else if(process.argv[2]==='refresh-qr'){writeFileSync(new URL('refreshed',root),'fresh');console.log('{}')}
+else if(process.argv[2]==='refresh-qr'){writeFileSync(new URL('refreshed',root),'fresh');const path=new URL('login.png',root);writeFileSync(path,'fixture');console.log(JSON.stringify({ok:true,status:'scan_to_login',path:(await import('node:url')).fileURLToPath(path)}))}
 else process.exit(2);
 '@
     Set-Content -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'src\wechat\account-manager.mjs') -Value $managerFixture -Encoding ASCII
