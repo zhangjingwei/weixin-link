@@ -59,7 +59,15 @@ Linux 需要可用的用户级 systemd 会话及 `flock`；Linux/macOS 下载 No
 
 ### 2. 安装并扫码
 
-在有仓库访问权限的环境获取当前开发分支：
+Linux / macOS 远程安装入口（需先将 `bootstrap.sh` 及配套源码发布到 `main`，当前尚未验证公开可用）：
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.sh)"
+```
+
+入口默认下载 `main` 分支，源码保存在 `~/.local/share/zero-link/source`，随后运行现有安装器；已有目录时拒绝覆盖。可通过环境变量 `ZERO_LINK_DIR` 指定其他目录。安装完成后仍需扫码。此入口适用于可公开下载的仓库。
+
+开发分支或 Windows 可在有仓库访问权限的环境获取源码：
 
 ```sh
 git clone --branch refactor/modules https://github.com/zhangjingwei/zero-link.git
