@@ -1,0 +1,15 @@
+{
+  "remote-linux": {
+    "platform": "posix",
+    "binary": "/home/example/.local/bin/codex",
+    "root": "/home/example/projects",
+    "transport": "daemon-proxy"
+  },
+  "remote-windows": {
+    "platform": "win32",
+    "binary": "C:\\Users\\example\\AppData\\Roaming\\npm\\codex.cmd",
+    "root": "C:\\Users\\example\\projects",
+    "transport": "ssh-websocket",
+    "port": 47831
+  }
+}

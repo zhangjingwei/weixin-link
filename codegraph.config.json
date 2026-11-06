@@ -1,0 +1,11 @@
+{
+  "discovery": {
+    "ignoreGlobs": [
+      "node_modules/**",
+      "backups/**",
+      "refactor-stage/**",
+      "outputs/**",
+      "__pycache__/**"
+    ]
+  }
+}

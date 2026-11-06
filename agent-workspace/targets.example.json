@@ -1,0 +1,20 @@
+{
+  "hosts": [
+    {
+      "id": "remote-linux",
+      "aliases": [
+        "远程开发机"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "demo",
+      "aliases": [
+        "示例项目"
+      ],
+      "host": "remote-linux",
+      "path": "/home/example/projects/demo"
+    }
+  ]
+}

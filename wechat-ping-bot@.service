@@ -1,0 +1,16 @@
+# Managed by wechat-assistant setup v1
+[Unit]
+Description=WeChat assistant account %i
+After=network-online.target
+[Service]
+Type=simple
+WorkingDirectory="/path/to/wechat-ping-bot"
+ExecStart="/path/to/node" "/path/to/wechat-ping-bot/bot.mjs"
+Environment="PATH=/path/to:/home/example/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment=WECHAT_ACCOUNT=%i
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+[Install]
+WantedBy=default.target

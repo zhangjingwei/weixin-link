@@ -1,0 +1,4 @@
+{
+  "baseUrl": "http://homeassistant.local:8123",
+  "token": "REPLACE_WITH_PRIVATE_TOKEN"
+}
