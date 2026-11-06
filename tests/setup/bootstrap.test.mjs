@@ -82,3 +82,8 @@ test('recognized legacy default sources resume pairing in place',{skip:process.p
  assert(r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(dest,'keep'),'utf8'),'original')
  assert.equal((await readdir(join(f.root,'.local/share'))).includes('weixin-link'),false)
 })
+test('existing installations also resume through a relative custom directory',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t);await existingInstallation(f)
+ const r=await exec('bash',[bootstrap],{cwd:f.root,env:{...f.env,WEIXIN_LINK_DIR:'source with spaces'}})
+ assert(r.stdout.includes('FRESH_QR_DISPLAYED'));assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
+})

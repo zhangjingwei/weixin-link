@@ -27,7 +27,7 @@ if [[ -e "$bootstrap_dest" || -L "$bootstrap_dest" ]]; then
   if [[ -z "$bootstrap_node" ]] || ! "$bootstrap_node" -e 'process.exit(Number(process.versions.node.split(".")[0])>=24?0:1)'; then
     echo 'Existing installation needs Node.js 24+ before pairing can resume.' >&2; exit 1
   fi
-  "$bootstrap_node" -e 'const p=require(process.argv[1]);if(!["weixin-link","wechat-ping-bot"].includes(p.name))process.exit(1)' "$bootstrap_dest/package.json" || { echo 'Unrecognized existing source directory.' >&2; exit 1; }
+  "$bootstrap_node" -e 'const p=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8"));if(!["weixin-link","wechat-ping-bot"].includes(p.name))process.exit(1)' "$bootstrap_dest/package.json" || { echo 'Unrecognized existing source directory.' >&2; exit 1; }
   bootstrap_accounts=$("$bootstrap_node" "$bootstrap_dest/src/wechat/account-manager.mjs" list)
   bootstrap_status=$("$bootstrap_node" -e 'const d=JSON.parse(process.argv[1]);const a=d.accounts?.find(a=>a.account==="default");if(!a)throw Error("DEFAULT_ACCOUNT_NOT_FOUND");console.log(a.ready?"online":a.service_active?"running":"offline")' "$bootstrap_accounts")
   if [[ "$bootstrap_status" = online ]]; then
