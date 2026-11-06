@@ -38,6 +38,14 @@ Git 手动安装的源码位置是克隆目录。工作区和 Codex 路径由安
 
 ## 二维码维护
 
+**已经在微信解绑，但脚本仍提示本地服务就绪？** 本地进程状态不能证明服务端绑定有效。使用显式重新登录入口，等待任务结束、安全停止账号后重新扫码：
+
+```sh
+WEIXIN_LINK_RELOGIN=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+```
+
+本地脚本对应 `./qr.sh --relogin` 或 `./qr.sh --relogin bot2`。不会删除账号档案或改绑另一个微信账号；如无法安全停止服务，操作失败并保留现有状态。旧部署的原停止命令若不支持当前运行状态，需要先按该部署的维护流程停止服务。
+
 Linux/macOS 推荐使用独立入口，无需切换到安装目录：
 
 ```sh

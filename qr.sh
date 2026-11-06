@@ -3,11 +3,13 @@
 set -eu
 umask 077
 if test "${1:-}" = --help; then
- echo '用法：sh qr.sh [账号名]（默认 default）'
+ echo '用法：sh qr.sh [--relogin] [账号名]（默认 default）'
  echo 'WEIXIN_LINK_DIR 指定安装源码目录；支持 Linux/macOS。'
  exit 0
 fi
-if test "$#" -gt 1; then echo '用法：sh qr.sh [账号名]' >&2; exit 1; fi
+qr_relogin="${WEIXIN_LINK_RELOGIN:-0}"
+if test "${1:-}" = --relogin; then qr_relogin=1; shift; fi
+if test "$#" -gt 1; then echo '用法：sh qr.sh [--relogin] [账号名]' >&2; exit 1; fi
 qr_account="${1:-${WEIXIN_LINK_ACCOUNT:-default}}"
 qr_root="${WEIXIN_LINK_DIR:-${ZERO_LINK_DIR:-$HOME/.local/share/weixin-link/source}}"
 if test -z "${WEIXIN_LINK_DIR:-}${ZERO_LINK_DIR:-}" && test -d "$HOME/.local/share/zero-link/source"; then
@@ -21,11 +23,11 @@ if test -z "$qr_node" || ! "$qr_node" -e 'process.exit(Number(process.versions.n
  echo '需要已有的 Node.js 24 或更新版本。' >&2; exit 1
 fi
 PATH="$(dirname "$qr_node"):$PATH"; export PATH
-"$qr_node" - "$qr_root" "$qr_account" <<'NODE'
+"$qr_node" - "$qr_root" "$qr_account" "$qr_relogin" <<'NODE'
 const {execFileSync} = require('node:child_process')
 const {resolve} = require('node:path')
 const {existsSync,readFileSync} = require('node:fs')
-const root = resolve(process.argv[2]), account = process.argv[3]
+const root = resolve(process.argv[2]), account = process.argv[3], relogin = process.argv[4] === '1'
 const manager = resolve(root, 'src/wechat/account-manager.mjs')
 try {
   if (!/^[a-z][a-z0-9-]{0,31}$/.test(account)) throw Error('INVALID_ACCOUNT_ID')
@@ -34,8 +36,17 @@ try {
   const listing = JSON.parse(execFileSync(process.execPath,[manager,'list'],{encoding:'utf8',timeout:30000,stdio:['ignore','pipe','pipe']}))
   const current = listing.accounts?.find(row=>row.account===account)
   if (!current) throw Error('ACCOUNT_NOT_FOUND')
-  if (current.ready) { console.log('微信账号已在线，无需重新扫码。请在微信发送「安装状态」检查。'); process.exit(0) }
-  if (current.service_active) throw Error('ACCOUNT_RUNNING_NOT_READY')
+  if (!relogin && current.ready) {
+    console.log('本地服务报告就绪，但这不能确认微信绑定仍有效。')
+    console.log('如果已解绑或需要重新授权，请使用 qr.sh --relogin（远程命令可设置 WEIXIN_LINK_RELOGIN=1）。')
+    process.exit(0)
+  }
+  if (current.service_active && !relogin) throw Error('ACCOUNT_RUNNING_NOT_READY')
+  if (relogin && current.service_active) {
+    console.log('已选择重新登录，正在等待当前任务结束并安全停止账号服务…')
+    const stopped=JSON.parse(execFileSync(process.execPath,[manager,'stop',account],{encoding:'utf8',timeout:650000,stdio:['ignore','pipe','pipe']}))
+    if (!stopped.ok || stopped.status !== 'stopped') throw Error('ACCOUNT_STOP_UNCONFIRMED')
+  }
   console.log('正在刷新微信登录二维码…')
   let result
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -72,9 +83,10 @@ try {
   if (Number(code) === 113) code = 'MACOS_SERVICE_NOT_FOUND'
   if (!/^[A-Z0-9_]+$/.test(code)) code = 'QR_REFRESH_FAILED'
   const messages={
+    ACCOUNT_STOP_UNCONFIRMED:'未能确认服务安全停止，没有生成新二维码。请先检查服务状态。',
     ACCOUNT_NOT_FOUND:'未找到该账号，请先创建账号档案。',
     ACCOUNT_RUNNING_NOT_READY:'账号服务正在运行但尚未就绪，未重新配对。请先检查服务状态。',
-    ACCOUNT_ONLINE_NO_REFRESH_NEEDED:'账号已在线，无需重新扫码。',
+    ACCOUNT_ONLINE_NO_REFRESH_NEEDED:'账号服务仍在运行，无法刷新二维码。需要重新授权时请使用 --relogin。',
     INSTALLATION_NOT_FOUND:'未找到有效安装，请通过 WEIXIN_LINK_DIR 指定源码目录。',
     INVALID_ACCOUNT_ID:'账号名无效，请使用小写字母开头的字母、数字或连字符。',
   }

@@ -1,3 +1,4 @@
+import {trackLoginValidity} from './login-validity.mjs'
 import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
 import {setupModelTest} from '../setup/setup-model-test.mjs'
@@ -57,6 +58,7 @@ const setupController=await new SetupController({stateDir,backend,accountId:acco
 const conversations=new TextConversations(manager,owners)
 await manager.save()
 const bot = new WeChatBot({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
+const loginValidity=trackLoginValidity(bot)
 const typingStatus=new TypingStatus({start:userId=>bot.sendTyping(conversations.recipient(userId)),stop:userId=>bot.stopTyping(conversations.recipient(userId)),log})
 const typingTimer=setInterval(()=>typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key)))),1000);typingTimer.unref()
 // Device-code polling may take longer than the SDK's default GET timeout.
@@ -85,7 +87,7 @@ const runtime=new RuntimeControl({
   const sent=await manager.emit(session,text,()=>session.busy&&(session.workToken?.current()??false));if(!sent)throw Error('Delivery not confirmed')
   return {accepted:true}
  },
- ready:()=>loggedIn&&bot.isRunning&&!stopping,
+ ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
  snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+durable.users.size,saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
  onSeal:()=>bot.stop(),onResume:()=>{void (async()=>{if(bot.runPromise)await bot.runPromise.catch(()=>{});if(!stopping)await bot.start()})().catch(e=>log('service.resume_failed',errorFields(e)))}
 })

@@ -123,7 +123,7 @@ On Linux/macOS, refresh pairing for an installed but offline account without rei
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
 ```
 
-A local graphical terminal attempts to open the PNG. SSH sessions print its path so you can download and scan it. Online accounts are not re-paired. Use `WEIXIN_LINK_DIR` for a custom source directory and `WEIXIN_LINK_ACCOUNT` for another account. See [QR maintenance](CONFIGURATION.md#二维码维护).
+A local graphical terminal attempts to open the PNG. SSH sessions print its path so you can download and scan it. Running accounts are not re-paired by default. Local readiness does not prove that WeChat binding is still valid. If you have unbound the bot, prefix the command with `WEIXIN_LINK_RELOGIN=1` to safely stop the account service and obtain a fresh login QR code. Use `WEIXIN_LINK_DIR` for a custom source directory and `WEIXIN_LINK_ACCOUNT` for another account. See [QR maintenance](CONFIGURATION.md#二维码维护).
 
 ## More capabilities and documentation
 

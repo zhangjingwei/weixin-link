@@ -23,7 +23,7 @@ try{
   if(await mainPid()!==pid)throw Object.assign(Error('Process changed'),{code:'PID_CHANGED'})
  }
  if(old){
-  if(old.pid!==pid||!old.ready)throw Object.assign(Error('Runtime mismatch'),{code:'RUNTIME_NOT_READY'})
+  if(old.pid!==pid||(!old.ready&&!process.argv.includes('--stop')))throw Object.assign(Error('Runtime mismatch'),{code:'RUNTIME_NOT_READY'})
   let sealed=false
   for(let i=0;i<600;i++){
    const state=await request('POST','/drain',{lease});drained=true
