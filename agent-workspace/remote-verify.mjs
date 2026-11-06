@@ -1,2 +1,2 @@
-// Compatibility entry point; all verification now exercises the production adapter.
-import './remote-live-check.mjs'
+import {loadRemoteModule} from './remote-loader.mjs'
+await loadRemoteModule('remote-verify')

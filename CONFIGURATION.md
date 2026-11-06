@@ -10,7 +10,7 @@
 
 SSH 使用 WECHAT_SSH_CONFIG 指定的文件，默认 ~/.ssh/wechat_hosts_config。examples/ssh-config.example 展示严格密钥校验；需自行验证主机密钥，不自动接受未知密钥。
 
-源码内 agent-workspace/AGENTS.md 是通用模板；部署时复制到工作目录，再在该私有副本中填写助手名称、地点和个人要求。已有工作目录的 AGENTS.md 不覆盖。远程适配器独立复制到工作目录时，设置 WECHAT_BOT_ROOT 为机器人源码的绝对路径，供 watch 调用本账号控制接口。
+源码内 agent-workspace/AGENTS.md 是通用模板；部署时复制到工作目录，再在该私有副本中填写助手名称、地点和个人要求。已有工作目录的 AGENTS.md 不覆盖。远程实现位于 src/remote/，不再复制实现到工作目录。新入口为 node src/remote/remote-codex.mjs，默认使用安装配置中的工作目录；WECHAT_REMOTE_WORKSPACE 可指定实际工作目录。旧工作目录如需保留 remote-*.mjs 调用方式，仅复制 agent-workspace/ 中的兼容入口与 remote-loader.mjs，并设置 WECHAT_BOT_ROOT 为机器人源码的绝对路径。
 
 ## 可选集成
 

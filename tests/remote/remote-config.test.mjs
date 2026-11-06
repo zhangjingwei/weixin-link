@@ -1,18 +1,19 @@
+import './remote-test-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtempSync,writeFileSync,rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {execFileSync} from 'node:child_process'
-import {loadRemoteHosts,shellQuote} from './remote-config.mjs'
+import {loadRemoteHosts,shellQuote} from '../../src/remote/remote-config.mjs'
 test('unconfigured adapter has no implicit personal hosts',()=>{
  const env={...process.env};delete env.WECHAT_REMOTE_HOSTS
- const value=execFileSync(process.execPath,['--input-type=module','-e',`import {HOSTS} from ${JSON.stringify(new URL('./remote-config.mjs',import.meta.url).href)}; console.log(JSON.stringify(HOSTS))`],{env,encoding:'utf8'})
+ const value=execFileSync(process.execPath,['--input-type=module','-e',`import {HOSTS} from ${JSON.stringify(new URL('../../src/remote/remote-config.mjs',import.meta.url).href)}; console.log(JSON.stringify(HOSTS))`],{env,encoding:'utf8'})
  assert.deepEqual(JSON.parse(value),{})
 })
 test('explicit missing config fails rather than falling back to personal hosts',()=>{
  const env={...process.env,WECHAT_REMOTE_HOSTS:join(tmpdir(),'absent-remote-config-'+process.pid+'.json')}
- assert.throws(()=>execFileSync(process.execPath,['--input-type=module','-e',`import ${JSON.stringify(new URL('./remote-config.mjs',import.meta.url).href)}`],{env,stdio:'pipe'}),error=>/REMOTE_HOSTS_CONFIG_UNREADABLE/.test(error.stderr.toString()))
+ assert.throws(()=>execFileSync(process.execPath,['--input-type=module','-e',`import ${JSON.stringify(new URL('../../src/remote/remote-config.mjs',import.meta.url).href)}`],{env,stdio:'pipe'}),error=>/REMOTE_HOSTS_CONFIG_UNREADABLE/.test(error.stderr.toString()))
 })
 test('configuration validates host names, absolute roots, platform and ports',()=>{
  const dir=mkdtempSync(join(tmpdir(),'config-validation-')),file=join(dir,'hosts.json'),valid={platform:'posix',binary:'/opt/Codex App/codex',root:'/srv/projects',transport:'daemon-proxy'}

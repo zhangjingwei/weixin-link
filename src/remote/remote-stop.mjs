@@ -1,11 +1,14 @@
 import {access} from 'node:fs/promises'
 import {join} from 'node:path'
-import {pathToFileURL} from 'node:url'
 export async function remoteScope(cwd,threadId,action){
  if(!threadId)return {stop_confirmed:true,tasks:[]}
- const path=join(cwd,'remote-controller.mjs')
- try{await access(path)}catch(e){if(e.code==='ENOENT')return {stop_confirmed:true,tasks:[]};throw e}
- const {RemoteController}=await import(pathToFileURL(path).href)
+ // Avoid creating remote state for installations that never enabled remote execution.
+ let enabled=false
+ for(const path of [join(cwd,'remote-controller.mjs'),join(cwd,'remote-sessions.json'),process.env.WECHAT_REMOTE_HOSTS??join(cwd,'remote-hosts.json')]){
+  try{await access(path);enabled=true;break}catch(error){if(error.code!=='ENOENT')throw error}
+ }
+ if(!enabled)return {stop_confirmed:true,tasks:[]}
+ const {RemoteController}=await import('./remote-controller.mjs')
  const controller=new RemoteController({root:cwd,scope:threadId})
  return action==='activate'?controller.activate():action==='seal'?controller.seal():controller.stopScope()
 }

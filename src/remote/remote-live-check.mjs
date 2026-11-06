@@ -1,0 +1,16 @@
+import {remoteWorkspace} from './remote-paths.mjs'
+import {RemoteController} from './remote-controller.mjs'
+import {readFile,writeFile} from 'node:fs/promises'
+import {setTimeout as delay} from 'node:timers/promises'
+const root=remoteWorkspace,c=new RemoteController({root,scope:'production-adapter-verification-20261018'})
+const host=process.argv[2];if(!host||!process.argv[3])throw Error('Usage: node remote-live-check.mjs HOST ABSOLUTE_TEST_PROJECT');const project=process.argv[3],report={host,checks:[]}
+async function done(task){for(let n=0;n<90;n++){const s=await c.status({task});if(s.turn_status==='completed'){if(s.error)throw Error(JSON.stringify(s.error));return s}if(['failed','interrupted'].includes(s.turn_status))throw Error(JSON.stringify(s));await delay(1000)}throw Error('TASK_TIMEOUT')}
+try{
+ await c.select({host,project});report.checks.push('select-and-inspect')
+ const first=await c.start({host,project,newThread:true,prompt:'This is an isolated transport test. Remember marker REMOTE_NATIVE_20261018. Reply exactly REMOTE_NATIVE_20261018. Do not use tools.'});console.log(JSON.stringify({stage:'started',...first}));report.first=first
+ let s=await done(first.task);if(!JSON.stringify(s.answer).includes('REMOTE_NATIVE_20261018'))throw Error('ANSWER_MISSING');report.checks.push('submit-disconnect-reconnect-result')
+ const second=await c.start({task:first.task,prompt:'What marker did I ask you to remember? Reply only the marker. No tools.'});s=await done(second.task);if(second.thread_id!==first.thread_id||!JSON.stringify(s.answer).includes('REMOTE_NATIVE_20261018'))throw Error('CONTEXT_LOST');report.checks.push('same-thread-continuation')
+ const third=await c.start({task:second.task,prompt:'For this authorized isolated test run a shell command that writes exactly REMOTE_NATIVE_20261018 to adapter-result.txt in the current project directory. Then reply done.'});s=await done(third.task);const file=await c.fetch({task:third.task,path:project+'/adapter-result.txt'});if((await readFile(file.path,'utf8')).trim()!=='REMOTE_NATIVE_20261018')throw Error('FETCH_MISMATCH');report.checks.push('command-execution-and-artifact-fetch');report.file=file
+ const sleeper=await c.start({task:third.task,prompt:'For this isolated stop test execute exactly sleep 120 as a shell command. Wait until it finishes; do not run any other command.'});report.sleeper=sleeper;console.log(JSON.stringify({stage:'sleep-started',...sleeper}));for(let n=0;n<50;n++){s=await c.status({task:sleeper.task});if(s.commands.length||s.background_commands.length)break;await delay(1000)}if(!s.commands.length&&!s.background_commands.length)throw Error('SLEEP_NOT_STARTED');report.stop=await c.stop({task:sleeper.task});if(!report.stop.stop_confirmed)throw Error('STOP_UNCONFIRMED');report.checks.push('exact-turn-and-command-stop');report.ok=true
+}catch(error){report.ok=false;report.error=error.message;console.log(JSON.stringify({error:error.message}));if(report.sleeper)try{report.cleanup=await c.stop({task:report.sleeper.task})}catch(e){report.cleanup_error=e.message}}
+await writeFile(root+'/outputs/remote-adapter-'+host+'-verification.json',JSON.stringify(report,null,2)+'\n',{mode:0o600});console.log(JSON.stringify(report));if(!report.ok)process.exitCode=1

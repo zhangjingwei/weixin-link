@@ -28,3 +28,11 @@ The first command uses `remote-hosts.json` plus the existing SSH alias. It verif
 `--check` only verifies the official RPC connection through the shared adapter. For Unix hosts the command is also connection-only: keep using the official daemon setup rather than installing this Windows launcher. The deployment helper is an on-demand script, not a daemon, queue, task engine or new service-management system. SSH authentication is never embedded in generated files. It does not install Codex, log in for the user, add SSH keys, or reboot the machine.
 
 Windows uses `wscript.exe` with a hidden `powershell.exe` child so the official app-server does not open a terminal window. The task starts at the user's logon, under that same user, with no SYSTEM account or elevated task privileges. It requires Windows Script Host and an interactive user logon; if blocked by system policy, deployment fails instead of bypassing it. Service auto-recovery and logged-out execution are not introduced.
+
+## Source and workspace boundary
+
+Implementation is in src/remote/ and tests are in tests/remote/. This directory contains templates and thin compatibility entries only. Do not copy implementation files into a private workspace.
+
+From the repository root use `node src/remote/remote-codex.mjs` with JSON stdin. Runtime configuration and remote-sessions.json remain in the installation workspace; WECHAT_REMOTE_WORKSPACE overrides that location, and WECHAT_REMOTE_HOSTS can select a separate host JSON.
+
+Legacy entries in this directory retain their adjacent workspace as the default. When copied elsewhere, include remote-loader.mjs and set WECHAT_BOT_ROOT to the source repository root. Existing session records are not moved or rewritten.

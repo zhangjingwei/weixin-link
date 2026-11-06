@@ -75,7 +75,7 @@ const runtime=new RuntimeControl({
   if(typeof scope!=='string'||typeof task!=='string'||!Number.isSafeInteger(seq)||seq<1||typeof text!=='string'||text.length>6000)throw Error('Invalid progress')
   const session=[...manager.sessions.values()].find(s=>s.threadId===scope)
   if(!session?.busy||session.exited||!(session.workToken?.current()??false))throw Error('Inactive scope')
-  const {RemoteController}=await import(join(cwd,'remote-controller.mjs')),controller=new RemoteController({root:cwd,scope}),record=await controller.task(task)
+  const {RemoteController}=await import('../remote/remote-controller.mjs'),controller=new RemoteController({root:cwd,scope}),record=await controller.task(task)
   if(record.stop_confirmed||(await controller.store.read())._cancelled?.[controller.scope])throw Error('Cancelled task')
   if(typeof chunkId!=='string'||!/^[a-f0-9]{64}$/.test(chunkId))throw Error('Invalid chunk')
   const key=task+':'+chunkId;if(remoteSequences.has(key))return {accepted:true,duplicate:true}

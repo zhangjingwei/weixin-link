@@ -1,8 +1,9 @@
+import {remoteWorkspace} from './remote-paths.mjs'
 import {readFileSync} from 'node:fs'
 import {homedir} from 'node:os'
 import {join,posix,win32} from 'node:path'
 export const sshConfig=process.env.WECHAT_SSH_CONFIG??join(homedir(),'.ssh/wechat_hosts_config')
-export function loadRemoteHosts(path=process.env.WECHAT_REMOTE_HOSTS??new URL('./remote-hosts.json',import.meta.url)){
+export function loadRemoteHosts(path=process.env.WECHAT_REMOTE_HOSTS??join(remoteWorkspace,'remote-hosts.json')){
  let hosts
  try{hosts=JSON.parse(readFileSync(path,'utf8'))}catch(error){if(error.code==='ENOENT'&&!process.env.WECHAT_REMOTE_HOSTS)return {};throw Error('REMOTE_HOSTS_CONFIG_UNREADABLE')}
  if(!hosts||typeof hosts!=='object'||Array.isArray(hosts))throw Error('INVALID_REMOTE_HOSTS_CONFIG')

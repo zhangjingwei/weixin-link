@@ -54,7 +54,7 @@ export class DurableIntake {
   }
  }
  async recoverRemote(job,reply,token){
-  const {RemoteController}=await import(new URL('file://'+this.manager.cwd+'/remote-controller.mjs'))
+  const {RemoteController}=await import('../remote/remote-controller.mjs')
   const controller=new RemoteController({root:this.manager.cwd,scope:job.thread_id}),entries=Object.entries(await controller.store.read()).filter(([,t])=>t?.kind==='official-remote-task'&&t.scope===controller.scope&&Date.parse(t.submitted_at)>=job.created)
   if(!entries.length)throw Error('LOCAL_TURN_ABANDONED')
   for(;;){if(this.closed||!token.current())return;const results=[]

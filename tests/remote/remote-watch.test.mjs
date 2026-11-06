@@ -2,8 +2,8 @@ import './remote-test-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp} from 'node:fs/promises'
-import {RemoteController} from './remote-controller.mjs'
-import {watchTask} from './remote-watch.mjs'
+import {RemoteController} from '../../src/remote/remote-controller.mjs'
+import {watchTask} from '../../src/remote/remote-watch.mjs'
 async function setup(text){const root=await mkdtemp('/tmp/watch-'),c=new RemoteController({root,scope:'watch-test'}),turn={id:'turn',status:'completed',items:[{id:'item',type:'agentMessage',text,phase:'final_answer'}]};await c.store.update(s=>{s.task={kind:'official-remote-task',scope:c.scope,host:'spark',cwd:'/home/example/work/test',thread_id:'thread',turn_id:'turn'}});c.usingTask=async(t,fn)=>fn({});c.turns=async()=>turn;return c}
 test('remote watch checkpoints delivery and does not resend completed text on another watch',async()=>{const c=await setup('远程任务完成。'),sent=[];c.relayText=async v=>sent.push(v);const result=await watchTask(c,{task:'task'});assert.equal(result.streamed,true);assert.equal(sent[0].text,'【Spark｜test｜任务 task】\n远程任务完成。');assert.equal((await c.task('task')).stream_offsets.item.state,'accepted');const again=await watchTask(c,{task:'task'});assert.equal(again.chunks,0);assert.equal(sent.length,2)})
 test('ambiguous delivery is recorded and never automatically repeated',async()=>{const c=await setup('结果。');let count=0;c.relayText=async()=>{count++;throw Error('CONNECTION_RESET')};await assert.rejects(watchTask(c,{task:'task'}));assert.equal((await c.task('task')).stream_offsets.item.state,'unknown');await assert.rejects(watchTask(c,{task:'task'}),/DELIVERY_UNCERTAIN/);assert.equal(count,1)})
