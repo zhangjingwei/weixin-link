@@ -14,6 +14,6 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm run check:release
-      - run: node --test release-check.test.mjs
+      - run: node --test tests/tools/release-check.test.mjs
       - run: npm ci
-      - run: node --test platform-service.test.mjs platform-smoke.test.mjs
+      - run: node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs

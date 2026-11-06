@@ -18,7 +18,7 @@
 - FFmpeg 按系统和架构选择。图片/PDF 使用现有原生依赖；Office 文本解析额外需要 Python 3（Mac/Linux 命令 `python3`，Windows 命令 `python`），缺少时保留原件并明确解析失败。
 - Podman 隔离容器、既有 systemd 新闻定时器、NAS 备份和树莓派监控仍是 Linux 专用功能，本轮不将其宣称为三平台已验收功能。新闻手动生成还依赖 Python、浏览器和中文字体，应另作专项验收。
 
-跨平台核心检查：`node --test platform-service.test.mjs platform-smoke.test.mjs`，含真实文件锁竞争、SQLite WAL、控制连接、图像和 FFmpeg 加载。`.github/workflows/platform.yml` 配置了三系统检查，但本地尚未运行 Mac/Windows CI。完整上线仍需在每个目标机上检查安装诊断、用户后台任务、独立扫码、文字/图片/文件收发、/stop 和服务停止。
+跨平台核心检查：`node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs`，含真实文件锁竞争、SQLite WAL、控制连接、图像和 FFmpeg 加载。`.github/workflows/platform.yml` 配置了三系统检查，但本地尚未运行 Mac/Windows CI。完整上线仍需在每个目标机上检查安装诊断、用户后台任务、独立扫码、文字/图片/文件收发、/stop 和服务停止。
 
 ## 文件
 
@@ -588,3 +588,20 @@ Node 引导、系统依赖和微信首次扫码不可在尚未建立的微信通
 - [配置说明](CONFIGURATION.md)：账号、SSH、HA 等私有配置与发布内容的边界。
 
 项目是独立实现，不代表微信、OpenAI 或其他服务提供方的官方产品或背书。使用外部服务需自行取得账号与访问授权；项目许可证不授予第三方商标、服务访问或内容转载权限。
+
+## 模块目录
+
+- `src/core/`：任务生命周期、持久队列、恢复和控制接口。
+- `src/wechat/`：账号、协议、消息收发和机器人组合入口。
+- `src/codex/`：官方会话协议、模型输入、后端及原生记忆。
+- `src/remote/`：远程停止协调；`agent-workspace/` 仍是独立部署的远程适配器。
+- `src/media/`：附件准备、文档、图片、音视频和输出交付。
+- `src/setup/`：安装向导、平台服务、诊断和后端选择。
+- `src/integrations/`：新闻、HA、备份和监控等可选集成。
+- `src/tools/`：SDK 补丁、发布检查和维护工具。
+- `tests/`：按模块组织的测试；远程适配器测试仍与独立适配器一起保存。
+- `assets/news/`：新闻模板、结构化输出 schema 和渲染图片。
+
+根目录的 bot.mjs、setup.mjs、account-manager.mjs 等文件仅保留兼容命令入口；现有安装命令、systemd/launchd/Windows 服务路径和用户私有状态目录继续有效。不要仅复制根目录入口，部署和发布须包含 src/、assets/ 与 agent-workspace/。
+
+运行 `npm test` 执行 JavaScript 测试，`npm run test:python` 执行 Python 测试。真实微信收发、登录和远程执行验收仍需独立授权的测试环境。

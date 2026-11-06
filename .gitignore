@@ -84,3 +84,10 @@
 !/THIRD_PARTY_NOTICES.md
 !/CONTRIBUTING.md
 !/SECURITY.md
+
+# Modular source, tests and runtime rendering resources.
+!/src/
+!/tests/
+!/assets/
+**/__pycache__/
+**/*.pyc

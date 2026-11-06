@@ -4,13 +4,14 @@
   "description": "",
   "main": "bot.mjs",
   "scripts": {
-    "test": "node --test *.test.mjs",
+    "test": "node --test \"tests/**/*.test.mjs\" \"agent-workspace/*.test.mjs\"",
     "test:media-live": "node media-live-check.mjs",
     "check:codex-input": "node verify-media-contract.mjs",
     "postinstall": "node sdk-upload-timeout.mjs && node sdk-protocol-patch.mjs",
     "setup": "node setup.mjs",
     "doctor": "node setup.mjs doctor",
-    "check:release": "node release-check.mjs"
+    "check:release": "node release-check.mjs",
+    "test:python": "node src/tools/test-python.mjs"
   },
   "keywords": [],
   "author": "",

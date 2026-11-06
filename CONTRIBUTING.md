@@ -10,12 +10,12 @@
 
 ```sh
 npm run check:release
-node --test release-check.test.mjs
-node --test platform-service.test.mjs platform-smoke.test.mjs
+node --test tests/tools/release-check.test.mjs
+node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs
 npm test
 ```
 
-涉及远程适配器时增加 `node --test agent-workspace/*.test.mjs`。报告实际执行的检查、失败项及环境；不得将静态测试通过描述为跨平台或真实微信验收通过。当前源码快照的新闻测试可能因漏收模板和图片资源失败，此问题尚未修复，不能忽略失败后宣称全部通过。
+涉及远程适配器时增加 `node --test agent-workspace/*.test.mjs`。报告实际执行的检查、失败项及环境；不得将静态测试通过描述为跨平台或真实微信验收通过。新闻模板、schema 和渲染图片位于 assets/news/，应随源码一同发布。
 
 真实登录、远程任务、HA 查询、消息发送和服务操作只在有明确授权的专用测试环境执行。停止任务必须核对归属，不得终止其他会话或共享服务。
 
