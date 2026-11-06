@@ -67,10 +67,10 @@ Linux / macOS 远程安装入口（需先将 `bootstrap.sh` 及配套源码发�
 
 入口默认下载 `main` 分支，源码保存在 `~/.local/share/zero-link/source`，随后运行现有安装器；已有目录时拒绝覆盖。可通过环境变量 `ZERO_LINK_DIR` 指定其他目录。安装完成后仍需扫码。此入口适用于可公开下载的仓库。
 
-开发分支或 Windows 可在有仓库访问权限的环境获取源码：
+Windows 或需要手动安装时，可在有仓库访问权限的环境获取主干源码：
 
 ```sh
-git clone --branch refactor/modules https://github.com/zhangjingwei/zero-link.git
+git clone --branch main https://github.com/zhangjingwei/zero-link.git
 cd zero-link
 ```
 
