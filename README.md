@@ -122,6 +122,7 @@ Linux/macOS 执行 `./install.sh`；Windows PowerShell 执行 `.\install.ps1`。
 - [使用指南](USER-GUIDE.md)：会话、模型、记忆、附件与结果。
 - [配置与维护](CONFIGURATION.md)：安装、升级、备份和故障处理。
 - [远程连接](src/remote/README.md)：连接已授权的远程工作区。
+- [可选集成](src/integrations/README.md)：HA 只读查询，按账号显式启用；新闻与备份统一接入仍待迁移。
 - [配置示例](config-templates/)：部署配置参考。
 - [参与贡献](CONTRIBUTING.md)：问题反馈与代码贡献。
 

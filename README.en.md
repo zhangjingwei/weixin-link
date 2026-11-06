@@ -125,6 +125,8 @@ Run `./install.sh` on Linux/macOS, or `.\install.ps1` in Windows PowerShell.
 - [Configuration examples](config-templates/): deployment references.
 - [Contributing](CONTRIBUTING.md): report issues and contribute changes.
 
+Optional integrations: [Home Assistant read-only queries](src/integrations/README.md) require explicit per-account enablement. News and backup migration to this interface remains pending.
+
 ## Security and license
 
 Pair with your own WeChat account. Do not share login QR codes or device authorization codes. Authenticate Codex on the official OpenAI authorization page, and grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.

@@ -53,6 +53,7 @@
 **/account-identity.json
 **/codex-owners.json
 **/codex-sessions.json
+**/integrations.json
 **/installation.json
 **/notification-jobs.json
 **/wechat_hosts_config

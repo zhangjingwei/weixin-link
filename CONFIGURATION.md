@@ -78,7 +78,7 @@ node src/setup/setup.mjs config-restore ha
 
 - **远程主机**：私有工作区 `remote-hosts.json` 使用 `version: 1` 和 `hosts` 对象；每个主机包含 `platform`、`binary`、`root`、`transport`，`ssh-websocket` 另需 `port`。兼容旧版主机映射格式。用 config-schema 查看完整规则。
 - **SSH**：`WECHAT_SSH_CONFIG` 指定配置文件，默认 `~/.ssh/wechat_hosts_config`。示例见 [SSH 配置模板](config-templates/ssh-config.example)，保持主机密钥校验。
-- **HA**：智能体参考 [HA 模板](config-templates/ha.example.json)，通过配置接口写入 `~/.config/wechat-assistant/ha.json`；当前只读查询。
+- **HA**：智能体参考 [HA 模板](config-templates/ha.example.json)，通过配置接口写入 `~/.config/wechat-assistant/ha.json`；还需运行 `node src/integrations/cli.mjs enable home-assistant <账号>` 显式启用，当前仅支持只读查询。旧凭据路径继续兼容，新账号不继承启用状态；详见 [集成说明](src/integrations/README.md)。
 - **备份（Linux）**：智能体参考 [备份模板](config-templates/backup.example.json)，通过配置接口写入 `~/.config/wechat-assistant/backup.json`；目标、加密公钥及远端私钥独立准备。
 
 运行时可通过 `WECHAT_REMOTE_HOSTS`、`WECHAT_BACKUP_CONFIG` 指向外部配置；配置管理接口不接管自定义路径，遇到不一致时返回 `CONFIG_CUSTOM_PATH_UNMANAGED`。远程工作区可用 `WECHAT_REMOTE_WORKSPACE` 指定。

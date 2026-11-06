@@ -1,0 +1,8 @@
+{
+  "id": "home-assistant",
+  "version": 1,
+  "name": "Home Assistant",
+  "configKind": "ha",
+  "capabilities": ["states", "history"],
+  "readOnly": true
+}

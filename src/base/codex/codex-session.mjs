@@ -1,3 +1,4 @@
+import {integrationGuidance} from '../../integrations/runtime.mjs'
 import {initializeCodex} from './protocol-operations.mjs'
 import {homedir as platformHome} from 'node:os'
 import {emptyContinuationNotice} from '../../core/delivery/notification-policy.mjs'
@@ -149,13 +150,18 @@ export class SessionManager {
     if(session.rpcAttempt===attempt)session.rpcAttempt=null
     try{attempt.rpc?.close()}catch{}
   }
+  async sessionInstructions() {
+    // Local integrations execute in this account's host environment, not a remote/container backend.
+    const guidance=this.backend?'':await integrationGuidance({stateDir:this.stateDir})
+    return this.instructions+(guidance?'\n\n'+guidance:'')
+  }
   async startProvider(session) {
     const provider='configured',attempt=this.attachRpc(session)
     const saved=this.state.users[session.userId]??={}
     try {
       await initializeCodex(attempt.rpc,{name:'wechat_codex',title:'WeChat',version:'3.0.0'})
       if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
-      const params={config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:this.instructions,...attempt.providerOptions.thread}
+      const params={config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:await this.sessionInstructions(),...attempt.providerOptions.thread}
       let result
       if(saved.threadId){
         try{result=await attempt.rpc.request('thread/resume',{...params,threadId:saved.threadId,excludeTurns:true})}
@@ -240,7 +246,7 @@ export class SessionManager {
       if(meta?.id!==id||meta.cwd&&meta.cwd!==this.cwd)throw Error('历史对话目录不匹配，未切换。')
       if(meta.status?.type==='active')throw Error('目标对话正在执行任务，未切换。')
       const selectedProvider=this.providerOptions()
-      const result=await session.rpc.request('thread/resume',{config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:this.instructions,threadId:id,excludeTurns:true,...selectedProvider.thread})
+      const result=await session.rpc.request('thread/resume',{config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:await this.sessionInstructions(),threadId:id,excludeTurns:true,...selectedProvider.thread})
       if(result.thread?.id!==id||result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never')throw Error('Codex 未确认目标对话与权限，未切换。')
       await enableThreadMemory(session.rpc,id)
       if(!token.current())return

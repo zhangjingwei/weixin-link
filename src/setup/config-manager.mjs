@@ -1,3 +1,4 @@
+import {integrations,integrationByConfig} from '../integrations/registry.mjs'
 import {homedir} from 'node:os'
 import {join,dirname,posix,win32} from 'node:path'
 import {access,stat,readFile} from 'node:fs/promises'
@@ -14,7 +15,8 @@ const exec=promisify(execFile),quote=s=>"'"+s.replaceAll("'","'\"'\"'")+"'"
 const currentHome=()=>process.env.HOME||homedir()
 export function configPath(kind,{home=currentHome(),workspace,env=process.env}={}){
  if(kind==='installation')return join(home,'.local/share/wechat-ping-bot/installation.json')
- if(kind==='ha')return join(home,'.config/wechat-assistant/ha.json')
+ const integration=integrationByConfig(kind)
+ if(integration)return integration.configPath({home,workspace,env})
  if(kind==='backup'){
   const path=join(home,'.config/wechat-assistant/backup.json')
   if(env.WECHAT_BACKUP_CONFIG&&env.WECHAT_BACKUP_CONFIG!==path)throw new ConfigError('CONFIG_CUSTOM_PATH_UNMANAGED')
@@ -29,7 +31,7 @@ export function configPath(kind,{home=currentHome(),workspace,env=process.env}={
 }
 export async function configStatus(options={}){
  const result={}
- for(const kind of ['installation','ha','backup','remote-hosts']){
+ for(const kind of ['installation','backup','remote-hosts',...integrations.map(item=>item.manifest.configKind)]){
   try{const text=await readPrivateFile(configPath(kind,options));if(text===null){result[kind]={configured:false};continue}const config=parseConfig(kind,text);result[kind]={configured:true,valid:true,version:config.version}}
   catch(error){result[kind]={configured:true,valid:false,error:error.code??'CONFIG_UNREADABLE'}}
  }
@@ -37,9 +39,9 @@ export async function configStatus(options={}){
 }
 async function probeConfiguration(kind,config,{home=currentHome(),env=process.env,remoteTasks=[]}={}){
  try{
-  if(kind==='ha'){
-   const response=await fetch(config.baseUrl.replace(/\/$/,'')+'/api/config',{headers:{Authorization:'Bearer '+config.token},signal:AbortSignal.timeout(6000),redirect:'error'})
-   if(!response.ok)throw Error();const data=await response.json();if(!data||typeof data!=='object'||Array.isArray(data))throw Error()
+  const integration=integrationByConfig(kind)
+  if(integration){
+   await integration.health(config)
   }else if(kind==='backup'){
    if(process.platform!=='linux')throw new ConfigError('CONFIG_PLATFORM_NOT_SUPPORTED','backup')
    const key=createPublicKey(await readFile(join(home,'.config/wechat-assistant/backup-public.pem')))

@@ -1,3 +1,4 @@
+import {integrations} from '../integrations/registry.mjs'
 import {isAbsolute,posix,win32} from 'node:path'
 export const MAX_CONFIG_BYTES=1024*1024
 export class ConfigError extends Error{constructor(code,field){super(code);this.code=code;if(field&&/^[A-Za-z0-9_.-]{1,100}$/.test(field))this.field=field}}
@@ -7,7 +8,7 @@ const object=(properties,required)=>({type:'object',properties,required,addition
 const host=object({platform:{enum:['posix','win32']},binary:{...text,format:'remote-path'},root:{...text,format:'remote-path'},transport:{enum:['daemon-proxy','ssh-websocket']},port:{type:'integer',minimum:1024,maximum:65535}},['platform','binary','root','transport'])
 export const CONFIG_SCHEMAS={
  installation:object({version:{const:1},workspace:absolute,codexBinary:absolute,createdAt:{...text,format:'date-time'}},['version','workspace']),
- ha:object({version:{const:1},baseUrl:{...text,format:'http-url'},token:text},['version','baseUrl','token']),
+ ...Object.fromEntries(integrations.map(item=>[item.manifest.configKind,item.schema])),
  backup:object({version:{const:1},host:{...text,pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},remoteDirectory:{...text,format:'backup-directory'}},['version','host','remoteDirectory']),
  'remote-hosts':object({version:{const:1},hosts:{type:'object',propertyNames:{pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},additionalProperties:host}},['version','hosts']),
 }
