@@ -1,7 +1,7 @@
 import {spawn} from 'node:child_process'
 import {createInterface} from 'node:readline'
-import {installConfig} from '../setup/install-config.mjs'
-import {errorFields} from '../core/diagnostic-log.mjs'
+import {installConfig} from '../../setup/install-config.mjs'
+import {errorFields} from '../../core/diagnostic-log.mjs'
 import {codexProviderOptions,codexFallbackProviderOptions} from './provider-options.mjs'
 
 function rpcFailure(message,fields={}) {

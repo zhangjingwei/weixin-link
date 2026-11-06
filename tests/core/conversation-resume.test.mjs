@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {SessionManager,controlCommand} from '../../src/codex/codex-session.mjs'
+import {SessionManager,controlCommand} from '../../src/base/codex/codex-session.mjs'
 async function fixture(){
  const dir=await mkdtemp(join(tmpdir(),'resume-owned-')),calls=[],out=[];let fail=false,gate
  const options={stateDir:dir,cwd:join(dir,'work'),owners:['a','b'],remoteControl:async()=>({stop_confirmed:true}),rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method,p){calls.push({method,p});if(method==='thread/read')return {thread:{id:p.threadId,cwd:options.cwd,name:'Saved topic',status:{type:'idle'}}};if(method==='thread/resume'){if(p.threadId==='old'&&gate)await gate;if(p.threadId==='old'&&fail)throw Error('Cannot resume');return {thread:{id:p.threadId},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'}};if(method==='turn/start')return {turn:{id:'next'}};return {}}})}

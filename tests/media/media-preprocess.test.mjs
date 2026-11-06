@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os'
 import {execFileSync} from 'node:child_process'
 import sharp from 'sharp'
 import {composeMediaInput,preprocessAttachment} from '../../src/media/media-preprocess.mjs'
-import {codexInput} from '../../src/codex/codex-input.mjs'
+import {codexInput} from '../../src/base/codex/codex-input.mjs'
 export function pdfFixture(pages=2){
  const objects=['<< /Type /Catalog /Pages 2 0 R >>',`<< /Type /Pages /Count ${pages} /Kids [${Array.from({length:pages},(_,i)=>`${4+i*2} 0 R`).join(' ')}] >>`,'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
  for(let i=0;i<pages;i++){const content=`BT /F1 24 Tf 20 70 Td (CODEX MEDIA 7429 PAGE ${i+1}) Tj ET`;objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 100] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5+i*2} 0 R >>`,`<< /Length ${content.length} >>\nstream\n${content}\nendstream`)}

@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
-import {SessionManager,codexFallbackProviderOptions,isProviderAvailabilityFailure,DEEPSEEK_FALLBACK_NOTICE} from '../../src/codex/codex-session.mjs'
-import {DurableJobs} from '../../src/core/durable-jobs.mjs'
+import {SessionManager,codexFallbackProviderOptions,isProviderAvailabilityFailure,DEEPSEEK_FALLBACK_NOTICE} from '../../../src/base/codex/codex-session.mjs'
+import {DurableJobs} from '../../../src/core/durable-jobs.mjs'
 
 const fallbackEnv={
   WECHAT_CODEX_FALLBACK_PROVIDER:'deepseek_test',

@@ -1,5 +1,5 @@
 import {stripTaskFlow,executionState} from './task-flow.mjs'
-import {publicMemoryText} from '../codex/native-memory.mjs'
+import {publicMemoryText} from '../base/codex/native-memory.mjs'
 import {localTaskLabel,localCompletion} from './task-label.mjs'
 import {addTargetHints} from './target-hints.mjs'
 import {setTimeout as delay} from 'node:timers/promises'

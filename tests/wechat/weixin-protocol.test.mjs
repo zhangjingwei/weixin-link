@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {WeChatBot} from '@wechatbot/wechatbot'
 import {installWeixinProtocol,quotedContext,encodeVoice} from '../../src/wechat/weixin-protocol.mjs'
-import {codexInput} from '../../src/codex/codex-input.mjs'
+import {codexInput} from '../../src/base/codex/codex-input.mjs'
 const logger={child(){return this},debug(){},info(){},warn(){},error(){}}
 const bot=()=>new WeChatBot({storage:'memory',logger})
 test('SDK parses uint64 message and quote IDs losslessly without touching message text',async()=>{const b=bot(),prior=globalThis.fetch;globalThis.fetch=async()=>new Response('{"message_id":18446744073709551615,"nested":{"svr_id":9007199254740993,"msg_id":123},"text":"message_id:9007199254740993"}');try{const r=await b.http.executeRequest({url:'https://example.invalid',method:'GET',headers:{},timeoutMs:1000});assert.equal(r.data.message_id,'18446744073709551615');assert.equal(r.data.nested.svr_id,'9007199254740993');assert.equal(r.data.nested.msg_id,'123');assert.equal(r.data.text,'message_id:9007199254740993')}finally{globalThis.fetch=prior}})

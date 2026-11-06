@@ -1,2 +1,2 @@
 // Compatibility export for existing integrations.
-export * from './src/codex/codex-session.mjs'
+export * from './src/base/codex/codex-session.mjs'

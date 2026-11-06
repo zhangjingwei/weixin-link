@@ -7,7 +7,7 @@ import sharp from 'sharp'
 import {execFileSync} from 'node:child_process'
 const ffmpeg=new URL('../../node_modules/@ffmpeg-installer/linux-arm64/ffmpeg',import.meta.url).pathname
 import {OutputStore,OutputTransport,outputLinks} from '../../src/media/outbound-media.mjs'
-import {SessionManager} from '../../src/codex/codex-session.mjs'
+import {SessionManager} from '../../src/base/codex/codex-session.mjs'
 async function fixture(work){const dir=await mkdtemp(join(tmpdir(),'wx-out-'));const cwd=join(dir,'work'),stateDir=join(dir,'state');await mkdir(cwd);const store=new OutputStore({stateDir,cwd,roots:[cwd]});try{await work({dir,cwd,store,stateDir})}finally{await rm(dir,{recursive:true,force:true})}}
 async function image(cwd){const path=join(cwd,'image.png');await sharp({create:{width:64,height:64,channels:3,background:'#1a3e2f'}}).png().toFile(path);return path}
 test('only explicit local deliverable links are selected; remote URLs and code examples are ignored',()=>{assert.deepEqual(outputLinks('![图](/tmp/a.png) [文件](sandbox:/tmp/a.pdf) [web](https://a/b.png) `![例](/tmp/c.png)`\n```\n[x](/tmp/d.pdf)\n```'),['/tmp/a.png','/tmp/a.pdf'])})

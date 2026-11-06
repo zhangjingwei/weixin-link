@@ -1,2 +1,2 @@
 // Stable command entry; implementation lives in src/.
-export * from './src/codex/codex-backend-live-check.mjs'
+export * from './src/base/codex/codex-backend-live-check.mjs'

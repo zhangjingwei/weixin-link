@@ -1,9 +1,9 @@
 import {fileURLToPath as repositoryFilePath} from 'node:url'
 const repositoryDirectory=repositoryFilePath(new URL('../../',import.meta.url))
 import {installConfig} from './install-config.mjs'
-import {bindingIdentity,resolveBindingAccount} from '../codex/backend-identity.mjs'
+import {bindingIdentity,resolveBindingAccount} from '../base/codex/backend-identity.mjs'
 import {accountPaths,assertAccount,listAccounts} from '../wechat/accounts.mjs'
-import {loadBackend} from '../codex/codex-backend.mjs'
+import {loadBackend} from '../base/codex/codex-backend.mjs'
 import {controlRequest} from '../core/runtime-control.mjs'
 import {RemoteStore} from '../core/registry-lock.mjs'
 import {readFile,writeFile,rename,unlink,access} from 'node:fs/promises'

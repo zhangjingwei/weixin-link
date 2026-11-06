@@ -1,4 +1,4 @@
-import {CodexRpc} from '../codex/codex-session.mjs'
+import {CodexRpc} from '../base/codex/codex-session.mjs'
 import {randomUUID} from 'node:crypto'
 export function conversationCommand(text=''){
  const s=text.trim();let m;
