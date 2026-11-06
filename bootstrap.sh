@@ -44,9 +44,21 @@ const {resolve} = require('node:path')
 const {existsSync} = require('node:fs')
 const root = resolve(process.argv[2])
 try {
-  const result = JSON.parse(execFileSync(process.execPath,
-    [resolve(root, 'src/wechat/account-manager.mjs'), 'refresh-qr', 'default'],
-    {encoding:'utf8', timeout:60000}))
+  let result
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      result = JSON.parse(execFileSync(process.execPath,
+        [resolve(root, 'src/wechat/account-manager.mjs'), 'refresh-qr', 'default'],
+        {encoding:'utf8', timeout:60000, stdio:['ignore','pipe','pipe']}))
+      break
+    } catch (error) {
+      let code
+      try { code = JSON.parse(String(error.stdout)).error } catch {}
+      if (process.platform !== 'darwin' || Number(code) !== 113 || attempt === 2) throw error
+      console.log('macOS 登录服务正在重新注册，正在重试…')
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300)
+    }
+  }
   if (!result.ok || result.status !== 'scan_to_login' || typeof result.path !== 'string' || !existsSync(result.path)) {
     throw Error('QR_IMAGE_UNAVAILABLE')
   }
@@ -64,6 +76,7 @@ try {
 } catch (error) {
   let code = error.message
   try { code = JSON.parse(String(error.stdout)).error || code } catch {}
+  if (Number(code) === 113) code = 'MACOS_SERVICE_NOT_FOUND'
   if (!/^[A-Z0-9_]+$/.test(code)) code = 'QR_REFRESH_FAILED'
   console.error('无法刷新二维码，请稍后重试。错误代码：' + code)
   process.exitCode = 1

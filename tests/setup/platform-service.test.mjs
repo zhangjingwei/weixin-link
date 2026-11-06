@@ -13,3 +13,20 @@ test('Mac install prepares a LaunchAgent without loading it and refuses foreign 
 test('Mac lifecycle uses the user GUI domain and preserves account pairing identity',async t=>{const home=await fixture(t),calls=[];let loaded=false;const run=async(b,a)=>{calls.push([b,a]);if(a[0]==='print'){if(!loaded)throw Error('not loaded');return {stdout:'state = running\npid = 42'}}if(a[0]==='bootstrap')loaded=true;return {stdout:''}};const s=new ServiceManager({platform:'darwin',home,root:'/tmp/src',uid:501,run});await s.pair('bot2');const text=await readFile(s.plist('wechat-pair-bot2.service'),'utf8');assert(text.includes('<string>bot2</string>'));assert(calls.some(([b,a])=>b==='launchctl'&&a[0]==='bootstrap'&&a[1]==='gui/501'));assert.equal((await s.status('wechat-pair-bot2.service')).pid,42);await s.stop('wechat-pair-bot2.service');assert(calls.some(([,a])=>a[0]==='bootout'&&a[1].endsWith('wechat-pair-bot2')))})
 test('Windows calls use structured payload and no cmd shell interpolation',async t=>{const home=await fixture(t),calls=[];const s=new ServiceManager({platform:'win32',home,root:'/tmp/a & b',run:async(b,a)=>{calls.push([b,a]);return {stdout:'{"active":false,"pid":0}'}}});await s.prepare('wechat-ping-bot@bot2.service');await s.pair('bot2');await s.status('wechat-ping-bot@bot2.service');for(const [bin,args]of calls){assert.equal(bin,'powershell.exe');assert(args.includes('-File'));assert.equal(args[args.indexOf('-File')+1],join('/tmp/a & b','src/setup/windows-service.ps1'));const d=JSON.parse(Buffer.from(args.at(-1),'base64'));assert.equal(d.root,'/tmp/a & b');assert(d.name.startsWith('com.wechat-assistant.'))}const first=JSON.parse(Buffer.from(calls[0][1].at(-1),'base64'));assert.equal(first.account,'bot2');assert.equal(first.action,'prepare')})
 test('private endpoints are deterministic, account-scoped Windows pipes and Unix sockets',()=>{const pipe=controlEndpoint('C:\\Users\\me\\state','win32');assert(isPipe(pipe));assert(!pipe.includes('Users'));assert.notEqual(pipe,controlEndpoint('C:\\Users\\me\\other','win32'));assert.equal(controlEndpoint('/tmp/user','darwin'),join('/tmp/user','runtime.sock'))})
+test('Mac pairing retries a service disappearing between print and kickstart',async t=>{
+ const home=await fixture(t);let loaded=true,kicks=0,boots=0
+ const run=async(bin,args)=>{
+  if(args[0]==='print'){if(!loaded)throw Object.assign(Error('missing'),{code:113});return {stdout:'state = not running'}}
+  if(args[0]==='bootstrap'){loaded=true;boots++}
+  if(args[0]==='kickstart'&&++kicks===1){loaded=false;throw Object.assign(Error('missing'),{code:113})}
+  return {stdout:''}
+ }
+ await new ServiceManager({platform:'darwin',home,uid:501,run}).pair('default')
+ assert.equal(kicks,2);assert.equal(boots,1)
+})
+test('Mac pairing gives a named error after bounded missing-service retries',async t=>{
+ const home=await fixture(t);let kicks=0
+ const run=async(bin,args)=>{if(args[0]==='kickstart'){kicks++;throw Object.assign(Error('missing'),{code:113})}return {stdout:''}}
+ await assert.rejects(new ServiceManager({platform:'darwin',home,uid:501,run}).pair('default'),/MACOS_SERVICE_NOT_FOUND/)
+ assert.equal(kicks,3)
+})

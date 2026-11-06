@@ -109,3 +109,13 @@ test('legacy refresh failures retain a useful error code without dumping JSON',{
   return true
  })
 })
+test('legacy Mac refresh retries error 113 without exposing JSON',{skip:process.platform!=='darwin'},async t=>{
+ const f=await fixture(t);await existingInstallation(f)
+ const manager=join(f.dest,'src/wechat/account-manager.mjs')
+ const source=await readFile(manager,'utf8')
+ await writeFile(manager,source.replace("writeFileSync(new URL('../../refreshed',import.meta.url),'fresh');", "const marker=new URL('../../first-attempt',import.meta.url);if(!(await import('node:fs')).existsSync(marker)){writeFileSync(marker,'attempted');console.log(JSON.stringify({ok:false,error:113}));process.exit(1)}writeFileSync(new URL('../../refreshed',import.meta.url),'fresh');"))
+ const r=await exec('bash',[bootstrap],{env:f.env})
+ assert(r.stdout.includes('正在重试'))
+ assert(r.stdout.includes('请用微信扫描 PNG 图片'))
+ assert(!r.stdout.includes('"ok"'))
+})

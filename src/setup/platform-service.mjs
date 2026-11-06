@@ -2,6 +2,7 @@ import {fileURLToPath as repositoryFilePath} from 'node:url'
 const repositoryDirectory=repositoryFilePath(new URL('../../',import.meta.url))
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
+import {setTimeout as delay} from 'node:timers/promises'
 import {homedir} from 'node:os'
 import {join,dirname} from 'node:path'
 import {mkdir,readFile,writeFile,rename} from 'node:fs/promises'
@@ -22,7 +23,16 @@ export class ServiceManager{
  async prepare(unit,{pair=false}={}){const account=pair?unit.slice(12,-8):(unit.includes('@')?unit.split('@')[1].slice(0,-8):'default');if(this.platform==='darwin'){await this.managedWrite(this.plist(unit),launchAgent({unit,root:this.root,home:this.home,account,pair,path:this.env.PATH}));return}if(this.platform==='win32'){await this.windows('prepare',unit,{account,pair});return}if(this.platform!=='linux')throw Error('UNSUPPORTED_PLATFORM')}
  async windows(action,unit,options={}){const data=Buffer.from(JSON.stringify({action,name:serviceName(unit),home:this.home,root:this.root,node:process.execPath,...options})).toString('base64');return this.run('powershell.exe',['-NoProfile','-NonInteractive','-File',join(this.root,'src/setup/windows-service.ps1'),data],{timeout:30000,maxBuffer:65536})}
  async status(unit){if(this.platform==='linux'){try{const r=await this.run('systemctl',['--user','show',unit,'-p','ActiveState','-p','MainPID'],{timeout:10000});return {active:/ActiveState=(active|activating)/.test(r.stdout),pid:Number(r.stdout.match(/MainPID=(\d+)/)?.[1]??0)}}catch{return {active:false,pid:0}}}if(this.platform==='darwin'){try{const r=await this.run('launchctl',['print',this.domain+'/'+serviceName(unit)],{timeout:10000});return {active:/state = running/.test(r.stdout),pid:Number(r.stdout.match(/pid = (\d+)/)?.[1]??0)}}catch(e){if(e.code=== 'ENOENT')throw e;return {active:false,pid:0}}}if(this.platform==='win32')return JSON.parse((await this.windows('status',unit)).stdout);throw Error('UNSUPPORTED_PLATFORM')}
- async start(unit,{enable=false,pair=false}={}){if(this.platform==='linux')return this.run('systemctl',['--user',...(enable?['enable','--now']:['start']),unit],{timeout:30000});await this.prepare(unit,{pair});if(this.platform==='darwin'){if((await this.status(unit)).active)return;try{await this.run('launchctl',['print',this.domain+'/'+serviceName(unit)],{timeout:10000})}catch{await this.run('launchctl',['bootstrap',this.domain,this.plist(unit)],{timeout:15000})}return this.run('launchctl',['kickstart',this.domain+'/'+serviceName(unit)],{timeout:15000})}return this.windows('start',unit)}
+ async start(unit,{enable=false,pair=false}={}){if(this.platform==='linux')return this.run('systemctl',['--user',...(enable?['enable','--now']:['start']),unit],{timeout:30000});await this.prepare(unit,{pair});if(this.platform==='darwin'){
+  const target=this.domain+'/'+serviceName(unit)
+  for(let attempt=0;attempt<3;attempt++){
+   if((await this.status(unit)).active)return
+   try{await this.run('launchctl',['print',target],{timeout:10000})}
+   catch{await this.run('launchctl',['bootstrap',this.domain,this.plist(unit)],{timeout:15000})}
+   try{return await this.run('launchctl',['kickstart',target],{timeout:15000})}
+   catch(error){if(Number(error.code)!==113)throw error;if(attempt===2)throw Error('MACOS_SERVICE_NOT_FOUND');await delay(100)}
+  }
+ }return this.windows('start',unit)}
  async stop(unit){if(this.platform==='linux')return this.run('systemctl',['--user','stop',unit],{timeout:30000});if(this.platform==='darwin'){try{await this.run('launchctl',['print',this.domain+'/'+serviceName(unit)],{timeout:10000})}catch{return}return this.run('launchctl',['bootout',this.domain+'/'+serviceName(unit)],{timeout:30000})}return this.windows('stop',unit)}
  async restart(unit){await this.stop(unit);return this.start(unit)}
  async pair(id){const unit='wechat-pair-'+id+'.service';serviceName(unit);if(this.platform==='linux')return this.run('systemd-run',['--user','--unit='+unit.slice(0,-8),'--collect','--property=UMask=0077','--property=RuntimeMaxSec=600','--setenv=PATH='+this.env.PATH,process.execPath,join(this.root,'src/wechat/account-login.mjs'),id],{timeout:15000});return this.start(unit,{pair:true})}

@@ -22,6 +22,7 @@ export function setupError(error) {
   STOP_ACCOUNT_BEFORE_RELOGIN:'微信账号已在线，请在微信发送「安装状态」继续。',
   INSTALLATION_ALREADY_CONFIGURED:'已有安装配置，请使用原工作目录继续安装。',
   INVALID_WORKSPACE:'工作目录必须是有效的绝对路径。',
+  MACOS_SERVICE_NOT_FOUND:'macOS 登录服务尚未准备好，请稍后重新运行安装命令。',
   ENOENT:'缺少所需文件或命令，请检查安装目录和运行环境。',
   EACCES:'没有足够的访问权限，请检查安装目录权限。',
  }
