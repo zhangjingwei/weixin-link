@@ -6,6 +6,33 @@ case "$(uname -s):$(uname -m)" in
   Linux:aarch64|Linux:x86_64|Darwin:arm64|Darwin:x86_64) ;;
   *) echo 'Supported: Linux/macOS arm64/x64. Windows: use install.ps1.' >&2; exit 1 ;;
 esac
+# Discover registered services before downloading tools or creating another source tree.
+case "$(uname -s)" in
+ Linux)
+  if command -v systemctl >/dev/null 2>&1; then
+   existing_service=$(systemctl --user show wechat-ping-bot.service --property=LoadState --property=ActiveState --property=FragmentPath 2>/dev/null || true)
+   existing_fragment=$(printf '%s\n' "$existing_service" | sed -n 's/^FragmentPath=//p')
+   existing_source="${WEIXIN_LINK_DIR:-${ZERO_LINK_DIR:-$HOME/.local/share/weixin-link/source}}"
+   resume_pairing=false
+   if ! printf '%s\n' "$existing_service" | grep -q '^ActiveState=active$' && test -f "$existing_fragment" && grep -q '^# Managed by wechat-assistant setup v1$' "$existing_fragment" && test -f "$existing_source/src/wechat/account-manager.mjs"; then
+    resume_pairing=true
+   fi
+   if test -n "$existing_fragment" && test "$resume_pairing" = false; then
+    echo '检测到已有 Weixin Link 后台服务，跳过重复安装。'
+    printf '%s\n' "$existing_service" | grep -E '^(ActiveState|FragmentPath)=' || true
+    echo '服务状态不代表微信登录状态；可在微信发送「安装状态」检查。升级请使用独立升级入口。'
+    exit 0
+   fi
+  fi
+  ;;
+ Darwin)
+  if launchctl print "gui/$(id -u)/com.wechat-assistant.wechat-ping-bot" >/dev/null 2>&1; then
+   echo '检测到已有 Weixin Link 后台服务，跳过重复安装。'
+   echo '可在微信发送「安装状态」检查；升级请使用独立升级入口。'
+   exit 0
+  fi
+  ;;
+esac
 for bootstrap_cmd in curl tar mktemp; do
   command -v "$bootstrap_cmd" >/dev/null 2>&1 || { echo "Missing prerequisite: $bootstrap_cmd" >&2; exit 1; }
 done

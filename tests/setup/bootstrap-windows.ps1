@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ('weixin-link-bootstrap-test-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
 $previousNewDest = $env:WEIXIN_LINK_DIR
@@ -19,6 +19,8 @@ function Invoke-WebRequest {
     Copy-Item -LiteralPath $env:ZERO_LINK_TEST_ARCHIVE -Destination $OutFile
 }
 function Assert-True($condition, [string]$message) { if (!$condition) { throw $message } }
+$script:fixtureTask = $null
+function Get-ScheduledTask { param([string]$TaskName, [string]$ErrorAction) return $script:fixtureTask }
 function Make-Archive([string]$installer, [bool]$complete = $true) {
     $source = Join-Path $fixtureRoot 'fixture-source'
     if (Test-Path -LiteralPath $source) { Remove-Item -LiteralPath $source -Recurse -Force }
@@ -30,6 +32,11 @@ function Make-Archive([string]$installer, [bool]$complete = $true) {
     Compress-Archive -LiteralPath $source -DestinationPath $env:ZERO_LINK_TEST_ARCHIVE -Force
 }
 try {
+    $script:fixtureTask = [pscustomobject]@{State='Running'}
+    $registeredOutput = & $bootstrapPath
+    Assert-True (($registeredOutput | Out-String).Contains('跳过重复安装')) 'Registered service was not detected before download.'
+    Assert-True ($env:ZERO_LINK_TEST_REQUESTED_URL -eq '') 'Existing service triggered a download.'
+    $script:fixtureTask = $null
     # The child installer is a fixture: no packages, accounts, services or network are touched.
     Make-Archive 'Set-Content -LiteralPath (Join-Path $PSScriptRoot "installed.txt") -Value "installed"; exit 0'
     $env:ZERO_LINK_DIR = Join-Path $fixtureRoot 'source with spaces & symbols'

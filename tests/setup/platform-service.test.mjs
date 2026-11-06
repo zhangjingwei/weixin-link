@@ -30,3 +30,15 @@ test('Mac pairing gives a named error after bounded missing-service retries',asy
  await assert.rejects(new ServiceManager({platform:'darwin',home,uid:501,run}).pair('default'),/MACOS_SERVICE_NOT_FOUND/)
  assert.equal(kicks,3)
 })
+test('Linux installation reports an unmanaged unit without changing either service',async t=>{
+ const home=await fixture(t),dir=join(home,'.config/systemd/user')
+ await mkdir(dir,{recursive:true})
+ const regular=join(dir,'wechat-ping-bot.service'),template=join(dir,'wechat-ping-bot@.service')
+ const original='# Managed by wechat-assistant setup v1\nexisting config\n'
+ await writeFile(regular,original);await writeFile(template,'[Service]\nExecStart=/legacy/bot\n')
+ await assert.rejects(installServices({home,root:'/new/source',platform:'linux',run:async()=>assert.fail('must not reload on conflict')}),error=>{
+  assert.equal(error.message,'EXISTING_SERVICE_REQUIRES_REVIEW');assert.equal(error.servicePath,template);return true
+ })
+ assert.equal(await readFile(regular,'utf8'),original)
+ assert.equal(await readFile(template,'utf8'),'[Service]\nExecStart=/legacy/bot\n')
+})

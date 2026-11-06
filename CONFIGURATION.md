@@ -96,3 +96,26 @@ node src/setup/setup.mjs config-restore ha
 SSH 私钥、HA 令牌、微信/Codex 凭据、聊天记录、附件、状态数据库和本地配置不进入源码或发布包。模板仅含脱敏示例，不自动启用集成，也不提供维护者的账号权限。
 
 提交前暂存拟发布内容，再运行 `npm run check:release`。它检查暂存区路径和常见密钥格式，不替代人工检查、依赖审查或 Git 历史审计。不要直接压缩整个运行目录；公开发布前独立审计历史，发现凭据泄露时先撤销或轮换。
+
+
+## 已有安装与独立升级
+
+安装入口先检查当前用户的 systemd 服务、macOS LaunchAgent 或 Windows 计划任务。已有服务即使采用不同源码目录或自定义服务配置，也不会触发重复安装、覆盖服务或自动升级。服务运行状态不等于微信登录状态。未运行的标准 Linux 安装仍可通过 bootstrap 刷新扫码；其他已注册部署可使用原安装目录中的配对命令恢复登录。
+
+标准安装使用独立升级入口：
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/upgrade.sh)"
+```
+
+Windows PowerShell：
+
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/upgrade.ps1')))
+```
+
+`WEIXIN_LINK_DIR` 指向已安装源码目录，`WEIXIN_LINK_REF` 可选择目标分支、标签或提交（默认 `main`）。升级不会运行安装向导或重新扫码。先在旁边的暂存目录安装依赖，再通过控制接口确认所有已注册账号空闲，停止原先运行的服务，备份源码和运行数据，切换源码，恢复原先运行的服务并检查微信通道就绪。原先停止的账号保持停止。服务定义和覆盖配置、工作目录、Node 工具目录保持原样。
+
+切换或就绪检查失败时，自动恢复旧源码与运行数据后启动旧版。备份保存在源码目录旁的 `.backup-*` 和 `~/.local/share/weixin-link/upgrades/`，其中运行数据可能含凭据，应按私密备份保存。回滚未能确认成功时保留升级锁和 `upgrade.json` 恢复记录，不继续尝试覆盖。突然断电或强制终止进程不会执行自动回滚，应由维护者依据记录恢复；不要直接删除锁重新升级。
+
+自动升级仅适用于安装器管理、服务实际指向所选源码目录、支持维护控制接口的标准安装。Git 工作区、自定义 `.env`、运行数据位于源码目录内、未托管服务、服务覆盖配置指向另一个版本目录等情况会在切换前退出。自定义部署应使用自身发布流程升级，或先制定迁移方案；此入口不会擅自更改其模型提供方配置、启动参数或版本选择。Windows 平台流程需要在 Windows 上验证，其他平台的测试不能替代真实 Windows 服务验收。

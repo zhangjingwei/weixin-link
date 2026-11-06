@@ -40,3 +40,10 @@ test('pairing prompts distinguish an existing login and explain the next step',(
  assert(setupError(Error('QR_NOT_READY_OR_EXPIRED')).includes('刷新二维码'))
  assert(!setupError(Error('sensitive raw process output')).includes('sensitive'))
 })
+test('service conflicts identify the preserved file and do not suggest a network failure',()=>{
+ const error=Object.assign(Error('EXISTING_SERVICE_REQUIRES_REVIEW'),{servicePath:'/home/test/.config/systemd/user/wechat-ping-bot.service'})
+ const text=setupError(error)
+ assert(text.includes('已保留原配置'))
+ assert(text.includes(error.servicePath))
+ assert(!text.includes('网络'))
+})

@@ -11,6 +11,7 @@ $t=Get-ScheduledTask -TaskName $d.name -ErrorAction SilentlyContinue
 $owner=[Security.Principal.WindowsIdentity]::GetCurrent().Name
 if($t -and ($t.Description -ne 'Managed by wechat-assistant setup v1' -or $t.Principal.UserId -notin @($owner,[Security.Principal.WindowsIdentity]::GetCurrent().User.Value))){throw 'EXISTING_SERVICE_REQUIRES_REVIEW'}
 switch($d.action){
+ 'inspect' {@{exists=($null -ne $t);description=$t.Description;arguments=($t.Actions | ForEach-Object {$_.Arguments}) -join ' '}|ConvertTo-Json -Compress}
  'prepare' {
   # Task Scheduler launches an executable directly; no cmd.exe interpolation.
   function QuoteArg([string]$s){if($s -match '[\r\n\x00]'){throw 'INVALID_PATH'};return '"'+($s -replace '(\\*)"','$1$1\"' -replace '(\\+)$','$1$1')+'"'}

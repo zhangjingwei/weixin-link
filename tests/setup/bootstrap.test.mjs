@@ -15,6 +15,8 @@ async function fixture(t){
  await writeFile(join(source,'package.json'),'{}\n');await writeFile(join(source,'.sample'),'included\n')
  const archive=join(root,'fixture.tar.gz');await exec('tar',['-czf',archive,'-C',source,'.'])
  // Fake only the download: tar, filesystem handling and installer invocation are real.
+ await writeFile(join(bin,'launchctl'),'#!/bin/sh\nexit 113\n',{mode:0o755})
+ await writeFile(join(bin,'systemctl'),'#!/bin/sh\nprintf \"LoadState=not-found\\nFragmentPath=\\n\"\n',{mode:0o755})
  await writeFile(join(bin,'curl'),'#!/bin/sh\nwhile [ "$#" -gt 0 ]; do if [ "$1" = -o ]; then cp "$FIXTURE_ARCHIVE" "$2"; exit; fi; shift; done\nexit 2\n',{mode:0o755})
  return {root,source,dest,archive,env:{...process.env,WEIXIN_LINK_DIR:'',WEIXIN_LINK_REF:'',PATH:bin+':'+process.env.PATH,ZERO_LINK_DIR:dest,FIXTURE_ARCHIVE:archive}}
 }
@@ -118,4 +120,17 @@ test('legacy Mac refresh retries error 113 without exposing JSON',{skip:process.
  assert(r.stdout.includes('正在重试'))
  assert(r.stdout.includes('请用微信扫描 PNG 图片'))
  assert(!r.stdout.includes('"ok"'))
+})
+test('registered Linux deployments are detected before download and dependency installation regardless of source layout',{skip:process.platform==='win32'},async t=>{
+ for(const state of ['active','inactive','failed']){
+  const f=await fixture(t)
+  await writeFile(join(f.root,'bin/uname'),'#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo aarch64;; esac\n',{mode:0o755})
+  await writeFile(join(f.root,'bin/systemctl'),`#!/bin/sh\nprintf 'LoadState=loaded\\nActiveState=${state}\\nFragmentPath=/custom/services/wechat-ping-bot.service\\n'\n`,{mode:0o755})
+  const env={...f.env,FIXTURE_ARCHIVE:join(f.root,'must-not-download')}
+  for(const script of [bootstrap,fileURLToPath(new URL('../../install.sh',import.meta.url))]){
+   const result=await exec('bash',[script],{env})
+   assert(result.stdout.includes('跳过重复安装'));assert(result.stdout.includes('ActiveState='+state))
+  }
+  assert(!(await readdir(f.root)).includes('source with spaces'))
+ }
 })

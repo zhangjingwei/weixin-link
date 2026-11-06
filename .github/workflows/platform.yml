@@ -17,4 +17,4 @@ jobs:
       - run: node --test tests/tools/release-check.test.mjs
       - run: npm ci
       - run: node --test tests/base/codex/protocol-client.test.mjs tests/remote/remote-protocol.test.mjs tests/remote/reconnecting-connection.test.mjs tests/remote/remote-rpc.test.mjs tests/core/original-request.test.mjs
-      - run: node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs tests/setup/bootstrap.test.mjs
+      - run: node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs tests/setup/bootstrap.test.mjs tests/setup/upgrade.test.mjs tests/setup/cli-output.test.mjs

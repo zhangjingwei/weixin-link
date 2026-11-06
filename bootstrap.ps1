@@ -1,7 +1,14 @@
-# Download Weixin Link into a persistent directory, then run its Windows installer.
+﻿# Download Weixin Link into a persistent directory, then run its Windows installer.
 $ErrorActionPreference = 'Stop'
 if ([Environment]::OSVersion.Platform -ne 'Win32NT' -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
     throw 'Supported: Windows x64. Linux/macOS: use bootstrap.sh.'
+}
+# A registered task is an existing deployment, regardless of its source directory.
+$existingTask = Get-ScheduledTask -TaskName 'com.wechat-assistant.wechat-ping-bot' -ErrorAction SilentlyContinue
+if ($existingTask) {
+    Write-Output '检测到已有 Weixin Link 后台服务，跳过重复安装。'
+    Write-Output "服务状态：$($existingTask.State)。请在微信发送「安装状态」检查；升级请使用独立升级入口。"
+    return
 }
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $bootstrapHome = [Environment]::GetFolderPath('UserProfile')

@@ -32,7 +32,7 @@ export async function initInstallation({home=(process.env.HOME||platformHome()),
 export async function installServices({home=(process.env.HOME||platformHome()),root=projectRoot,reload=true,run=exec,platform=process.platform}={}){
  const manager=new ServiceManager({platform,home,root,run});if(platform!=='linux'){await manager.prepare('wechat-ping-bot.service');return {servicesPrepared:true,started:false}}
  const paths=setupPaths({home,root});await mkdir(paths.units,{recursive:true,mode:0o700});const prepared=[]
- for(const template of [false,true]){const name=template?'wechat-ping-bot@.service':'wechat-ping-bot.service',path=join(paths.units,name),text=unitText({root,template,home});if(await exists(path)){const old=await readFile(path,'utf8');if(old!==text&&!old.startsWith('# Managed by wechat-assistant setup v1\n'))throw Error('EXISTING_SERVICE_REQUIRES_REVIEW');if(old===text)continue}prepared.push({path,text})}
+ for(const template of [false,true]){const name=template?'wechat-ping-bot@.service':'wechat-ping-bot.service',path=join(paths.units,name),text=unitText({root,template,home});if(await exists(path)){const old=await readFile(path,'utf8');if(old!==text&&!old.startsWith('# Managed by wechat-assistant setup v1\n'))throw Object.assign(Error('EXISTING_SERVICE_REQUIRES_REVIEW'),{servicePath:path});if(old===text)continue}prepared.push({path,text})}
  for(const {path,text}of prepared){await writeFile(path+'.tmp',text,{mode:0o600});await rename(path+'.tmp',path)}
  if(reload)await run('systemctl',['--user','daemon-reload'],{timeout:15000})
  return {servicesPrepared:true,started:false}

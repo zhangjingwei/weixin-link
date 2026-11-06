@@ -1,5 +1,12 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 if($env:PROCESSOR_ARCHITECTURE -ne 'AMD64'){throw 'Supported: Windows x64'}
+# A registered task is an existing deployment, regardless of its source directory.
+$existingTask = Get-ScheduledTask -TaskName 'com.wechat-assistant.wechat-ping-bot' -ErrorAction SilentlyContinue
+if ($existingTask) {
+    Write-Output '检测到已有 Weixin Link 后台服务，跳过重复安装。'
+    Write-Output "服务状态：$($existingTask.State)。请在微信发送「安装状态」检查；升级请使用独立升级入口。"
+    return
+}
 $env:HOME=[Environment]::GetFolderPath('UserProfile')
 $tools=Join-Path $env:HOME '.local\share\wechat-ping-bot\tools'
 $node=Join-Path $tools 'node\node.exe'

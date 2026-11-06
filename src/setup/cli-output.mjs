@@ -22,11 +22,13 @@ export function setupError(error) {
   STOP_ACCOUNT_BEFORE_RELOGIN:'微信账号已在线，请在微信发送「安装状态」继续。',
   INSTALLATION_ALREADY_CONFIGURED:'已有安装配置，请使用原工作目录继续安装。',
   INVALID_WORKSPACE:'工作目录必须是有效的绝对路径。',
+  EXISTING_SERVICE_REQUIRES_REVIEW:'检测到未由本安装器管理的同名后台服务，已保留原配置。请先核对该服务的来源和启动路径，再决定是否迁移。',
   MACOS_SERVICE_NOT_FOUND:'macOS 登录服务尚未准备好，请稍后重新运行安装命令。',
   ENOENT:'缺少所需文件或命令，请检查安装目录和运行环境。',
   EACCES:'没有足够的访问权限，请检查安装目录权限。',
  }
- return `安装未完成：${messages[code] || '当前步骤执行失败，请检查网络和运行环境后重试。'}\n错误代码：${code}`
+ const detail=code==='EXISTING_SERVICE_REQUIRES_REVIEW'&&typeof error.servicePath==='string'?`\n冲突文件：${error.servicePath}`:''
+ return `安装未完成：${messages[code] || '当前步骤执行失败，请检查网络和运行环境后重试。'}${detail}\n错误代码：${code}`
 }
 
 export const setupProgress = {

@@ -80,7 +80,7 @@ Linux 需要可用的用户级 systemd 会话及 `flock`；Linux/macOS 下载 No
 
 Windows 引导脚本仅为安装子进程使用 `ExecutionPolicy Bypass`，不修改系统或用户的持久执行策略。
 
-两个引导脚本默认把源码保存到 `~/.local/share/weixin-link/source`（Windows 为用户目录下的 `.local\share\weixin-link\source`），再调用 `install.sh` 或 `install.ps1`。可通过环境变量 `WEIXIN_LINK_DIR` 指定源码目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。再次执行时会识别已有安装：未登录则刷新并显示二维码，已在线则提示已登录；不会覆盖源码或重复安装。无法识别的已有目录会被拒绝。这些命令不用于更新已有部署的代码。源码、工作区和账号数据分别保存。
+两个引导脚本默认把源码保存到 `~/.local/share/weixin-link/source`（Windows 为用户目录下的 `.local\share\weixin-link\source`），再调用 `install.sh` 或 `install.ps1`。可通过环境变量 `WEIXIN_LINK_DIR` 指定源码目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。再次执行时先检查已注册服务，已有部署会跳过重复安装；未注册服务的既有源码、以及未运行的标准 Linux 安装可继续配对。不会覆盖已有服务配置。无法识别的已有目录会被拒绝。升级请使用[独立升级入口](CONFIGURATION.md#已有安装与独立升级)，这些安装命令不会更新已有部署的代码。源码、工作区和账号数据分别保存。
 
 旧版 `ZERO_LINK_DIR`、`ZERO_LINK_REF` 仍兼容，新变量优先。改名不迁移现有工作区、账号数据或服务；旧源码目录若已存在，先核实原安装再更新。
 
@@ -108,7 +108,7 @@ Windows PowerShell：
 
 安装器准备私有目录、工作区、依赖及后台服务，启动配对并输出二维码。使用微信扫码确认；扫码者成为该账号档案的初始授权用户。
 
-二维码过期后，可重新执行上方一键命令，或在安装目录运行下方刷新命令（使用已有安装的 Node.js）：
+二维码过期且账号尚未在线时，在安装目录运行下方刷新命令（使用已有安装的 Node.js）：
 
 ```sh
 PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/wechat/account-manager.mjs refresh-qr default

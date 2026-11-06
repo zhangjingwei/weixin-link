@@ -77,7 +77,7 @@ The repository is public. For a first installation, run the command for your pla
 
 The Windows bootstrap uses `ExecutionPolicy Bypass` only for the installer child process. It does not change the persistent user or system execution policy.
 
-Both scripts save source code to `~/.local/share/weixin-link/source` by default (the `.local\share\weixin-link\source` directory under your Windows user profile), then invoke `install.sh` or `install.ps1`. Set `WEIXIN_LINK_DIR` to choose a source directory or `WEIXIN_LINK_REF` to select a branch, tag, or commit. On repeat runs, a recognized existing installation resumes pairing: offline accounts get a fresh QR code, while online accounts are left running. Source files are not overwritten and installation is not repeated. Unrecognized existing destinations are refused. These commands do not update existing source code. Source code, the workspace, and account data are stored separately.
+Both scripts save source code to `~/.local/share/weixin-link/source` by default (the `.local\share\weixin-link\source` directory under your Windows user profile), then invoke `install.sh` or `install.ps1`. Set `WEIXIN_LINK_DIR` to choose a source directory or `WEIXIN_LINK_REF` to select a branch, tag, or commit. Repeat runs detect registered services first and skip reinstalling existing deployments. Source-only installations and inactive standard Linux installations can resume pairing. Source files are not overwritten and installation is not repeated. Unrecognized existing destinations are refused. These commands do not update existing source code. Source code, the workspace, and account data are stored separately.
 
 Legacy `ZERO_LINK_DIR` and `ZERO_LINK_REF` remain supported; the new variables take precedence. Renaming does not move existing workspaces, account data, or services. Inspect an existing old source directory before updating.
 
@@ -105,7 +105,7 @@ Windows PowerShell:
 
 The installer prepares private directories, the workspace, dependencies, and a background service, then starts pairing and displays a QR code. Scan and confirm it in WeChat. The person who confirms becomes the account profile's initial authorized user.
 
-If a QR code expires, rerun the one-line bootstrap command to refresh it. To display a currently valid QR code on Linux or macOS, run `./wechat-setup qr` from the installation directory. With the default bootstrap layout, first change to `~/.local/share/weixin-link/source`; use your chosen directory for a custom installation. See [QR code maintenance](CONFIGURATION.md#二维码维护) for refreshing an expired code.
+For expired QR codes, use the refresh command in the installation maintenance guide. To display a currently valid QR code on Linux or macOS, run `./wechat-setup qr` from the installation directory. With the default bootstrap layout, first change to `~/.local/share/weixin-link/source`; use your chosen directory for a custom installation. See [QR code maintenance](CONFIGURATION.md#二维码维护) for refreshing an expired code.
 
 ### 3. Complete Codex setup in WeChat
 
@@ -211,3 +211,5 @@ Incoming messages support up to 10 attachments totaling 50 MiB. Each outgoing gr
 [User guide](USER-GUIDE.md) · [Configuration and release boundaries](CONFIGURATION.md) · [Contributing](CONTRIBUTING.md) · [Security reports](SECURITY.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 The project's own code and documentation are licensed under the [MIT License](LICENSE). Third-party dependencies, optional binaries, and external services have their own terms. Weixin Link is an independent project and is not an official product of, or endorsed by, WeChat, OpenAI, or other service providers.
+
+Existing registered services are preserved and do not trigger a reinstall. Upgrades are explicit through `upgrade.sh` (Linux/macOS) or `upgrade.ps1` (Windows), with staged dependencies, state backups, health checks and automatic rollback on failure. Custom deployments are detected and require their own migration/release procedure. See [upgrade behavior and limitations](CONFIGURATION.md#已有安装与独立升级).
