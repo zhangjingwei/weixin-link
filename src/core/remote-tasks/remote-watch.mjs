@@ -1,5 +1,5 @@
 import {pathToFileURL,fileURLToPath} from 'node:url'
-const botRoot=process.env.WECHAT_BOT_ROOT??fileURLToPath(new URL('../../',import.meta.url))
+const botRoot=process.env.WECHAT_BOT_ROOT??fileURLToPath(new URL('../../../',import.meta.url))
 // Lazy loading also allows the adapter's read-only actions without a local bot installation.
 async function relay(body){
  const [{accountPaths},{controlRequest}]=await Promise.all([import(pathToFileURL(join(botRoot,'src/wechat/accounts.mjs'))),import(pathToFileURL(join(botRoot,'src/core/runtime-control.mjs')))])

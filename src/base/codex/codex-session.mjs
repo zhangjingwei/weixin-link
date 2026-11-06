@@ -1,3 +1,4 @@
+import {initializeCodex} from './protocol-operations.mjs'
 import {homedir as platformHome} from 'node:os'
 import {emptyContinuationNotice} from '../../core/notification-policy.mjs'
 import {currentMaterials,materialInput} from '../../core/material-context.mjs'
@@ -6,7 +7,7 @@ import {recoveryText} from '../../core/recovery-state.mjs'
 import {publicMemoryText,nativeMemoryConfig,enableThreadMemory} from './native-memory.mjs'
 import {ASSISTANT_INSTRUCTIONS} from '../../core/assistant-policy.mjs'
 import {localTaskLabel,localCompletion} from '../../core/task-label.mjs'
-import {remoteScope} from '../../remote/remote-stop.mjs'
+import {remoteScope} from '../../core/remote-tasks/remote-stop.mjs'
 import {OutputStore,outputLinks} from '../../media/outbound-media.mjs'
 import {CancellationScopes,transition} from '../../core/lifecycle.mjs'
 import {codexInput} from './codex-input.mjs'
@@ -154,9 +155,8 @@ export class SessionManager {
     const provider='configured',attempt=this.attachRpc(session)
     const saved=this.state.users[session.userId]??={}
     try {
-      await attempt.rpc.request('initialize', { clientInfo: { name: 'wechat_codex', title: 'WeChat', version: '3.0.0' }, capabilities:{experimentalApi:true} })
+      await initializeCodex(attempt.rpc,{name:'wechat_codex',title:'WeChat',version:'3.0.0'})
       if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
-      attempt.rpc.write({ method: 'initialized', params: {} })
       const params={config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:this.instructions,...attempt.providerOptions.thread}
       let result
       if(saved.threadId){

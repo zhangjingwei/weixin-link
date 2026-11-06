@@ -1,7 +1,7 @@
 import './remote-test-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {windowsDeployment,deploy} from '../../src/remote/remote-deploy.mjs'
+import {windowsDeployment,deploy} from '../../src/setup/remote-deploy.mjs'
 const config={platform:'win32',transport:'ssh-websocket',binary:'C:\\Users\\demo\\codex.cmd',port:47831}
 test('invalid endpoints are refused before running SSH or changing a machine',async()=>{
  for(const port of [0,22,65536,47831.5,'47831; command'])assert.throws(()=>windowsDeployment({...config,port}),/INVALID/)

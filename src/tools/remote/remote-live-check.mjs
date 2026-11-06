@@ -1,5 +1,5 @@
-import {remoteWorkspace} from './remote-paths.mjs'
-import {RemoteController} from './remote-controller.mjs'
+import {remoteWorkspace} from '../../remote/remote-paths.mjs'
+import {RemoteController} from '../../core/remote-tasks/remote-controller.mjs'
 import {readFile,writeFile} from 'node:fs/promises'
 import {setTimeout as delay} from 'node:timers/promises'
 const root=remoteWorkspace,c=new RemoteController({root,scope:'production-adapter-verification-20261018'})

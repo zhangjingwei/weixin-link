@@ -323,7 +323,7 @@ refresh-qr ACCOUNT 会只重启指定账号的配对流程，等待新二维码�
 
 ## NAS 源码仓库与恢复布局
 
-Git 远端由部署者自行设置。顶层是机器人源码；`agent-workspace/`是当前独立工作目录中远程兼容入口、目标配置示例和AGENTS.md模板，运行目录仍为`~/work/wechat-assistant`，远程实现统一维护在 src/remote/。全新恢复时可将兼容入口和模板放回工作目录，并配置 WECHAT_BOT_ROOT；不要覆盖已有remote-sessions.json、私有目录或outputs。凭据、会话、SQLite数据库、聊天附件、日志、备份、依赖和CodeGraph索引不纳入Git。
+Git 远端由部署者自行设置。顶层是机器人源码；`agent-workspace/`是当前独立工作目录中远程兼容入口、目标配置示例和AGENTS.md模板，运行目录仍为`~/work/wechat-assistant`，远程连接维护在 src/remote/，任务协调维护在 src/core/remote-tasks/。全新恢复时可将兼容入口和模板放回工作目录，并配置 WECHAT_BOT_ROOT；不要覆盖已有remote-sessions.json、私有目录或outputs。凭据、会话、SQLite数据库、聊天附件、日志、备份、依赖和CodeGraph索引不纳入Git。
 
 ## 微信文字排版
 
@@ -479,7 +479,8 @@ Node 引导、系统依赖和微信首次扫码不可在尚未建立的微信通
 - `src/core/`：任务生命周期、持久队列、恢复和控制接口。
 - `src/wechat/`：账号、协议、消息收发和机器人组合入口。
 - `src/base/`：智能体底座集合；`codex/` 承载现有实现，`claude/`、`opencode/` 为未启用的预留目录。
-- `src/remote/`：远程连接、任务协调、停止核验、进度转发与部署实现。
+- `src/remote/`：SSH 连接、隧道、有界重连与主机连接配置；旧命令仅保留薄兼容入口。
+- `src/core/remote-tasks/`：远程会话恢复、任务归属、持久化、停止核验与进度转发。
 - `src/media/`：附件准备、文档、图片、音视频和输出交付。
 - `src/setup/`：安装向导、平台服务、诊断和后端选择。
 - `src/integrations/`：HA、备份等可选集成。

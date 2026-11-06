@@ -31,7 +31,7 @@ Windows uses `wscript.exe` with a hidden `powershell.exe` child so the official 
 
 ## Source and workspace boundary
 
-Implementation is in src/remote/ and tests are in tests/remote/. This directory contains templates and thin compatibility entries only. Do not copy implementation files into a private workspace.
+Connection implementation is in src/remote/, shared Codex protocol is in src/base/codex/, and task coordination is in src/core/remote-tasks/. Tests are in tests/remote/. This directory contains templates and thin compatibility entries only. Do not copy implementation files into a private workspace.
 
 From the repository root use `node src/remote/remote-codex.mjs` with JSON stdin. Runtime configuration and remote-sessions.json remain in the installation workspace; WECHAT_REMOTE_WORKSPACE overrides that location, and WECHAT_REMOTE_HOSTS can select a separate host JSON.
 

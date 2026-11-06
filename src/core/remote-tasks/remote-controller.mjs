@@ -1,5 +1,6 @@
 import {watchTask} from './remote-watch.mjs'
-import {RemoteRpc,HOSTS} from './remote-rpc.mjs'
+import {RemoteRpc} from './remote-task-client.mjs'
+import {HOSTS} from '../../remote/remote-config.mjs'
 import {RemoteStore} from './remote-store.mjs'
 import {win32,posix,resolve,relative,isAbsolute,join,basename} from 'node:path'
 import {mkdir,writeFile} from 'node:fs/promises'
