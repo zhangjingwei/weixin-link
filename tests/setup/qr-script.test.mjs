@@ -68,3 +68,31 @@ test('failed safe stop prevents a new pairing attempt',{skip:process.platform===
  await assert.rejects(exec('sh',[script,'--relogin'],{env:f.env}),e=>e.stderr.includes('STOP_FAILED'))
  assert(!(await readdir(f.root)).includes('refreshed'))
 })
+async function terminalFixture(t,{expired=false,mismatch=false,columns=80}={}){
+ const f=await fixture(t),version='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+ const stateDir=join(f.home,'.local/share/wechat-ping-bot')
+ await mkdir(stateDir,{recursive:true})
+ await writeFile(join(stateDir,'pairing.json'),JSON.stringify({status:'waiting_scan',qr_version:version,valid_until:expired?0:Date.now()+90000}))
+ await writeFile(join(stateDir,'login-'+version+'.terminal'),'▀▄█ QR-FIXTURE █▄▀')
+ const manager=join(f.root,'src/wechat/account-manager.mjs')
+ if(!mismatch)await writeFile(manager,(await readFile(manager,'utf8')).replace("../../login.png",'../../login-'+version+'.png'))
+ const tty=join(f.home,'tty.cjs');await writeFile(tty,`process.stdout.isTTY=true;process.stdout.columns=${columns}`)
+ f.env.NODE_OPTIONS=`--require=${JSON.stringify(tty)}`
+ return f
+}
+test('SSH terminals show the matching QR code and retain a fallback PNG path',{skip:process.platform==='win32'},async t=>{
+ const f=await terminalFixture(t)
+ const r=await exec('sh',[script],{env:f.env})
+ assert(r.stdout.includes('请直接用微信扫描'));assert(r.stdout.includes('▀▄█ QR-FIXTURE █▄▀'))
+ assert(r.stdout.includes('备用 PNG'));assert(!r.stdout.includes('"ok"'))
+})
+test('expired and mismatched terminal QR codes are never printed',{skip:process.platform==='win32'},async t=>{
+ for(const options of [{expired:true},{mismatch:true}]){
+  const f=await terminalFixture(t,options),r=await exec('sh',[script],{env:f.env})
+  assert(!r.stdout.includes('QR-FIXTURE'));assert(r.stdout.includes('二维码 PNG'))
+ }
+})
+test('narrow terminals explain how to avoid wrapping the QR code',{skip:process.platform==='win32'},async t=>{
+ const f=await terminalFixture(t,{columns:10}),r=await exec('sh',[script],{env:f.env})
+ assert(!r.stdout.includes('QR-FIXTURE'));assert(r.stdout.includes('终端宽度不足'))
+})

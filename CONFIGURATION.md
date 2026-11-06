@@ -52,7 +52,7 @@ Linux/macOS 推荐使用独立入口，无需切换到安装目录：
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
 ```
 
-也可在源码目录运行 `./qr.sh`，或 `./qr.sh bot2` 刷新已创建的指定账号。远程一行命令可通过 `WEIXIN_LINK_ACCOUNT=bot2` 选择账号，通过 `WEIXIN_LINK_DIR=/实际源码目录` 选择自定义安装。未指定目录时识别标准路径与旧版 zero-link 路径；若两者同时存在则要求指定目录。脚本不会安装依赖、升级源码或停止在线账号。SSH 会话仅输出 PNG 路径，需下载图片扫码；在有图形环境的本机终端会尝试自动打开。
+也可在源码目录运行 `./qr.sh`，或 `./qr.sh bot2` 刷新已创建的指定账号。远程一行命令可通过 `WEIXIN_LINK_ACCOUNT=bot2` 选择账号，通过 `WEIXIN_LINK_DIR=/实际源码目录` 选择自定义安装。未指定目录时识别标准路径与旧版 zero-link 路径；若两者同时存在则要求指定目录。脚本不会安装依赖、升级源码或停止在线账号。SSH 或无图形界面的交互终端会显示当前有效的字符二维码，可直接扫码；终端过窄时提示放大窗口，并始终保留 PNG 路径。若字体行距造成断缝或扫码失败，可下载 PNG 扫码。有图形环境的本机终端会尝试自动打开图片。
 
 Linux/macOS 在安装源码目录运行 `./wechat-setup qr`，再次显示当前二维码。使用引导脚本默认目录时先运行 `cd ~/.local/share/weixin-link/source`。
 

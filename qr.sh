@@ -66,16 +66,45 @@ try {
   if (!result.ok || result.status !== 'scan_to_login' || typeof result.path !== 'string' || !existsSync(result.path)) {
     throw Error('QR_IMAGE_UNAVAILABLE')
   }
-  console.log('✓ 登录二维码已刷新。\n请用微信扫描 PNG 图片：\n' + result.path)
+  console.log('✓ 登录二维码已刷新。')
   const remote = process.env.SSH_CONNECTION || process.env.SSH_CLIENT || process.env.SSH_TTY
   const viewer = !remote && process.stdout.isTTY && (process.platform === 'darwin' ? 'open' :
     process.env.DISPLAY || process.env.WAYLAND_DISPLAY ? 'xdg-open' : null)
+  let opened = false
   if (viewer) {
     try {
       execFileSync(viewer, [result.path], {stdio:'ignore', timeout:5000})
+      opened = true
       console.log('已打开二维码图片，请及时扫码。')
-    } catch { console.log('无法自动打开图片，请手动打开上面的 PNG 文件。') }
+    } catch { console.log('无法自动打开图片，尝试在终端显示二维码。') }
   }
+  let displayed = false
+  if (!opened && process.stdout.isTTY) {
+    const base=resolve(process.env.HOME, '.local/share/wechat-ping-bot')
+    const stateDir=account==='default'?base:resolve(base,'accounts',account)
+    // The pairing worker publishes the PNG before writing its terminal rendering.
+    for(let attempt=0;attempt<10;attempt++){
+      try {
+        const state=JSON.parse(readFileSync(resolve(stateDir,'pairing.json'),'utf8'))
+        if(state.status!=='waiting_scan'||!Number.isFinite(state.valid_until)||Date.now()>=state.valid_until||
+          !/^[a-f0-9-]{36}$/.test(state.qr_version)||!result.path.endsWith('-'+state.qr_version+'.png')) break
+        const terminal=readFileSync(resolve(stateDir,'login-'+state.qr_version+'.terminal'),'utf8')
+        const lines=terminal.replace(/\x1b\[[0-9;]*m/g,'').split('\n')
+        const width=Math.max(...lines.map(line=>Array.from(line).length))
+        if(width>=(process.stdout.columns||80)){
+          console.log('终端宽度不足，请放大窗口后重试，或打开下方 PNG 文件。')
+          break
+        }
+        console.log('请直接用微信扫描下方二维码：')
+        process.stdout.write(terminal+'\n')
+        displayed=true
+        break
+      }catch{}
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)
+    }
+  }
+  if(!opened&&!displayed) console.log('未能在终端显示二维码，请打开 PNG 图片扫码。')
+  console.log((displayed?'备用 PNG（终端显示有断缝或扫码失败时使用）：':'二维码 PNG：')+'\n'+result.path)
   console.log('扫码并在手机上确认后，请在微信发送「安装状态」继续配置。')
 } catch (error) {
   let code = error.message
