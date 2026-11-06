@@ -64,7 +64,26 @@ Linux 需要可用的用户级 systemd 会话及 `flock`；Linux/macOS 下载 No
 
 ### 2. 安装并扫码
 
-`bootstrap.sh` 已随源码发布到 `main`。**仓库目前为私有**，匿名下载安装链接返回 404；当前请使用具备仓库读取权限的 Git 环境安装：
+仓库已公开。首次安装可直接运行以下命令，自动下载 `main` 源码并启动对应平台的安装器，无需预先克隆仓库。
+
+**Linux / macOS**
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.sh)"
+```
+
+**Windows x64（PowerShell）**
+
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.ps1')))
+```
+
+Windows 引导脚本仅为安装子进程使用 `ExecutionPolicy Bypass`，不修改系统或用户的持久执行策略。
+
+两个引导脚本默认把源码保存到 `~/.local/share/zero-link/source`（Windows 为用户目录下的 `.local\share\zero-link\source`），再调用 `install.sh` 或 `install.ps1`。可通过环境变量 `ZERO_LINK_DIR` 指定源码目录、`ZERO_LINK_REF` 指定分支、标签或提交。目标目录已存在时拒绝覆盖；这些命令用于首次安装，不用于直接更新已有部署。源码、工作区和账号数据分别保存。
+
+<details>
+<summary>手动克隆安装</summary>
 
 ```sh
 git clone --branch main https://github.com/zhangjingwei/zero-link.git
@@ -82,17 +101,6 @@ Windows PowerShell：
 ```powershell
 .\install.ps1
 ```
-
-<details>
-<summary>Linux / macOS 引导脚本（仓库允许公开下载后使用）</summary>
-
-```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.sh)"
-```
-
-脚本默认下载 `main`，将完整源码保存到 `~/.local/share/zero-link/source` 后运行安装器。可通过 `ZERO_LINK_DIR` 指定目录、`ZERO_LINK_REF` 指定分支或提交；已有目标目录时拒绝覆盖。此目录是源码位置，工作区和账号数据分别保存。
-
-这是一条首次安装命令，不是已有部署的更新命令。Windows 使用上面的 PowerShell 安装入口。
 
 </details>
 
@@ -192,7 +200,7 @@ Codex app-server
 
 ## 安全与扫码
 
-- 从本仓库 `main` 获取安装脚本和源码；私有仓库需要相应读取权限。
+- 从本仓库 `main` 获取安装脚本和源码。
 - 使用自己的微信扫码确认，确认者成为该账号档案的初始授权用户；不要分享登录二维码或设备验证码。
 - Codex 登录在官方 OpenAI 授权页面完成，配置和凭据保存在部署者的私有运行目录。
 - 二维码本地展示窗口为 90 秒；已在线账号不重新配对。安全问题的报告方式见 [安全政策](SECURITY.md)。
