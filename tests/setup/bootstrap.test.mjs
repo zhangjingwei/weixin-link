@@ -68,7 +68,7 @@ test('repeating bootstrap refreshes an offline existing installation without dow
 })
 test('repeating bootstrap leaves an online account running and does not refresh its QR',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t);await existingInstallation(f,{ready:true,running:true})
- const r=await exec('bash',[bootstrap],{env:f.env});assert(r.stdout.includes('Already logged in'))
+ const r=await exec('bash',[bootstrap],{env:f.env});assert(r.stdout.includes('微信已登录'))
  assert.equal((await readdir(f.dest)).includes('refreshed'),false)
 })
 test('running but unready accounts are not forcibly re-paired',{skip:process.platform==='win32'},async t=>{

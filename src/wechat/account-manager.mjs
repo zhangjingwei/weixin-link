@@ -1,3 +1,4 @@
+import {setupMessage,setupError} from '../setup/cli-output.mjs'
 import {fileURLToPath as repositoryFilePath} from 'node:url'
 const repositoryDirectory=repositoryFilePath(new URL('../../',import.meta.url))
 import {ServiceManager} from '../setup/platform-service.mjs'
@@ -32,4 +33,5 @@ async function run(){
  if(action==='start'){if(!await readFile(join(p.stateDir,'codex-owners.json'),'utf8'))throw Error('LOGIN_FIRST');await services.start(p.service);return {account:p.id,status:'starting'}}
  throw Error('USAGE: create|login|qr|refresh-qr|verify|list|start|stop ACCOUNT')
 }
-try{console.log(JSON.stringify({ok:true,...await run()}))}catch(e){console.log(JSON.stringify({ok:false,error:/^[A-Z0-9_:| -]+$/.test(e.message)?e.message:e.code??'ACCOUNT_OPERATION_FAILED'}));process.exitCode=1}
+const human=process.argv.includes('--human')
+try{const result=await run();console.log(human?setupMessage(action,result):JSON.stringify({ok:true,...result}))}catch(e){if(human)console.error(setupError(e));else console.log(JSON.stringify({ok:false,error:/^[A-Z0-9_:| -]+$/.test(e.message)?e.message:e.code??'ACCOUNT_OPERATION_FAILED'}));process.exitCode=1}

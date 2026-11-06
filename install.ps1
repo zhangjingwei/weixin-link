@@ -23,4 +23,4 @@ $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 & icacls.exe $state /inheritance:r /grant:r "*${sid}:(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'|Out-Null
 if($LASTEXITCODE -ne 0){throw 'PRIVATE_STATE_ACL_FAILED'}
 Push-Location $PSScriptRoot
-try{foreach($step in @('init','deps','services','pair','qr')){& $node (Join-Path $PSScriptRoot 'src/setup/setup.mjs') $step;if($LASTEXITCODE -ne 0){throw "SETUP_FAILED_$step"}}}finally{Pop-Location}
+try{foreach($step in @('init','deps','services','pair','qr')){& $node (Join-Path $PSScriptRoot 'src/setup/setup.mjs') $step --human;if($LASTEXITCODE -ne 0){throw "SETUP_FAILED_$step"}}}finally{Pop-Location}

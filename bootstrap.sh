@@ -31,14 +31,14 @@ if [[ -e "$bootstrap_dest" || -L "$bootstrap_dest" ]]; then
   bootstrap_accounts=$("$bootstrap_node" "$bootstrap_dest/src/wechat/account-manager.mjs" list)
   bootstrap_status=$("$bootstrap_node" -e 'const d=JSON.parse(process.argv[1]);const a=d.accounts?.find(a=>a.account==="default");if(!a)throw Error("DEFAULT_ACCOUNT_NOT_FOUND");console.log(a.ready?"online":a.service_active?"running":"offline")' "$bootstrap_accounts")
   if [[ "$bootstrap_status" = online ]]; then
-    echo 'Already logged in. Send 安装状态 in WeChat to continue.'; exit 0
+    echo '微信已登录，请发送「安装状态」继续配置。'; exit 0
   fi
   if [[ "$bootstrap_status" = running ]]; then
     echo 'The account service is running but not ready; inspect its status before re-pairing.' >&2; exit 1
   fi
-  echo 'Existing installation found; refreshing the login QR code without reinstalling.'
-  "$bootstrap_node" "$bootstrap_dest/src/wechat/account-manager.mjs" refresh-qr default
-  "$bootstrap_node" "$bootstrap_dest/src/setup/setup.mjs" qr default
+  echo '检测到已有安装，正在刷新微信登录二维码…'
+  "$bootstrap_node" "$bootstrap_dest/src/wechat/account-manager.mjs" refresh-qr default --human
+  "$bootstrap_node" "$bootstrap_dest/src/setup/setup.mjs" qr default --human
   exit 0
 fi
 mkdir -p "$(dirname -- "$bootstrap_dest")"

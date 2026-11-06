@@ -29,12 +29,12 @@ if ($bootstrapExisting) {
     if ($LASTEXITCODE -ne 0) { throw 'ACCOUNT_STATUS_FAILED' }
     $bootstrapAccount = (($bootstrapAccounts | Out-String | ConvertFrom-Json).accounts | Where-Object account -eq 'default' | Select-Object -First 1)
     if (!$bootstrapAccount) { throw 'DEFAULT_ACCOUNT_NOT_FOUND' }
-    if ($bootstrapAccount.ready) { Write-Output 'Already logged in. Send installation status in WeChat to continue.'; return }
+    if ($bootstrapAccount.ready) { Write-Output '微信已登录，请发送「安装状态」继续配置。'; return }
     if ($bootstrapAccount.service_active) { throw 'The account service is running but not ready; inspect its status before re-pairing.' }
-    Write-Output 'Existing installation found; refreshing the login QR code without reinstalling.'
-    & $bootstrapNode $bootstrapManager refresh-qr default
+    Write-Output '检测到已有安装，正在刷新微信登录二维码…'
+    & $bootstrapNode $bootstrapManager refresh-qr default --human
     if ($LASTEXITCODE -ne 0) { throw 'QR_REFRESH_FAILED' }
-    & $bootstrapNode (Join-Path $bootstrapDest 'src\setup\setup.mjs') qr default
+    & $bootstrapNode (Join-Path $bootstrapDest 'src\setup\setup.mjs') qr default --human
     if ($LASTEXITCODE -ne 0) { throw 'QR_DISPLAY_FAILED' }
     return
 }
