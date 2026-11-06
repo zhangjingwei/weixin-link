@@ -123,9 +123,25 @@ On Linux/macOS, refresh pairing for an installed but offline account without rei
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
 ```
 
-A local graphical terminal attempts to open the PNG. SSH and headless interactive terminals display a scannable QR code, with a PNG path as a fallback. Running accounts are not re-paired by default. Local readiness does not prove that WeChat binding is still valid. If you have unbound the bot, prefix the command with `WEIXIN_LINK_RELOGIN=1` to safely stop the account service and obtain a fresh login QR code. Use `WEIXIN_LINK_DIR` for a custom source directory and `WEIXIN_LINK_ACCOUNT` for another account. See [QR maintenance](CONFIGURATION.md#二维码维护).
+A local graphical terminal attempts to open the PNG. SSH and headless interactive terminals display the QR code, with a PNG path as a fallback.
 
-If terminal glyphs show gaps, prefix the refresh command with `WEIXIN_LINK_QR_STYLE=full` to use solid background-color cells. Enlarge the terminal or reduce the font size to fit the whole code.
+**Gaps in the terminal QR code? Use solid background-color cells:**
+
+```sh
+WEIXIN_LINK_QR_STYLE=full /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+```
+
+Full mode uses black and white backgrounds with spaces instead of half-block glyphs. Enlarge the terminal or reduce the font size so the entire code and white border fit on screen. The script reports the required column count if the window is too narrow. Compact mode remains the default; the PNG is always available as a fallback.
+
+**Unbound the bot in WeChat, but the service still reports ready? Reauthenticate with full mode:**
+
+```sh
+WEIXIN_LINK_RELOGIN=1 WEIXIN_LINK_QR_STYLE=full /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+```
+
+Local readiness does not prove that the WeChat binding is still valid. Reauthentication waits for current work to finish and safely stops the selected account service before generating a new QR code. It exits if a safe stop cannot be confirmed and does not delete account data. Ordinary refresh does not stop running accounts by default.
+
+Use `WEIXIN_LINK_DIR` for a custom source directory and `WEIXIN_LINK_ACCOUNT` for another account. Full mode works with older installations without upgrading the local service. See [QR maintenance](CONFIGURATION.md#二维码维护) for details.
 
 ## More capabilities and documentation
 
