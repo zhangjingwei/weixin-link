@@ -71,6 +71,7 @@ test('storage failure before submission prevents RPC',async t=>{
 test('bot classifies supplement as a control at ingress and dispatch, without a queued receipt',async()=>{
  const bot=await readFile(new URL('../../src/wechat/bot.mjs',import.meta.url),'utf8')
  assert.match(bot,/if\(control\)await handleMessage\(message\)/)
- assert.match(bot,/if\(!control&&notice/)
- assert.match(bot,/control.action==='steer'\?messageId:undefined/)
+ const processor=await readFile(new URL('../../src/wechat/message-processor.mjs',import.meta.url),'utf8')
+ assert.match(processor,/if\(!control&&notice/)
+ assert.match(processor,/control.action==='steer'\?messageId:undefined/)
 })

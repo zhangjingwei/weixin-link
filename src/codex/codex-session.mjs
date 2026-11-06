@@ -1,10 +1,9 @@
 import {homedir as platformHome} from 'node:os'
-import {installConfig} from '../setup/install-config.mjs'
 import {emptyContinuationNotice} from '../core/notification-policy.mjs'
 import {currentMaterials,materialInput} from '../core/material-context.mjs'
 import {hasAttachments,flowInput,stripTaskFlow,executionState} from '../core/task-flow.mjs'
 import {recoveryText} from '../core/recovery-state.mjs'
-import {memoryCommand,publicMemoryText,nativeMemoryConfig,enableThreadMemory} from './native-memory.mjs'
+import {publicMemoryText,nativeMemoryConfig,enableThreadMemory} from './native-memory.mjs'
 import {ASSISTANT_INSTRUCTIONS} from '../core/assistant-policy.mjs'
 import {localTaskLabel,localCompletion} from '../core/task-label.mjs'
 import {remoteScope} from '../remote/remote-stop.mjs'
@@ -14,177 +13,17 @@ import {codexInput} from './codex-input.mjs'
 import {errorFields} from '../core/diagnostic-log.mjs'
 import {deliveryError,deliveryFailureState} from '../core/delivery-error.mjs'
 import {fetchDeepSeekBalance,formatDeepSeekBalance} from '../core/deepseek-balance.mjs'
-import { spawn } from 'node:child_process'
-import { createInterface } from 'node:readline'
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
 
-const PRIMARY_PROVIDER_PREFIX = 'WECHAT_CODEX'
-const FALLBACK_PROVIDER_PREFIX = 'WECHAT_CODEX_FALLBACK'
-export const DEEPSEEK_FALLBACK_NOTICE = '⚠️ GPT 当前不可用，本次对话使用 DeepSeek 生成。'
+import {CodexRpc} from './codex-rpc.mjs'
+import {controlCommand} from './control-command.mjs'
+import {codexProviderOptions,codexFallbackProviderOptions,isProviderAvailabilityFailure,providerEventCode,isIncompatibleThreadProvider,providerEventFailure,DEEPSEEK_FALLBACK_NOTICE} from './provider-options.mjs'
+export {CodexRpc} from './codex-rpc.mjs'
+export {controlCommand} from './control-command.mjs'
+export {codexProviderOptions,codexFallbackProviderOptions,isProviderAvailabilityFailure,DEEPSEEK_FALLBACK_NOTICE} from './provider-options.mjs'
 const TURN_START_FAILURE = '__provider_turn_start_failure__'
-
-export function codexProviderOptions(env = process.env, {prefix = PRIMARY_PROVIDER_PREFIX} = {}) {
-  const value = name => env[`${prefix}_${name}`]?.trim()
-  const provider = value('PROVIDER')
-  if (provider && !/^[a-zA-Z0-9_-]+$/.test(provider)) throw Error('Invalid Codex provider')
-  const reasoningEffort = value('REASONING_EFFORT')
-  if (reasoningEffort && !['low','high','max'].includes(reasoningEffort)) throw Error('Invalid Codex reasoning effort')
-  const model = value('MODEL')
-  const overrides=[]
-  if(provider){
-    const baseUrl = value('BASE_URL')
-    const apiKeyEnv = value('API_KEY_ENV') ?? 'DEEPSEEK_API_KEY'
-    if(!baseUrl?.startsWith('https://'))throw Error('HTTPS Codex provider URL required')
-    if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(apiKeyEnv))throw Error('Invalid Codex provider API key environment name')
-    const values={model,model_provider:provider,model_reasoning_effort:reasoningEffort,
-      [`model_providers.${provider}.name`]:provider,
-      [`model_providers.${provider}.base_url`]:baseUrl,
-      [`model_providers.${provider}.wire_api`]:'responses',
-      [`model_providers.${provider}.env_key`]:apiKeyEnv,
-      [`model_providers.${provider}.requires_openai_auth`]:false,
-      [`shell_environment_policy.filters.${apiKeyEnv}`]:'exclude'}
-    for(const [key,item]of Object.entries(values))if(item!==undefined)overrides.push('-c',`${key}=${JSON.stringify(item)}`)
-  }
-  const search = value('WEB_SEARCH') ?? 'live'
-  if (!['live', 'cached', 'disabled'].includes(search)) throw Error('Invalid Codex web search mode')
-  return {
-    args: ['app-server', ...Object.entries(nativeMemoryConfig).flatMap(([key,value])=>['-c',`${key}=${value}`]), ...overrides, '-c', `web_search="${search}"`, '--listen', 'stdio://'],
-    thread: {...(model ? {model} : {}),
-      ...(provider ? {modelProvider: provider} : {}),
-      ...(reasoningEffort ? {reasoningEffort} : {})},
-    provider: provider || null,
-    prefix,
-  }
-}
-
-export function codexFallbackProviderOptions(env = process.env) {
-  if(!env[`${FALLBACK_PROVIDER_PREFIX}_PROVIDER`]?.trim())return null
-  return codexProviderOptions(env,{prefix:FALLBACK_PROVIDER_PREFIX})
-}
-
-const PROVIDER_UNAVAILABLE_PATTERN=/(?:model.{0,80}(?:not found|not available|unsupported|unavailable|no access|unauthori[sz]ed|forbidden)|provider.{0,80}(?:not found|unsupported|unavailable|disabled)|(?:^|\D)(?:401|403|429)(?:\D|$)|rate.?limit|quota|unauthori[sz]ed|forbidden|overloaded|service unavailable|upstream|network|connection (?:closed|reset|refused)|ECONN(?:RESET|REFUSED)|ENOTFOUND|fetch failed|stream (?:error|disconnected))/i
-
-export function isProviderAvailabilityFailure(error,{stage='connect'}={}) {
-  if(error?.fallbackEligible===false)return false
-  if(error?.connectionClosed||error?.requestTimeout)return true
-  const message=String(error?.message??'')
-  return Boolean(error?.definitiveRpcError&&PROVIDER_UNAVAILABLE_PATTERN.test(message))
-}
-
-function providerEventCode(params={}) {
-  const info=params.codexErrorInfo
-  if(typeof info==='string')return info
-  if(info&&typeof info==='object')return Object.keys(info)[0]
-  return null
-}
-
-function isIncompatibleThreadProvider(error) {
-  if(!error?.definitiveRpcError)return false
-  return /model provider .{0,100}(?:not found|unsupported|unavailable)/i.test(String(error.message??''))
-}
-
-function providerEventFailure(params={}) {
-
-  const code=providerEventCode(params)
-  if(!code)return null
-  const terminalEvents=new Set(['responseStreamConnectionFailed','responseTooManyFailedAttempts','unauthorized','usageLimitExceeded','rateLimitExceeded','serverOverloaded','httpConnectionFailed'])
-  if(params.willRetry===true&&!terminalEvents.has(code))return null
-  return Object.assign(Error(`Codex provider event: ${code}`),{definitiveRpcError:true,providerEventCode:code})
-}
-
-function rpcFailure(message,fields={}) {
-  const error=new Error(message)
-  Object.assign(error,fields)
-  return error
-}
-
-export class CodexRpc {
-  constructor({ cwd, onEvent, onClose, log = () => {}, binary = installConfig().codexBinary, provider = 'primary', providerOptions: resolvedProviderOptions }) {
-    this.log = log
-    this.provider = provider
-    this.nextId = 0
-    this.pending = new Map()
-    this.closed = false
-    const env = { ...process.env, TZ: 'Asia/Shanghai' }
-    for (const key of ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL', 'CODEX_API_KEY', 'HA_TOKEN', 'HA_BASE_URL']) delete env[key]
-    const selectedOptions=resolvedProviderOptions ?? (provider==='fallback'?codexFallbackProviderOptions(env):codexProviderOptions(env))
-    if(!selectedOptions)throw Error('Codex fallback provider 未配置。')
-    this.providerOptions=selectedOptions
-    this.child = spawn(binary, selectedOptions.args, { cwd, env })
-    this.child.stdin.on('error', () => {})
-    this.child.stderr.on('data', chunk => { this.stderrBytes = (this.stderrBytes ?? 0) + chunk.length })
-    this.log('rpc.spawn', { pid: this.child.pid })
-    createInterface({ input: this.child.stdout }).on('line', line => {
-      let msg
-      try { msg = JSON.parse(line) } catch { this.log('rpc.invalid_json'); return }
-      if (msg.id !== undefined && !msg.method) {
-        const request = this.pending.get(msg.id)
-        if (!request) { this.log('rpc.unmatched_response', {rpc_id: msg.id}); return }
-        this.pending.delete(msg.id)
-        clearTimeout(request.timer)
-        this.log('rpc.response', {rpc_id:msg.id,method:request.method,status:msg.error?'error':'ok',code:msg.error?.code,duration_ms:Date.now()-request.started})
-        if (msg.error) request.reject(rpcFailure(msg.error.message ?? 'Codex 请求失败。',{definitiveRpcError:true,rpcCode:msg.error.code,method:request.method}))
-        else request.resolve(msg.result)
-      } else Promise.resolve(onEvent(msg)).catch(error => this.log('rpc.event_failed', errorFields(error)))
-    })
-    const close = (code, signal) => {
-      this.log('rpc.closed', {exit_code:typeof code==='number'?code:undefined,signal,bytes:this.stderrBytes??0})
-      if (this.closed) return
-      this.closed = true
-      for (const request of this.pending.values()) {
-        clearTimeout(request.timer)
-        request.reject(rpcFailure('Codex 连接已断开。',{connectionClosed:true,method:request.method}))
-      }
-      this.pending.clear()
-      onClose()
-    }
-    this.child.on('error', error => {this.log('rpc.spawn_failed',errorFields(error));close()})
-    this.child.on('close', close)
-  }
-  write(message) {
-    if (this.closed) throw rpcFailure('Codex 连接已关闭。',{connectionClosed:true})
-    this.child.stdin.write(JSON.stringify(message) + '\n')
-  }
-  request(method, params, timeout = 45_000) {
-    return new Promise((resolve, reject) => {
-      const id = ++this.nextId
-      const started=Date.now()
-      this.log('rpc.request',{rpc_id:id,method})
-      const timer = setTimeout(() => { this.log('rpc.timeout',{rpc_id:id,method,duration_ms:Date.now()-started}); this.pending.delete(id); reject(rpcFailure(`Codex ${method} 响应超时。`,{requestTimeout:true,method})) }, timeout)
-      this.pending.set(id, { resolve, reject, timer, method, started })
-      try { this.write({ id, method, params }) }
-      catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error instanceof Error?error:rpcFailure(String(error),{connectionClosed:true,method})) }
-    })
-  }
-  respond(id, result) { this.write({ id, result }) }
-  close() { this.child.kill() }
-}
-
-export function controlCommand(text) {
-  const steer=text.trim().match(/^补充(?:[\s：:]+([\s\S]*))?$/)
-  if(steer)return {action:'steer',text:(steer[1]??'').trim()}
-  const chinese={停止:'stop',结果:'result',恢复:'recover',退出:'exit',余额:'balance',模型:'models',状态:'status',任务状态:'status',停止任务:'stop',查看结果:'result',重看结果:'result',恢复任务:'recover',核对任务:'recover',退出会话:'exit',帮助:'help'}
-  const alias=text.trim().replace(/^\//,'').replace(/[。！!]$/,'')
-  if(alias==='记忆')return {action:'memory',op:'list'}
-  if(chinese[alias])return {action:chinese[alias]}
-  const memory = memoryCommand(text)
-  if(memory)return memory
-  if(/^\/sessions$/i.test(text.trim()))return {action:'sessions'}
-  const resume=text.trim().match(/^\/resume(?:\s+([A-Za-z0-9-]+))?$/i)
-  if(resume)return {action:'resume',selection:resume[1]}
-  const command = text.trim().match(/^\/(?:codex\s+)?(status|stop|exit|reset|new|result|recover|help|models|balance)$/i)
-  if (command) return {action:command[1].toLowerCase()}
-  if (/^\/(?:余额|api余额)$/i.test(text.trim()) || /^(?:查看|查询|检查)?\s*(?:当前)?\s*(?:API|DeepSeek)\s*(?:账户)?\s*(?:余额|还剩多少钱|剩余费用)[。！!，,]?$/i.test(text.trim())) return {action:'balance'}
-  if (/^(?:停止|中断)(?:当前)?任务[。！!，,]?$/.test(text)) return { action: 'stop' }
-  if (/^(?:退出|停止|关闭|结束)\s*codex[。！!，,]?$/i.test(text) || text === '退出当前对话') return { action: 'exit' }
-  const decision = text.match(/^\/?(批准|拒绝)\s+([a-f\d]{6})$/i)
-  if (decision) return { action: 'approval', accept: decision[1] === '批准', code: decision[2].toLowerCase() }
-  const answer = text.match(/^\/?回答\s+([a-f\d]{6})\s+([\s\S]+)$/i)
-  if (answer) return { action: 'answer', code: answer[1].toLowerCase(), text: answer[2] }
-  return null
-}
 
 export class SessionManager {
   constructor({ stateDir, cwd, owners, backend = null, rpcFactory = options => new CodexRpc(options), remoteControl = remoteScope, completionMarkers = false, balanceReader = fetchDeepSeekBalance, providerEnv = process.env, log = () => {} }) {

@@ -605,3 +605,5 @@ Node 引导、系统依赖和微信首次扫码不可在尚未建立的微信通
 根目录的 bot.mjs、setup.mjs、account-manager.mjs 等文件仅保留兼容命令入口；现有安装命令、systemd/launchd/Windows 服务路径和用户私有状态目录继续有效。不要仅复制根目录入口，部署和发布须包含 src/、assets/ 与 agent-workspace/。
 
 运行 `npm test` 执行 JavaScript 测试，`npm run test:python` 执行 Python 测试。真实微信收发、登录和远程执行验收仍需独立授权的测试环境。
+
+Codex 会话入口保留兼容导出；内部拆为 provider-options.mjs（服务商配置与故障判定）、codex-rpc.mjs（进程/RPC 通信）、control-command.mjs（控制命令解析）和 codex-session.mjs（会话协调）。机器人使用 message-processor.mjs 处理消息，bot.mjs 负责初始化、接线及服务生命周期。
