@@ -6,13 +6,9 @@
 
 ## 安装来源与目录
 
-`bootstrap.sh` 和配套源码已在 `main`。仓库目前为私有，匿名访问 raw 脚本和源码包会返回 404；使用具有读取权限的 Git 环境克隆 `main`，再运行 `./install.sh` 或 `.\install.ps1`。仓库可公开读取后，README 中的一行引导命令才可匿名使用。
+仓库已公开，Linux/macOS 使用 `bootstrap.sh`，Windows x64 使用 `bootstrap.ps1`。README 提供可匿名下载的一行安装命令；也可克隆 `main` 后运行 `./install.sh` 或 `.\install.ps1`。
 
-引导脚本支持 Linux/macOS arm64、x64，默认下载 `main`：
-
-- `ZERO_LINK_DIR`：源码保存目录，默认 `~/.local/share/zero-link/source`。
-- `ZERO_LINK_REF`：下载的分支、标签或提交，默认 `main`。
-- 目标目录已存在时拒绝覆盖；脚本用于首次安装，不自动更新已有部署。
+两个引导脚本默认下载 `main`，支持 `ZERO_LINK_DIR` 指定源码保存目录、`ZERO_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/zero-link/source`；Windows 对应用户目录下的 `.local\share\zero-link\source`。目标目录已存在时拒绝覆盖，用于首次安装，不自动更新已有部署。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
 
 不同目录分别承担不同用途：
 

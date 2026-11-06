@@ -61,7 +61,26 @@ Linux requires a working user-level systemd session and `flock`. Downloading Nod
 
 ### 2. Install and pair WeChat
 
-`bootstrap.sh` is included on `main`. **The repository is currently private**, so anonymous installation downloads return 404. For now, clone it using a Git environment with permission to read the repository:
+The repository is public. For a first installation, run the command for your platform to download `main` and launch its installer. You do not need to clone the repository first.
+
+**Linux / macOS**
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.sh)"
+```
+
+**Windows x64 (PowerShell)**
+
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.ps1')))
+```
+
+The Windows bootstrap uses `ExecutionPolicy Bypass` only for the installer child process. It does not change the persistent user or system execution policy.
+
+Both scripts save source code to `~/.local/share/zero-link/source` by default (the `.local\share\zero-link\source` directory under your Windows user profile), then invoke `install.sh` or `install.ps1`. Set `ZERO_LINK_DIR` to choose a source directory or `ZERO_LINK_REF` to select a branch, tag, or commit. They refuse to overwrite an existing destination. These commands are for first installations, not for directly updating an existing deployment. Source code, the workspace, and account data are stored separately.
+
+<details>
+<summary>Install from a manual clone</summary>
 
 ```sh
 git clone --branch main https://github.com/zhangjingwei/zero-link.git
@@ -79,17 +98,6 @@ Windows PowerShell:
 ```powershell
 .\install.ps1
 ```
-
-<details>
-<summary>Linux / macOS bootstrap command — available once the repository permits public downloads</summary>
-
-```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.sh)"
-```
-
-The script downloads `main` to `~/.local/share/zero-link/source` by default, then runs the installer. Set `ZERO_LINK_DIR` to choose a different source directory or `ZERO_LINK_REF` to select a branch or commit. It refuses to overwrite an existing destination. Source code, the agent workspace, and account data are stored separately.
-
-This command is for a first installation, not for updating an existing deployment. On Windows, use the PowerShell installer above.
 
 </details>
 
@@ -191,7 +199,7 @@ Incoming messages support up to 10 attachments totaling 50 MiB. Each outgoing gr
 
 ## Security and pairing
 
-- Obtain installation scripts and source code from this repository's `main` branch. Private repositories require read permission.
+- Obtain installation scripts and source code from this repository's `main` branch.
 - Confirm pairing with your own WeChat account. The person who confirms becomes the profile's initial authorized user. Do not share login QR codes or device authorization codes.
 - Authenticate Codex on the official OpenAI authorization page. Configuration and credentials stay in the deployment owner's private runtime directories.
 - QR codes have a conservative local display window of 90 seconds. An online account is not paired again. See the [security policy](SECURITY.md) for reporting issues.
