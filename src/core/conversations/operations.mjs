@@ -1,5 +1,12 @@
 
-export async function rename(context,entry,name,reply){}
+export async function rename(context,entry,name,reply){
+ const session=await context.manager.connect(entry.key,context.manager.sessions.get(entry.key)?.reply??reply),threadId=context.manager.state.users[entry.key]?.threadId??session.threadId;
+ if(!threadId)throw Error('Codex尚未确认会话，未修改标题。');
+ let failure;try{await session.rpc.request('thread/name/set',{threadId,name});}catch(e){failure=e;}
+ const result=await session.rpc.request('thread/read',{threadId,includeTurns:false});
+ if(result.thread?.name!==name)throw Error(failure?'Codex标题修改结果未确认，请查看列表核对，未自动重试。':'Codex返回的标题与请求不一致，未确认修改。');
+ await context.titleUpdated(threadId,result.thread.name);
+ }
 
 export async function selectOfficial(context,message,reply){
   const owner=message._conversationOwner,cmd=message._conversationCommand,r=context.ensure(owner);

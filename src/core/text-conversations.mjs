@@ -25,30 +25,11 @@ export class TextConversations{
  label(...args){return label(this,...args)}
  // Serialize by real recipient so replay always precedes later live output.
  serialize(...args){return serialize(this,...args)}
- async flush(...args){return flush(this,...args)} async flush(key,send){const e=this.entry(key);if(!e)return;const saved=this.root[e.owner].entries.find(x=>x.key===key);saved.unread??=[];
- while(saved.unread.length&&this.find(e.owner)?.key===key){const item=saved.unread[0];if(item.state==='sending'||item.state==='unknown')break;item.state='sending';await this.manager.save();try{const result=await send(key,this.label(key,item.value),{checkpoint:()=>this.manager.save()});if(result?.status&&result.status!=='accepted'){item.state=result.status;await this.manager.save();break}saved.unread.shift();await this.manager.save()}catch(error){item.state='unknown';await this.manager.save();throw error}}
- }
- deliver(...args){return deliver(this,...args)} deliver(key,value,options,send){return this.serialize(this.recipient(key),async()=>{
- if(options?.current&&!options.current())return {status:'cancelled'};
- const e=this.entry(key);if(!e)return send(key,value,options);
- if(options?.conversationControl)return send(key,this.label(key,value),options);
- if(e.deleted)return {status:'cancelled'};
- if(this.find(e.owner)?.key===key){await this.flush(key,send);const saved=this.root[e.owner].entries.find(x=>x.key===key);if(!saved.unread?.length)return send(key,this.label(key,value),options);}
- const saved=this.root[e.owner].entries.find(x=>x.key===key);saved.unread??=[];saved.unread.push({value:structuredClone(value),state:'pending'});await this.manager.save();
- const text=typeof value==='string'?value:value.text;
- if(/(?:本轮回答结束|本轮执行失败，回答已结束|本轮已停止)/.test(text)&&this.find(e.owner)?.key!==key)await send(key,`会话${e.id}：${e.name} 的任务已结束，切换${e.id}后查看未展示消息。`,options);
- return {status:'deferred'};
- })}
+ async flush(...args){return flush(this,...args)}
+ deliver(...args){return deliver(this,...args)}
  replay(...args){return replay(this,...args)}
  titleUpdated(...args){return titleUpdated(this,...args)}
- async rename(...args){return rename(this,...args)} async rename(entry,name,reply){
- const session=await this.manager.connect(entry.key,this.manager.sessions.get(entry.key)?.reply??reply),threadId=this.manager.state.users[entry.key]?.threadId??session.threadId;
- if(!threadId)throw Error('Codex尚未确认会话，未修改标题。');
- let failure;try{await session.rpc.request('thread/name/set',{threadId,name});}catch(e){failure=e;}
- const result=await session.rpc.request('thread/read',{threadId,includeTurns:false});
- if(result.thread?.name!==name)throw Error(failure?'Codex标题修改结果未确认，请查看列表核对，未自动重试。':'Codex返回的标题与请求不一致，未确认修改。');
- await this.titleUpdated(threadId,result.thread.name);
- }
+ async rename(...args){return rename(this,...args)}
  // Codex is authoritative for persisted threads. Local archived is only a verified cache.
  async withCatalogRpc(...args){return withCatalogRpc(this,...args)}
  async officialCatalog(...args){return officialCatalog(this,...args)}
