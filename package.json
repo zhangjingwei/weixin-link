@@ -1,7 +1,7 @@
 {
-  "name": "wechat-ping-bot",
+  "name": "weixin-link",
   "version": "1.0.0",
-  "description": "",
+  "description": "A self-hosted bridge for continuing Codex tasks from WeChat.",
   "main": "src/wechat/bot.mjs",
   "scripts": {
     "test": "node --test \"tests/**/*.test.mjs\"",

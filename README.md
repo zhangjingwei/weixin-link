@@ -1,6 +1,6 @@
 <div align="center">
 
-# Zero Link
+# Weixin Link
 
 [简体中文](README.md) | [English](README.en.md)
 
@@ -16,7 +16,7 @@
 
 </div>
 
-Zero Link 是一个可自部署的 AI Agent 桥接器，让你通过微信续接电脑或服务器上的 Codex 会话与任务。用文字、图片或文件提出需求，在离开工位后继续补充要求、查看进展并接收结果。
+Weixin Link 是一个可自部署的 AI Agent 桥接器，让你通过微信续接电脑或服务器上的 Codex 会话与任务。用文字、图片或文件提出需求，在离开工位后继续补充要求、查看进展并接收结果。
 
 电脑需要保持在线。当前启用 **Codex** 底座；Claude、OpenCode 目录仅作预留，尚未接入。
 
@@ -69,25 +69,27 @@ Linux 需要可用的用户级 systemd 会话及 `flock`；Linux/macOS 下载 No
 **Linux / macOS**
 
 ```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh)"
 ```
 
 **Windows x64（PowerShell）**
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.ps1')))
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.ps1')))
 ```
 
 Windows 引导脚本仅为安装子进程使用 `ExecutionPolicy Bypass`，不修改系统或用户的持久执行策略。
 
-两个引导脚本默认把源码保存到 `~/.local/share/zero-link/source`（Windows 为用户目录下的 `.local\share\zero-link\source`），再调用 `install.sh` 或 `install.ps1`。可通过环境变量 `ZERO_LINK_DIR` 指定源码目录、`ZERO_LINK_REF` 指定分支、标签或提交。目标目录已存在时拒绝覆盖；这些命令用于首次安装，不用于直接更新已有部署。源码、工作区和账号数据分别保存。
+两个引导脚本默认把源码保存到 `~/.local/share/weixin-link/source`（Windows 为用户目录下的 `.local\share\weixin-link\source`），再调用 `install.sh` 或 `install.ps1`。可通过环境变量 `WEIXIN_LINK_DIR` 指定源码目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。目标目录已存在时拒绝覆盖；这些命令用于首次安装，不用于直接更新已有部署。源码、工作区和账号数据分别保存。
+
+旧版 `ZERO_LINK_DIR`、`ZERO_LINK_REF` 仍兼容，新变量优先。改名不迁移现有工作区、账号数据或服务；旧源码目录若已存在，先核实原安装再更新。
 
 <details>
 <summary>手动克隆安装</summary>
 
 ```sh
-git clone --branch main https://github.com/zhangjingwei/zero-link.git
-cd zero-link
+git clone --branch main https://github.com/zhangjingwei/weixin-link.git
+cd weixin-link
 ```
 
 Linux / macOS：
@@ -106,7 +108,7 @@ Windows PowerShell：
 
 安装器准备私有目录、工作区、依赖及后台服务，启动配对并输出二维码。使用微信扫码确认；扫码者成为该账号档案的初始授权用户。
 
-需要再次显示二维码时，在安装目录运行 `./wechat-setup qr`（Linux/macOS）。使用引导脚本安装的用户先进入 `~/.local/share/zero-link/source`，自定义目录则进入对应位置。二维码过期后的刷新方法见 [安装维护说明](CONFIGURATION.md#二维码维护)。
+需要再次显示二维码时，在安装目录运行 `./wechat-setup qr`（Linux/macOS）。使用引导脚本安装的用户先进入 `~/.local/share/weixin-link/source`，自定义目录则进入对应位置。二维码过期后的刷新方法见 [安装维护说明](CONFIGURATION.md#二维码维护)。
 
 ### 3. 在微信完成 Codex 设置
 
@@ -140,7 +142,7 @@ Windows PowerShell：
 ```text
 微信私聊
    ↕ 消息与附件
-Zero Link：授权校验 · 持久队列 · 会话管理 · 结果交付
+Weixin Link：授权校验 · 持久队列 · 会话管理 · 结果交付
    ↕ 官方协议
 Codex app-server
    ↕ 工具与工作区
@@ -209,4 +211,4 @@ Codex app-server
 
 [使用指南](USER-GUIDE.md) · [配置与发布边界](CONFIGURATION.md) · [贡献指南](CONTRIBUTING.md) · [安全报告](SECURITY.md) · [第三方许可](THIRD_PARTY_NOTICES.md)
 
-本项目自有代码与文档采用 [MIT License](LICENSE)。第三方依赖、可选二进制和外部服务分别遵循其条款。Zero Link 为独立项目，不代表微信、OpenAI 或其他服务提供方的官方产品或背书。
+本项目自有代码与文档采用 [MIT License](LICENSE)。第三方依赖、可选二进制和外部服务分别遵循其条款。Weixin Link 为独立项目，不代表微信、OpenAI 或其他服务提供方的官方产品或背书。
