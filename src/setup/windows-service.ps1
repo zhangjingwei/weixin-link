@@ -14,7 +14,7 @@ switch($d.action){
  'prepare' {
   # Task Scheduler launches an executable directly; no cmd.exe interpolation.
   function QuoteArg([string]$s){if($s -match '[\r\n\x00]'){throw 'INVALID_PATH'};return '"'+($s -replace '(\\*)"','$1$1\"' -replace '(\\+)$','$1$1')+'"'}
-  $entry=if($d.pair){'account-login.mjs'}else{'service-entry.mjs'}
+  $entry=if($d.pair){'src/wechat/account-login.mjs'}else{'src/setup/service-entry.mjs'}
   $a=(QuoteArg (Join-Path $d.root $entry))+' '+(QuoteArg $d.account)
   if($t){if($t.Actions.Count -ne 1 -or $t.Actions[0].Execute -ne $d.node -or $t.Actions[0].Arguments -ne $a -or $t.Actions[0].WorkingDirectory -ne $d.root){throw 'SERVICE_CONFIGURATION_CHANGED_REQUIRES_REVIEW'};break}
   $action=New-ScheduledTaskAction -Execute $d.node -Argument $a -WorkingDirectory $d.root

@@ -1,21 +1,21 @@
 import {spawn} from 'node:child_process'
 import net from 'node:net'
-import {HOSTS,sshConfig,shellQuote} from './remote-config.mjs'
+import {HOSTS,sshConfig,shellQuote,configuredHost,validateHostConfig} from './remote-config.mjs'
 export {HOSTS} from './remote-config.mjs'
 export class RemoteTransport {
- constructor(host,{onMessage=()=>{},onDisconnect=()=>{}}={}){if(!HOSTS[host])throw Error('UNKNOWN_HOST');Object.assign(this,{host,onMessage,onDisconnect});this.closed=false;this.opened=false}
+ constructor(host,{onMessage=()=>{},onDisconnect=()=>{},config}={}){const hostConfig=config??configuredHost(host);validateHostConfig(host,hostConfig);Object.assign(this,{host,config:structuredClone(hostConfig),onMessage,onDisconnect});this.closed=false;this.opened=false}
  async connect(){
   try{
-   if(HOSTS[this.host].transport==='ssh-websocket'){
+   if(this.config.transport==='ssh-websocket'){
     const reservation=net.createServer();await new Promise((ok,fail)=>{reservation.once('error',fail);reservation.listen(0,'127.0.0.1',ok)});const port=reservation.address().port;await new Promise(ok=>reservation.close(ok));
-    this.child=spawn('ssh',['-F',sshConfig,'-N','-o','BatchMode=yes','-o','ExitOnForwardFailure=yes','-o','ClearAllForwardings=no','-o','ConnectTimeout=8','-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3','-o','TCPKeepAlive=yes','-L',`127.0.0.1:${port}:127.0.0.1:${HOSTS[this.host].port}`,this.host],{stdio:['pipe','pipe','pipe']});
+    this.child=spawn('ssh',['-F',sshConfig,'-N','-o','BatchMode=yes','-o','ExitOnForwardFailure=yes','-o','ClearAllForwardings=no','-o','ConnectTimeout=8','-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3','-o','TCPKeepAlive=yes','-L',`127.0.0.1:${port}:127.0.0.1:${this.config.port}`,this.host],{stdio:['pipe','pipe','pipe']});
     this.child.stdin.on('error',()=>{});this.child.stderr.on('data',()=>{});this.child.on('error',()=>this.close());this.child.on('close',()=>this.close());
     await new Promise((ok,fail)=>{let attempts=0;const check=()=>{if(this.closed)return fail(Error('REMOTE_CONNECT_FAILED'));const probe=net.connect(port,'127.0.0.1');probe.once('connect',()=>{probe.destroy();ok()});probe.once('error',()=>{probe.destroy();if(++attempts>=50)fail(Error('REMOTE_CONNECT_TIMEOUT'));else setTimeout(check,100)})};check()});
     this.ws=new WebSocket('ws://127.0.0.1:'+port)
    }else{
    this.server=net.createServer(socket=>{
     this.socket=socket;this.server.close()
-    this.child=spawn('ssh',['-F',sshConfig,'-o','BatchMode=yes','-o','ConnectTimeout=8','-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3','-o','TCPKeepAlive=yes',this.host,'exec '+shellQuote(HOSTS[this.host].binary)+' app-server proxy'],{stdio:['pipe','pipe','pipe']})
+    this.child=spawn('ssh',['-F',sshConfig,'-o','BatchMode=yes','-o','ConnectTimeout=8','-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3','-o','TCPKeepAlive=yes',this.host,'exec '+shellQuote(this.config.binary)+' app-server proxy'],{stdio:['pipe','pipe','pipe']})
     this.child.stdin.on('error',()=>{});this.child.stdout.pipe(socket);socket.pipe(this.child.stdin);socket.on('error',()=>{});this.child.stderr.on('data',()=>{})
     this.child.on('error',()=>this.close());this.child.on('close',()=>this.close());socket.on('close',()=>this.close())
    });this.server.maxConnections=1

@@ -5,7 +5,7 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory="/path/to/wechat-ping-bot"
-ExecStart="/path/to/node" "/path/to/wechat-ping-bot/bot.mjs"
+ExecStart="/path/to/node" "/path/to/wechat-ping-bot/src/wechat/bot.mjs"
 Environment="PATH=/path/to:/home/example/.local/bin:/usr/local/bin:/usr/bin:/bin"
 Environment=WECHAT_ACCOUNT=default
 UMask=0077

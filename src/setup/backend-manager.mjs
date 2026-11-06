@@ -26,7 +26,7 @@ async function run(){
   if(previous.id===next.id)return {accountId:await bindingIdentity(p),backend:next.id,status:'already_bound'}
   await ensureQueueEmpty(previous.stateDir);await ensureQueueEmpty(next.stateDir)
   const active=await serviceActive(p)
-  if(active){const status=await controlRequest(p.socket,'GET','/status');if(!status.ready||!status.idle)throw Error('ACCOUNT_BUSY_BINDING_NOT_CHANGED');await exec('node',[join(repositoryDirectory,'activate-diagnostics.mjs'),'--stop'],{env:{...process.env,WECHAT_ACCOUNT:p.id},timeout:650000})}
+  if(active){const status=await controlRequest(p.socket,'GET','/status');if(!status.ready||!status.idle)throw Error('ACCOUNT_BUSY_BINDING_NOT_CHANGED');await exec('node',[join(repositoryDirectory,'src/tools/activate-diagnostics.mjs'),'--stop'],{env:{...process.env,WECHAT_ACCOUNT:p.id},timeout:650000})}
   if(active){try{await ensureQueueEmpty(previous.stateDir);await ensureQueueEmpty(next.stateDir)}catch(error){await exec('systemctl',['--user','start',p.service]);throw error}}
   const file=join(p.stateDir,'codex-backend.json');let old;try{old=await readFile(file)}catch(e){if(e.code!=='ENOENT')throw e}
   try{await writeFile(file+'.tmp',JSON.stringify({version:1,id:next.id,wechatAccountId:await bindingIdentity(p),updatedAt:new Date().toISOString()})+'\n',{mode:0o600});await rename(file+'.tmp',file)

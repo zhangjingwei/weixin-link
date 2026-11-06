@@ -1,6 +1,6 @@
 import {watchTask} from './remote-watch.mjs'
 import {RemoteRpc} from './remote-task-client.mjs'
-import {HOSTS} from '../../remote/remote-config.mjs'
+import {HOSTS,configuredHost} from '../../remote/remote-config.mjs'
 import {RemoteStore} from './remote-store.mjs'
 import {win32,posix,resolve,relative,isAbsolute,join,basename} from 'node:path'
 import {mkdir,writeFile} from 'node:fs/promises'
@@ -9,9 +9,9 @@ import {setTimeout as delay} from 'node:timers/promises'
 const hash=s=>createHash('sha256').update(s).digest('hex')
 const hostPath=host=>HOSTS[host]?.platform==='win32'?win32:posix
 export function projectPath(host,value){
- const {isAbsolute,resolve,relative,sep}=hostPath(host)
- if(!HOSTS[host]||typeof value!=='string'||!isAbsolute(value)||/[\0\r\n]/.test(value)||value.split(/[\\/]/).includes('..'))throw Error('INVALID_PROJECT')
- const path=resolve(value),rel=relative(HOSTS[host].root,path)
+ const config=configuredHost(host),{isAbsolute,resolve,relative,sep}=config.platform==='win32'?win32:posix
+ if(!config||typeof value!=='string'||!isAbsolute(value)||/[\0\r\n]/.test(value)||value.split(/[\\/]/).includes('..'))throw Error('INVALID_PROJECT')
+ const path=resolve(value),rel=relative(config.root,path)
  if(rel==='..'||rel.startsWith('..'+sep)||isAbsolute(rel)||rel.split(sep).some(p=>p.startsWith('.')))throw Error('PROJECT_OUTSIDE_HOST_ROOT')
  return path
 }
@@ -50,7 +50,8 @@ export class RemoteController{
   for(const [id,record] of records){try{if(!record.turn_id){const reconciled=await this.reconcile({task:id});if(!reconciled.turn_id)throw Error('SUBMISSION_UNKNOWN_REQUIRE_RECONCILIATION')}results.push(await this.stop({task:id}))}catch(error){results.push({task:id,host:record.host,stop_confirmed:false,error:error.message})}}
   return {stop_confirmed:results.every(r=>r.stop_confirmed),tasks:results}
  })}
- async submit(input){
+ async submit(input){return this.store.locked('host-config',()=>this.submitWithConfig(input))}
+ async submitWithConfig(input){
   if(typeof input.prompt!=='string'||!input.prompt.trim()||input.prompt.length>12000)throw Error('INVALID_PROMPT')
   const target=await this.target(input),lock='project-'+hash(target.host+'\0'+target.cwd).slice(0,32)
   return this.store.locked(lock,()=>this.usingTask(target,async rpc=>{

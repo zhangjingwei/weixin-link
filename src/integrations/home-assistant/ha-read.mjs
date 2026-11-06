@@ -1,8 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import {parseConfig} from '../../setup/config-schema.mjs'
+import {readPrivateFile} from '../../setup/config-files.mjs'
 
 // Read-only Home Assistant access helper; planning and interpretation belong to Codex.
-const config = JSON.parse(await readFile(join(process.env.HOME, '.config/wechat-assistant/ha.json'), 'utf8'))
+let config
+try{config=parseConfig('ha',await readPrivateFile(join(process.env.HOME, '.config/wechat-assistant/ha.json')))}catch{console.error('HA_CONFIG_REQUIRED_OR_INVALID');process.exit(1)}
 const haBaseUrl = config.baseUrl.replace(/\/$/, '')
 const haToken = config.token
 
@@ -128,6 +131,6 @@ try {
   let result
   if (command === 'states') result = await searchHaEntities(value)
   else if (command === 'history') result = await getHaHistory(value, Number(hours))
-  else throw new Error('Usage: node ha-read.mjs states [query] | history entity_id [hours]')
+  else throw new Error('Usage: node src/integrations/home-assistant/ha-read.mjs states [query] | history entity_id [hours]')
   console.log(JSON.stringify(result))
 } catch (error) { console.error(error.message); process.exitCode = 1 }

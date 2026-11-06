@@ -8,14 +8,14 @@
 
 项目定位由智能体底座自行管理。接入层不读取项目别名文件，也不向原始请求注入项目/主机候选。远程连接配置的主机注册和允许根目录属于执行边界，不用于推断用户要操作哪个项目。
 
-SSH 使用 WECHAT_SSH_CONFIG 指定的文件，默认 ~/.ssh/wechat_hosts_config。examples/ssh-config.example 展示严格密钥校验；需自行验证主机密钥，不自动接受未知密钥。
+SSH 使用 WECHAT_SSH_CONFIG 指定的文件，默认 ~/.ssh/wechat_hosts_config。config-templates/ssh-config.example 展示严格密钥校验；需自行验证主机密钥，不自动接受未知密钥。
 
-安装器创建或复用实际工作目录；缺少 AGENTS.md 时生成简版规则，已有文件保持不变。用户可在该私有文件中补充工作要求，仓库不提供独立工作目录模板。远程连接位于 src/remote/，共享协议位于 src/base/codex/，任务协调位于 src/core/remote-tasks/。统一使用 node src/remote/remote-codex.mjs，默认读取安装配置中的工作目录；WECHAT_REMOTE_WORKSPACE 可指定实际工作目录。无需向工作目录复制执行脚本。
+安装器创建或复用实际工作目录；缺少 AGENTS.md 时生成规则，已有文件保留用户内容，仅更新明确标记的程序管理区块。用户可在该私有文件中补充工作要求，仓库不提供独立工作目录模板。远程连接位于 src/remote/，共享协议位于 src/base/codex/，任务协调位于 src/core/remote-tasks/。统一使用 node src/remote/remote-codex.mjs，默认读取安装配置中的工作目录；WECHAT_REMOTE_WORKSPACE 可指定实际工作目录。无需向工作目录复制执行脚本。
 
 ## 可选集成
 
-- HA：复制 examples/ha.example.json 到 ~/.config/wechat-assistant/ha.json，替换 URL 与令牌，权限设为 0600；保持只读。
-- 加密备份（Linux）：复制 examples/backup.example.json 到 ~/.config/wechat-assistant/backup.json；WECHAT_BACKUP_CONFIG 可覆盖位置。目标必须显式配置；公钥及远端私钥仍按原备份协议单独准备。工作目录从 installation.json 读取，源码目录自动推导。没有配置不连接默认 NAS。
+- HA：复制 config-templates/ha.example.json 到 ~/.config/wechat-assistant/ha.json，替换 URL 与令牌，权限设为 0600；保持只读。
+- 加密备份（Linux）：复制 config-templates/backup.example.json 到 ~/.config/wechat-assistant/backup.json；WECHAT_BACKUP_CONFIG 可覆盖位置。目标必须显式配置；公钥及远端私钥仍按原备份协议单独准备。工作目录从 installation.json 读取，源码目录自动推导。没有配置不连接默认 NAS。
 - 微信账号授权：仍在账号私有 stateDir 中配置，不能放入示例或源码。
 - 安装目录和 Codex 路径：沿用用户私有 installation.json，通过安装器生成；服务由安装器按真实路径生成。
 

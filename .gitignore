@@ -1,29 +1,24 @@
 # Track source only; private runtime files are opt-in excluded by default.
 /*
 !/.gitignore
-!/*.mjs
-!/*.py
-!/*.sh
 !/README.md
 !/package.json
 !/package-lock.json
 !/codegraph.config.json
 !/install.sh
-!/wechat-ping-bot.service
-!/wechat-ping-bot@.service
 
 !/wechat-setup
 
 !/USER-GUIDE.md
 
-!/*.ps1
+!/install.ps1
 !/.github/
 !/.github/workflows/
 !/.github/workflows/*.yml
 
-!/examples/
-!/examples/*.example.json
-!/examples/ssh-config.example
+!/config-templates/
+!/config-templates/*.example.json
+!/config-templates/ssh-config.example
 !/CONFIGURATION.md
 # Private deployment and runtime data, including nested directories.
 **/*.local.json

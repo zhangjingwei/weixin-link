@@ -30,9 +30,9 @@ else
  launchctl print "gui/$(id -u)" >/dev/null 2>&1 || { echo 'A logged-in macOS GUI session is required.'; exit 1; }
 fi
 cd "$setup_root"
-node setup.mjs init
-node setup.mjs deps
-node setup.mjs services
-node setup.mjs pair
+node src/setup/setup.mjs init
+node src/setup/setup.mjs deps
+node src/setup/setup.mjs services
+node src/setup/setup.mjs pair
 ./wechat-setup qr
 echo 'Run ./wechat-setup qr to obtain the QR image. After scanning, send 安装状态 in WeChat.'

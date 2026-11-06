@@ -1,9 +1,10 @@
+import {parseConfig,MAX_CONFIG_BYTES} from './config-schema.mjs'
 import {homedir as platformHome} from 'node:os'
 import {fileURLToPath} from 'node:url'
-import {readFileSync,existsSync,readdirSync} from 'node:fs'
+import {readFileSync,existsSync,readdirSync,lstatSync} from 'node:fs'
 import {join,isAbsolute,delimiter,dirname} from 'node:path'
 export const projectRoot=fileURLToPath(new URL('../../',import.meta.url))
-export function installConfig(home=(process.env.HOME||platformHome())){let c={};try{c=JSON.parse(readFileSync(join(home,'.local/share/wechat-ping-bot/installation.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw Error('INSTALL_CONFIG_UNREADABLE')}
+export function installConfig(home=(process.env.HOME||platformHome())){let c={};try{const path=join(home,'.local/share/wechat-ping-bot/installation.json'),info=lstatSync(path);if(!info.isFile()||info.isSymbolicLink()||info.size>MAX_CONFIG_BYTES)throw Error('INSTALL_CONFIG_UNREADABLE');c=parseConfig('installation',readFileSync(path,'utf8'))}catch(e){if(e.code!=='ENOENT')throw Error('INSTALL_CONFIG_UNREADABLE')}
  for(const k of ['workspace','codexBinary'])if(c[k]!==undefined&&(!isAbsolute(c[k])||/[\r\n\0]/.test(c[k])))throw Error('INVALID_INSTALL_CONFIG')
  return {workspace:c.workspace??join(home,'work/wechat-assistant'),codexBinary:c.codexBinary??findCodex(home)}
 }

@@ -55,10 +55,10 @@ Linux/macOS 如需再次显示当前二维码：
 Windows 或已配置 Node 的终端可使用：
 
 ```sh
-node setup.mjs qr
+node src/setup/setup.mjs qr
 ```
 
-二维码采用 90 秒保守本地展示窗口，不保证服务端有效期；已过期时运行 `node account-manager.mjs refresh-qr default`。在线账号拒绝刷新，避免误登出。
+二维码采用 90 秒保守本地展示窗口，不保证服务端有效期；已过期时运行 `node src/wechat/account-manager.mjs refresh-qr default`。在线账号拒绝刷新，避免误登出。
 
 扫码连接后，在微信发送 **安装向导**，按当前页面回复 1、2、3；3 退出，已完成步骤保留。选择本机环境即可继续安装、登录与检查 Codex。设备授权只在官方 OpenAI 页面完成，已登录账号不会被自动替换。
 
@@ -75,15 +75,31 @@ node setup.mjs qr
 已有 Node.js 24+ 和 npm 时，可拆分执行：
 
 ```sh
-node setup.mjs init
-node setup.mjs deps
-node setup.mjs services
-node setup.mjs pair
-node setup.mjs qr
-node setup.mjs doctor
+node src/setup/setup.mjs init
+node src/setup/setup.mjs deps
+node src/setup/setup.mjs services
+node src/setup/setup.mjs pair
+node src/setup/setup.mjs qr
+node src/setup/setup.mjs doctor
 ```
 
-`init` 创建私有配置和工作区，缺少 AGENTS.md 时生成简版规则，不复制其他部署的微信凭据、授权名单、SSH 或 HA 配置，也不覆盖已有工作区的 AGENTS.md。`services` 准备后台服务；配对成功后启动对应账号并检查消息通道。遇到权限不足、已有服务冲突或缺少系统依赖时会明确阻断，不自动申请管理员权限。
+`init` 创建私有配置和工作区，缺少 AGENTS.md 时生成简版规则，不复制其他部署的微信凭据、授权名单、SSH 或 HA 配置，也保留已有工作区 AGENTS.md 的用户内容，仅更新标明由程序管理的区块。`services` 准备后台服务；配对成功后启动对应账号并检查消息通道。遇到权限不足、已有服务冲突或缺少系统依赖时会明确阻断，不自动申请管理员权限。
+
+### 配置管理
+
+配置示例位于 `config-templates/`。通过以下命令查看格式、校验、检查状态和恢复上一版：
+
+```sh
+node src/setup/setup.mjs config-schema ha
+node src/setup/setup.mjs config-check ha < /path/to/private-ha.json
+node src/setup/setup.mjs config-set ha < /path/to/private-ha.json
+node src/setup/setup.mjs config-status
+node src/setup/setup.mjs config-restore ha
+```
+
+支持 `installation`、`ha`、`backup` 和 `remote-hosts`。`config-check` 仅校验格式；`config-set` 会检查连接和运行条件后写入私有文件，配置内容通过标准输入传递，不放进命令参数。不要将实际令牌写入源码或示例。
+
+升级已有部署后需重新准备后台服务，使其指向新的模块路径；先等待任务结束再安排服务重启。Windows 已有任务配置不匹配时会明确拒绝覆盖，需要核对后单独迁移。
 
 ## 日常使用
 
@@ -135,12 +151,12 @@ MP3、WAV、SILK 默认按音频文件交付，不承诺原生语音气泡。原
 在项目根目录管理账号：
 
 ```sh
-node account-manager.mjs list
-node account-manager.mjs create bot2
-node account-manager.mjs login bot2
-node account-manager.mjs qr bot2
-node account-manager.mjs start bot2
-node account-manager.mjs stop bot2
+node src/wechat/account-manager.mjs list
+node src/wechat/account-manager.mjs create bot2
+node src/wechat/account-manager.mjs login bot2
+node src/wechat/account-manager.mjs qr bot2
+node src/wechat/account-manager.mjs start bot2
+node src/wechat/account-manager.mjs stop bot2
 ```
 
 这些是按需使用的独立命令；`stop` 会等待该账号空闲后停用，不影响其他账号。新账号必须独立扫码，不能复制主账号凭据或将旧档案换绑后继承会话；二维码生成不等于登录成功。账号名需以小写字母开头，仅含小写字母、数字和连字符，最多 32 字符。要求验证码时用 `verify 账号名 数字验证码` 提交，避免公开验证码。
@@ -156,11 +172,11 @@ node account-manager.mjs stop bot2
 
 ## 故障排查
 
-1. 微信在线但不能推理：发送 `安装状态`，按提示安装、登录或验收 Codex；终端可运行 `node setup.mjs doctor`。
-2. 二维码过期：运行 `node account-manager.mjs refresh-qr 账号名`，不要使用旧图片。
+1. 微信在线但不能推理：发送 `安装状态`，按提示安装、登录或验收 Codex；终端可运行 `node src/setup/setup.mjs doctor`。
+2. 二维码过期：运行 `node src/wechat/account-manager.mjs refresh-qr 账号名`，不要使用旧图片。
 3. 容器未就绪：查看 `安装状态`，使用 `启动容器`、`登录Codex`；缺少系统条件时先处理明确报错。
 4. 任务或发送结果未知：先查 `/status`，需要时用 `/recover` 对账；不要反复提交同一任务。已保存的结果可通过 `/result` 查看，重发可能包含先前已接受的附件。
-5. 需要诊断摘要：运行 `node diagnostics.mjs`。日志与诊断材料仍可能涉及运行信息，分享前需检查并脱敏。
+5. 需要诊断摘要：运行 `node src/tools/diagnostics.mjs`。日志与诊断材料仍可能涉及运行信息，分享前需检查并脱敏。
 
 Linux 默认账号服务可这样检查：
 
@@ -169,7 +185,7 @@ systemctl --user status wechat-ping-bot.service
 journalctl --user -u wechat-ping-bot.service -f
 ```
 
-其他账号使用 `wechat-ping-bot@<id>.service`；不要将这些 Linux 命令用于 macOS 或 Windows。服务操作和真实收发应在明确授权的部署环境执行。
+服务模板位于 `src/setup/services/`，由安装器按实际路径生成。其他账号使用 `wechat-ping-bot@<id>.service`；不要将这些 Linux 命令用于 macOS 或 Windows。服务操作和真实收发应在明确授权的部署环境执行。
 
 ## 源码结构
 
@@ -182,7 +198,7 @@ journalctl --user -u wechat-ping-bot.service -f
 - `src/integrations/`：HA、备份等可选集成。
 - `src/tools/` 与 `tests/`：维护工具及按模块组织的测试。
 
-根目录 `bot.mjs`、`setup.mjs` 等保留兼容命令入口。部署必须包含完整 `src/` 和依赖，不能仅复制根目录脚本。协议说明见 [底座文档](src/base/README.md)。
+根目录仅保留安装脚本、`wechat-setup` 和项目文档与配置；运行、管理和验收命令直接使用 `src/` 下的实际模块。部署必须包含完整 `src/` 和依赖，不能仅复制根目录脚本。协议说明见 [底座文档](src/base/README.md)。
 
 ## 开发与验证
 

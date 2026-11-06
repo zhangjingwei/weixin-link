@@ -28,7 +28,7 @@ async function run(){
  }
  if(action==='qr')return exportQr(p,join(installConfig().workspace,'outputs'),{running:await active('wechat-pair-'+p.id+'.service')})
  if(action==='verify'){const code=process.argv[4];if(!/^\d{4,12}$/.test(code??''))throw Error('INVALID_VERIFICATION_CODE');await writeFile(join(p.stateDir,'pairing-code.txt'),code,{mode:0o600});return {account:p.id,status:'verification_submitted'}}
- if(action==='stop'){await services.stop('wechat-pair-'+p.id+'.service').catch(()=>{});if(!await active(p.service)){await services.stop(p.service);return {account:p.id,status:'stopped'}}await exec(process.execPath,[join(repositoryDirectory,'activate-diagnostics.mjs'),'--stop'],{env:{...process.env,WECHAT_ACCOUNT:p.id},timeout:650000});return {account:p.id,status:'stopped'}}
+ if(action==='stop'){await services.stop('wechat-pair-'+p.id+'.service').catch(()=>{});if(!await active(p.service)){await services.stop(p.service);return {account:p.id,status:'stopped'}}await exec(process.execPath,[join(repositoryDirectory,'src/tools/activate-diagnostics.mjs'),'--stop'],{env:{...process.env,WECHAT_ACCOUNT:p.id},timeout:650000});return {account:p.id,status:'stopped'}}
  if(action==='start'){if(!await readFile(join(p.stateDir,'codex-owners.json'),'utf8'))throw Error('LOGIN_FIRST');await services.start(p.service);return {account:p.id,status:'starting'}}
  throw Error('USAGE: create|login|qr|refresh-qr|verify|list|start|stop ACCOUNT')
 }

@@ -27,7 +27,7 @@ FFmpeg 平台包的许可声明并不一致：当前锁文件中 Linux arm64/x64
 
 ## SDK 修改与传递依赖
 
-本仓库安装时会通过 sdk-upload-timeout.mjs、sdk-protocol-patch.mjs 修改已安装的微信 SDK；SDK 仍保留其原许可证。若分发修改后的 SDK，应说明修改并保留其原始版权和许可证。
+本仓库安装时会通过 src/tools/sdk-upload-timeout.mjs、src/tools/sdk-protocol-patch.mjs 修改已安装的微信 SDK；SDK 仍保留其原许可证。若分发修改后的 SDK，应说明修改并保留其原始版权和许可证。
 
 升级依赖时同步更新本清单；传递依赖以锁文件和实际安装内容为准，本清单未穷举。部署者安装的 Codex、Podman、Python 库、浏览器、字体与其他外部工具各自遵循上游许可证和使用条件。
 

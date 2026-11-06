@@ -13,7 +13,7 @@ test('unconfigured adapter has no implicit personal hosts',()=>{
 })
 test('explicit missing config fails rather than falling back to personal hosts',()=>{
  const env={...process.env,WECHAT_REMOTE_HOSTS:join(tmpdir(),'absent-remote-config-'+process.pid+'.json')}
- assert.throws(()=>execFileSync(process.execPath,['--input-type=module','-e',`import ${JSON.stringify(new URL('../../src/remote/remote-config.mjs',import.meta.url).href)}`],{env,stdio:'pipe'}),error=>/REMOTE_HOSTS_CONFIG_UNREADABLE/.test(error.stderr.toString()))
+ assert.throws(()=>execFileSync(process.execPath,['--input-type=module','-e',`import {loadRemoteHosts} from ${JSON.stringify(new URL('../../src/remote/remote-config.mjs',import.meta.url).href)}; loadRemoteHosts()`],{env,stdio:'pipe'}),error=>/REMOTE_HOSTS_CONFIG_UNREADABLE/.test(error.stderr.toString()))
 })
 test('configuration validates host names, absolute roots, platform and ports',()=>{
  const dir=mkdtempSync(join(tmpdir(),'config-validation-')),file=join(dir,'hosts.json'),valid={platform:'posix',binary:'/opt/Codex App/codex',root:'/srv/projects',transport:'daemon-proxy'}

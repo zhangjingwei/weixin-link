@@ -11,7 +11,9 @@ HOME=Path.home(); ROOT=HOME/'.local/share/wechat-assistant-backups'; ROOT.mkdir(
 import re
 CONFIG_PATH=Path(os.environ.get('WECHAT_BACKUP_CONFIG',HOME/'.config/wechat-assistant/backup.json'))
 try:
+ if CONFIG_PATH.is_symlink() or CONFIG_PATH.stat().st_size>1048576:raise ValueError()
  CONFIG=json.loads(CONFIG_PATH.read_text())
+ if not isinstance(CONFIG,dict) or set(CONFIG)-{'version','host','remoteDirectory'} or isinstance(CONFIG.get('version',1),bool) or CONFIG.get('version',1)!=1:raise ValueError()
  host=CONFIG['host'];REMOTE=CONFIG['remoteDirectory']
  if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*',host) or not re.fullmatch(r'/[A-Za-z0-9_./-]+',REMOTE) or '..' in REMOTE.split('/') or REMOTE=='/':raise ValueError()
 except Exception:

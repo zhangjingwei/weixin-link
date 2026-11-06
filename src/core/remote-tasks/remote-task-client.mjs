@@ -2,11 +2,11 @@ import {CodexProtocolClient,remoteRpcErrors} from '../../base/codex/protocol-cli
 import {initializeCodex,isReadOnlyCodexMethod} from '../../base/codex/protocol-operations.mjs'
 import {RemoteTransport} from '../../remote/ssh-transport.mjs'
 import {ReconnectingConnection,isTransientConnectionError} from '../../remote/reconnecting-connection.mjs'
-import {HOSTS} from '../../remote/remote-config.mjs'
+import {configuredHost,validateHostConfig} from '../../remote/remote-config.mjs'
 // Codex session recovery and replay policy are coordination, never SSH transport behavior.
 export class RemoteRpc {
- constructor(host,{onEvent=()=>{},transportFactory=(h,o)=>new RemoteTransport(h,o),retryDelays=[250,1000,2500]}={}){
-  if(!HOSTS[host])throw Error('UNKNOWN_HOST')
+ constructor(host,{onEvent=()=>{},hostConfig,transportFactory=(h,o)=>new RemoteTransport(h,{...o,config:hostConfig}),retryDelays=[250,1000,2500]}={}){
+  const config=hostConfig??configuredHost(host);validateHostConfig(host,config)
   Object.assign(this,{host,onEvent});this.recovery=null
   this.connection=new ReconnectingConnection({retryDelays,
    transportFactory:options=>transportFactory(host,{...options,onEvent:event=>this.onEvent(event)}),
