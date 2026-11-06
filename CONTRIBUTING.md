@@ -1,6 +1,6 @@
 # 贡献指南
 
-欢迎通过 Issue 描述问题或通过 Pull Request / Merge Request 提交改进。项目处于开源准备阶段，尚无稳定版本兼容承诺。
+欢迎通过 Issue 描述问题或通过 Pull Request / Merge Request 提交改进。项目处于预览阶段，尚无稳定版本兼容承诺。
 
 ## 开发与验证
 

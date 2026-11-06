@@ -18,7 +18,7 @@ Zero Link 将微信私聊连接到你部署的 Codex。通过文字、图片或�
 
 电脑需要保持在线。当前启用 **Codex** 底座；Claude、OpenCode 目录仅作预留，尚未接入。
 
-> **预览阶段**：尚无稳定版本兼容承诺。macOS / Windows 已有适配，完整真机扫码、收发与停止验收尚未完成。仓库历史仍有个人主机与路径信息，公开发布前需另行清理，见 [发布边界](CONFIGURATION.md)。
+> **预览阶段**：尚无稳定版本兼容承诺。macOS / Windows 已有适配，完整真机扫码、收发与停止验收尚未完成。安装与运行要求见下文；配置及发布检查见 [配置说明](CONFIGURATION.md)。
 
 ## 可以用来做什么
 
@@ -59,15 +59,7 @@ Linux 需要可用的用户级 systemd 会话及 `flock`；Linux/macOS 下载 No
 
 ### 2. 安装并扫码
 
-Linux / macOS 远程安装入口（需先将 `bootstrap.sh` 及配套源码发布到 `main`，当前尚未验证公开可用）：
-
-```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.sh)"
-```
-
-入口默认下载 `main` 分支，源码保存在 `~/.local/share/zero-link/source`，随后运行现有安装器；已有目录时拒绝覆盖。可通过环境变量 `ZERO_LINK_DIR` 指定其他目录。安装完成后仍需扫码。此入口适用于可公开下载的仓库。
-
-Windows 或需要手动安装时，可在有仓库访问权限的环境获取主干源码：
+`bootstrap.sh` 已随源码发布到 `main`。**仓库目前为私有**，匿名下载安装链接返回 404；当前请使用具备仓库读取权限的 Git 环境安装：
 
 ```sh
 git clone --branch main https://github.com/zhangjingwei/zero-link.git
@@ -86,15 +78,22 @@ Windows PowerShell：
 .\install.ps1
 ```
 
-安装器准备私有目录、工作区、依赖及后台服务，启动配对并输出二维码。使用微信扫码确认；扫码者成为该账号档案的初始授权用户。
-
-Linux/macOS 可用 `./wechat-setup qr` 再次查看当前二维码。二维码过期时，在项目根目录运行：
+<details>
+<summary>Linux / macOS 引导脚本（仓库允许公开下载后使用）</summary>
 
 ```sh
-node src/wechat/account-manager.mjs refresh-qr default
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/zero-link/main/bootstrap.sh)"
 ```
 
-二维码采用 90 秒保守本地展示窗口，不是服务端有效期保证。已在线账号拒绝重新配对，避免误登出。
+脚本默认下载 `main`，将完整源码保存到 `~/.local/share/zero-link/source` 后运行安装器。可通过 `ZERO_LINK_DIR` 指定目录、`ZERO_LINK_REF` 指定分支或提交；已有目标目录时拒绝覆盖。此目录是源码位置，工作区和账号数据分别保存。
+
+这是一条首次安装命令，不是已有部署的更新命令。Windows 使用上面的 PowerShell 安装入口。
+
+</details>
+
+安装器准备私有目录、工作区、依赖及后台服务，启动配对并输出二维码。使用微信扫码确认；扫码者成为该账号档案的初始授权用户。
+
+需要再次显示二维码时，在安装目录运行 `./wechat-setup qr`（Linux/macOS）。使用引导脚本安装的用户先进入 `~/.local/share/zero-link/source`，自定义目录则进入对应位置。二维码过期后的刷新方法见 [安装维护说明](CONFIGURATION.md#二维码维护)。
 
 ### 3. 在微信完成 Codex 设置
 
@@ -162,8 +161,6 @@ Codex app-server
 
 智能体查询现状、补齐必要信息，再调用配置或账号管理接口。用户按提示完成扫码和登录授权；无需通过 IDE 或文本编辑器手工修改服务器配置。
 
-
-
 ## 附件与结果
 
 | 输入 | 处理方式 |
@@ -176,19 +173,24 @@ Codex app-server
 
 结果可直接回复文字，也可交付图片、H.264 MP4、PDF、ZIP、TXT、Markdown、CSV、JSON、Word、Excel 和 PowerPoint 文件。MP3、WAV、SILK 以音频文件交付。
 
-接收单消息最多 10 个附件、合计 50MiB；交付每组最多 8 个、总量最多 50MB。具体解析范围与格式要求见 [使用指南](USER-GUIDE.md)。
+接收单消息最多 10 个附件、合计 50MiB；交付每组最多 8 个、总量最多 50MiB。具体解析范围与格式要求见 [使用指南](USER-GUIDE.md)。
 
 ## 常见问题
 
-**微信在线，但不回答？** 先发送 `安装状态`，按提示安装、登录或验收 Codex；终端可运行 `npm run doctor`。
+**微信在线，但不回答？** 先发送 `安装状态`，按提示安装、登录或验收 Codex。
 
 **任务或发送结果不确定？** 先查 `状态`，需要时用 `恢复` 对账，不重复提交同一任务。保存的结果用 `结果` 取回，重发可能包含之前已接受的附件。
 
 **容器未就绪？** 查看 `安装状态`，按需使用 `启动容器`、`登录智能体`；缺少系统条件时先处理具体报错。
 
-**微信诊断入口：** 发送“运行诊断”“服务状态”“查看最近错误”“导出诊断报告”，不依赖模型，仅读取当前账号日志和服务状态；报告以脱敏 JSON 文件交付。终端入口保留：`node src/tools/diagnostics.mjs`、`npm run doctor`。
+**微信诊断入口：** 发送“运行诊断”“服务状态”“查看最近错误”“导出诊断报告”，不依赖模型，仅读取当前账号日志和服务状态；报告以脱敏 JSON 文件交付。
 
-**如何排查故障？** 在微信发送“帮我检查机器人运行状态”，由智能体读取诊断与服务状态。模型不可用时先发送“安装状态”或“安装帮助”。
+## 安全与扫码
+
+- 从本仓库 `main` 获取安装脚本和源码；私有仓库需要相应读取权限。
+- 使用自己的微信扫码确认，确认者成为该账号档案的初始授权用户；不要分享登录二维码或设备验证码。
+- Codex 登录在官方 OpenAI 授权页面完成，配置和凭据保存在部署者的私有运行目录。
+- 二维码本地展示窗口为 90 秒；已在线账号不重新配对。安全问题的报告方式见 [安全政策](SECURITY.md)。
 
 ## 文档与许可
 

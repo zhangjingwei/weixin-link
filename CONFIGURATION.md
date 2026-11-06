@@ -1,49 +1,62 @@
-# 通用代码与个人配置
+# 配置与安装维护
 
-源码中仅保留通用规则和脱敏示例，不预设家庭主机、微信账号、天气地点或备份目标。示例不自动启用；登录凭据、会话、附件、日志与备份仍保存在用户私有目录。
+日常配置直接在微信说明需求，例如“帮我配置远程主机”“检查家庭设备连接”或“创建第二个机器人账号”。智能体查询现状、校验参数和连接，再调用管理命令处理，无需用户使用 IDE、nano 或手工编辑运行 JSON。
 
-## 远程主机与项目
+自然语言配置需要模型可用；安装向导、登录和中文诊断入口由代码处理，不依赖模型。首次建立微信连接、扫码及外部账号授权由用户完成。
 
-启用远程连接时，由智能体通过配置接口在私有工作目录管理 remote-hosts.json：每个键是实际 SSH 别名，配置包含 platform、binary、root、transport，ssh-websocket 另需 port。填写真实系统类型、Codex 绝对路径和允许访问的项目根目录。缺省不注册任何主机；格式错误会明确拒绝加载。可用 WECHAT_REMOTE_HOSTS 指向外部 JSON。不要将凭据放入主机 JSON。
+## 安装来源与目录
 
-项目定位由智能体底座自行管理。接入层不读取项目别名文件，也不向原始请求注入项目/主机候选。远程连接配置的主机注册和允许根目录属于执行边界，不用于推断用户要操作哪个项目。
+`bootstrap.sh` 和配套源码已在 `main`。仓库目前为私有，匿名访问 raw 脚本和源码包会返回 404；使用具有读取权限的 Git 环境克隆 `main`，再运行 `./install.sh` 或 `.\install.ps1`。仓库可公开读取后，README 中的一行引导命令才可匿名使用。
 
-SSH 使用 WECHAT_SSH_CONFIG 指定的文件，默认 ~/.ssh/wechat_hosts_config。config-templates/ssh-config.example 展示严格密钥校验；需自行验证主机密钥，不自动接受未知密钥。
+引导脚本支持 Linux/macOS arm64、x64，默认下载 `main`：
 
-安装器创建或复用实际工作目录；缺少 AGENTS.md 时生成规则，已有文件保留用户内容，仅更新明确标记的程序管理区块。用户可在该私有文件中补充工作要求，仓库不提供独立工作目录模板。远程连接位于 src/remote/，共享协议位于 src/base/codex/，任务协调位于 src/core/remote-tasks/。统一使用 node src/remote/remote-codex.mjs，默认读取安装配置中的工作目录；WECHAT_REMOTE_WORKSPACE 可指定实际工作目录。无需向工作目录复制执行脚本。
+- `ZERO_LINK_DIR`：源码保存目录，默认 `~/.local/share/zero-link/source`。
+- `ZERO_LINK_REF`：下载的分支、标签或提交，默认 `main`。
+- 目标目录已存在时拒绝覆盖；脚本用于首次安装，不自动更新已有部署。
 
-## 可选集成
+不同目录分别承担不同用途：
 
-- HA：由智能体参考 config-templates/ha.example.json，通过配置接口校验并写入 ~/.config/wechat-assistant/ha.json；保持只读访问。
-- 加密备份（Linux）：由智能体参考 config-templates/backup.example.json，通过配置接口校验并写入 ~/.config/wechat-assistant/backup.json；WECHAT_BACKUP_CONFIG 可覆盖位置。目标必须显式配置；公钥及远端私钥仍按原备份协议单独准备。工作目录从 installation.json 读取，源码目录自动推导。没有配置不连接默认 NAS。
-- 微信账号授权：仍在账号私有 stateDir 中配置，不能放入示例或源码。
-- 安装目录和 Codex 路径：沿用用户私有 installation.json，通过安装器生成；服务由安装器按真实路径生成。
+| 用途 | 默认位置 |
+| --- | --- |
+| 引导脚本下载的源码 | `~/.local/share/zero-link/source` |
+| 智能体工作区 | `~/work/wechat-assistant` |
+| 安装配置 | `~/.local/share/wechat-ping-bot/installation.json` |
+| 默认微信账号数据 | `~/.local/share/wechat-ping-bot` |
+| 其他微信账号数据 | `~/.local/share/wechat-ping-bot/accounts/<id>/` |
+| HA 与备份私有配置 | `~/.config/wechat-assistant/` |
 
-## 迁移与验证
+Git 手动安装的源码位置是克隆目录。工作区和 Codex 路径由安装配置确定，不随下载目录自动变化。安装器保留已有工作区 AGENTS.md 的用户内容，仅更新明确标记的程序管理区块；更新后新会话才能读取新规则。
 
-remote-hosts.json、*.local.json、*.local.md 和 .private/ 不进入 Git。不要用 git add -f 强行加入私人配置。树莓派现有运行目录未改动。
+## 微信操作
 
-本次准备前的个人主机清单和工作说明在 Mac mini 的 .private/original-config/ 保留，不进入提交。工作目录内已有的 AGENTS.md 应作为部署配置保留。
+- `安装向导`：按当前步骤选择运行环境、安装、登录及验证。
+- `安装状态`、`安装智能体`、`登录智能体`、`验收智能体`：独立安装维护入口。
+- `运行诊断`、`服务状态`、`查看最近错误`、`导出诊断报告`：查询当前账号诊断和服务状态，不调用模型。
+- 远程主机、HA、备份与多账号：用自然语言说明需求，由智能体执行下方底层接口。
 
-远程验收脚本需显式传入 HOST 和绝对测试项目目录；运行会执行真实任务，只对专用测试项目使用。Podman 验收仍要求显式准备 pilot 测试容器。
+微信在线只代表通道建立。向导可发起一次真实模型测试；协议检查与实际推理分别报告结果。多账号需分别扫码，不复制已有凭据或授权名单。
 
-本次拆分只修改当前源码树，旧 Git 提交仍包含历史个人信息。公开发布前需另行审计并清理历史，或建立不携带旧历史的发布仓库；本次不重写历史。
+## 二维码维护
 
-## SSH、HA 与账号凭据的发布边界
+Linux/macOS 在安装源码目录运行 `./wechat-setup qr`，再次显示当前二维码。使用引导脚本默认目录时先运行 `cd ~/.local/share/zero-link/source`。
 
-实际 SSH 配置/私钥在用户的 ~/.ssh；HA URL/令牌在 ~/.config/wechat-assistant/ha.json；微信凭据、授权名单和账号身份在 ~/.local/share/wechat-ping-bot（其他账号位于 accounts/<id>）。这些目录属于运行环境，不复制到源码或发布目录，也不移动或删除正在使用的凭据。
+二维码过期且尚未建立微信通道时，由安装维护终端刷新默认账号：
 
-源码仅保留 *.example.json 和 SSH 示例。私钥、公钥 PEM、HA 实际配置、账号凭据、授权名单、状态数据库及本地配置均被显式忽略。git archive 还使用 .gitattributes 排除私有目录。不要直接压缩整个工作目录，因为它可能含 .private/ 迁移备份。
+```sh
+PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/wechat/account-manager.mjs refresh-qr default
+```
 
-提交和发布前运行 npm run check:release，检查暂存区的真实 Git 内容；即使 git add -f 强行加入敏感文件，检查仍会拒绝。CI 在安装依赖前运行同一检查。该检查基于文件名和常见密钥格式，不能保证发现所有未知格式的秘密，发布前仍需人工审查。
+Windows 使用安装时准备的 Node.js，从源码目录调用同一账号工具；仅安装了私有 Node 时，可执行：
 
-本轮扫描可达 Git 历史 247 个 blob，未发现 SSH 私钥标记、常见提供商 token、JWT 或实际 HA/账号配置文件；字符串候选经检查为合成测试数据。此结果不代表历史已脱敏：旧提交仍包含个人主机与路径，公开前需另行处理历史。账号和密钥始终由部署者在私有目录独立准备，不随源码继承。
+```powershell
+& "$HOME\.local\share\wechat-ping-bot\tools\node\node.exe" src/wechat/account-manager.mjs refresh-qr default
+```
 
-## 智能体配置接口
+已在线账号拒绝刷新。二维码采用 90 秒保守本地展示窗口，服务端报过期或配对退出后不继续交付旧码。微信通道建立后，其他账号的创建和二维码交付可直接委托智能体完成。
 
-日常使用时，在微信直接说明“帮我配置远程主机”“检查家庭设备连接”或“创建第二个机器人账号”。智能体负责查询、校验与执行，用户无需登录服务器使用 IDE、nano 或手工修改 JSON。首次消息通道的安装、扫码和外部账号授权仍按安装向导完成。
+## 智能体与维护者接口
 
-下列命令是供智能体和维护者调用的底层接口，不是微信中需要记忆的聊天命令。在源码目录执行：
+以下是源码目录下的底层接口，不是用户在微信中需要记忆的英文命令。运行时需使用 Node.js 24+；Linux/macOS 若只安装了私有 Node，先将其 bin 目录加入当前命令的 PATH，或通过 `./wechat-setup` 调用配置入口。
 
 ```sh
 node src/setup/setup.mjs config-schema ha
@@ -53,6 +66,31 @@ node src/setup/setup.mjs config-status
 node src/setup/setup.mjs config-restore ha
 ```
 
-类型支持 installation、ha、backup、remote-hosts。schema 返回格式，check 校验输入，set 在连接和运行条件校验后原子写入，status 只返回配置就绪状态，restore 校验并恢复上一版。实际 JSON 通过标准输入提供，不将令牌放进命令参数。安装路径迁移与活动远程任务的主机切换仍受现有保护约束。
+类型支持 `installation`、`ha`、`backup`、`remote-hosts`。schema 返回格式；check 校验输入；set 检查连接和运行条件后原子写入并保留上一版；status 返回配置状态；restore 重新校验并恢复上一版。配置通过标准输入提供，不将令牌放入命令参数。
 
-多账号入口为 node src/wechat/account-manager.mjs，支持 list、create、login、refresh-qr、qr、start、stop、verify。智能体按用户授权执行；二维码通过 qr 导出为可交付文件，扫码及设备授权由用户完成。
+安装工作区不能直接迁移。存在运行实例时，安装路径配置需先停服务；远程主机有未对账任务时，删除或改变目标会被拒绝。恢复配置同样遵守这些检查。
+
+多账号入口为 `node src/wechat/account-manager.mjs`，支持 `list`、`create`、`login`、`refresh-qr`、`qr`、`start`、`stop`、`verify`。`qr` 导出可交付文件；`stop` 等待指定账号空闲后停用，不影响其他账号。
+
+## 远程主机与可选集成
+
+- **远程主机**：私有工作区 `remote-hosts.json` 使用 `version: 1` 和 `hosts` 对象；每个主机包含 `platform`、`binary`、`root`、`transport`，`ssh-websocket` 另需 `port`。兼容旧版主机映射格式。用 config-schema 查看完整规则。
+- **SSH**：`WECHAT_SSH_CONFIG` 指定配置文件，默认 `~/.ssh/wechat_hosts_config`。示例见 [SSH 配置模板](config-templates/ssh-config.example)，保持主机密钥校验。
+- **HA**：智能体参考 [HA 模板](config-templates/ha.example.json)，通过配置接口写入 `~/.config/wechat-assistant/ha.json`；当前只读查询。
+- **备份（Linux）**：智能体参考 [备份模板](config-templates/backup.example.json)，通过配置接口写入 `~/.config/wechat-assistant/backup.json`；目标、加密公钥及远端私钥独立准备。
+
+运行时可通过 `WECHAT_REMOTE_HOSTS`、`WECHAT_BACKUP_CONFIG` 指向外部配置；配置管理接口不接管自定义路径，遇到不一致时返回 `CONFIG_CUSTOM_PATH_UNMANAGED`。远程工作区可用 `WECHAT_REMOTE_WORKSPACE` 指定。
+
+项目定位由智能体结合请求和实际目录处理，主机注册与允许根目录只限定执行边界。远程连接入口见 [远程连接文档](src/remote/README.md)，无需向私有工作区复制执行脚本。
+
+## 升级与验证
+
+已有部署先核实源码、工作区和服务实际路径，再安排更新；保留账号数据、AGENTS.md、远程会话记录和 outputs，不直接覆盖运行目录。服务入口位于 src/，由安装器按真实路径生成。Windows 已有任务配置不一致时明确拒绝覆盖，需要单独核对迁移。
+
+远程验收脚本需要指定主机和专用测试项目，会执行真实任务；登录、发送消息、服务重启和容器切换按用户授权进行。检查通过与真实收发验收分别报告，见 [贡献指南](CONTRIBUTING.md)。
+
+## 私有数据与发布检查
+
+SSH 私钥、HA 令牌、微信/Codex 凭据、聊天记录、附件、状态数据库和本地配置不进入源码或发布包。模板仅含脱敏示例，不自动启用集成，也不提供维护者的账号权限。
+
+提交前暂存拟发布内容，再运行 `npm run check:release`。它检查暂存区路径和常见密钥格式，不替代人工检查、依赖审查或 Git 历史审计。不要直接压缩整个运行目录；公开发布前独立审计历史，发现凭据泄露时先撤销或轮换。
