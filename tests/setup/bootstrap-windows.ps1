@@ -4,13 +4,15 @@ New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
 $previousDest = $env:ZERO_LINK_DIR
 $previousRef = $env:ZERO_LINK_REF
 $previousArch = $env:PROCESSOR_ARCHITECTURE
+$previousFixture = $env:ZERO_LINK_TEST_ARCHIVE
+$previousUrl = $env:ZERO_LINK_TEST_REQUESTED_URL
 $bootstrapPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\bootstrap.ps1'))
-$script:fixtureArchive = Join-Path $fixtureRoot 'fixture.zip'
-$script:requestedUrl = ''
+$env:ZERO_LINK_TEST_ARCHIVE = Join-Path $fixtureRoot 'fixture.zip'
+$env:ZERO_LINK_TEST_REQUESTED_URL = ''
 function Invoke-WebRequest {
     param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
-    $script:requestedUrl = $Uri
-    Copy-Item -LiteralPath $script:fixtureArchive -Destination $OutFile
+    $env:ZERO_LINK_TEST_REQUESTED_URL = $Uri
+    Copy-Item -LiteralPath $env:ZERO_LINK_TEST_ARCHIVE -Destination $OutFile
 }
 function Assert-True($condition, [string]$message) { if (!$condition) { throw $message } }
 function Make-Archive([string]$installer, [bool]$complete = $true) {
@@ -21,7 +23,7 @@ function Make-Archive([string]$installer, [bool]$complete = $true) {
     Set-Content -LiteralPath (Join-Path $source '.sample') -Value 'included' -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $source 'install.ps1') -Value $installer -Encoding UTF8
     if ($complete) { Set-Content -LiteralPath (Join-Path $source 'src\setup\setup.mjs') -Value '// fixture' -Encoding UTF8 }
-    Compress-Archive -LiteralPath $source -DestinationPath $script:fixtureArchive -Force
+    Compress-Archive -LiteralPath $source -DestinationPath $env:ZERO_LINK_TEST_ARCHIVE -Force
 }
 try {
     # The child installer is a fixture: no packages, accounts, services or network are touched.
@@ -31,7 +33,7 @@ try {
     & $bootstrapPath
     Assert-True (Test-Path -LiteralPath (Join-Path $env:ZERO_LINK_DIR 'installed.txt')) 'Installer was not executed.'
     Assert-True (Test-Path -LiteralPath (Join-Path $env:ZERO_LINK_DIR '.sample')) 'Dotfile was not copied.'
-    Assert-True ($script:requestedUrl.EndsWith('feature%2Fa%20b')) 'Ref was not URL-encoded.'
+    Assert-True ($env:ZERO_LINK_TEST_REQUESTED_URL.EndsWith('feature%2Fa%20b')) 'Ref was not URL-encoded.'
     $refused = $false
     try { & $bootstrapPath } catch { $refused = $_.Exception.Message -like '*already exists*' }
     Assert-True $refused 'Existing installation was not refused.'
@@ -58,5 +60,7 @@ try {
     $env:ZERO_LINK_DIR = $previousDest
     $env:ZERO_LINK_REF = $previousRef
     $env:PROCESSOR_ARCHITECTURE = $previousArch
+    $env:ZERO_LINK_TEST_ARCHIVE = $previousFixture
+    $env:ZERO_LINK_TEST_REQUESTED_URL = $previousUrl
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
 }
