@@ -8,6 +8,7 @@
 !/install.sh
 !/bootstrap.sh
 !/bootstrap.ps1
+!/qr.sh
 !/upgrade.sh
 !/upgrade.ps1
 

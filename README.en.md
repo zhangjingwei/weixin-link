@@ -115,6 +115,16 @@ Run `./install.sh` on Linux/macOS, or `.\install.ps1` in Windows PowerShell.
 
 </details>
 
+## Refresh the login QR code
+
+On Linux/macOS, refresh pairing for an installed but offline account without reinstalling or changing directories:
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+```
+
+A local graphical terminal attempts to open the PNG. SSH sessions print its path so you can download and scan it. Online accounts are not re-paired. Use `WEIXIN_LINK_DIR` for a custom source directory and `WEIXIN_LINK_ACCOUNT` for another account. See [QR maintenance](CONFIGURATION.md#二维码维护).
+
 ## More capabilities and documentation
 
 **Codex** is the currently supported agent backend. Multiple WeChat accounts, remote hosts and isolated Linux containers can be configured later; they are not required for initial setup.

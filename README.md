@@ -115,6 +115,16 @@ Linux/macOS 执行 `./install.sh`；Windows PowerShell 执行 `.\install.ps1`。
 
 </details>
 
+## 重新获取登录二维码
+
+Linux/macOS 已安装但尚未登录时，执行下面一行即可刷新二维码，无需切换目录或重新安装：
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+```
+
+本机图形终端会尝试打开 PNG 图片；SSH 会话输出图片路径，可下载后扫码。已在线账号不会重新配对。自定义源码目录用 `WEIXIN_LINK_DIR` 指定，多账号可用 `WEIXIN_LINK_ACCOUNT` 指定；详见 [二维码维护](CONFIGURATION.md#二维码维护)。
+
 ## 更多能力与文档
 
 当前支持的智能体底座是 **Codex**。可按需配置多微信账号、远程主机，以及 Linux 独立容器；这些扩展不要求在首次安装时完成。
