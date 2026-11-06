@@ -2,6 +2,8 @@
 
 # Zero Link
 
+[简体中文](README.md) | [English](README.en.md)
+
 **在微信里，继续电脑上的 Codex 工作。**
 
 发起任务 · 补充要求 · 查看进展 · 接收文件
