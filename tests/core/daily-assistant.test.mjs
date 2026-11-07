@@ -16,6 +16,18 @@ test('daily command is exact and media captions remain ordinary input',()=>{
  const {router}=fixture();const project=router.bind({userId:'alice',text:'新建 Project'})
  assert.equal(router.bind({userId:'alice',text:'日常助手',images:[{}]}).userId,project.userId)
 })
+test('list shows projects only while daily stays available through its own command',async()=>{
+ const {router}=fixture(),out=[]
+ const list=async text=>{await router.control(router.bind({userId:'alice',text}),value=>out.push(value));return out.at(-1)}
+ assert.deepEqual(conversationCommand('项目列表'),{action:'list'})
+ const empty=await list('列表');assert.match(empty,/^项目列表\n暂无项目/);assert(!empty.includes('1. 原有对话'))
+ const project=router.bind({userId:'alice',text:'新建 Work'})
+ router.find('alice','2').name='Work'
+ const projects=await list('项目列表');assert.match(projects,/2\. Work \[当前\]/);assert(!projects.includes('1. 原有对话'))
+ router.bind({userId:'alice',text:'日常'})
+ const fromDaily=await list('列表');assert.match(fromDaily,/2\. Work/);assert(!fromDaily.includes('[当前]'))
+ assert.equal(router.bind({userId:'alice',text:'切换2'}).userId,project.userId)
+})
 test('daily entry reuses original owned thread without creating threads or stopping project work',async()=>{
  const {manager,router,calls}=fixture(),project=router.bind({userId:'alice',text:'新建 Project'})
  manager.sessions.set(project.userId,{busy:true,queue:['keep']})
