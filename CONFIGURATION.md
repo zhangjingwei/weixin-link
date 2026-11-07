@@ -96,6 +96,8 @@ node src/setup/setup.mjs config-restore ha
 
 Claude 适配器通过 `installation` 配置选择：在保留现有 `workspace` 的前提下设置 `agentBackend: "claude"` 和 `claudeBinary`（官方 CLI 的绝对路径，版本 2.1.259+）。配置接口会检查 CLI 版本，并要求服务停止后才更改安装配置；切换后 Claude 会话状态独立保存，不移用 Codex 会话。运行服务还需获得 Anthropic Console 的 `ANTHROPIC_API_KEY` 或受支持云提供商凭据；密钥不写入安装 JSON，也不在微信发送。Claude 模式下“安装状态”只检查 CLI 路径与凭据是否存在，不等于真实推理验收。功能边界见 [Claude 接入说明](src/base/claude/README.md)。
 
+服务运行后可在微信发送“切换智能体”查看当前账号底座，发送“切换智能体 Codex”或“切换智能体 Claude”安排空闲切换。Claude 需要先在安装配置中设置 CLI 路径，并向服务环境提供 API 凭据；Codex 需要已安装且登录。切换只影响当前微信账号，保留各底座原有会话，不迁移会话 ID。切换会重启该账号服务；完成后再次发送“切换智能体”核对实际运行底座。安装配置中的 `agentBackend` 仍是未指定账号选择时的默认值。
+
 安装工作区不能直接迁移。存在运行实例时，安装路径配置需先停服务；远程主机有未对账任务时，删除或改变目标会被拒绝。恢复配置同样遵守这些检查。
 
 多账号入口为 `node src/wechat/account-manager.mjs`，支持 `list`、`create`、`login`、`refresh-qr`、`qr`、`start`、`stop`、`verify`。`qr` 导出可交付文件；`stop` 等待指定账号空闲后停用，不影响其他账号。

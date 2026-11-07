@@ -94,6 +94,7 @@ Send ordinary requests directly. These fixed commands control the bridge:
 | `恢复` | Reconcile a submitted task whose result is uncertain |
 | `新建 Name` / `列表` | Create a conversation or list conversations |
 | `安装状态` / `安装向导` | Check setup or continue installation and authentication |
+| `切换智能体` / `切换智能体 Codex` / `切换智能体 Claude` | Show the current agent or switch this account after it becomes idle |
 | `使用说明` | Read the full user guide |
 
 Each message is processed independently. Text and attachments in the same message are submitted together. See the [user guide](USER-GUIDE.md) for conversation management, attachment limits and diagnostic commands.

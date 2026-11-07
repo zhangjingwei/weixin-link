@@ -9,6 +9,8 @@ import {installConfig} from '../setup/install-config.mjs'
 import {createToolNotifier} from './tool-status.mjs'
 import {installWeixinProtocol} from './weixin-protocol.mjs'
 import {loadAgentAdapter} from '../base/agent-adapter.mjs'
+import {selectedAgentKind} from '../base/agent-selection.mjs'
+import {AgentSwitcher,agentSwitchCommand} from '../setup/agent-switch.mjs'
 import {ClaudeConversations} from '../base/claude/claude-conversations.mjs'
 import {ClaudeSetupController} from '../base/claude/claude-setup.mjs'
 import {TextConversations,conversationCommand} from '../core/text-conversations.mjs'
@@ -34,7 +36,7 @@ const account=accountPaths();await assertAccount(account.id)
 const stateDir = account.stateDir
 const installation=installConfig()
 const cwd = installation.workspace
-const agent=await loadAgentAdapter(account,cwd,installation)
+const agent=await loadAgentAdapter(account,cwd,{...installation,agentBackend:await selectedAgentKind(account,installation)})
 const backend=agent.backend
 const runtimeStateDir=backend.stateDir
 await mkdir(stateDir, { recursive: true, mode: 0o700 })
@@ -59,6 +61,7 @@ if (testing) {
 }
 
 const setupController=await (agent.kind==='claude'?new ClaudeSetupController({binary:installation.claudeBinary}):new SetupController({stateDir,backend,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)})).init()
+const agentSwitcher=new AgentSwitcher({account,installation,agentKind:agent.kind,backendReady:codexAvailability})
 const conversations=agent.catalog==='local'?new ClaudeConversations(manager,owners):new TextConversations(manager,owners)
 await manager.save()
 const bot = new WeChatBot({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
@@ -76,7 +79,7 @@ const remoteSequences=new Map()
 let stopping=false,loggedIn=false
 const pending = new MessageDispatch()
 const runtime=new RuntimeControl({
- backend:{id:backend.id,kind:backend.kind,container:backend.container??null,memoryMode:backend.memoryMode??'wechat'},
+ backend:{id:backend.id,kind:backend.kind,agentKind:agent.kind,container:backend.container??null,memoryMode:backend.memoryMode??'wechat'},
  features:{daily_assistant:true,numeric_setup_wizard:true,setup_commands:true,codex_backend_binding:true,container_backend:backend.kind==='podman',native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,remote_stream:true},
  onRemoteText:async({scope,task,seq,chunkId,text})=>{
   if(typeof scope!=='string'||typeof task!=='string'||!Number.isSafeInteger(seq)||seq<1||typeof text!=='string'||text.length>6000)throw Error('Invalid progress')
@@ -130,10 +133,10 @@ const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable})
+const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,agentSwitcher,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable})
 const intakeHandler=nonBlockingHandler(async message => {
   try {
-    const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
+    const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
     if(control)await handleMessage(message)
     else await pending.enqueue(message.userId,()=>handleMessage(message),message._intakeToken)
   }
