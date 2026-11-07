@@ -7,7 +7,7 @@ import {controlCommand} from '../base/codex/control-command.mjs'
 import {agentSwitchCommand} from '../setup/agent-switch.mjs'
 import {chatUpgradeCommand} from '../setup/chat-upgrade.mjs'
 import {hasMedia} from '../media/media-input.mjs'
-import {voiceTextMessage} from '../media/voice-text.mjs'
+import {voiceCommandInput} from './voice-command-input.mjs'
 import {receiptPolicy} from '../core/delivery/notification-policy.mjs'
 import {singleMedia} from '../media/single-media.mjs'
 import {quoteInput} from './weixin-protocol.mjs'
@@ -24,6 +24,8 @@ return async function handleMessage(message) {
   const deliver=(value,options)=>outgoing.deliver(message.userId,value,{...options,traceId:options?.traceId??trace_id})
   log('message.received',{trace_id,userId:message.userId,messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text',chars:message.text?.length??0})
   if (!manager.owners.has(message.userId)) {log('message.rejected',{trace_id,reason:'unauthorized'});return}
+  message=voiceCommandInput(message)
+  if(message._voiceTranscribed)log('voice.transcript_forwarded',{trace_id,userId:message.userId,status:'wechat_asr_text'})
   let lifecycleDelivery
   try{lifecycleDelivery=await lifecycleNotice?.onInbound(conversations.recipient(message.userId))}catch(error){log('lifecycle_notice.failed',{trace_id,...errorFields(error)})}
   const diagnosticAction=!hasMedia(message)&&diagnosticCommand(message.text)
@@ -47,8 +49,6 @@ return async function handleMessage(message) {
    const ready=await codexAvailability();if(!ready.installed||!ready.loggedIn){await deliver(!ready.installed?'微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。':'微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
   if(!initialControl&&backend.agentKind==='claude'&&!manager.sessions.has(message.userId)&&!process.env.ANTHROPIC_API_KEY&&!process.env.CLAUDE_CODE_USE_BEDROCK&&!process.env.CLAUDE_CODE_USE_VERTEX&&!process.env.CLAUDE_CODE_USE_FOUNDRY){await deliver('微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
-  const transcribed=voiceTextMessage(message)
-  if(transcribed){log('voice.transcript_forwarded',{trace_id,userId:message.userId,status:'wechat_asr_text'});message=transcribed}
   const media = hasMedia(message)
   if (!media && !message.text?.trim()){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const reply = (value,options) => deliver(options?.checkpoint?value:systemNotice(value),options)

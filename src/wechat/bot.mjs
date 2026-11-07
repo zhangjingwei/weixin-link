@@ -1,3 +1,4 @@
+import {voiceCommandInput} from './voice-command-input.mjs'
 import {trackLoginValidity} from './login-validity.mjs'
 import {systemNotice} from '../core/delivery/system-notice.mjs'
 import {LifecycleNotice} from './lifecycle-notice.mjs'
@@ -148,7 +149,7 @@ const weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:async wires=
  if(runtime.sealed)throw Error('INGRESS_SEALED')
  const received=[],setupReceived=[]
  for(const wire of wires){const parsed=originalParse(wire);if(!parsed||!conversations.realOwners.has(parsed.userId))continue
-  const previous=jobs.findCaptured(parsed);const message=previous??conversations.bind(parsed);message._traceId??=ingressTrace.traceId(wire);const frozenSetup=setupReceipts.get(parsed);if(frozenSetup){message._setupAction=frozenSetup.action;message._setupReceiptId=frozenSetup.id}if(!Object.hasOwn(message,'_setupAction'))message._setupAction=previous?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId);message.references??=weixin.quote(message);stagedWires.set(wire,message)
+  const previous=jobs.findCaptured(parsed);const message=previous??conversations.bind(voiceCommandInput(parsed));message._traceId??=ingressTrace.traceId(wire);const frozenSetup=setupReceipts.get(parsed);if(frozenSetup){message._setupAction=frozenSetup.action;message._setupReceiptId=frozenSetup.id}if(!Object.hasOwn(message,'_setupAction'))message._setupAction=previous?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId);message.references??=weixin.quote(message);stagedWires.set(wire,message)
   const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
   if(message._setupAction)setupReceived.push(message)
   if(!control)received.push(message)
@@ -167,6 +168,7 @@ bot.on('error', error => log('wechat.error',errorFields(error)))
 const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
 intakeHandler=nonBlockingHandler(async message => {
   try {
+    message=voiceCommandInput(message)
     const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
     if(control)await handleMessage(message)
     else await pending.enqueue(message.userId,()=>handleMessage(message),message._intakeToken)
@@ -182,6 +184,7 @@ intakeHandler=nonBlockingHandler(async message => {
 bot.onMessage(message=>{
  const inboundTrace=ingressTrace.callback(message);message._traceId??=inboundTrace
  if(!conversations.realOwners.has(message._conversationOwner??message.userId)||runtime.sealed)return
+ message=voiceCommandInput(message)
  if(!message._conversationOwner)message=conversations.bind(message)
  if(!Object.hasOwn(message,'_setupAction'))message._setupAction=message._recovered?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId)
  if(!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))){intakeHandler(message);return}

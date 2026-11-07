@@ -113,3 +113,22 @@ test('explicit setup commands continue without a duplicate welcome',async()=>{
  await f.handle({userId:'owner',text:'安装状态',_setupAction:'status',_ingressId:'status'})
  assert.deepEqual(f.sent,[['owner','安装状态结果']]);assert.equal(f.submitted.length,0)
 })
+
+test('voice status bypasses unavailable model and stop bypasses maintenance gating',async()=>{
+ const f=fixture(),handled=[]
+ f.deps.manager.sessions.clear();f.deps.backend.kind='podman';f.deps.backend.preflight=()=>{throw Error('must not preflight')}
+ f.deps.manager.acceptMessage=async()=>true;f.deps.manager.handle=async(owner,text)=>handled.push([owner,text])
+ f.handle=createMessageProcessor(f.deps)
+ const voice=text=>({userId:'owner',type:'voice',text:'[voice]',voices:[{text}],_ingressId:text,raw:{item_list:[{voice_item:{text}}]}})
+ await f.handle(voice('状态。'))
+ f.deps.runtime.draining=true;await f.handle(voice('停止。'))
+ assert.deepEqual(handled,[['owner','状态'],['owner','停止']]);assert.deepEqual(f.submitted,[])
+})
+test('voice upgrade uses maintenance handler and recovered request does not repeat',async()=>{
+ const f=fixture();let calls=0
+ f.deps.manager.acceptMessage=async()=>true;f.deps.runtime.track=async(kind,work)=>work()
+ f.deps.upgrader={handle:async()=>{calls++}};f.handle=createMessageProcessor(f.deps)
+ const message={userId:'owner',type:'voice',text:'[voice]',voices:[{text:'升级。'}],_ingressId:'voice-upgrade'}
+ await f.handle(message);await f.handle({...message,_recovered:true})
+ assert.equal(calls,1);assert.deepEqual(f.submitted,[]);assert.match(f.sent[0][1],/未重复执行/)
+})
