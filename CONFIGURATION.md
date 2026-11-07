@@ -6,9 +6,9 @@
 
 ## 安装来源与目录
 
-仓库已公开，Linux/macOS 使用 `bootstrap.sh`，Windows x64 使用 `bootstrap.ps1`。README 提供可匿名下载的一行安装命令；也可克隆 `main` 后运行 `./install.sh` 或 `.\install.ps1`。
+仓库已公开，Linux/macOS 使用 `install.sh`，Windows x64 使用 `install.ps1`；各平台安装和升级均复用自己的同一入口。README 提供可匿名下载的命令。克隆源码后，本地安装步骤分别位于 `src/setup/unix-install.sh` 和 `src/setup/windows-install.ps1`。
 
-两个引导脚本默认下载 `main`，支持 `WEIXIN_LINK_DIR` 指定源码保存目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。Linux/macOS 目标目录已存在时会识别安装并执行标准升级；无法识别的目录仍拒绝覆盖。扫码刷新使用 `qr.sh`。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
+两个入口默认下载 `main`，支持 `WEIXIN_LINK_DIR` 指定源码保存目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。目标目录已存在时会识别安装并执行标准升级；无法识别的目录仍拒绝覆盖。扫码刷新使用 `qr.sh`。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
 
 旧版 `ZERO_LINK_DIR`、`ZERO_LINK_REF` 仍兼容，新变量优先。改名不迁移现有工作区、账号数据或服务；旧源码目录若已存在，先核实原安装再更新。
 
@@ -128,18 +128,18 @@ SSH 私钥、HA 令牌、微信/Codex 凭据、聊天记录、附件、状态数
 
 ## 已有安装与升级
 
-Linux/macOS 统一入口先核验选定的源码目录。目录不存在而已有后台服务时拒绝创建平行安装；可用 `WEIXIN_LINK_DIR` 指定原目录。自定义服务由升级器拒绝接管。服务运行状态不等于微信登录状态；恢复扫码使用 `qr.sh`。
+安装与升级入口先核验选定的源码目录。目录不存在而已有后台服务时拒绝创建平行安装；可用 `WEIXIN_LINK_DIR` 指定原目录。自定义服务由升级器拒绝接管。服务运行状态不等于微信登录状态；恢复扫码使用 `qr.sh`。
 
 Linux/macOS 首次安装和标准升级使用同一入口：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
 ```
 
-Windows PowerShell：
+Windows PowerShell 首次安装和标准升级使用同一入口：
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/upgrade.ps1')))
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
 `WEIXIN_LINK_DIR` 指向已安装源码目录，`WEIXIN_LINK_REF` 可选择目标分支、标签或提交（默认 `main`）。升级不会运行安装向导或重新扫码。先在旁边的暂存目录安装依赖，再通过控制接口确认所有已注册账号空闲，停止原先运行的服务，备份源码和运行数据，切换源码，恢复原先运行的服务并检查微信通道就绪。原先停止的账号保持停止。服务定义和覆盖配置、工作目录、Node 工具目录保持原样。

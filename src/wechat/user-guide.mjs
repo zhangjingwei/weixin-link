@@ -2,7 +2,7 @@ export const USER_GUIDE=`微信助手使用说明
 
 一、首次设置
 安装器支持 macOS（Apple Silicon/Intel）和 Windows x64 适配，Linux arm64/x64 保留。macOS/Windows 尚待真机扫码收发验收，不表示已验证上线；Mac 需要已登录的图形会话，Windows 使用当前用户的任务计划程序。安装入口：Linux/Mac 为 ./install.sh，Windows 为 .\\install.ps1。
-main 分支提供 Linux/macOS 的 bootstrap.sh 和 Windows x64 的 bootstrap.ps1，支持公开下载；默认源码目录为 ~/.local/share/weixin-link/source，README 提供一键安装命令。首次安装需要电脑终端，扫码后配置通过微信交给智能体处理。
+main 分支提供 Linux/macOS 的 install.sh 和 Windows x64 的 install.ps1；各平台重复运行同一安装命令即可升级标准部署。默认源码目录为 ~/.local/share/weixin-link/source，README 提供命令。首次安装需要电脑终端，扫码后配置通过微信交给智能体处理。
 微信绑定仅表示消息通道连接成功，不代表 Codex 已安装或可用。
 发送“安装向导”，之后只需按当前页面回复1、2、3。每页最多三个选项；3退出，已完成内容保留。已有安装会跳过对应步骤，失败可重试，重启后重新打开向导继续。
 首次选择：1电脑本机，2独立容器，3退出。隔离环境默认内存上限1.5GiB，需要 rootless Podman、用户级 systemd 和内存控制器；缺少条件时会说明原因，不自动修改内核或重启。

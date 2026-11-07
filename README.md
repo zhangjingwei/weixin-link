@@ -2,7 +2,7 @@
 
 # Weixin Link
 
-**离开电脑，也能用微信让 Codex 继续干活。**
+**离开电脑，也能用微信让智能体继续干活。**
 
 发任务 · 补充要求 · 查看进度 · 接收文件
 
@@ -16,7 +16,7 @@
 
 </div>
 
-Weixin Link 把微信私聊接到你电脑或服务器上的 **Codex**。离开工位后，你仍能发起任务、继续补充要求，并在微信里收到回答和生成的文件。
+Weixin Link 把微信私聊接到你电脑或服务器上的**智能体底座**。目前支持 Codex（默认）和 Claude CLI；离开工位后，你仍能发起任务、补充要求，并在微信里收到回答和生成的文件。
 
 <p align="center">
   <img src="docs/images/weather-conversation.png" width="320" alt="微信对话：追问城市后查询天气">
@@ -27,23 +27,23 @@ Weixin Link 把微信私聊接到你电脑或服务器上的 **Codex**。离开�
 
 ## 快速开始
 
-**一行启动安装 → 微信扫码 → 发送「安装向导」。** 需要自己的微信和可用的 Codex 账号及模型权限；Node.js 24+ 由安装器按需准备。
+**运行安装命令 → 微信扫码 → 发送「安装向导」。** 需要自己的微信账号，以及所选智能体底座的模型访问权限；Node.js 24+ 由安装器按需准备。
 
 **Linux / macOS**：在电脑终端执行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
 ```
 
 **Windows x64**：在 PowerShell 执行：
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.ps1')))
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-用微信扫描安装器提供的二维码并确认，然后发送 **安装向导**，按提示完成 Codex 安装、登录和模型测试。完成后，直接发一句任务需求即可。
+用微信扫描安装器提供的二维码并确认，然后发送 **安装向导**。默认的 Codex 底座可按提示完成安装、登录和模型测试；Claude CLI 需先配置可执行文件与服务凭据。完成后，直接发一句任务需求即可。
 
-> 扫码成功表示微信通道已连接；向导中的模型测试通过后，才能确认 Codex 可以处理请求。安装遇到问题时，发送 **安装状态**。
+> 扫码成功只确认微信通道。Codex 向导的模型测试通过后，才能确认 Codex 可处理请求；Claude 的安装状态只检查 CLI 与凭据，实际模型请求需另行验收。安装遇到问题时，发送 **安装状态**。
 
 <details>
 <summary>平台支持与安装要求</summary>
@@ -73,7 +73,7 @@ Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验
 
 - **继续同一个任务**：保留会话与任务状态，支持多个对话之间切换。
 - **文字之外也能传材料**：接收图片、PDF、Office 文档等附件，交付文本、图片和生成的文件。
-- **执行过程可掌握**：Codex 的阶段进展形成完整语句时即发送到微信；也可查询状态、补充要求、停止任务或核对未确认的结果。最终回答仍在完成后发送。
+- **执行过程可掌握**：智能体的阶段进展形成完整语句时即发送到微信；也可查询状态、补充要求、停止任务或核对未确认的结果。最终回答仍在完成后发送。
 - **部署在自己的环境**：接入服务、会话和凭据由你管理；模型请求与微信通信仍经过相应外部服务。
 
 ## 常用命令
@@ -100,19 +100,7 @@ Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验
 
 ## 安装与升级
 
-**Linux / macOS**：安装和升级运行同一命令。
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh | sh
-```
-
-**Windows x64**：[首次安装](#快速开始)使用 PowerShell 安装命令；升级运行：
-
-```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/upgrade.ps1')))
-```
-
-升级适用于安装器管理的标准部署。自定义部署、扫码刷新和恢复步骤见 [配置与维护](CONFIGURATION.md#已有安装与升级)。
+升级时，重新执行[快速开始](#快速开始)中对应平台的安装命令。自动升级仅适用于安装器管理的标准部署；自定义部署、扫码刷新和恢复步骤见 [配置与维护](CONFIGURATION.md#已有安装与升级)。
 
 ## 重新获取登录二维码
 
@@ -126,7 +114,7 @@ Linux / macOS：
 
 ## 更多能力与文档
 
-当前默认智能体底座是 **Codex**；新增 **Claude** CLI 适配器，可在安装配置中显式选择。Claude 需官方 CLI 2.1.259+ 和服务侧 API 凭据；目前只覆盖本机文字与文件任务、会话续接和停止，模型目录、原生记忆、官方历史检索和永久删除尚未接入。详见 [Claude 接入说明](src/base/claude/README.md)。多微信账号、远程主机和 Linux 独立容器仍按各自已验证的 Codex 路径使用。
+目前支持 **Codex**（默认）和 **Claude CLI**（需显式配置）。两者共用微信收件、任务状态与投递；具体能力因底座而异。Claude 需 CLI 2.1.259+ 和服务侧 API 凭据，当前支持本机任务、会话续接和停止；模型目录、原生记忆、官方历史检索和永久删除尚未接入，详见 [Claude 接入说明](src/base/claude/README.md)。远程主机和 Linux 独立容器目前使用 Codex 路径。
 
 - [使用指南](USER-GUIDE.md)：会话、模型、记忆、附件与结果。
 - [配置与维护](CONFIGURATION.md)：安装、升级、备份和故障处理。
@@ -137,6 +125,6 @@ Linux / macOS：
 
 ## 安全与许可
 
-使用自己的微信扫码，不要分享登录二维码或设备验证码。Codex 登录在官方 OpenAI 授权页面完成；只授权智能体访问你允许的工作区和服务。安全问题请参阅 [安全政策](SECURITY.md)。
+使用自己的微信扫码，不要分享登录二维码或设备验证码。Codex 登录在官方 OpenAI 授权页面完成；Claude 的 API 凭据由服务环境提供，不要通过微信发送。只授权智能体访问你允许的工作区和服务。安全问题请参阅 [安全政策](SECURITY.md)。
 
 本项目采用 [MIT License](LICENSE)。第三方依赖与外部服务遵循各自条款，见 [第三方许可](THIRD_PARTY_NOTICES.md)。Weixin Link 是独立项目，不代表微信、OpenAI 或其他服务提供方的官方产品或背书。

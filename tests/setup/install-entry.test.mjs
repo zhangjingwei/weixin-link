@@ -8,13 +8,18 @@ import {promisify} from 'node:util'
 import {fileURLToPath} from 'node:url'
 
 const exec=promisify(execFile)
-const bootstrap=fileURLToPath(new URL('../../bootstrap.sh',import.meta.url))
+const bootstrap=fileURLToPath(new URL('../../install.sh',import.meta.url))
+test('Windows PowerShell entry installs and upgrades with one command',{skip:process.platform!=='win32'},async()=>{
+ const script=fileURLToPath(new URL('./install-windows.ps1',import.meta.url))
+ const result=await exec('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',script],{timeout:60000})
+ assert.match(result.stdout,/WINDOWS_INSTALL_FIXTURES_OK/)
+})
 async function fixture(t){
  const root=await mkdtemp(join(tmpdir(),'weixin-bootstrap-'))
  t.after(()=>rm(root,{recursive:true,force:true}))
  const bin=join(root,'bin'),source=join(root,'fixture'),dest=join(root,'source with spaces')
  await mkdir(bin);await mkdir(join(source,'src/setup'),{recursive:true})
- await writeFile(join(source,'install.sh'),'#!/bin/sh\nprintf installed > installed.txt\n')
+ await writeFile(join(source,'src/setup/unix-install.sh'),'#!/bin/sh\nprintf installed > installed.txt\n')
  await writeFile(join(source,'package.json'),'{"name":"weixin-link"}\n')
  await writeFile(join(source,'src/setup/upgrade.mjs'),'// fixture\n')
  const archive=join(root,'fixture.tar.gz')
