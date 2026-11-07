@@ -18,7 +18,7 @@ async function fixture(t,{welcomePending=false,commit=a}={}){
 test('fresh install sends one welcome immediately without waiting for inbound',async t=>{
  const f=await fixture(t,{welcomePending:true});await f.notice.start()
  assert.deepEqual(f.sent,[['owner',WELCOME_MESSAGE]])
- await f.notice.onInbound('owner');assert.equal(f.sent.length,1);assert.equal((await f.saved()).status,'accepted')
+ assert.equal(await f.notice.onInbound('owner'),null);assert.equal(f.sent.length,1);assert.equal((await f.saved()).status,'accepted')
 })
 test('upgrade sends one status message for a new commit and not a plain restart',async t=>{
  const f=await fixture(t);await f.notice.start()

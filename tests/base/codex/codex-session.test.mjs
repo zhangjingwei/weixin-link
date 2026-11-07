@@ -351,7 +351,7 @@ test('deltas are silent and authoritative final text is delivered once',async()=
  try{await manager.handle('owner','test',async t=>output.push(t),1);const session=manager.sessions.get('owner'),prefix='这是一段用于验证微信分段发送的文字。'.repeat(8);await manager.event(session,{method:'item/agentMessage/delta',params:{threadId:'thread',turnId:'turn',itemId:'answer',delta:prefix}});assert.equal(output.length,0);await manager.event(session,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'answer',type:'agentMessage',phase:'final_answer',text:prefix+'最后结果。'}}});await manager.event(session,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.equal(output.join(''),prefix+'最后结果。');assert.equal(manager.state.users.owner.lastReply,prefix+'最后结果。')}finally{manager.close();await rm(dir,{recursive:true,force:true})}
 })
 
-test('commentary sentences reach WeChat before item completion without duplicate text',async()=>{
+test('multi-sentence commentary is sent once when its item completes',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'wechat-stage-')),output=[]
  const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],remoteControl:async()=>({active:true}),rpcFactory:()=>({closed:false,request:async m=>m==='thread/start'?{thread:{id:'thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'}:m==='turn/start'?{turn:{id:'turn'}}:{},write(){},close(){this.closed=true}})}).init()
  try{
@@ -361,12 +361,12 @@ test('commentary sentences reach WeChat before item completion without duplicate
   await manager.event(session,{method:'item/agentMessage/delta',params:{...params,delta:'我正在核对当前任务的'}})
   assert.deepEqual(output,[])
   await manager.event(session,{method:'item/agentMessage/delta',params:{...params,delta:'状态和消息投递链路。后续还要检查测试'}})
-  assert.deepEqual(output,['我正在核对当前任务的状态和消息投递链路。'])
+  assert.deepEqual(output,[])
   await manager.event(session,{method:'item/completed',params:{...params,item:{id:'stage',type:'agentMessage',phase:'commentary',text:'我正在核对当前任务的状态和消息投递链路。后续还要检查测试。'}}})
-  assert.deepEqual(output,['我正在核对当前任务的状态和消息投递链路。','后续还要检查测试。'])
+  assert.deepEqual(output,['我正在核对当前任务的状态和消息投递链路。后续还要检查测试。'])
   await manager.event(session,{method:'item/completed',params:{...params,item:{id:'answer',type:'agentMessage',phase:'final_answer',text:'检查完成。'}}})
   await manager.event(session,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
-  assert.deepEqual(output,['我正在核对当前任务的状态和消息投递链路。','后续还要检查测试。','检查完成。'])
+  assert.deepEqual(output,['我正在核对当前任务的状态和消息投递链路。后续还要检查测试。','检查完成。'])
  }finally{manager.close();await rm(dir,{recursive:true,force:true})}
 })
 

@@ -22,7 +22,8 @@ return async function handleMessage(message) {
   const trace_id=randomUUID()
   log('message.received',{trace_id,userId:message.userId,messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text',chars:message.text?.length??0})
   if (!manager.owners.has(message.userId)) {log('message.rejected',{trace_id,reason:'unauthorized'});return}
-  try{await lifecycleNotice?.onInbound(conversations.recipient(message.userId))}catch(error){log('lifecycle_notice.failed',{trace_id,...errorFields(error)})}
+  let lifecycleDelivery
+  try{lifecycleDelivery=await lifecycleNotice?.onInbound(conversations.recipient(message.userId))}catch(error){log('lifecycle_notice.failed',{trace_id,...errorFields(error)})}
   const diagnosticAction=!hasMedia(message)&&diagnosticCommand(message.text)
   const agentAction=!hasMedia(message)&&agentSwitchCommand(message.text?.trim()??'')
   const upgradeAction=!hasMedia(message)&&chatUpgradeCommand(message.text)
@@ -54,8 +55,9 @@ return async function handleMessage(message) {
    await runtime.track('delivery',()=>outgoing.deliver(message.userId,'上次维护指令的结果待核对，未重复执行。可发“服务状态”查看当前服务。',{conversationControl:true}))
    jobs.acknowledge([message._ingressId].filter(Boolean));return
   }
+  let recoveryDelivery
   if(!initialControl&&!hasMedia(message)&&!message._recovered){
-   try{const status=await recoverFailedFinal(manager,message.userId,(key,value)=>outgoing.deliver(key,value,{conversationControl:true}));if(status)log('delivery.recovery_attempt',{trace_id,status})}
+   try{recoveryDelivery=await recoverFailedFinal(manager,message.userId,(key,value)=>outgoing.deliver(key,value,{conversationControl:true}));if(recoveryDelivery)log('delivery.recovery_attempt',{trace_id,status:recoveryDelivery})}
    catch(error){log('delivery.recovery_failed',{trace_id,...errorFields(error)})}
   }
   if(agentAction){
@@ -78,7 +80,8 @@ return async function handleMessage(message) {
   const notice=receiptPolicy({media,busy:manager.sessions.get(message.userId)?.busy,waiting:!!manager.state.users[message.userId]?.waitingAttachment})
   message._receiptDeferred=notice==='defer'
   if(!control&&notice!=='defer'&&jobs.claimReceipt(message._ingressId)&&notice==='send'){
-    try{void Promise.resolve(reply(media?'已收到附件，正在接收。':manager.sessions.get(message.userId)?.busy?'已收到，已排队。':'已收到，正在处理。')).catch(error=>log('receipt.delivery_unconfirmed',{trace_id,...errorFields(error)}))}catch(error){log('receipt.delivery_unconfirmed',{trace_id,...errorFields(error)})}
+    if(lifecycleDelivery==='accepted'||recoveryDelivery==='accepted')log('receipt.suppressed',{trace_id,reason:'other_notice_sent'})
+    else try{void Promise.resolve(reply(media?'已收到附件，正在接收。':manager.sessions.get(message.userId)?.busy?'已收到，已排队。':'已收到，正在处理。')).catch(error=>log('receipt.delivery_unconfirmed',{trace_id,...errorFields(error)}))}catch(error){log('receipt.delivery_unconfirmed',{trace_id,...errorFields(error)})}
   }
   if(!control&&media){await singleMedia(message,token,mediaDependencies);return}
   // Controls must not wait behind a slow turn/start or an earlier message send.

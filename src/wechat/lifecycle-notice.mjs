@@ -23,7 +23,7 @@ export class LifecycleNotice{
  async write(owner,value){const path=this.path(owner),temp=path+'.'+randomUUID()+'.tmp';try{await writeFile(temp,JSON.stringify(value)+'\n',{flag:'wx',mode:0o600});await rename(temp,path)}finally{await unlink(temp).catch(()=>{})}}
  serialize(owner,work){const next=(this.locks.get(owner)??Promise.resolve()).catch(()=>{}).then(work);this.locks.set(owner,next);return next.finally(()=>{if(this.locks.get(owner)===next)this.locks.delete(owner)})}
  async start(){this.commit=await this.release();this.started=true;await Promise.all(this.owners.map(owner=>this.attempt(owner,false).catch(error=>this.log('lifecycle_notice.failed',{userId:owner,code:/^LIFECYCLE_[A-Z_]+$/.test(error.message)?error.message:'LIFECYCLE_NOTICE_FAILED'}))))}
- async onInbound(owner){if(!this.owners.includes(owner))return;if(!this.started){this.commit=await this.release();this.started=true}await this.attempt(owner,true)}
+ async onInbound(owner){if(!this.owners.includes(owner))return;if(!this.started){this.commit=await this.release();this.started=true}return this.attempt(owner,true)}
  attempt(owner,inbound){return this.serialize(owner,async()=>{
   let value=await this.read(owner)
   if(!value||value.commit!==this.commit){
@@ -31,7 +31,7 @@ export class LifecycleNotice{
    value={version:1,kind:!value&&this.welcomePending&&!await this.legacyWelcomed(owner)?'welcome':'upgrade',commit:this.commit,status:'pending'}
    await this.write(owner,value)
   }
-  if(!['pending',...(inbound?['deferred']:[])].includes(value.status))return value.status
+  if(!['pending',...(inbound?['deferred']:[])].includes(value.status))return null
   await this.write(owner,{...value,status:'sending'})
   let status='unknown'
   try{const result=await this.send(owner,value.kind==='welcome'?WELCOME_MESSAGE:upgradeMessage(value.commit));status=result?.status==='accepted'?'accepted':'unknown'}

@@ -278,7 +278,7 @@ export class SessionManager {
       this.state.users[userId]=next;session.threadId=id
       try{await this.save()}catch(e){if(this.state.users[userId]===next){this.state.users[userId]=previous;session.threadId=oldId}throw e}
       this.lifecycle.cancel(userId)
-      this.clearQuestions(session);session.items.clear();session.progressChunks=new Map();session.finals=[];session.localTask=null;session.lastProgress=null;session.turnId=null;session.attachmentContinuation=null;session.model=result.model;session.modelProvider=result.modelProvider??selectedProvider.provider??session.modelProvider
+      this.clearQuestions(session);session.items.clear();session.finals=[];session.localTask=null;session.lastProgress=null;session.turnId=null;session.attachmentContinuation=null;session.model=result.model;session.modelProvider=result.modelProvider??selectedProvider.provider??session.modelProvider
       this.diagnostic(session,'session.selected',{previous_thread_id:oldId})
       await reply('已恢复对话 '+id+'，下一条消息将在该对话中继续。')
     }finally{session.selecting=false}
@@ -319,7 +319,6 @@ export class SessionManager {
     session.displayFinals=[]
     session.imageOutputIds=new Set()
     session.items.clear()
-    session.progressChunks=new Map()
     const traceId=session.traceId
     let result
     try {
@@ -445,28 +444,9 @@ export class SessionManager {
       if (!session.busy || !session.turnReady || (session.finalReceived&&p.item?.type!=='imageGeneration')) { this.diagnostic(session,'event.ignored',{reason:'inactive_or_final',method:message.method}); return }
       if (p.turnId && p.turnId !== session.turnId) { this.diagnostic(session,'event.ignored',{reason:'old_turn',method:message.method}); return }
     }
-    if(message.method==='item/agentMessage/delta'){
-      if(session.contextRejected)return
-      const item=session.items.get(p.itemId)
-      if(item?.type!=='agentMessage'||item.phase!=='commentary'||session.attachmentContinuation||typeof p.delta!=='string'||!p.delta)return
-      session.progressChunks??=new Map()
-      const chunk=session.progressChunks.get(p.itemId)??{raw:'',sent:0}
-      chunk.raw+=p.delta
-      session.progressChunks.set(p.itemId,chunk)
-      const pending=chunk.raw.slice(chunk.sent)
-      // Send complete thoughts as they arrive. Keep markup and short fragments until completion.
-      if(pending.includes('<'))return
-      const boundaries=[...pending.matchAll(/[。！？!?；;\n]/gu)]
-      const length=boundaries.length?boundaries.at(-1).index+boundaries.at(-1)[0].length:pending.length>=240?240:0
-      if(length<16)return
-      const stage=pending.slice(0,length).trim()
-      const turnId=session.turnId
-      if(stage&&await this.emit(session,stage,()=>(session.workToken?.current()??true)&&session.busy&&!session.finalReceived&&session.turnId===turnId)){
-        chunk.sent+=length
-        session.lastProgress={text:stage,at:Date.now(),turnId}
-      }
-      return
-    }
+    // A completed commentary item is one user-facing stage. Streaming deltas
+    // are intentionally silent so a multi-sentence update is sent once.
+    if(message.method==='item/agentMessage/delta')return
     if (message.method === 'item/started') {
       // Retain metadata for approval review, but do not invent generic progress messages.
       session.items.set(p.item.id, p.item)
@@ -487,9 +467,7 @@ export class SessionManager {
       if(p.item?.type&&p.item.type!=='agentMessage'&&p.item.type!=='webSearch')this.diagnostic(session,'tool.completed',{kind:p.item.type,status:p.item.status,exit_code:p.item.exitCode})
       if (p.item?.type === 'agentMessage' && p.item.text) {
         const flow=stripTaskFlow(publicMemoryText(p.item.text),session.traceId)
-        const chunk=session.progressChunks?.get(p.item.id)
-        session.progressChunks?.delete(p.item.id)
-        const rest=p.item.phase==='commentary'&&chunk?.sent&&p.item.text.startsWith(chunk.raw.slice(0,chunk.sent))?flow.text.slice(chunk.sent).trim():flow.text
+        const rest=flow.text
         if(p.item.phase==='final_answer'||!p.item.phase)session.waitingAttachment=flow.waiting
         if (p.item.phase === 'commentary') {
           const turnId = session.turnId

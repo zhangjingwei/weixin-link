@@ -79,6 +79,15 @@ test('inbound lifecycle notice precedes normal message processing',async()=>{
  await f.handle({userId:'owner',text:'你好，帮我整理文件',_ingressId:'request'})
  assert.deepEqual(events,['notice:owner','submit'])
 })
+test('an accepted lifecycle notice replaces the routine receipt',async()=>{
+ const f=fixture()
+ f.deps.lifecycleNotice={onInbound:async()=> 'accepted'}
+ f.deps.jobs.claimReceipt=()=>true
+ f.handle=createMessageProcessor(f.deps)
+ await f.handle({userId:'owner',text:'继续检查',_ingressId:'request'})
+ assert.deepEqual(f.sent,[])
+ assert.equal(f.submitted.length,1)
+})
 test('explicit setup commands continue without a duplicate welcome',async()=>{
  const f=fixture()
  f.deps.setupReceipts={capture:()=>({id:'receipt'}),claim:()=>true,finish:()=>{}}
