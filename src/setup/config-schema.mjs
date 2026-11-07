@@ -8,7 +8,7 @@ const object=(properties,required)=>({type:'object',properties,required,addition
 const host=object({platform:{enum:['posix','win32']},binary:{...text,format:'remote-path'},root:{...text,format:'remote-path'},transport:{enum:['daemon-proxy','ssh-websocket']},port:{type:'integer',minimum:1024,maximum:65535}},['platform','binary','root','transport'])
 export const CONFIG_SCHEMAS={
  installation:object({version:{const:1},workspace:absolute,codexBinary:absolute,agentBackend:{enum:['codex','claude']},claudeBinary:absolute,createdAt:{...text,format:'date-time'}},['version','workspace']),
- ...Object.fromEntries(integrations.map(item=>[item.manifest.configKind,item.schema])),
+ ...Object.fromEntries(integrations.filter(item=>item.schema).map(item=>[item.manifest.configKind,item.schema])),
  backup:object({version:{const:1},host:{...text,pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},remoteDirectory:{...text,format:'backup-directory'}},['version','host','remoteDirectory']),
  'remote-hosts':object({version:{const:1},hosts:{type:'object',propertyNames:{pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},additionalProperties:host}},['version','hosts']),
 }

@@ -26,7 +26,7 @@ export {controlCommand} from './control-command.mjs'
 export {codexProviderOptions} from './provider-options.mjs'
 
 export class SessionManager {
-  constructor({ stateDir, cwd, owners, backend = null, agentKind = 'codex', rpcFactory = options => new CodexRpc(options), remoteControl = remoteScope, completionMarkers = false, providerEnv = process.env, log = () => {} }) {
+  constructor({ stateDir, cwd, owners, backend = null, agentKind = 'codex', rpcFactory = options => new CodexRpc(options), remoteControl = remoteScope, completionMarkers = false, providerEnv = process.env, scheduleGuidance = '', log = () => {} }) {
     this.log = log
     this.agentKind=agentKind
     this.agentName=agentKind==='claude'?'Claude':'Codex'
@@ -42,6 +42,7 @@ export class SessionManager {
     this.owners = new Set(owners)
     this.rpcFactory = rpcFactory
     this.providerEnv = providerEnv
+    this.scheduleGuidance = scheduleGuidance
     this.state = { version: 1, users: {} }
     this.sessions = new Map()
     this.questions = new Map()
@@ -154,10 +155,10 @@ export class SessionManager {
   }
   async sessionInstructions() {
     // Local integrations execute in this account's host environment, not a remote/container backend.
-    const guidance=this.backend?'':await integrationGuidance({stateDir:this.stateDir})
+    const guidance=this.backend && this.backend.kind !== 'host' ? '' : await integrationGuidance({stateDir:this.stateDir})
     let workspaceRules=''
     if(this.agentKind==='claude')try{const content=await readFile(join(this.cwd,'AGENTS.md'),'utf8');if(Buffer.byteLength(content)>64*1024)throw Error('WORKSPACE_RULES_TOO_LARGE');workspaceRules='\n\n工作区规则（AGENTS.md）：\n'+content}catch(error){if(error.code!=='ENOENT')throw error}
-    return this.instructions+(guidance?'\n\n'+guidance:'')+workspaceRules
+    return this.instructions+(this.backend?.kind === 'host' && this.agentKind === 'codex' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules
   }
   async startProvider(session) {
     const provider='configured',attempt=this.attachRpc(session)

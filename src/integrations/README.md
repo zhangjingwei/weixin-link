@@ -1,6 +1,6 @@
 # 可选集成
 
-核心通过静态注册表提供发现、配置、启停、检查、调用和会话指引。第一批迁移 Home Assistant；备份仍沿用现有配置实现，新闻尚未迁入本注册表。
+核心通过静态注册表提供发现、配置、启停、检查、调用和会话指引。当前注册 Home Assistant、SSH 远程 Codex 任务和 RSSHub。备份仍沿用现有配置实现。
 
 ## 使用和迁移
 
@@ -18,14 +18,24 @@ JSON
 node src/integrations/cli.mjs disable home-assistant default
 ```
 
+RSSHub 使用源码外的 `~/.config/wechat-assistant/rsshub.json`，配置示例：
+
+```json
+{"version":1,"baseUrl":"http://rsshub.example.test:1200","feeds":{"tech":"/example/news"}}
+```
+
+`feeds` 中的名称由用户自定，值为该 RSSHub 实例上的路由；调用时只能选配置过的名称。通过 `config-set rsshub` 写入后，运行 `integration-enable rsshub [账号]`，再用 `integration-call rsshub [账号]` 传入 `{"operation":"latest","source":"tech","limit":10}`。插件请求 RSSHub 的 JSON Feed 输出，最多返回 30 条，限制响应大小和请求时间；不自动抓取链接正文。RSSHub 路由和 JSON Feed 格式参见[官方文档](https://docs.rsshub.app/guide/parameters)。
+
+SSH 插件 ID 为 `ssh-remote`，沿用现有 `remote-hosts` 配置和远程任务账本，不复制 SSH 凭据或 Codex 协议。先用既有 `config-set remote-hosts` 配置主机，再按账号执行 `integration-enable ssh-remote [账号]`。调用时必须有当前会话的 `CODEX_THREAD_ID`，例如 `{"action":"list","host":"example"}`；插件仅允许远程 Codex 任务操作，不提供任意 SSH shell。启用前会探测已配置的第一台主机。既有 `remote-cli.mjs` 是受信任宿主的兼容入口；新插件的账号开关只约束插件入口，不能当作同一 OS 用户的安全隔离。
+
 `list` / `status` 接受一个可选账号；`enable` / `disable` / `check` / `call` 接受集成 ID 和可选账号。未指定账号时取 `WECHAT_ACCOUNT`，再回退 `default`。安装入口同时支持 `integration-list/status/enable/disable/check/call`，参数与上述入口一致。
 
 - 保留 `config-schema/check/set/restore/status ha` 和 `~/.config/wechat-assistant/ha.json`，兼容不带 version 的旧配置；无须复制已有令牌。配置不会自动启用。
 - 每个账号私有状态目录中的 `integrations.json` 记录启用状态。缺失时全部禁用；损坏时拒绝调用并省略集成指引。启用前校验配置和连接，失败不会写入启用状态；禁用不要求连接正常。
-- 首版所有已授权账号使用同一份宿主 HA 配置。每个账号必须单独启用；尚不支持多个 HA 实例或账号专属凭据。
+- 首版所有已授权账号使用同一份宿主 HA、RSSHub 或 SSH 主机配置。每个账号必须单独启用；尚不支持各账号独立服务配置。
 - 旧 `node src/integrations/home-assistant/ha-read.mjs states ...` / `history ...` 入口保留，但现在也检查当前账号的启用状态。迁移部署后先显式启用，再使用旧入口。
 - 启用/禁用状态每次调用重读，禁用阻止后续调用；已经发出的请求可能完成。启用后的指引在下一次新建或重新连接会话时生效。已有会话可能保留旧指引，但调用仍会检查最新状态。
-- 指引按本地账号加载到会话，不向共享 `AGENTS.md` 写入 HA 说明或任何凭据；远程/容器底座暂不加载宿主集成。
+- 指引按本地账号加载到会话，不向共享 `AGENTS.md` 写入集成说明或任何凭据；远程/容器底座暂不加载宿主集成。
 - `status` 只检查本地配置，不探测网络；禁用的集成不读取凭据。`check` 主动检查连接。单个集成配置错误或连接失败不会阻止普通会话。
 
 迁移已有私人部署时，先备份账号状态和配置，显式启用需要的账号，并清理个人 `AGENTS.md` 中手写的旧 HA 路径和重复说明。程序仅维护其标记区块，不自动删除个人文字。验证完成后再切换服务源码路径；本次功能改动不执行生产部署。
@@ -37,7 +47,7 @@ node src/integrations/cli.mjs disable home-assistant default
 | 字段 | 作用 |
 | --- | --- |
 | manifest | 唯一 id、版本、名称、唯一 configKind、能力列表和只读声明 |
-| schema | 供现有配置验证器消费的配置 schema |
+| schema | 供现有配置验证器消费的配置 schema；复用核心配置类型时可省略 |
 | configPath(context) | 源码外的私有配置位置 |
 | health(config) | 有界连接检查，不返回凭据 |
 | invoke(config, request) | 校验操作及参数后调用服务 |
@@ -52,7 +62,7 @@ Home Assistant 仅公开 states/history；REST 使用固定 GET 路径，禁止�
 ## 验证
 
 ```sh
-node --test tests/integrations/home-assistant.test.mjs tests/setup/config-manager.test.mjs
+node --test tests/integrations/*.test.mjs tests/setup/config-manager.test.mjs tests/remote/*.test.mjs
 ```
 
-测试使用临时目录和模拟 HA 响应，不读取生产凭据、不发送微信消息、不操作设备。
+测试使用临时目录和模拟服务响应，不读取生产凭据、不发送微信消息、不操作设备或真实远程主机。

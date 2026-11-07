@@ -1,0 +1,27 @@
+import {join, dirname} from 'node:path'
+import manifest from './manifest.json' with {type: 'json'}
+
+const allowed = new Set(manifest.capabilities)
+export default {
+  manifest,
+  guidanceUrl: new URL('./guidance.md', import.meta.url),
+  async configPath({home, workspace, env = process.env}) {
+    const {installConfig} = await import('../../setup/install-config.mjs')
+    return env.WECHAT_REMOTE_HOSTS ?? join(workspace ?? env.WECHAT_REMOTE_WORKSPACE ?? installConfig(home).workspace, 'remote-hosts.json')
+  },
+  async health(config) {
+    const hosts = Object.keys(config.hosts)
+    if (!hosts.length) throw Error('REMOTE_HOSTS_REQUIRED')
+    const {RemoteRpc} = await import('../../core/remote-tasks/remote-task-client.mjs')
+    const host = hosts[0], rpc = new RemoteRpc(host, {hostConfig: config.hosts[host], retryDelays: []})
+    try { await rpc.connect(); await rpc.request('thread/list', {limit: 1}, 6000) } finally { rpc.close() }
+  },
+  async invoke(_config, request, {home, scope, workspace, env}) {
+    if (!request || typeof request !== 'object' || Array.isArray(request) || !allowed.has(request.action)) throw Error('INTEGRATION_OPERATION_NOT_ALLOWED')
+    if (typeof scope !== 'string' || !scope || scope.length > 200) throw Error('INTEGRATION_ARGUMENTS_INVALID')
+    const {RemoteController} = await import('../../core/remote-tasks/remote-controller.mjs')
+    const root = dirname(await this.configPath({home, workspace, env}))
+    // Use the same thread scope as the existing /stop cleanup and remote CLI.
+    return new RemoteController({root, scope}).run(request)
+  },
+}

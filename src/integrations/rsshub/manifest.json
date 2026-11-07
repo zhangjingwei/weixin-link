@@ -1,0 +1,8 @@
+{
+  "id": "rsshub",
+  "version": 1,
+  "name": "RSSHub",
+  "configKind": "rsshub",
+  "capabilities": ["latest"],
+  "readOnly": true
+}

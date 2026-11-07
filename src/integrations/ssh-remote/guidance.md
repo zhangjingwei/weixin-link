@@ -1,0 +1,1 @@
+SSH 插件通过现有远程 Codex 任务协调器运行，使用已配置的主机和项目根目录；它不提供任意 SSH 命令执行。仅在当前会话确有用户授权时调用 `node src/integrations/cli.mjs call ssh-remote`，请求 JSON 从标准输入提供，例如 `{"action":"list","host":"example"}`。调用进程必须设置当前会话的 `CODEX_THREAD_ID`；账号由 `WECHAT_ACCOUNT` 指定。任务停止、恢复和文件交付仍遵守远程任务归属约束。

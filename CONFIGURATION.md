@@ -8,7 +8,7 @@
 
 仓库已公开，Linux/macOS 使用 `bootstrap.sh`，Windows x64 使用 `bootstrap.ps1`。README 提供可匿名下载的一行安装命令；也可克隆 `main` 后运行 `./install.sh` 或 `.\install.ps1`。
 
-两个引导脚本默认下载 `main`，支持 `WEIXIN_LINK_DIR` 指定源码保存目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。目标目录已存在时先识别已有安装：未登录则刷新二维码，由引导脚本直接解析结果、显示中文提示并在本机桌面打开 PNG（兼容不支持 `--human` 的旧安装），已在线则提示已登录；不覆盖源码、不重装。无法识别的目录仍拒绝覆盖，不自动更新已有部署。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
+两个引导脚本默认下载 `main`，支持 `WEIXIN_LINK_DIR` 指定源码保存目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。Linux/macOS 目标目录已存在时会识别安装并执行标准升级；无法识别的目录仍拒绝覆盖。扫码刷新使用 `qr.sh`。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
 
 旧版 `ZERO_LINK_DIR`、`ZERO_LINK_REF` 仍兼容，新变量优先。改名不迁移现有工作区、账号数据或服务；旧源码目录若已存在，先核实原安装再更新。
 
@@ -126,14 +126,14 @@ SSH 私钥、HA 令牌、微信/Codex 凭据、聊天记录、附件、状态数
 提交前暂存拟发布内容，再运行 `npm run check:release`。它检查暂存区路径和常见密钥格式，不替代人工检查、依赖审查或 Git 历史审计。不要直接压缩整个运行目录；公开发布前独立审计历史，发现凭据泄露时先撤销或轮换。
 
 
-## 已有安装与独立升级
+## 已有安装与升级
 
-安装入口先检查当前用户的 systemd 服务、macOS LaunchAgent 或 Windows 计划任务。已有服务即使采用不同源码目录或自定义服务配置，也不会触发重复安装、覆盖服务或自动升级。服务运行状态不等于微信登录状态。未运行的标准 Linux 安装仍可通过 bootstrap 刷新扫码；其他已注册部署可使用原安装目录中的配对命令恢复登录。
+Linux/macOS 统一入口先核验选定的源码目录。目录不存在而已有后台服务时拒绝创建平行安装；可用 `WEIXIN_LINK_DIR` 指定原目录。自定义服务由升级器拒绝接管。服务运行状态不等于微信登录状态；恢复扫码使用 `qr.sh`。
 
-标准安装使用独立升级入口：
+Linux/macOS 首次安装和标准升级使用同一入口：
 
 ```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/upgrade.sh)"
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh | sh
 ```
 
 Windows PowerShell：

@@ -1,0 +1,8 @@
+{
+  "id": "ssh-remote",
+  "version": 1,
+  "name": "SSH Remote Codex",
+  "configKind": "remote-hosts",
+  "capabilities": ["inspect", "select", "list", "attach", "start", "status", "stop", "fetch", "reconcile"],
+  "readOnly": false
+}

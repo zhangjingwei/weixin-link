@@ -16,7 +16,7 @@ const currentHome=()=>process.env.HOME||homedir()
 export function configPath(kind,{home=currentHome(),workspace,env=process.env}={}){
  if(kind==='installation')return join(home,'.local/share/wechat-ping-bot/installation.json')
  const integration=integrationByConfig(kind)
- if(integration)return integration.configPath({home,workspace,env})
+ if(integration&&kind!=='remote-hosts')return integration.configPath({home,workspace,env})
  if(kind==='backup'){
   const path=join(home,'.config/wechat-assistant/backup.json')
   if(env.WECHAT_BACKUP_CONFIG&&env.WECHAT_BACKUP_CONFIG!==path)throw new ConfigError('CONFIG_CUSTOM_PATH_UNMANAGED')
@@ -31,7 +31,7 @@ export function configPath(kind,{home=currentHome(),workspace,env=process.env}={
 }
 export async function configStatus(options={}){
  const result={}
- for(const kind of ['installation','backup','remote-hosts',...integrations.map(item=>item.manifest.configKind)]){
+ for(const kind of [...new Set(['installation','backup','remote-hosts',...integrations.map(item=>item.manifest.configKind)])]){
   try{const text=await readPrivateFile(configPath(kind,options));if(text===null){result[kind]={configured:false};continue}const config=parseConfig(kind,text);result[kind]={configured:true,valid:true,version:config.version}}
   catch(error){result[kind]={configured:true,valid:false,error:error.code??'CONFIG_UNREADABLE'}}
  }
@@ -40,7 +40,7 @@ export async function configStatus(options={}){
 async function probeConfiguration(kind,config,{home=currentHome(),env=process.env,remoteTasks=[]}={}){
  try{
   const integration=integrationByConfig(kind)
-  if(integration){
+  if(integration&&kind!=='remote-hosts'){
    await integration.health(config)
   }else if(kind==='backup'){
    if(process.platform!=='linux')throw new ConfigError('CONFIG_PLATFORM_NOT_SUPPORTED','backup')

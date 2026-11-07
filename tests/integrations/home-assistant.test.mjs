@@ -141,6 +141,8 @@ test('configured enabled guidance is injected on connection, excluded for other 
   const stateDir = join(options.home, '.local/share/wechat-ping-bot')
   const manager = new SessionManager({stateDir, cwd: options.home, owners: []})
   assert.match(await manager.sessionInstructions(), /Home Assistant/)
+  const host = new SessionManager({stateDir, cwd: options.home, owners: [], backend: {kind: 'host'}})
+  assert.match(await host.sessionInstructions(), /Home Assistant/)
   const other = new SessionManager({stateDir: join(stateDir, 'accounts/bot2'), cwd: options.home, owners: []})
   assert.equal(await other.sessionInstructions(), other.instructions)
   const remote = new SessionManager({stateDir, cwd: options.home, owners: [], backend: {workspace: options.home}})

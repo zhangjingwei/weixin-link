@@ -23,6 +23,8 @@ import {DurableIntake} from '../core/durable-intake.mjs'
 import {OutputTransport} from '../media/outbound-media.mjs'
 import {composeMediaInput} from '../media/media-preprocess.mjs'
 import {RuntimeControl} from '../core/runtime/runtime-control.mjs'
+import {ScheduleService} from '../core/schedules/schedule-service.mjs'
+import {scheduleCommand} from '../core/schedules/schedule-commands.mjs'
 import {nonBlockingHandler} from './message-handler.mjs'
 import {MessageDispatch} from './message-dispatch.mjs'
 import {createDiagnosticLog,errorFields,createSdkLogger} from '../core/diagnostics/diagnostic-log.mjs'
@@ -50,7 +52,8 @@ if (testing && !/^[a-zA-Z0-9_-]+$/.test(testName)) throw new Error('Invalid test
 const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-logs':'logs')})
 const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:testing?'test':'live'})
-const manager = await new SessionManager({log, completionMarkers:true, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, agentKind:agent.kind, ...agent.sessionOptions, ...(backend.kind==='podman'?{rpcFactory:backend.rpcFactory,remoteControl:backend.remoteControl,providerEnv:{}}:{}) }).init()
+const scheduleGuidance=`定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../core/schedules/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2026-11-07T09:00:00+08:00","text":"开会"}。定时运行 Codex：{"action":"create","kind":"task","at":"2026-11-07T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":"Asia/Shanghai"} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向本会话的 Codex 任务队列提交原样文字，不预先声称任务完成。必须使用本会话的 CODEX_THREAD_ID，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
+const manager = await new SessionManager({log, completionMarkers:true, scheduleGuidance, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, agentKind:agent.kind, ...agent.sessionOptions, ...(backend.kind==='podman'?{rpcFactory:backend.rpcFactory,remoteControl:backend.remoteControl,providerEnv:{}}:{}) }).init()
 const agentSwitcher=new AgentSwitcher({account,installation,agentKind:agent.kind,backendReady:codexAvailability})
 
 if (testing) {
@@ -95,6 +98,7 @@ const runtime=new RuntimeControl({
   const sent=await manager.emit(session,text,()=>session.busy&&(session.workToken?.current()??false));if(!sent)throw Error('Delivery not confirmed')
   return {accepted:true}
  },
+ onSchedule:request=>scheduleCommand(request,{manager,conversations,service:schedules}),
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
  snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+durable.users.size,saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
  onSeal:()=>bot.stop(),onResume:()=>{void (async()=>{if(bot.runPromise)await bot.runPromise.catch(()=>{});if(!stopping)await bot.start()})().catch(e=>log('service.resume_failed',errorFields(e)))}
@@ -108,6 +112,14 @@ const mediaDependencies={
 const outgoing=new OutputTransport({store:manager.outputStore,log,send:async(userId,content)=>runtime.track('delivery',()=>content?.voice?bot.sendVoice(conversations.recipient(userId),content.voice):bot.send(conversations.recipient(userId),content))})
 const deliverOriginal=outgoing.deliver.bind(outgoing);conversations.sendOutput=deliverOriginal
 outgoing.deliver=(key,value,options)=>conversations.deliver(key,value,options,deliverOriginal)
+let schedules
+try {schedules=await new ScheduleService({stateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,track:work=>runtime.track('schedule',work),send:(owner,text)=>outgoing.deliver(owner,text,{conversationControl:true}),submitTask:(owner,key,text,id,at)=>{
+ const entry=conversations.entry(key)
+ if(agent.kind!=='codex'||backend.kind!=='host'||!entry||entry.owner!==owner||entry.deleted||entry.archived)throw Object.assign(Error('SCHEDULE_TASK_UNAVAILABLE'),{deliveryState:'failed'})
+ const submissionId=durable.submit(key,{text},'schedule:'+id+':'+at)
+ return {status:'accepted',submissionId}
+},log}).init()}
+catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 await runtime.listen(account.socket)
 const jobs=new DurableJobs(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs
 let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(stateDir,'welcome-pending.json'),'utf8')).pending===true}catch{}
@@ -159,7 +171,7 @@ bot.onMessage(message=>{
  void (async()=>{try{await manager.save();if(!token.current())return;const id=jobs.capture(message);if(id){log('ingress.persisted',{messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text'});intakeHandler({...message,_ingressId:id,_intakeToken:token})}}catch(error){log('ingress.persist_failed',errorFields(error));void bot.reply({...message,userId:conversations.recipient(message.userId)},'消息未能持久保存，请稍后重试。').catch(()=>{})}})()
 })
 
-async function shutdown(signal){if(stopping)return;stopping=true;clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
+async function shutdown(signal){if(stopping)return;stopping=true;schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})
 
 await bot.login({ callbacks: {
@@ -167,5 +179,5 @@ await bot.login({ callbacks: {
   onScanned: () => log('wechat.qr_scanned'),
 } })
 const loginCheck=await assertUniqueLogin(account.id,bot.getCredentials());for(const issue of loginCheck.issues)log('account.other_profile_unreadable',{code:issue.code});await rememberIdentity(account,bot.getCredentials())
-loggedIn=true;for(const message of jobs.rawPending())intakeHandler(message);durable.resume();log('wechat.login_completed');console.log('LOGIN_OK CODEX_DEFAULT')
+loggedIn=true;schedules?.start();for(const message of jobs.rawPending())intakeHandler(message);durable.resume();log('wechat.login_completed');console.log('LOGIN_OK CODEX_DEFAULT')
 await bot.start()

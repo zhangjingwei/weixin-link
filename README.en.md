@@ -34,7 +34,7 @@ flowchart LR
 **Linux / macOS** — run in a terminal:
 
 ```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh)"
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh | sh
 ```
 
 **Windows x64** — run in PowerShell:
@@ -101,13 +101,13 @@ Each message is processed independently. Text and attachments in the same messag
 
 ## Installation and upgrades
 
-**Rerunning installation does not upgrade your deployment.** The installer checks registered services first, avoiding duplicate installation or replacement of existing service settings. Source code defaults to `~/.local/share/weixin-link/source`; workspace and account data are stored separately.
+**Run the same command to install or upgrade a standard deployment.** The entry checks the selected source and registered services before changing an existing installation. Source code defaults to `~/.local/share/weixin-link/source`; workspace and account data are stored separately.
 
-Standard installations use the separate `upgrade.sh` / `upgrade.ps1` entry points: prepare the new source and dependencies, back up source and runtime data, switch versions and check service health. Failed checks trigger an automatic rollback attempt. **Custom services, separate release directories and local modifications require their existing deployment procedure; the upgrader does not take them over.**
+On Linux/macOS, rerun the command above; Windows still uses `upgrade.ps1`. The upgrade prepares the new source and dependencies, backs up source and runtime data, switches versions and checks service health. Failed checks trigger an automatic rollback attempt. **Custom services, separate release directories and local modifications require their existing deployment procedure; the upgrader does not take them over.**
 
 A successful upgrade explicitly prints a completion message and the backup location. Repeating the same version reports that the source is already current, without another backup or service restart. Seeing only the download message does not confirm an upgrade; check the result message and service status.
 
-See [existing installations and explicit upgrades](CONFIGURATION.md#已有安装与独立升级) for commands, custom paths, QR refresh and recovery steps.
+See [existing installations and upgrades](CONFIGURATION.md#已有安装与升级) for commands, custom paths, QR refresh and recovery steps.
 
 <details>
 <summary>Install from a source checkout</summary>
@@ -141,7 +141,7 @@ Prefix the command with `WEIXIN_LINK_QR_STYLE=full` for solid cells, or `WEIXIN_
 - [Configuration examples](config-templates/): deployment references.
 - [Contributing](CONTRIBUTING.md): report issues and contribute changes.
 
-Optional integrations: [Home Assistant read-only queries](src/integrations/README.md) require explicit per-account enablement. News and backup migration to this interface remains pending.
+Optional integrations: [Home Assistant read-only queries, SSH remote Codex tasks, and RSSHub feeds](src/integrations/README.md) require explicit per-account enablement. Backup migration to this interface remains pending.
 
 ## Security and license
 

@@ -34,7 +34,7 @@ flowchart LR
 **Linux / macOS**：在电脑终端执行：
 
 ```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh)"
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh | sh
 ```
 
 **Windows x64**：在 PowerShell 执行：
@@ -102,13 +102,13 @@ Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验
 
 ## 安装与升级
 
-**重复安装不会自动升级。** 安装入口会优先识别已注册服务，避免重复安装或覆盖已有配置。源码默认位于 `~/.local/share/weixin-link/source`；工作区和账号数据独立保存。
+**首次执行安装，再次执行升级标准安装。** 已有安装会核验源码和服务，避免覆盖自定义部署。源码默认位于 `~/.local/share/weixin-link/source`；工作区和账号数据独立保存。
 
-标准安装通过独立的 `upgrade.sh` / `upgrade.ps1` 升级：准备新版与依赖、备份旧源码和运行数据、切换后检查服务；检查失败则尝试自动回滚。**自定义服务、独立发布目录和本地修改需要使用原部署流程，升级器不会自动接管。**
+Linux/macOS 重复执行上方命令即可升级；Windows 仍使用 `upgrade.ps1`。升级会准备新版与依赖、备份旧源码和运行数据、切换后检查服务；检查失败则尝试自动回滚。**自定义服务、独立发布目录和本地修改需要使用原部署流程，升级器不会自动接管。**
 
 升级成功会明确输出“升级完成”及备份位置。再次运行同一版本时会输出“源码已是目标版本”，不再备份或重启服务。仅看到“下载升级版本”不代表已完成；应核对结果提示和服务状态。
 
-升级命令、自定义安装路径、二维码刷新与恢复步骤见 [已有安装与独立升级](CONFIGURATION.md#已有安装与独立升级)。
+自定义安装路径、二维码刷新与恢复步骤见 [已有安装与升级](CONFIGURATION.md#已有安装与升级)。
 
 <details>
 <summary>从源码手动安装</summary>
@@ -139,7 +139,7 @@ Linux / macOS：
 - [使用指南](USER-GUIDE.md)：会话、模型、记忆、附件与结果。
 - [配置与维护](CONFIGURATION.md)：安装、升级、备份和故障处理。
 - [远程连接](src/remote/README.md)：连接已授权的远程工作区。
-- [可选集成](src/integrations/README.md)：HA 只读查询，按账号显式启用；新闻与备份统一接入仍待迁移。
+- [可选集成](src/integrations/README.md)：HA 只读查询、SSH 远程 Codex 任务和 RSSHub 新闻源，按账号显式启用；备份统一接入仍待迁移。
 - [配置示例](config-templates/)：部署配置参考。
 - [参与贡献](CONTRIBUTING.md)：问题反馈与代码贡献。
 

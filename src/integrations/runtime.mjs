@@ -10,7 +10,7 @@ import {integrations, integrationById} from './registry.mjs'
 function context(options = {}) {
   const home = options.home ?? (process.env.HOME || homedir())
   const account = options.account ?? process.env.WECHAT_ACCOUNT ?? 'default'
-  return {home, stateDir: options.stateDir ?? accountPaths(account, home).stateDir}
+  return {home, account, workspace: options.workspace, env: options.env ?? process.env, stateDir: options.stateDir ?? accountPaths(account, home).stateDir}
 }
 function definition(id) {
   const item = integrationById(id)
@@ -32,7 +32,7 @@ async function policy(options) {
   return {path, text, value}
 }
 async function configuration(item, options) {
-  const text = await readPrivateFile(item.configPath(context(options)))
+  const text = await readPrivateFile(await item.configPath(context(options)))
   if (text === null) throw new ConfigError('INTEGRATION_CONFIG_REQUIRED')
   return parseConfig(item.manifest.configKind, text)
 }
@@ -47,7 +47,7 @@ export async function setIntegrationEnabled(id, enabled, options = {}) {
   const {path, text, value} = await policy(options)
   if (enabled) {
     const config = await configuration(item, options)
-    try { await item.health(config) } catch { throw new ConfigError('INTEGRATION_HEALTH_FAILED') }
+    try { await item.health(config, context(options)) } catch { throw new ConfigError('INTEGRATION_HEALTH_FAILED') }
   }
   value.enabled[id] = enabled
   const result = await atomicConfigWrite(path, JSON.stringify(value, null, 2) + '\n', {expected: digest(text)})
@@ -56,13 +56,13 @@ export async function setIntegrationEnabled(id, enabled, options = {}) {
 export async function checkIntegration(id, options = {}) {
   const item = await enabledDefinition(id, options)
   const config = await configuration(item, options)
-  try { await item.health(config); return {id, ok: true} } catch { throw new ConfigError('INTEGRATION_HEALTH_FAILED') }
+  try { await item.health(config, context(options)); return {id, ok: true} } catch { throw new ConfigError('INTEGRATION_HEALTH_FAILED') }
 }
 export async function invokeIntegration(id, request, options = {}) {
   const item = await enabledDefinition(id, options)
   // Re-read both policy and credentials on every call; disabling does not require restarting the bot.
   const config = await configuration(item, options)
-  try { return await item.invoke(config, request) } catch (error) {
+  try { return await item.invoke(config, request, {...context(options), scope: options.scope ?? process.env.CODEX_THREAD_ID}) } catch (error) {
     const safe = ['INTEGRATION_OPERATION_NOT_ALLOWED', 'INTEGRATION_ARGUMENTS_INVALID']
     throw new ConfigError(safe.includes(error.message) ? error.message : 'INTEGRATION_CALL_FAILED')
   }

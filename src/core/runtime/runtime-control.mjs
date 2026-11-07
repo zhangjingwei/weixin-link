@@ -7,8 +7,8 @@ import {chmod,unlink} from 'node:fs/promises'
 
 /** Private, live control plane. Logs never participate in restart decisions. */
 export class RuntimeControl {
- constructor({snapshot=()=>({}),ready=()=>false,onSeal=()=>{},onResume=()=>{},onRemoteText=async()=>{throw Error("Unavailable")},features={},backend=null,now=Date.now}={}){
-  Object.assign(this,{snapshot,ready,onSeal,onResume,onRemoteText,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
+ constructor({snapshot=()=>({}),ready=()=>false,onSeal=()=>{},onResume=()=>{},onRemoteText=async()=>{throw Error("Unavailable")},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
+  Object.assign(this,{snapshot,ready,onSeal,onResume,onRemoteText,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
  }
  get draining(){
   if(this.lease&&!this.sealed&&this.lease.expires<=this.now())this.lease=null
@@ -42,12 +42,17 @@ export class RuntimeControl {
     let result
     if(req.method==='GET'&&req.url==='/status')result=this.status()
     else if(req.method==='POST'&&req.url==='/remote-text'){let body='';for await(const chunk of req){body+=chunk;if(body.length>16384)throw Object.assign(Error('Too large'),{statusCode:413})}result=await this.onRemoteText(JSON.parse(body))}
+    else if(req.method==='POST'&&req.url==='/schedules'){
+     if(this.sealed||this.draining)throw Object.assign(Error('Unavailable'),{statusCode:409})
+     let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>4096)throw Object.assign(Error('Too large'),{statusCode:413})}
+     result=await this.track('schedule',()=>this.onSchedule(JSON.parse(body)))
+    }
     else if(req.method==='POST'&&['/drain','/seal','/resume'].includes(req.url)){
      let body='';for await(const chunk of req){body+=chunk;if(body.length>512)throw Object.assign(Error('Too large'),{statusCode:413})}
      result=this.command(req.url.slice(1),JSON.parse(body).lease)
     }else throw Object.assign(Error('Not found'),{statusCode:404})
     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(result))
-   }catch(error){res.writeHead(error.statusCode??400,{'content-type':'application/json'});res.end(JSON.stringify({error:'CONTROL_REQUEST_REJECTED'}))}
+   }catch(error){res.writeHead(error.statusCode??400,{'content-type':'application/json'});res.end(JSON.stringify({error:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'CONTROL_REQUEST_REJECTED'}))}
   })
   this.server.requestTimeout=3000;this.server.headersTimeout=3000
   await new Promise((resolve,reject)=>{this.server.once('error',reject);this.server.listen(path,resolve)})
@@ -60,8 +65,8 @@ export async function controlRequest(socketPath,method,path,body,timeoutMs=2500)
  const headers=isPipe(socketPath)?{'x-control-token':await readFile(await tokenFile(socketPath),'utf8')}:{}
  return new Promise((resolve,reject)=>{
   const req=http.request({socketPath,method,path,headers,timeout:timeoutMs},res=>{
-   let text='';res.on('data',chunk=>{text+=chunk;if(text.length>16384)res.destroy(Error('Oversized control response'))});res.on('error',reject)
-   res.on('end',()=>{if(res.statusCode!==200){reject(Object.assign(Error('Control request rejected'),{code:'CONTROL_REJECTED',statusCode:res.statusCode}));return}try{resolve(JSON.parse(text))}catch(error){reject(error)}})
+   let text='';res.on('data',chunk=>{text+=chunk;if(Buffer.byteLength(text)>65536)res.destroy(Error('Oversized control response'))});res.on('error',reject)
+   res.on('end',()=>{if(res.statusCode!==200){let safe='CONTROL_REJECTED';try{const parsed=JSON.parse(text);if(/^SCHEDULE_[A-Z_]+$/.test(parsed.error))safe=parsed.error}catch{}reject(Object.assign(Error(safe),{code:safe,statusCode:res.statusCode}));return}try{resolve(JSON.parse(text))}catch(error){reject(error)}})
   });req.on('error',reject);req.on('timeout',()=>req.destroy(Object.assign(Error('Control timeout'),{code:'ETIMEDOUT'})));req.end(body?JSON.stringify(body):undefined)
  })
 }
