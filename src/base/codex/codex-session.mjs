@@ -113,6 +113,8 @@ export class SessionManager {
       this.questions.delete(code)
     }
   }
+  workspaceFor(userId){return this.state.users[userId]?.workspace??this.cwd}
+  outputStoreFor(userId){return this.state.users[userId]?.workspace?new OutputStore({stateDir:this.stateDir,cwd:this.workspaceFor(userId),voiceMode:this.outputStore.voiceMode}):this.outputStore}
   createCatalogRpc(){return this.rpcFactory({cwd:this.cwd,provider:'configured',providerOptions:this.providerOptions(),onEvent:()=>{},onClose:()=>{},log:this.log})}
   providerOptions() {
     return codexProviderOptions(this.providerEnv)
@@ -122,7 +124,7 @@ export class SessionManager {
     const attempt={provider,current:true,closing:false,rpc:null,providerOptions}
     session.rpcAttempt=attempt
     const rpc=this.rpcFactory({
-      cwd:this.cwd,provider,providerOptions,
+      cwd:this.workspaceFor(session.userId),provider,providerOptions,
       log:(event,fields)=>this.diagnostic(session,event,{provider,...fields}),
       onEvent:message=>{
         if(!attempt.current||attempt.closing||session.rpcAttempt!==attempt)return
@@ -173,11 +175,11 @@ export class SessionManager {
     if(session.rpcAttempt===attempt)session.rpcAttempt=null
     try{attempt.rpc?.close()}catch{}
   }
-  async sessionInstructions() {
+  async sessionInstructions(userId) {
     // Local integrations execute in this account's host environment, not a remote/container backend.
     const guidance=this.backend && this.backend.kind !== 'host' ? '' : await integrationGuidance({stateDir:this.stateDir})
     let workspaceRules=''
-    if(this.agentKind==='claude')try{const content=await readFile(join(this.cwd,'AGENTS.md'),'utf8');if(Buffer.byteLength(content)>64*1024)throw Error('WORKSPACE_RULES_TOO_LARGE');workspaceRules='\n\n工作区规则（AGENTS.md）：\n'+content}catch(error){if(error.code!=='ENOENT')throw error}
+    if(this.agentKind==='claude')try{const content=await readFile(join(this.workspaceFor(userId),'AGENTS.md'),'utf8');if(Buffer.byteLength(content)>64*1024)throw Error('WORKSPACE_RULES_TOO_LARGE');workspaceRules='\n\n工作区规则（AGENTS.md）：\n'+content}catch(error){if(error.code!=='ENOENT')throw error}
     return this.instructions+(this.backend?.kind === 'host' && this.agentKind === 'codex' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules
   }
   async startProvider(session) {
@@ -186,7 +188,7 @@ export class SessionManager {
     try {
       await initializeCodex(attempt.rpc,{name:'wechat_codex',title:'WeChat',version:'3.0.0'})
       if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
-      const params={config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:await this.sessionInstructions(),...attempt.providerOptions.thread}
+      const params={config:nativeMemoryConfig,cwd:this.workspaceFor(session.userId),sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:await this.sessionInstructions(session.userId),...attempt.providerOptions.thread}
       let result
       if(saved.threadId){
         try{result=await attempt.rpc.request('thread/resume',{...params,threadId:saved.threadId,excludeTurns:true})}
@@ -268,15 +270,15 @@ export class SessionManager {
       let remote={};try{remote=JSON.parse(await readFile(join(this.cwd,'remote-sessions.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}
       if(Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed))throw Error('当前对话仍有未确认停止的远程任务，请先用 “停止” 核实，再切换。')
       const meta=(await session.rpc.request('thread/read',{threadId:id,includeTurns:false})).thread
-      if(meta?.id!==id||meta.cwd&&meta.cwd!==this.cwd)throw Error('历史对话目录不匹配，未切换。')
+      if(meta?.id!==id||meta.cwd&&meta.cwd!==this.workspaceFor(userId))throw Error('历史对话目录不匹配，未切换。')
       if(meta.status?.type==='active')throw Error('目标对话正在执行任务，未切换。')
       const selectedProvider=this.providerOptions()
-      const result=await session.rpc.request('thread/resume',{config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:await this.sessionInstructions(),threadId:id,excludeTurns:true,...selectedProvider.thread})
+      const result=await session.rpc.request('thread/resume',{config:nativeMemoryConfig,cwd:this.workspaceFor(session.userId),sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:await this.sessionInstructions(session.userId),threadId:id,excludeTurns:true,...selectedProvider.thread})
       if(result.thread?.id!==id||this.agentKind==='codex'&&(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never'))throw Error(`${this.agentName} 未确认目标对话，未切换。`)
       await enableThreadMemory(session.rpc,id)
       if(!token.current())return
       const previous=this.state.users[userId],oldId=session.threadId
-      const next={seen:previous.seen,previous:ids.filter(v=>v!==id).reverse().slice(-20),threadId:id,hasMessages:true,conversationChoices:previous.conversationChoices}
+      const next={seen:previous.seen,workspace:previous.workspace,previous:ids.filter(v=>v!==id).reverse().slice(-20),threadId:id,hasMessages:true,conversationChoices:previous.conversationChoices}
       this.state.users[userId]=next;session.threadId=id
       try{await this.save()}catch(e){if(this.state.users[userId]===next){this.state.users[userId]=previous;session.threadId=oldId}throw e}
       this.lifecycle.cancel(userId)
@@ -504,7 +506,7 @@ export class SessionManager {
       }
       let output=reply
       if((session.workToken?.current()??true)&&(session.generatedOutputs?.length||outputLinks(reply).length)){
-        try{output=await this.outputStore.package(session.userId,reply,session.generatedOutputs??[],session.workToken?.signal)}catch(error){
+        try{output=await this.outputStoreFor(session.userId).package(session.userId,reply,session.generatedOutputs??[],session.workToken?.signal)}catch(error){
           if(session.workToken&&!session.workToken.current())reply+='\n附件发送已取消。'
           else{this.diagnostic(session,'outbound.prepare_failed',errorFields(error));reply+='\n附件准备失败，可稍后重试。'}
           output=reply
@@ -522,7 +524,7 @@ export class SessionManager {
       if (session.exiting) { await this.finishExit(session, p.turn.status === 'interrupted' ? '当前任务已停止。' : '本轮任务已结束。'); return }
       const display=receivedWhileWaiting?reply:(session.displayFinals??session.finals).join('\n\n')+reply.slice(session.finals.join('\n\n').length)
       if(receivedWhileWaiting){this.diagnostic(session,'notification.suppressed',{reason:'attachment_already_pending'})}
-      else if(typeof output==='string'){if(display)await this.emit(session,display)}else await this.emit(session,{...output,text:display})
+      else if(typeof output==='string'){if(display)await this.emit(session,display)}else await this.emit(session,{...output,text:display+output.text.slice(reply.length)})
       const recovery=this.state.users[session.userId].recovery
       if(receivedWhileWaiting){session.lastDelivery={status:'not_required',updated:new Date().toISOString()}}
       const currentRecovery=this.sessions.get(session.userId)===session||!this.sessions.has(session.userId)
@@ -645,7 +647,7 @@ export class SessionManager {
         await reply(`${label}${queued?`；排队 ${queued} 条`:''}。${latest||(['running','connecting'].includes(state)?'\n尚无新的阶段信息。':'')}`)
         return
       }
-      if (command?.action === 'status') { try{const root=join((process.env.HOME||platformHome()),'.local/share/wechat-assistant-backups');let b;try{b=JSON.parse(await readFile(join(root,'last-failure.json'),'utf8'));await reply('备份：最近一次失败或因忙碌延后，请检查备份服务。')}catch{b=JSON.parse(await readFile(join(root,'latest.json'),'utf8'));await reply(b.status==='verified'?'备份：'+b.generation+'，NAS校验及隔离恢复通过。':'备份：最近一次未验证成功。')}}catch{} const recovery=recoveryText(this.state.users[userId]?.recovery);if(recovery)await reply(recovery);await reply(`会话：${this.state.users[userId]?.threadId ?? '尚未创建'}\n状态：${({connecting:'正在连接',idle:'空闲',running:'处理中',stopping:'正在停止',delivering:'正在发送最终回复',closed:'已断开'})[runtime?.state] ?? (runtime?.connecting?'正在连接':runtime?.busy?'处理中':runtime?.finishing?'正在发送最终回复':'空闲')}，排队 ${(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)} 条，待答复 ${[...this.questions.values()].filter(q => q.session.userId === userId).length} 条。\n未确认任务：${this.submissions?.uncertainCount?.(userId)??0} 条，需核对后再决定是否重试。\n运行环境：${this.backend?.kind==='podman'?'独立容器 '+this.backend.id:'宿主机'}。`); return }
+      if (command?.action === 'status') { try{const root=join((process.env.HOME||platformHome()),'.local/share/wechat-assistant-backups');let b;try{b=JSON.parse(await readFile(join(root,'last-failure.json'),'utf8'));await reply('备份：最近一次失败或因忙碌延后，请检查备份服务。')}catch{b=JSON.parse(await readFile(join(root,'latest.json'),'utf8'));await reply(b.status==='verified'?'备份：'+b.generation+'，NAS校验及隔离恢复通过。':'备份：最近一次未验证成功。')}}catch{} const recovery=recoveryText(this.state.users[userId]?.recovery);if(recovery)await reply(recovery);await reply(`会话：${this.state.users[userId]?.threadId ?? '尚未创建'}\n状态：${({connecting:'正在连接',idle:'空闲',running:'处理中',stopping:'正在停止',delivering:'正在发送最终回复',closed:'已断开'})[runtime?.state] ?? (runtime?.connecting?'正在连接':runtime?.busy?'处理中':runtime?.finishing?'正在发送最终回复':'空闲')}，排队 ${(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)} 条，待答复 ${[...this.questions.values()].filter(q => q.session.userId === userId).length} 条。\n未确认任务：${this.submissions?.uncertainCount?.(userId)??0} 条，需核对后再决定是否重试。\n目录：${this.workspaceFor(userId)}\n底座：${this.agentName}\n运行环境：${this.backend?.kind==='podman'?'独立容器 '+this.backend.id:'宿主机'}。`); return }
       if(command?.action==='recover'){
         const n=this.submissions?.recheck?.(userId)??0
         if(n)this.wakeRecovery?.(userId)

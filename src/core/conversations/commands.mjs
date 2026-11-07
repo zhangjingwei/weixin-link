@@ -1,5 +1,7 @@
 export function conversationCommand(text=''){
  const s=text.trim();let m;
+ if((m=s.match(/^新建项目\s+([^|\r\n]{1,40})\s*\|\s*(.+)$/)))return {action:'new',name:m[1].trim(),workspace:m[2].trim()};
+ if(/^(当前项目|当前目录)$/.test(s))return {action:'workspace'};
  if(/^(日常|日常助手|返回日常助手)$/.test(s))return {action:'daily'};
  if(/^(列表|项目列表|会话列表|查看会话|\/sessions)$/i.test(s))return {action:'list'};
  if((m=s.match(/^(?:新建(?:会话)?|\/new|\/reset)(?:\s+(.{1,40}))?$/i)))return {action:'new',name:m[1]};

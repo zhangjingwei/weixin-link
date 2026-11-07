@@ -134,7 +134,7 @@ export class OutputTransport {
    await checkpoint()
   }
   const textFailed=value.textParts.some(s=>s!=='accepted');
-  const failed=value.attachments.filter(a=>['unknown','failed'].includes(a.status)).length
+  const failed=value.attachments.filter(a=>['unknown','failed'].includes(a.status)).length+(value.errors?.length??0)
   if(failed&&current()&&!value.failureNotice){
    value.failureNotice='sending';await checkpoint()
    try{await this.sendWithRetry(userId,`有 ${failed} 个附件未能确认送达。可发“结果”主动重发整组结果（含已发送附件）。`,{event:'outbound.failure_notice_failed',kind:'failure_notice',parts:1,current,traceId});value.failureNotice='accepted'}catch(error){value.failureNotice=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);value.failureNoticeError=deliveryError(error)}

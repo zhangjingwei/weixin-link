@@ -1,3 +1,4 @@
+import {bindNewWorkspace,workspaceText} from './workspace.mjs'
 
 export async function rename(context,entry,name,reply){
  const session=await context.manager.connect(entry.key,context.manager.sessions.get(entry.key)?.reply??reply),threadId=context.manager.state.users[entry.key]?.threadId??session.threadId;
@@ -15,6 +16,7 @@ export async function selectOfficial(context,message,reply){
   try{
    await context.refreshTitles(owner);
    if(!current||current.deleted||current.deleteIntent||current.archived||current.archiveSync==='missing')throw Error('目标会话已归档或Codex记录缺失，未连接；请先查看列表或还原。');
+   await bindNewWorkspace(context,current.key,cmd.workspace);
    const session=await context.manager.connect(current.key,context.manager.sessions.get(current.key)?.reply??reply);
    const tid=context.manager.state.users[current.key]?.threadId??session.threadId;
    if(!tid)throw Error('Codex尚未确认会话，未报告新建或切换成功。');
@@ -24,7 +26,7 @@ export async function selectOfficial(context,message,reply){
    await context.manager.save();confirmed=true;
    if((cmd.action==='new'||cmd.action==='daily')&&cmd.name)await context.rename(current,cmd.name,reply);
    else if(official.name)await context.titleUpdated(tid,official.name);
-   await reply(cmd.action==='daily'?`已返回日常（会话${current.id}）。新项目发“新建 项目名”，返回时发“日常”。`:`Codex已确认${cmd.action==='new'?'新建':'连接'}会话${current.id}：${current.name}。后续消息进入此会话，其他会话任务继续执行。`);if(context.sendOutput)await context.replay(current.key,context.sendOutput);
+   await reply(cmd.action==='daily'?`已返回日常（会话${current.id}）。新项目发“新建 项目名”，返回时发“日常”。`:`Codex已确认${cmd.action==='new'?'新建':'连接'}会话${current.id}：${current.name}。目录：${workspaceText(context,current.key)}。后续消息进入此会话。`);if(context.sendOutput)await context.replay(current.key,context.sendOutput);
   }finally{
    if(!confirmed&&r.selectionVersion===message._conversationSelectionVersion&&message._conversationPriorActive&&context.find(owner,message._conversationPriorActive)&&!context.find(owner,message._conversationPriorActive).archived){r.active=message._conversationPriorActive;await context.manager.save();}
   }
