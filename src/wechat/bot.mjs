@@ -2,6 +2,7 @@ import {trackLoginValidity} from './login-validity.mjs'
 import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
 import {setupModelTest} from '../setup/setup-model-test.mjs'
+import {codexAvailability} from '../setup/setup-core.mjs'
 import {SetupReceipts} from '../setup/setup-receipts.mjs'
 import {USER_GUIDE} from './user-guide.mjs'
 import {SetupController,setupCommand} from '../setup/setup-controller.mjs'
@@ -50,6 +51,7 @@ const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-log
 const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:testing?'test':'live'})
 const manager = await new SessionManager({log, completionMarkers:true, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, agentKind:agent.kind, ...agent.sessionOptions, ...(backend.kind==='podman'?{rpcFactory:backend.rpcFactory,remoteControl:backend.remoteControl,providerEnv:{}}:{}) }).init()
+const agentSwitcher=new AgentSwitcher({account,installation,agentKind:agent.kind,backendReady:codexAvailability})
 
 if (testing) {
   try {
@@ -61,7 +63,6 @@ if (testing) {
 }
 
 const setupController=await (agent.kind==='claude'?new ClaudeSetupController({binary:installation.claudeBinary}):new SetupController({stateDir,backend,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)})).init()
-const agentSwitcher=new AgentSwitcher({account,installation,agentKind:agent.kind,backendReady:codexAvailability})
 const conversations=agent.catalog==='local'?new ClaudeConversations(manager,owners):new TextConversations(manager,owners)
 await manager.save()
 const bot = new WeChatBot({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
