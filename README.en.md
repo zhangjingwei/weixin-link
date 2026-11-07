@@ -64,7 +64,7 @@ Scan and confirm the pairing QR code in WeChat, then send **安装向导** (setu
 
 Linux/macOS require curl and tar, plus a SHA-256 verification tool when installing private Node.js. The installer verifies official checksums and does not replace system Node.js. Windows ARM64 is not supported, and the installer does not change persistent execution policies.
 
-This project is in Preview, with no stable-version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details. Supporting guides are currently in Chinese.
+[v1.0.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.0.0) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details. Supporting guides are currently in Chinese.
 
 </details>
 
@@ -110,9 +110,9 @@ Each message is processed independently. Text and attachments in the same messag
 
 ## Installation and upgrades
 
-To upgrade, rerun the command for your platform in [Quick start](#quick-start). Automatic upgrades support installer-managed deployments; see [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments, QR refresh and recovery.
+To upgrade, rerun the command for your platform in [Quick start](#quick-start). User-approved upgrades from WeChat support installer-managed deployments; see [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments, QR refresh and recovery.
 
-Standard installations check stable GitHub Releases (`vX.Y.Z`) hourly and offer upgrades by version, never by new main commits. Prereleases and automatic downgrades are excluded. Approval pins the release commit for verification. No stable release means no upgrade; there is no fallback to main. Legacy main installations can migrate to stable releases. Uncertain notification delivery is not automatically retried.
+Standard installations check stable GitHub Releases (`vX.Y.Z`) hourly and offer upgrades by version, never by new main commits. Prereleases and automatic downgrades are excluded. Approval pins the release commit for verification. No stable release means no upgrade; there is no fallback to main. Uncertain notification delivery is not automatically retried.
 
 ## Refresh the login QR code
 

@@ -64,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 
 Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验工具。安装器验证官方校验和，不覆盖系统 Node.js。Windows ARM64 暂不支持，安装器不修改持久执行策略。
 
-项目仍处于 Preview 阶段，尚无稳定版本兼容承诺。更多要求与维护步骤见 [配置说明](CONFIGURATION.md)。
+已发布正式版 [v1.0.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.0.0)，尚无长期版本兼容承诺。更多要求与维护步骤见 [配置说明](CONFIGURATION.md)。
 
 </details>
 
@@ -112,9 +112,9 @@ Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验
 
 ## 安装与升级
 
-升级时，重新执行[快速开始](#快速开始)中对应平台的安装命令。自动升级仅适用于安装器管理的标准部署；自定义部署、扫码刷新和恢复步骤见 [配置与维护](CONFIGURATION.md#已有安装与升级)。
+升级时，重新执行[快速开始](#快速开始)中对应平台的安装命令。微信内确认升级仅适用于安装器管理的标准部署；自定义部署、扫码刷新和恢复步骤见 [配置与维护](CONFIGURATION.md#已有安装与升级)。
 
-标准安装每小时检查 GitHub 正式 Release（`vX.Y.Z`），按版本号提示升级，不跟随主干提交、不自动降级，也不选择预发布版。只有明确同意才会升级；执行时固定该版本对应的提交用于完整性校验。没有正式 Release 时不会回退到主干。旧 main 安装可迁移到正式版本。投递结果不明的提醒不自动重发。
+标准安装每小时检查 GitHub 正式 Release（`vX.Y.Z`），按版本号提示升级，不跟随主干提交、不自动降级，也不选择预发布版。只有明确同意才会升级；执行时固定该版本对应的提交用于完整性校验。没有正式 Release 时不会回退到主干。投递结果不明的提醒不自动重发。
 
 ## 重新获取登录二维码
 
