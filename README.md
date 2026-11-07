@@ -120,31 +120,13 @@ Linux/macOS 执行 `./install.sh`；Windows PowerShell 执行 `.\install.ps1`。
 
 ## 重新获取登录二维码
 
-Linux/macOS 已安装但尚未登录时，执行下面一行即可刷新二维码，无需切换目录或重新安装：
+Linux / macOS：
 
 ```sh
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
 ```
 
-本机图形终端会尝试打开 PNG 图片；SSH 或无图形界面的交互终端会显示二维码，并保留 PNG 路径备用。
-
-**终端二维码有断缝？使用完整色块模式：**
-
-```sh
-WEIXIN_LINK_QR_STYLE=full /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
-```
-
-完整模式使用黑白背景色和空格绘制，不依赖半格字符。请放大终端窗口或缩小字号，确保整个二维码和白边都在屏幕内；宽度不足时脚本会提示所需列数。默认仍为紧凑模式，PNG 图片始终可作备用。
-
-**已在微信解绑，但服务仍提示就绪？重新登录并使用完整色块模式：**
-
-```sh
-WEIXIN_LINK_RELOGIN=1 WEIXIN_LINK_QR_STYLE=full /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
-```
-
-本地服务就绪不代表微信绑定仍有效。重新登录会等待当前任务结束、安全停止所选账号服务后再生成二维码；无法安全停止时退出，不删除账号数据。普通刷新默认不会停止运行中的账号。
-
-自定义源码目录用 `WEIXIN_LINK_DIR` 指定，多账号用 `WEIXIN_LINK_ACCOUNT` 指定。完整色块模式兼容旧版安装，无需先升级本机服务；更多说明见 [二维码维护](CONFIGURATION.md#二维码维护)。
+二维码有断缝时，加 `WEIXIN_LINK_QR_STYLE=full`；解绑后重新登录，加 `WEIXIN_LINK_RELOGIN=1`。参数放在命令前，详见 [二维码维护](CONFIGURATION.md#二维码维护)。
 
 ## 更多能力与文档
 

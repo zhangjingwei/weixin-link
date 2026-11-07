@@ -120,31 +120,13 @@ Run `./install.sh` on Linux/macOS, or `.\install.ps1` in Windows PowerShell.
 
 ## Refresh the login QR code
 
-On Linux/macOS, refresh pairing for an installed but offline account without reinstalling or changing directories:
+Linux / macOS:
 
 ```sh
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
 ```
 
-A local graphical terminal attempts to open the PNG. SSH and headless interactive terminals display the QR code, with a PNG path as a fallback.
-
-**Gaps in the terminal QR code? Use solid background-color cells:**
-
-```sh
-WEIXIN_LINK_QR_STYLE=full /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
-```
-
-Full mode uses black and white backgrounds with spaces instead of half-block glyphs. Enlarge the terminal or reduce the font size so the entire code and white border fit on screen. The script reports the required column count if the window is too narrow. Compact mode remains the default; the PNG is always available as a fallback.
-
-**Unbound the bot in WeChat, but the service still reports ready? Reauthenticate with full mode:**
-
-```sh
-WEIXIN_LINK_RELOGIN=1 WEIXIN_LINK_QR_STYLE=full /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
-```
-
-Local readiness does not prove that the WeChat binding is still valid. Reauthentication waits for current work to finish and safely stops the selected account service before generating a new QR code. It exits if a safe stop cannot be confirmed and does not delete account data. Ordinary refresh does not stop running accounts by default.
-
-Use `WEIXIN_LINK_DIR` for a custom source directory and `WEIXIN_LINK_ACCOUNT` for another account. Full mode works with older installations without upgrading the local service. See [QR maintenance](CONFIGURATION.md#二维码维护) for details.
+Prefix the command with `WEIXIN_LINK_QR_STYLE=full` for solid cells, or `WEIXIN_LINK_RELOGIN=1` to sign in again after unbinding. See [QR maintenance](CONFIGURATION.md#二维码维护).
 
 ## More capabilities and documentation
 
