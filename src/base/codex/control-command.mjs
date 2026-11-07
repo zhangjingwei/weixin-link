@@ -3,8 +3,8 @@ import {memoryCommand} from './native-memory.mjs'
 export function controlCommand(text) {
   const steer=text.trim().match(/^补充(?:[\s：:]+([\s\S]*))?$/)
   if(steer)return {action:'steer',text:(steer[1]??'').trim()}
-  const chinese={停止:'stop',结果:'result',恢复:'recover',退出:'exit',模型:'models',状态:'status',任务状态:'status',停止任务:'stop',查看结果:'result',重看结果:'result',恢复任务:'recover',核对任务:'recover',退出会话:'exit',帮助:'help'}
-  const alias=text.trim().replace(/^\//,'').replace(/[。！!]$/,'')
+  const chinese={停止:'stop',结果:'result',恢复:'recover',退出:'exit',模型:'models',状态:'status',任务状态:'status',进度:'progress',任务进度:'progress',进度如何了:'progress',现在到哪一步了:'progress',停止任务:'stop',查看结果:'result',重看结果:'result',恢复任务:'recover',核对任务:'recover',退出会话:'exit',帮助:'help'}
+  const alias=text.trim().replace(/^\//,'').replace(/[。？！!?]$/,'')
   if(alias==='记忆')return {action:'memory',op:'list'}
   if(chinese[alias])return {action:chinese[alias]}
   const memory = memoryCommand(text)

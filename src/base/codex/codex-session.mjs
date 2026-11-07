@@ -259,7 +259,7 @@ export class SessionManager {
       this.state.users[userId]=next;session.threadId=id
       try{await this.save()}catch(e){if(this.state.users[userId]===next){this.state.users[userId]=previous;session.threadId=oldId}throw e}
       this.lifecycle.cancel(userId)
-      this.clearQuestions(session);session.items.clear();session.finals=[];session.localTask=null;session.turnId=null;session.attachmentContinuation=null;session.model=result.model;session.modelProvider=result.modelProvider??selectedProvider.provider??session.modelProvider
+      this.clearQuestions(session);session.items.clear();session.finals=[];session.localTask=null;session.lastProgress=null;session.turnId=null;session.attachmentContinuation=null;session.model=result.model;session.modelProvider=result.modelProvider??selectedProvider.provider??session.modelProvider
       this.diagnostic(session,'session.selected',{previous_thread_id:oldId})
       await reply('已恢复对话 '+id+'，下一条消息将在该对话中继续。')
     }finally{session.selecting=false}
@@ -277,6 +277,7 @@ export class SessionManager {
       return
     }
     transition(session,'running')
+    session.lastProgress=null
     session.workToken=token
     session.traceId = randomBytes(8).toString('hex')
     const waiting=this.state.users[session.userId]?.waitingAttachment
@@ -449,7 +450,10 @@ export class SessionManager {
         if (p.item.phase === 'commentary') {
           const turnId = session.turnId
           if(session.attachmentContinuation&&emptyContinuationNotice(rest)){this.diagnostic(session,'notification.suppressed',{reason:'continuation_start'});return}
-          if(rest)await this.emit(session, rest, () => (session.workToken?.current()??true) && session.busy && !session.finalReceived && session.turnId === turnId)
+          if(rest){
+            const delivered=await this.emit(session, rest, () => (session.workToken?.current()??true) && session.busy && !session.finalReceived && session.turnId === turnId)
+            if(delivered&&session.turnId===turnId)session.lastProgress={text:rest,at:Date.now(),turnId}
+          }
         } else { if(p.item.phase!=='partial_answer')session.finalReceived = true; session.finals.push(rest);session.displayFinals??=[];session.displayFinals.push(rest) }
       }
     }
@@ -603,6 +607,14 @@ export class SessionManager {
       }
       if (command?.action === 'help') {await reply('直接发送需求即可。发送“使用说明”查看完整说明，“安装向导”完成首次设置。\n常用：日常助手、状态、停止、结果、恢复、退出、模型、记忆、开启记忆、关闭记忆、列表、新建 名称。\n配置远程主机、家庭设备或备份：直接说明需求，由智能体通过配置命令检查和处理；需要模型可用。\n归档保留历史；删除是不可还原的永久删除。');return}
       const runtime = this.sessions.get(userId)
+      if(command?.action==='progress'){
+        const queued=(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)
+        const state=runtime?.state??(runtime?.connecting?'connecting':runtime?.busy?'running':runtime?.finishing?'delivering':'idle')
+        const label=({connecting:'正在连接智能体',running:'正在处理',stopping:'正在停止',delivering:'正在发送最终回复',closed:'连接已断开',idle:'当前没有正在执行的任务'})[state]??'当前没有正在执行的任务'
+        const latest=['running','delivering'].includes(state)&&runtime?.lastProgress?.turnId===runtime.turnId?`\n最近进展：${runtime.lastProgress.text}`:''
+        await reply(`${label}${queued?`；排队 ${queued} 条`:''}。${latest||(['running','connecting'].includes(state)?'\n尚无新的阶段信息。':'')}`)
+        return
+      }
       if (command?.action === 'status') { try{const root=join((process.env.HOME||platformHome()),'.local/share/wechat-assistant-backups');let b;try{b=JSON.parse(await readFile(join(root,'last-failure.json'),'utf8'));await reply('备份：最近一次失败或因忙碌延后，请检查备份服务。')}catch{b=JSON.parse(await readFile(join(root,'latest.json'),'utf8'));await reply(b.status==='verified'?'备份：'+b.generation+'，NAS校验及隔离恢复通过。':'备份：最近一次未验证成功。')}}catch{} const recovery=recoveryText(this.state.users[userId]?.recovery);if(recovery)await reply(recovery);await reply(`会话：${this.state.users[userId]?.threadId ?? '尚未创建'}\n状态：${({connecting:'正在连接',idle:'空闲',running:'处理中',stopping:'正在停止',delivering:'正在发送最终回复',closed:'已断开'})[runtime?.state] ?? (runtime?.connecting?'正在连接':runtime?.busy?'处理中':runtime?.finishing?'正在发送最终回复':'空闲')}，排队 ${(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)} 条，待答复 ${[...this.questions.values()].filter(q => q.session.userId === userId).length} 条。\n未确认任务：${this.submissions?.uncertainCount?.(userId)??0} 条，需核对后再决定是否重试。\n运行环境：${this.backend?.kind==='podman'?'独立容器 '+this.backend.id:'宿主机'}。`); return }
       if(command?.action==='recover'){
         const n=this.submissions?.recheck?.(userId)??0
