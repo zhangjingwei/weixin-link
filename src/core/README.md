@@ -10,7 +10,7 @@ implementations stay in `src/wechat`, `src/remote` and `src/base`.
 - `diagnostics/`: redacted diagnostic logging and commands.
 - `runtime/`: account-scoped control endpoint and maintenance leases.
 - `schedules/`: account-scoped one-time, daily and weekly schedules. A schedule either sends fixed reminder text or submits a configured prompt to the existing durable Codex task queue.
-- `updates/`: checks the installer-recorded GitHub `main` commit and sends one approval prompt per newer commit; it never starts an upgrade.
+- `updates/`: checks stable GitHub Releases against the installed semantic version and sends one approval prompt per newer version; it never starts an upgrade.
 - `policy/`: assistant policy source.
 - `storage/`: shared registry locking and atomic JSON persistence.
 - `remote-tasks/`: remote coordination facade, path policy, submission/reconciliation, stopping/terminal cleanup, artifact export, progress delivery and RPC adaptation.

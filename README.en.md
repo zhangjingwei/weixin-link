@@ -95,7 +95,7 @@ Send ordinary requests directly. These fixed commands control the bridge:
 | `日常` | Return to the fixed everyday conversation |
 | `诊断` | Show local diagnostics and service status for this account |
 | `重启` | Restart this account's service when idle |
-| `升级` | Upgrade a standard installation to the latest GitHub main when idle |
+| `升级` | Upgrade a standard installation to the latest stable release when idle |
 | `状态` | Check the current task and queue |
 | `补充 Your instructions` | Add instructions to the active task |
 | `停止` | Cancel the current task and queued messages |
@@ -112,7 +112,7 @@ Each message is processed independently. Text and attachments in the same messag
 
 To upgrade, rerun the command for your platform in [Quick start](#quick-start). Automatic upgrades support installer-managed deployments; see [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments, QR refresh and recovery.
 
-Standard installations check GitHub `main` hourly. When a newer commit appears, the bot asks in WeChat whether to upgrade. It upgrades only after your explicit approval. A prompt explicitly rejected by WeChat is retried on a later check; an uncertain delivery is not automatically resent. Network failures do not interrupt messages; custom refs and installations without a recorded commit do not receive these prompts.
+Standard installations check stable GitHub Releases (`vX.Y.Z`) hourly and offer upgrades by version, never by new main commits. Prereleases and automatic downgrades are excluded. Approval pins the release commit for verification. No stable release means no upgrade; there is no fallback to main. Legacy main installations can migrate to stable releases. Uncertain notification delivery is not automatically retried.
 
 ## Refresh the login QR code
 

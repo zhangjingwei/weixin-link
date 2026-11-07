@@ -47,11 +47,18 @@ fi
 for bootstrap_cmd in curl tar mktemp; do
   command -v "$bootstrap_cmd" >/dev/null 2>&1 || { echo "Missing prerequisite: $bootstrap_cmd" >&2; exit 1; }
 done
-bootstrap_ref="${WEIXIN_LINK_REF:-${ZERO_LINK_REF:-main}}"
+bootstrap_ref="${WEIXIN_LINK_REF:-${ZERO_LINK_REF:-latest}}"
+if test "$bootstrap_ref" = latest; then
+  bootstrap_url=$(curl -fsSL --proto '=https' --tlsv1.2 -o /dev/null -w '%{url_effective}' https://github.com/zhangjingwei/weixin-link/releases/latest) || { echo 'No stable release available.' >&2; exit 1; }
+  bootstrap_ref=${bootstrap_url##*/}
+  printf '%s\n' "$bootstrap_ref" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || { echo 'No stable release available.' >&2; exit 1; }
+fi
+bootstrap_stable=false
+if printf '%s\n' "$bootstrap_ref" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then bootstrap_stable=true; fi
 bootstrap_expected="${WEIXIN_LINK_EXPECTED_COMMIT:-}"
 if test -n "$bootstrap_expected"; then
-  if test "$bootstrap_ref" != main || test "${#bootstrap_expected}" -ne 40; then echo 'Invalid expected main commit.' >&2; exit 1; fi
-  case "$bootstrap_expected" in *[!0-9a-f]*) echo 'Invalid expected main commit.' >&2; exit 1;; esac
+  if test "${#bootstrap_expected}" -ne 40; then echo 'Invalid expected commit.' >&2; exit 1; fi
+  case "$bootstrap_expected" in *[!0-9a-f]*) echo 'Invalid expected commit.' >&2; exit 1;; esac
 fi
 bootstrap_download_ref="${bootstrap_expected:-$bootstrap_ref}"
 mkdir -p "$(dirname -- "$bootstrap_dest")"
@@ -70,8 +77,12 @@ if test -n "$bootstrap_expected"; then
   if test -z "$bootstrap_commit"; then echo 'Downloaded commit could not be verified.' >&2; exit 1; fi
   case "$bootstrap_expected" in "$bootstrap_commit"*) ;; *) echo 'Downloaded commit differs from requested commit.' >&2; exit 1;; esac
 fi
-if test "$bootstrap_ref" = main && test -n "$bootstrap_commit"; then
-  printf '{"version":1,"repository":"zhangjingwei/weixin-link","ref":"main","commit":"%s"}\n' "$bootstrap_commit" > "$bootstrap_tmp/source/.weixin-link-release.json"
+if test "$bootstrap_stable" = true; then
+  bootstrap_version=$(sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$bootstrap_tmp/source/package.json")
+  test "v$bootstrap_version" = "$bootstrap_ref" || { echo 'Release tag and package version differ.' >&2; exit 1; }
+fi
+if { test "$bootstrap_ref" = main || test "$bootstrap_stable" = true; } && test -n "$bootstrap_commit"; then
+  printf '{"version":1,"repository":"zhangjingwei/weixin-link","ref":"%s","commit":"%s"}\n' "$bootstrap_ref" "$bootstrap_commit" > "$bootstrap_tmp/source/.weixin-link-release.json"
 fi
 if test "$bootstrap_mode" = upgrade; then
   test -f "$bootstrap_tmp/source/src/setup/upgrade.mjs" || { echo '该版本不支持升级。' >&2; exit 1; }

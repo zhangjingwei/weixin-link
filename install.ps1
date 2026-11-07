@@ -5,9 +5,15 @@ if ([Environment]::OSVersion.Platform -ne 'Win32NT' -or $env:PROCESSOR_ARCHITECT
 }
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $bootstrapHome = [Environment]::GetFolderPath('UserProfile')
-$bootstrapRef = if ($env:WEIXIN_LINK_REF) { $env:WEIXIN_LINK_REF } elseif ($env:ZERO_LINK_REF) { $env:ZERO_LINK_REF } else { 'main' }
+$bootstrapRef = if ($env:WEIXIN_LINK_REF) { $env:WEIXIN_LINK_REF } elseif ($env:ZERO_LINK_REF) { $env:ZERO_LINK_REF } else { 'latest' }
+if ($bootstrapRef -eq 'latest') {
+    $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/zhangjingwei/weixin-link/releases/latest'
+    if ($release.draft -or $release.prerelease -or $release.tag_name -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'No stable release available.' }
+    $bootstrapRef = $release.tag_name
+}
+$bootstrapStable = $bootstrapRef -cmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 $bootstrapExpected = $env:WEIXIN_LINK_EXPECTED_COMMIT
-if ($bootstrapExpected -and ($bootstrapRef -ne 'main' -or $bootstrapExpected -cnotmatch '^[0-9a-f]{40}$')) { throw 'Invalid expected main commit.' }
+if ($bootstrapExpected -and ($bootstrapExpected -cnotmatch '^[0-9a-f]{40}$')) { throw 'Invalid expected commit.' }
 $bootstrapDownloadRef = if ($bootstrapExpected) { $bootstrapExpected } else { $bootstrapRef }
 $bootstrapDest = if ($env:WEIXIN_LINK_DIR) { $env:WEIXIN_LINK_DIR } elseif ($env:ZERO_LINK_DIR) { $env:ZERO_LINK_DIR } else { Join-Path $bootstrapHome '.local\share\weixin-link\source' }
 $bootstrapDest = [IO.Path]::GetFullPath($bootstrapDest)
@@ -54,8 +60,12 @@ try {
             throw 'Downloaded archive is missing installation files.'
         }
     }
-    if ($bootstrapRef -eq 'main' -and $bootstrapRoots[0].Name -match '^zhangjingwei-weixin-link-([0-9a-f]{7,40})$') {
-        $bootstrapRelease = @{version=1; repository='zhangjingwei/weixin-link'; ref='main'; commit=$Matches[1]} | ConvertTo-Json -Compress
+    if ($bootstrapStable) {
+        $package = Get-Content -LiteralPath (Join-Path $bootstrapSource 'package.json') -Raw | ConvertFrom-Json
+        if ('v' + $package.version -cne $bootstrapRef) { throw 'Release tag and package version differ.' }
+    }
+    if (($bootstrapRef -eq 'main' -or $bootstrapStable) -and $bootstrapRoots[0].Name -match '^zhangjingwei-weixin-link-([0-9a-f]{7,40})$') {
+        $bootstrapRelease = @{version=1; repository='zhangjingwei/weixin-link'; ref=$bootstrapRef; commit=$Matches[1]} | ConvertTo-Json -Compress
         [IO.File]::WriteAllText((Join-Path $bootstrapSource '.weixin-link-release.json'), $bootstrapRelease + "`n", (New-Object Text.UTF8Encoding($false)))
     }
     if ($bootstrapExisting) {

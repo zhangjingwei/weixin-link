@@ -8,6 +8,7 @@ import {userHome} from './platform-service.mjs'
 import {standardDeployment} from './upgrade.mjs'
 import {readChatUpgrade,saveChatUpgrade} from './chat-upgrade.mjs'
 
+import {releaseTag} from '../core/updates/releases.mjs'
 import {nodeEnvironment} from './platform-command.mjs'
 const exec=promisify(execFile)
 export function upgradeFailureCode(error){
@@ -22,6 +23,7 @@ export async function performChatUpgrade({home=userHome(),target=fileURLToPath(n
  if(request?.id!==requestId||request.status!=='waiting_idle')throw Error('CHAT_UPGRADE_REQUEST_CHANGED')
  let stage='waiting_idle'
  try{
+  if(!releaseTag(request.tag))throw Error('CHAT_UPGRADE_RELEASE_REQUIRED')
   for(let attempt=0;attempt<attempts;attempt++){
    if((await read(home))?.id!==requestId)throw Error('CHAT_UPGRADE_REQUEST_CHANGED')
    const adapter=await deployment({target,home})
@@ -31,19 +33,19 @@ export async function performChatUpgrade({home=userHome(),target=fileURLToPath(n
    if(states.some(state=>!state.ready||!state.idle||state.draining)){await wait(1000);continue}
    stage='installer';await save(home,{...request,status:'running',stage})
    try{
-    await run(process.platform==='win32'?'powershell.exe':'/bin/sh',process.platform==='win32'?['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',join(target,'install.ps1')]:[join(target,'install.sh')],{cwd:target,env:{...nodeEnvironment(),HOME:home,WEIXIN_LINK_DIR:target,WEIXIN_LINK_UPGRADE_TRACE_ID:request.trace_id??'',WEIXIN_LINK_REF:'main',WEIXIN_LINK_EXPECTED_COMMIT:request.commit},timeout:900000,maxBuffer:1024*1024})
+    await run(process.platform==='win32'?'powershell.exe':'/bin/sh',process.platform==='win32'?['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',join(target,'install.ps1')]:[join(target,'install.sh')],{cwd:target,env:{...nodeEnvironment(),HOME:home,WEIXIN_LINK_DIR:target,WEIXIN_LINK_UPGRADE_TRACE_ID:request.trace_id??'',WEIXIN_LINK_REF:request.tag,WEIXIN_LINK_EXPECTED_COMMIT:request.commit},timeout:900000,maxBuffer:1024*1024})
    }catch(error){
     if(upgradeFailureCode(error)==='UPGRADE_BUSY'){await save(home,request);await wait(1000);continue}
     throw error
    }
    stage='verify_version'
    const marker=JSON.parse(await readFile(join(target,'.weixin-link-release.json'),'utf8'))
-   if(marker?.ref!=='main'||marker.repository!=='zhangjingwei/weixin-link'||!/^[0-9a-f]{7,40}$/.test(marker.commit??'')||!request.commit.startsWith(marker.commit))throw Error('CHAT_UPGRADE_VERSION_UNVERIFIED')
+   if(marker?.ref!==request.tag||marker.repository!=='zhangjingwei/weixin-link'||!/^[0-9a-f]{7,40}$/.test(marker.commit??'')||!request.commit.startsWith(marker.commit))throw Error('CHAT_UPGRADE_VERSION_UNVERIFIED')
    stage='verify_health'
    const after=await deployment({target,home})
    for(const service of active){const current=after.services.find(item=>item.id===service.id);if(!current?.active||(await after.status(current)).ready!==true)throw Error('CHAT_UPGRADE_HEALTH_UNVERIFIED')}
-   await save(home,{...request,status:'complete',stage:'complete',installedCommit:marker.commit})
-   return {status:'complete',commit:marker.commit}
+   await save(home,{...request,status:'complete',stage:'complete',installedVersion:request.tag,installedCommit:marker.commit})
+   return {status:'complete',version:request.tag,commit:marker.commit}
   }
   throw Error('CHAT_UPGRADE_REMAINED_BUSY')
  }catch(error){if((await read(home))?.id===requestId)await save(home,{...request,status:'failed',stage,error:upgradeFailureCode(error)});throw error}

@@ -7,7 +7,7 @@ import {writeFile,unlink} from 'node:fs/promises'
 import {xml,userHome} from './platform-service.mjs'
 import {readPrivateFile,atomicConfigWrite} from './config-files.mjs'
 import {standardDeployment} from './upgrade.mjs'
-import {githubMainCommit} from '../core/updates/update-notifier.mjs'
+import {githubLatestRelease,releaseTag,newerRelease,installedRelease} from '../core/updates/releases.mjs'
 import {RemoteStore} from '../core/storage/registry-lock.mjs'
 
 const exec=promisify(execFile)
@@ -41,16 +41,18 @@ export async function scheduleChatUpgrade(request,{platform=process.platform,run
 }
 
 export class ChatUpgrader{
- constructor({home=userHome(),target=root,latest=githubMainCommit,deployment=standardDeployment,schedule=scheduleChatUpgrade,lock}={}){Object.assign(this,{home,target,latest,deployment,schedule});this.lock=lock??(fn=>new RemoteStore(join(home,'.local/share/weixin-link')).locked('chat-upgrade-request',fn))}
+ constructor({home=userHome(),target=root,latest=githubLatestRelease,deployment=standardDeployment,schedule=scheduleChatUpgrade,lock}={}){Object.assign(this,{home,target,latest,deployment,schedule});this.lock=lock??(fn=>new RemoteStore(join(home,'.local/share/weixin-link')).locked('chat-upgrade-request',fn))}
  async handle(reply,{traceId}={}){
   const current=await readChatUpgrade(this.home)
   if(current&&['waiting_idle','running'].includes(current.status)){await reply('升级已安排，正在等待空闲或执行中；未重复提交。');return}
   let marker
   try{marker=JSON.parse(await readPrivateFile(join(this.target,'.weixin-link-release.json')))}catch{await reply('当前安装版本来源未核实，未自动升级。');return}
-  if(marker?.version!==1||marker.repository!==repository||marker.ref!=='main'||!/^[0-9a-f]{7,40}$/.test(marker.commit??'')){await reply('当前安装版本来源未核实，未自动升级。');return}
-  const commit=await this.latest()
-  if(!/^[0-9a-f]{40}$/.test(commit))throw Error('CHAT_UPGRADE_REF_INVALID')
-  if(commit.startsWith(marker.commit)){await reply('当前已是 main 最新版本。');return}
+  if(!installedRelease(marker)){await reply('当前安装版本来源未核实，未自动升级。');return}
+  const release=await this.latest()
+  if(!release){await reply('暂未发布正式版本，未安排升级。');return}
+  const {tag,commit}=release
+  if(!releaseTag(tag)||!/^[0-9a-f]{40}$/.test(commit??''))throw Error('CHAT_UPGRADE_REF_INVALID')
+  if(!newerRelease(tag,marker.ref)||marker.ref==='main'&&commit.startsWith(marker.commit)){await reply('当前无需升级，最新正式版本为 '+tag+'。');return}
   const deployment=await this.deployment({target:this.target,home:this.home})
   if(!deployment.services.some(service=>service.active))throw Error('CHAT_UPGRADE_SERVICE_UNAVAILABLE')
   for(const service of deployment.services){
@@ -61,11 +63,11 @@ export class ChatUpgrader{
   const outcome=await this.lock(async()=>{
    const pending=await readChatUpgrade(this.home)
    if(pending&&['waiting_idle','running'].includes(pending.status))return false
-   const request={id:randomUUID(),commit,previous:marker.commit,status:'waiting_idle',trace_id:/^[0-9a-f-]{36}$/i.test(traceId??'')?traceId:randomUUID()}
+   const request={id:randomUUID(),tag,commit,previous:marker.commit,status:'waiting_idle',trace_id:/^[0-9a-f-]{36}$/i.test(traceId??'')?traceId:randomUUID()}
    await saveChatUpgrade(this.home,request)
    try{await this.schedule(request,{home:this.home,target:this.target})}catch(error){await saveChatUpgrade(this.home,{...request,status:'failed',stage:'schedule',error:'CHAT_UPGRADE_SCHEDULE_FAILED'});throw error}
    return true
   })
-  await reply(outcome?`已安排空闲后升级到 main ${commit.slice(0,7)}。完成后发“诊断”核对服务。`:'升级已安排，未重复提交。')
+  await reply(outcome?`已安排空闲后升级到 ${tag}。完成后发“诊断”核对服务。`:'升级已安排，未重复提交。')
  }
 }

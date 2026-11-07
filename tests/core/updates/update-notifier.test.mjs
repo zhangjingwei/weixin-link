@@ -6,16 +6,16 @@ import {tmpdir} from 'node:os'
 import {UpdateNotifier} from '../../../src/core/updates/update-notifier.mjs'
 
 const old='a'.repeat(40),latest='b'.repeat(40)
-async function fixture(t,{ref='main',commit=old}={}){
+async function fixture(t,{ref='v1.0.0',commit=old}={}){
  const root=await mkdtemp(join(tmpdir(),'update-notice-'))
  t.after(()=>rm(root,{recursive:true,force:true}))
  await writeFile(join(root,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref,commit:commit.slice(0,7)}))
  const sent=[]
- const options={stateDir:root,sourceDir:root,owners:['owner'],fetchLatest:async()=>latest,send:async(owner,text)=>{sent.push({owner,text});return {status:'accepted'}}}
+ const options={stateDir:root,sourceDir:root,owners:['owner'],fetchLatest:async()=>({tag:'v1.1.0',commit:latest}),send:async(owner,text)=>{sent.push({owner,text});return {status:'accepted'}}}
  return {root,sent,options}
 }
 
-test('only a newer main commit prompts once, including after restart',async t=>{
+test('only a newer stable release prompts once, including after restart',async t=>{
  const f=await fixture(t)
  const notifier=new UpdateNotifier(f.options)
  await notifier.tick();await notifier.tick()
@@ -28,7 +28,7 @@ test('only a newer main commit prompts once, including after restart',async t=>{
 
 test('matching version, custom ref and unavailable release marker do not prompt',async t=>{
  const f=await fixture(t)
- await new UpdateNotifier({...f.options,fetchLatest:async()=>old}).tick()
+ await new UpdateNotifier({...f.options,fetchLatest:async()=>({tag:'v1.0.0',commit:old})}).tick()
  await writeFile(join(f.root,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'feature/x',commit:old.slice(0,7)}))
  await new UpdateNotifier(f.options).tick()
  await rm(join(f.root,'.weixin-link-release.json'))

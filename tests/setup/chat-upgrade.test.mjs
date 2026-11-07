@@ -16,7 +16,7 @@ test('upgrade request checks main release and schedules once without invoking in
  const home=await mkdtemp(join(tmpdir(),'chat-upgrade-'));t.after(()=>rm(home,{recursive:true,force:true}))
  const target=join(home,'source');await mkdir(target)
  await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'main',commit:oldCommit}))
- const sent=[],scheduled=[],upgrader=new ChatUpgrader({home,target,latest:async()=>newCommit,deployment:async()=>({services:[{active:true,stateDir:target}]}),schedule:async request=>scheduled.push(request)})
+ const sent=[],scheduled=[],upgrader=new ChatUpgrader({home,target,latest:async()=>({tag:'v1.1.0',commit:newCommit}),deployment:async()=>({services:[{active:true,stateDir:target}]}),schedule:async request=>scheduled.push(request)})
  await upgrader.handle(value=>sent.push(value),{traceId:'11111111-2222-3333-4444-555555555555'})
  assert.equal(scheduled[0].trace_id,'11111111-2222-3333-4444-555555555555')
  assert.equal(scheduled.length,1);assert.equal((await readChatUpgrade(home)).status,'waiting_idle');assert.match(sent[0],/已安排空闲后升级/)
@@ -26,18 +26,18 @@ test('upgrade request checks main release and schedules once without invoking in
 test('upgrade request refuses an unknown source and skips current main',async t=>{
  const home=await mkdtemp(join(tmpdir(),'chat-upgrade-source-'));t.after(()=>rm(home,{recursive:true,force:true}))
  const target=join(home,'source');await mkdir(target)
- const sent=[],upgrader=new ChatUpgrader({home,target,latest:async()=>newCommit,deployment:async()=>{throw Error('must not run')},schedule:async()=>{throw Error('must not schedule')}})
+ const sent=[],upgrader=new ChatUpgrader({home,target,latest:async()=>({tag:'v1.1.0',commit:newCommit}),deployment:async()=>{throw Error('must not run')},schedule:async()=>{throw Error('must not schedule')}})
  await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'other/repo',ref:'main',commit:oldCommit}))
  await upgrader.handle(value=>sent.push(value));assert.match(sent[0],/来源未核实/)
- await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'main',commit:newCommit}))
- await upgrader.handle(value=>sent.push(value));assert.match(sent[1],/已是 main 最新版本/)
+ await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'v1.1.0',commit:newCommit}))
+ await upgrader.handle(value=>sent.push(value));assert.match(sent[1],/当前无需升级/)
 })
 test('upgrade waits for an existing account maintenance request',async t=>{
  const home=await mkdtemp(join(tmpdir(),'chat-upgrade-conflict-'));t.after(()=>rm(home,{recursive:true,force:true}))
  const target=join(home,'source'),stateDir=join(home,'account');await mkdir(target);await mkdir(stateDir)
  await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'main',commit:oldCommit}))
  await writeFile(join(stateDir,'agent-switch.json'),JSON.stringify({status:'waiting_idle'}))
- const sent=[],upgrader=new ChatUpgrader({home,target,latest:async()=>newCommit,deployment:async()=>({services:[{active:true,stateDir}]}),schedule:async()=>{throw Error('must not schedule')}})
+ const sent=[],upgrader=new ChatUpgrader({home,target,latest:async()=>({tag:'v1.1.0',commit:newCommit}),deployment:async()=>({services:[{active:true,stateDir}]}),schedule:async()=>{throw Error('must not schedule')}})
  await upgrader.handle(value=>sent.push(value));assert.match(sent[0],/账号维护正在进行/)
  assert.equal(await readChatUpgrade(home),null)
 })
@@ -52,8 +52,8 @@ test('macOS upgrade worker is launched once and does not keep restarting',async 
 })
 test('worker waits for all active accounts, runs installer once, then verifies both',async t=>{
  const target=await mkdtemp(join(tmpdir(),'chat-upgrade-worker-'));t.after(()=>rm(target,{recursive:true,force:true}))
- await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'main',commit:newCommit}))
- let request={id:'request-1',commit:newCommit,status:'waiting_idle'},busy=true,installCalls=0
+ await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'v1.1.0',commit:newCommit}))
+ let request={id:'request-1',commit:newCommit,tag:'v1.1.0',status:'waiting_idle'},busy=true,installCalls=0
  const services=[{id:'default',active:true},{id:'second',active:true}]
  const adapter={services,status:async service=>({ready:true,idle:service.id==='default'||!busy,draining:false}),}
  const result=await performChatUpgrade({home:'/unused',target,requestId:request.id,read:async()=>request,save:async(h,value)=>{request=value},deployment:async()=>adapter,run:async(_bin,_args,options)=>{assert.equal(options.env.WEIXIN_LINK_EXPECTED_COMMIT,newCommit);installCalls++;busy=false},wait:async()=>{busy=false},attempts:3})
@@ -62,14 +62,14 @@ test('worker waits for all active accounts, runs installer once, then verifies b
 test('worker rejects an installed commit other than the approved target',async t=>{
  const target=await mkdtemp(join(tmpdir(),'chat-upgrade-mismatch-'));t.after(()=>rm(target,{recursive:true,force:true}))
  await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'main',commit:'c'.repeat(7)}))
- let request={id:'request-2',commit:newCommit,previous:oldCommit,status:'waiting_idle'}
+ let request={id:'request-2',commit:newCommit,tag:'v1.1.0',previous:oldCommit,status:'waiting_idle'}
  const adapter={services:[{id:'default',active:true}],status:async()=>({ready:true,idle:true,draining:false})}
  await assert.rejects(performChatUpgrade({home:'/unused',target,requestId:request.id,read:async()=>request,save:async(_home,value)=>{request=value},deployment:async()=>adapter,run:async()=>{},attempts:1}),/CHAT_UPGRADE_VERSION_UNVERIFIED/)
  assert.equal(request.status,'failed')
 })
 
 test('worker preserves trace and bounded failure stage without persisting subprocess output',async()=>{
- let request={id:'failure',commit:newCommit,status:'waiting_idle',trace_id:'11111111-2222-3333-4444-555555555555'}
+ let request={id:'failure',commit:newCommit,tag:'v1.1.0',status:'waiting_idle',trace_id:'11111111-2222-3333-4444-555555555555'}
  const adapter={services:[{id:'default',active:true}],status:async()=>({ready:true,idle:true})}
  await assert.rejects(performChatUpgrade({requestId:request.id,read:async()=>request,save:async(h,v)=>{request=v},deployment:async()=>adapter,run:async(bin,args,options)=>{
   assert.equal(options.env.WEIXIN_LINK_UPGRADE_TRACE_ID,request.trace_id)
