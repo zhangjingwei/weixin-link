@@ -1,6 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto'
 import {readFile,writeFile,rename,unlink,lstat} from 'node:fs/promises'
 import {join} from 'node:path'
+import {deliveryFailureState} from '../delivery/delivery-error.mjs'
 
 const REPOSITORY='zhangjingwei/weixin-link'
 const COMMIT=/^[0-9a-f]{7,40}$/
@@ -63,7 +64,10 @@ export class UpdateNotifier{
    await this.writeState(owner,latest,'sending')
    let status='unknown'
    try{const result=await this.send(owner,message);status=result?.status==='accepted'?'accepted':result?.status==='cancelled'?'deferred':'unknown'}
-   catch{this.log('update_notice.delivery_unknown',{code:'UPDATE_NOTICE_DELIVERY_UNKNOWN'})}
+   catch(error){
+    status=deliveryFailureState(error)==='failed'?'deferred':'unknown'
+    this.log(status==='deferred'?'update_notice.delivery_rejected':'update_notice.delivery_unknown',{code:status==='deferred'?'UPDATE_NOTICE_DELIVERY_REJECTED':'UPDATE_NOTICE_DELIVERY_UNKNOWN'})
+   }
    await this.writeState(owner,latest,status)
   }
  }

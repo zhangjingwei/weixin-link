@@ -48,6 +48,18 @@ test('uncertain delivery is never replayed; confirmed cancellation can retry',as
  assert.equal(g.sent.length,1)
 })
 
+test('confirmed WeChat rejection retries on a later check without replaying uncertain delivery',async t=>{
+ const f=await fixture(t)
+ const rejected=new UpdateNotifier({...f.options,send:async()=>{f.sent.push('rejected');throw Object.assign(Error('rejected'),{name:'ApiError',errcode:-2,payload:{ret:-2}})}})
+ await rejected.tick()
+ assert.equal(JSON.parse(await readFile(rejected.path('owner'),'utf8')).status,'deferred')
+ await new UpdateNotifier(f.options).tick()
+ assert.equal(f.sent.length,2)
+ assert.equal(JSON.parse(await readFile(rejected.path('owner'),'utf8')).status,'accepted')
+ await new UpdateNotifier(f.options).tick()
+ assert.equal(f.sent.length,2)
+})
+
 test('network failure and corrupt state do not send or overwrite the state',async t=>{
  const f=await fixture(t)
  const events=[]
