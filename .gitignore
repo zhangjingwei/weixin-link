@@ -25,6 +25,9 @@
 !/config-templates/
 !/config-templates/*.example.json
 !/config-templates/ssh-config.example
+!/docs/
+!/docs/images/
+!/docs/images/*.png
 !/CONFIGURATION.md
 # Private deployment and runtime data, including nested directories.
 **/*.local.json

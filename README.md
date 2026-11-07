@@ -18,14 +18,12 @@
 
 Weixin Link 把微信私聊接到你电脑或服务器上的 **Codex**。离开工位后，你仍能发起任务、继续补充要求，并在微信里收到回答和生成的文件。
 
-```mermaid
-flowchart LR
-    A["📱 微信：发送任务、图片或文件"] --> B["Weixin Link"]
-    B --> C["💻 你的电脑 / 服务器：Codex 执行"]
-    C --> D["📱 微信：接收回答与文件"]
-```
+<p align="center">
+  <img src="docs/images/weather-conversation.png" width="320" alt="微信对话：追问城市后查询天气">
+  <img src="docs/images/voice-story-conversation.png" width="320" alt="微信对话：语音转写后生成短篇故事">
+</p>
 
-*工作流程示意；并非真实聊天截图。电脑或服务器需要保持在线，执行范围取决于工作区与工具权限。*
+*实际对话截图整理：追问后继续查询、语音转写后回复。电脑或服务器需要保持在线；执行范围取决于工作区与工具权限。*
 
 ## 快速开始
 
@@ -102,25 +100,19 @@ Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验
 
 ## 安装与升级
 
-**首次执行安装，再次执行升级标准安装。** 已有安装会核验源码和服务，避免覆盖自定义部署。源码默认位于 `~/.local/share/weixin-link/source`；工作区和账号数据独立保存。
-
-Linux/macOS 重复执行上方命令即可升级；Windows 仍使用 `upgrade.ps1`。升级会准备新版与依赖、备份旧源码和运行数据、切换后检查服务；检查失败则尝试自动回滚。**自定义服务、独立发布目录和本地修改需要使用原部署流程，升级器不会自动接管。**
-
-升级成功会明确输出“升级完成”及备份位置。再次运行同一版本时会输出“源码已是目标版本”，不再备份或重启服务。仅看到“下载升级版本”不代表已完成；应核对结果提示和服务状态。
-
-自定义安装路径、二维码刷新与恢复步骤见 [已有安装与升级](CONFIGURATION.md#已有安装与升级)。
-
-<details>
-<summary>从源码手动安装</summary>
+**Linux / macOS**：安装和升级运行同一命令。
 
 ```sh
-git clone https://github.com/zhangjingwei/weixin-link.git
-cd weixin-link
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh | sh
 ```
 
-Linux/macOS 执行 `./install.sh`；Windows PowerShell 执行 `.\install.ps1`。
+**Windows x64**：[首次安装](#快速开始)使用 PowerShell 安装命令；升级运行：
 
-</details>
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/upgrade.ps1')))
+```
+
+升级适用于安装器管理的标准部署。自定义部署、扫码刷新和恢复步骤见 [配置与维护](CONFIGURATION.md#已有安装与升级)。
 
 ## 重新获取登录二维码
 

@@ -18,14 +18,12 @@ Start tasks · Add instructions · Check progress · Receive files
 
 Weixin Link connects WeChat private chats to **Codex** on your computer or server. Start tasks, add instructions while you are away, and receive answers and generated files in WeChat.
 
-```mermaid
-flowchart LR
-    A["📱 WeChat: send a task, image or file"] --> B["Weixin Link"]
-    B --> C["💻 Your computer / server: Codex runs the task"]
-    C --> D["📱 WeChat: receive answers and files"]
-```
+<p align="center">
+  <img src="docs/images/weather-conversation.png" width="320" alt="WeChat conversation: asking for a city before checking the weather">
+  <img src="docs/images/voice-story-conversation.png" width="320" alt="WeChat conversation: transcribing a voice message and writing a short story">
+</p>
 
-*Workflow illustration, not an actual chat screenshot. Your computer or server must stay online. Execution depends on your workspace and tool permissions.*
+*Edited from actual conversations: clarify a request, then respond; transcribe a voice message, then write a story. Your computer or server must stay online. Execution depends on your workspace and tool permissions.*
 
 ## Quick start
 
@@ -101,25 +99,19 @@ Each message is processed independently. Text and attachments in the same messag
 
 ## Installation and upgrades
 
-**Run the same command to install or upgrade a standard deployment.** The entry checks the selected source and registered services before changing an existing installation. Source code defaults to `~/.local/share/weixin-link/source`; workspace and account data are stored separately.
-
-On Linux/macOS, rerun the command above; Windows still uses `upgrade.ps1`. The upgrade prepares the new source and dependencies, backs up source and runtime data, switches versions and checks service health. Failed checks trigger an automatic rollback attempt. **Custom services, separate release directories and local modifications require their existing deployment procedure; the upgrader does not take them over.**
-
-A successful upgrade explicitly prints a completion message and the backup location. Repeating the same version reports that the source is already current, without another backup or service restart. Seeing only the download message does not confirm an upgrade; check the result message and service status.
-
-See [existing installations and upgrades](CONFIGURATION.md#已有安装与升级) for commands, custom paths, QR refresh and recovery steps.
-
-<details>
-<summary>Install from a source checkout</summary>
+**Linux / macOS:** Use the same command to install or upgrade.
 
 ```sh
-git clone https://github.com/zhangjingwei/weixin-link.git
-cd weixin-link
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/bootstrap.sh | sh
 ```
 
-Run `./install.sh` on Linux/macOS, or `.\install.ps1` in Windows PowerShell.
+**Windows x64:** Use the PowerShell command in [Quick start](#quick-start) to install. To upgrade, run:
 
-</details>
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/upgrade.ps1')))
+```
+
+Upgrades support installer-managed deployments. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments, QR refresh and recovery.
 
 ## Refresh the login QR code
 
