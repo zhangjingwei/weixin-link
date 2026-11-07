@@ -13,3 +13,12 @@ test('account scoped report excludes raw secret fields and handles malformed rec
  const missing=[];await handleDiagnostic('errors',x=>missing.push(x),{stateDir:join(dir,'other')});assert.match(missing[0],/暂无诊断日志/)
  }finally{await rm(dir,{recursive:true,force:true})}
 })
+test('recent errors expose a safe reference shared across failure stages',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'diagnostic-trace-'));try{
+  await mkdir(join(dir,'logs'))
+  await writeFile(join(dir,'logs/events.jsonl'),['ingress.persist_failed','outbound.text_failed'].map(event=>JSON.stringify({timestamp:'2026-11-06T01:00:00.000Z',event,trace_id:'same-message-trace',level:'error'})).join('\n')+'\n')
+  const sent=[];await handleDiagnostic('errors',value=>sent.push(value),{stateDir:dir})
+  const refs=[...sent[0].matchAll(/trace_ref=([a-f0-9]{12})/g)].map(m=>m[1])
+  assert.equal(refs.length,2);assert.equal(refs[0],refs[1]);assert.match(sent[0],/ingress.persist_failed/);assert.match(sent[0],/outbound.text_failed/);assert.doesNotMatch(sent[0],/same-message-trace/)
+ }finally{await rm(dir,{recursive:true,force:true})}
+})

@@ -24,6 +24,12 @@ test('extracted processor retains ping handling and durable ordinary submission'
  await f.handle({userId:'owner',text:'normal request',_ingressId:'request-id'})
  assert.equal(f.submitted.length,1);assert.equal(f.submitted[0][0],'owner');assert.equal(f.submitted[0][2],'request-id')
 })
+test('inbound trace is retained through message logging and durable submission',async()=>{
+ const f=fixture(),events=[];f.deps.log=(event,fields)=>events.push({event,...fields});f.handle=createMessageProcessor(f.deps)
+ await f.handle({userId:'owner',text:'请检查',_traceId:'message-trace-123',_ingressId:'request-id'})
+ assert.equal(events.find(e=>e.event==='message.received').trace_id,'message-trace-123')
+ assert.equal(f.submitted[0][1].traceId,'message-trace-123')
+})
 test('diagnostic controls bypass missing model/backend and never submit inference',async()=>{
  const f=fixture();f.deps.stateDir='/nonexistent-wechat-diagnostic-test';f.deps.manager.sessions.clear();f.deps.backend.kind='podman';f.deps.backend.preflight=()=>{throw Error('must not invoke backend')};f.deps.runtime.track=async(kind,fn)=>fn()
  await f.handle({userId:'owner',text:'查看最近错误',_ingressId:'diagnostic-id'})

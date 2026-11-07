@@ -42,8 +42,8 @@ test('ambiguous upload is marked unknown and never automatically resent; checkpo
 test('explicit API rejection retries only the failed text part and records attempts',async()=>{
  const logs=[];let calls=0
  const transport=new OutputTransport({retryDelayMs:0,log:(event,fields)=>logs.push({event,...fields}),send:async()=>{calls++;if(calls===1)throw Object.assign(Error('private rejection token=secret'),{name:'ApiError',code:'API_ERROR',httpStatus:409,errcode:19001})}})
- assert.deepEqual(await transport.deliver('owner','final answer'),{status:'accepted'});assert.equal(calls,2)
- const failed=logs.find(x=>x.event==='outbound.text_failed');assert.equal(failed.attempt,1);assert.equal(failed.final_attempt,false);assert.equal(failed.delivery_state,'failed');assert.equal(failed.http_status,409);assert.equal(failed.api_code,19001);assert.ok(!JSON.stringify(logs).includes('secret'))
+ assert.deepEqual(await transport.deliver('owner','final answer',{traceId:'message-trace-123'}),{status:'accepted'});assert.equal(calls,2)
+ const failed=logs.find(x=>x.event==='outbound.text_failed');assert.equal(failed.trace_id,'message-trace-123');assert.equal(logs.find(x=>x.event==='outbound.text_accepted').trace_id,'message-trace-123');assert.equal(failed.attempt,1);assert.equal(failed.final_attempt,false);assert.equal(failed.delivery_state,'failed');assert.equal(failed.http_status,409);assert.equal(failed.api_code,19001);assert.ok(!JSON.stringify(logs).includes('secret'))
 })
 
 test('ambiguous transport errors are never automatically replayed',async()=>{

@@ -67,7 +67,8 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
       return rpc
     },
   }
-  const reply = async text => output.push(text)
+  const replyOptions=[]
+  const reply = async (text,options) => {output.push(text);replyOptions.push(options)}
   const complete = async (rpc, text, status = 'completed') => {
     const threadId = rpc.calls.find(c => c.method === 'turn/start').params.threadId
     if (text) await rpc.event({ method: 'item/completed', params: { threadId, item: { id: 'answer', type: 'agentMessage', phase: 'final_answer', text } } })
@@ -78,11 +79,13 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     await manager.handle('stranger', '读一下服务器的项目', reply)
     assert.equal(clients.length, 0)
     const exact = '连接 spark，帮我查看项目，保留标点 $(example) `text`'
-    await manager.handle('owner', exact, reply, 1)
+    await manager.handle('owner', {text:exact,traceId:'known-trace-123'}, reply, 1)
     const first = clients.at(-1)
     assert.equal(first.calls.at(-1).params.input[0].text, exact)
+    assert.equal(manager.sessions.get('owner').traceId,'known-trace-123')
     await first.event({ method: 'item/completed', params: { threadId: 'thread-1', item: { id: 'progress', type: 'agentMessage', phase: 'commentary', text: '正在检查项目配置。' } } })
     assert.ok(output.includes('正在检查项目配置。'))
+    assert.equal(replyOptions.at(-1).traceId,'known-trace-123')
     const callsBeforeProgress=first.calls.length
     await manager.handle('owner', '进度如何了', reply, 3)
     assert.match(output.at(-1), /正在处理[\s\S]*最近进展：正在检查项目配置。/)

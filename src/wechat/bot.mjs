@@ -112,7 +112,7 @@ const runtime=new RuntimeControl({
 })
 const mediaDependencies={
  log,
- prepare:async(message,token)=>{const start=Date.now(),messageId=message.raw?.message_id??message.raw?.client_id;log('attachments.download_started',{messageId});try{const r=await runtime.track('media',()=>prepareMedia(message,stateDir,undefined,token?.signal));log('attachments.download_completed',{messageId,duration_ms:Date.now()-start,count:r.attachments.length,bytes:r.attachments.reduce((n,a)=>n+(a.bytes??0),0),status:r.errors.length?'partial':'ok'});return r}catch(e){log('attachments.download_failed',{messageId,duration_ms:Date.now()-start,...errorFields(e)});throw e}},
+ prepare:async(message,token)=>{const start=Date.now(),messageId=message.raw?.message_id??message.raw?.client_id,trace_id=message._traceId;log('attachments.download_started',{trace_id,messageId});try{const r=await runtime.track('media',()=>prepareMedia(message,stateDir,undefined,token?.signal));log('attachments.download_completed',{trace_id,messageId,duration_ms:Date.now()-start,count:r.attachments.length,bytes:r.attachments.reduce((n,a)=>n+(a.bytes??0),0),status:r.errors.length?'partial':'ok'});return r}catch(e){log('attachments.download_failed',{trace_id,messageId,duration_ms:Date.now()-start,...errorFields(e)});throw e}},
  compose:input=>runtime.track('media',()=>composeMediaInput(input)),
  submit:(owner,input,token,ingressId)=>{if(token.current())durable.submit(owner,input,ingressId,[ingressId].filter(Boolean))},
 }
@@ -142,7 +142,7 @@ const weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:async wires=
  if(runtime.sealed)throw Error('INGRESS_SEALED')
  const received=[],setupReceived=[]
  for(const wire of wires){const parsed=originalParse(wire);if(!parsed||!conversations.realOwners.has(parsed.userId))continue
-  const previous=jobs.findCaptured(parsed);const message=previous??conversations.bind(parsed);const frozenSetup=setupReceipts.get(parsed);if(frozenSetup){message._setupAction=frozenSetup.action;message._setupReceiptId=frozenSetup.id}if(!Object.hasOwn(message,'_setupAction'))message._setupAction=previous?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId);message.references??=weixin.quote(message);stagedWires.set(wire,message)
+  const previous=jobs.findCaptured(parsed);const message=previous??conversations.bind(parsed);message._traceId??=ingressTrace.traceId(wire);const frozenSetup=setupReceipts.get(parsed);if(frozenSetup){message._setupAction=frozenSetup.action;message._setupReceiptId=frozenSetup.id}if(!Object.hasOwn(message,'_setupAction'))message._setupAction=previous?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId);message.references??=weixin.quote(message);stagedWires.set(wire,message)
   const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
   if(message._setupAction)setupReceived.push(message)
   if(!control)received.push(message)
@@ -174,13 +174,13 @@ const intakeHandler=nonBlockingHandler(async message => {
   }
 },error=>log('message.background_failed',errorFields(error)),{enter:()=>runtime.enter('ingress')})
 bot.onMessage(message=>{
- ingressTrace.callback(message)
+ const inboundTrace=ingressTrace.callback(message);message._traceId??=inboundTrace
  if(!conversations.realOwners.has(message._conversationOwner??message.userId)||runtime.sealed)return
  if(!message._conversationOwner)message=conversations.bind(message)
  if(!Object.hasOwn(message,'_setupAction'))message._setupAction=message._recovered?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId)
  if(!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))){intakeHandler(message);return}
  const token=manager.lifecycle.capture(message.userId)
- void (async()=>{try{await manager.save();if(!token.current())return;const id=jobs.capture(message);if(id){log('ingress.persisted',{messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text'});intakeHandler({...message,_ingressId:id,_intakeToken:token})}}catch(error){log('ingress.persist_failed',errorFields(error));void bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('消息未能持久保存，请稍后重试。')).catch(()=>{})}})()
+ void (async()=>{try{await manager.save();if(!token.current())return;const id=jobs.capture(message);if(id){log('ingress.persisted',{trace_id:message._traceId,messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text'});intakeHandler({...message,_ingressId:id,_intakeToken:token})}}catch(error){log('ingress.persist_failed',{trace_id:message._traceId,...errorFields(error)});void bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('消息未能持久保存，请稍后重试。')).catch(()=>{})}})()
 })
 
 async function shutdown(signal){if(stopping)return;stopping=true;updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}

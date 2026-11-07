@@ -20,7 +20,8 @@ return async function handleMessage(message) {
   if(message._ingressId&&!jobs.rawCurrent(message._ingressId))return
   if(message._intakeToken&&!message._intakeToken.current())return
   if(message._contextToken)bot.contextStore.set(conversations.recipient(message.userId),message._contextToken)
-  const trace_id=randomUUID()
+  const trace_id=message._traceId??randomUUID()
+  const deliver=(value,options)=>outgoing.deliver(message.userId,value,{...options,traceId:options?.traceId??trace_id})
   log('message.received',{trace_id,userId:message.userId,messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text',chars:message.text?.length??0})
   if (!manager.owners.has(message.userId)) {log('message.rejected',{trace_id,reason:'unauthorized'});return}
   let lifecycleDelivery
@@ -34,18 +35,18 @@ return async function handleMessage(message) {
     jobs.acknowledge([message._ingressId].filter(Boolean))
     await runtime.track('delivery',()=>bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('服务正在维护重启，请稍后重新发送。')));return
   }
-  const setupAction=!hasMedia(message)&&message._setupAction;if(setupAction){const receipt=message._setupReceiptId?{id:message._setupReceiptId}:setupReceipts.capture(message);if(!receipt||!setupReceipts.claim(receipt.id)){if(message._recovered){await outgoing.deliver(message.userId,'上次安装操作的结果需要核对，未重复执行。发送“安装向导”重新检测并继续。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean))}return;}const setupToken=manager.lifecycle.capture(message.userId);const setupReply=(value,options={})=>{if(!setupToken.current())throw Error('SETUP_CANCELLED');return options.sensitive?runtime.track('delivery',()=>bot.sendSensitiveText(conversations.recipient(message.userId),value)):outgoing.deliver(message.userId,value,{current:()=>setupToken.current(),conversationControl:true})};await runtime.track('setup',()=>setupController.handle(setupAction,setupReply,{signal:setupToken.signal,scope:message._conversationOwner??message.userId,executionKey:message.userId}));setupReceipts.finish(receipt.id);jobs.acknowledge([message._ingressId].filter(Boolean));return}
-  if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>outgoing.deliver(message.userId,diagnosticAction==='export'?await new OutputStore({stateDir,cwd:process.cwd()}).package(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
-  if(!initialControl&&backend.kind==='podman'&&!manager.sessions.has(message.userId)){try{await backend.preflight(owners);backendStartupIssue=null}catch{backendStartupIssue='CONTAINER_NOT_READY'}if(backendStartupIssue){await outgoing.deliver(message.userId,'微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}}
+  const setupAction=!hasMedia(message)&&message._setupAction;if(setupAction){const receipt=message._setupReceiptId?{id:message._setupReceiptId}:setupReceipts.capture(message);if(!receipt||!setupReceipts.claim(receipt.id)){if(message._recovered){await deliver('上次安装操作的结果需要核对，未重复执行。发送“安装向导”重新检测并继续。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean))}return;}const setupToken=manager.lifecycle.capture(message.userId);const setupReply=(value,options={})=>{if(!setupToken.current())throw Error('SETUP_CANCELLED');return options.sensitive?runtime.track('delivery',()=>bot.sendSensitiveText(conversations.recipient(message.userId),value)):deliver(value,{current:()=>setupToken.current(),conversationControl:true})};await runtime.track('setup',()=>setupController.handle(setupAction,setupReply,{signal:setupToken.signal,scope:message._conversationOwner??message.userId,executionKey:message.userId}));setupReceipts.finish(receipt.id);jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>deliver(diagnosticAction==='export'?await new OutputStore({stateDir,cwd:process.cwd()}).package(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  if(!initialControl&&backend.kind==='podman'&&!manager.sessions.has(message.userId)){try{await backend.preflight(owners);backendStartupIssue=null}catch{backendStartupIssue='CONTAINER_NOT_READY'}if(backendStartupIssue){await deliver('微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}}
   if(!initialControl&&backend.kind==='host'&&backend.agentKind!=='claude'&&!manager.sessions.has(message.userId)){
-   const ready=await codexAvailability();if(!ready.installed||!ready.loggedIn){await outgoing.deliver(message.userId,!ready.installed?'微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。':'微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
+   const ready=await codexAvailability();if(!ready.installed||!ready.loggedIn){await deliver(!ready.installed?'微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。':'微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
-  if(!initialControl&&backend.agentKind==='claude'&&!manager.sessions.has(message.userId)&&!process.env.ANTHROPIC_API_KEY&&!process.env.CLAUDE_CODE_USE_BEDROCK&&!process.env.CLAUDE_CODE_USE_VERTEX&&!process.env.CLAUDE_CODE_USE_FOUNDRY){await outgoing.deliver(message.userId,'微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  if(!initialControl&&backend.agentKind==='claude'&&!manager.sessions.has(message.userId)&&!process.env.ANTHROPIC_API_KEY&&!process.env.CLAUDE_CODE_USE_BEDROCK&&!process.env.CLAUDE_CODE_USE_VERTEX&&!process.env.CLAUDE_CODE_USE_FOUNDRY){await deliver('微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const transcribed=voiceTextMessage(message)
   if(transcribed){log('voice.transcript_forwarded',{trace_id,userId:message.userId,status:'wechat_asr_text'});message=transcribed}
   const media = hasMedia(message)
   if (!media && !message.text?.trim()){jobs.acknowledge([message._ingressId].filter(Boolean));return}
-  const reply = (value,options) => outgoing.deliver(message.userId,options?.checkpoint?value:systemNotice(value),options)
+  const reply = (value,options) => deliver(options?.checkpoint?value:systemNotice(value),options)
   const text = message.text?.trim() ?? ''
   if (!media && text.toLowerCase() === 'ping') { await reply('pong');jobs.acknowledge([message._ingressId].filter(Boolean)); return }
   if (text.length > 12_000) { await reply('消息过长，请拆成几条发送。');jobs.acknowledge([message._ingressId].filter(Boolean)); return }
@@ -53,25 +54,25 @@ return async function handleMessage(message) {
   const messageId = message.raw?.message_id ?? message.raw?.client_id
   if (!message._recovered&&(media||initialControl)&&initialControl?.action!=='steer'&&!await manager.acceptMessage(message.userId,messageId)) return
   if(message._recovered&&(agentAction?.action==='restart'||upgradeAction)){
-   await runtime.track('delivery',()=>outgoing.deliver(message.userId,'上次维护指令的结果待核对，未重复执行。可发“服务状态”查看当前服务。',{conversationControl:true}))
+   await runtime.track('delivery',()=>deliver('上次维护指令的结果待核对，未重复执行。可发“服务状态”查看当前服务。',{conversationControl:true}))
    jobs.acknowledge([message._ingressId].filter(Boolean));return
   }
   let recoveryDelivery
   if(!initialControl&&!hasMedia(message)&&!message._recovered){
-   try{recoveryDelivery=await recoverFailedFinal(manager,message.userId,(key,value)=>outgoing.deliver(key,value,{conversationControl:true}));if(recoveryDelivery)log('delivery.recovery_attempt',{trace_id,status:recoveryDelivery})}
+   try{recoveryDelivery=await recoverFailedFinal(manager,message.userId,(key,value)=>outgoing.deliver(key,value,{conversationControl:true,traceId:trace_id}));if(recoveryDelivery)log('delivery.recovery_attempt',{trace_id,status:recoveryDelivery})}
    catch(error){log('delivery.recovery_failed',{trace_id,...errorFields(error)})}
   }
   if(agentAction){
    await runtime.track('setup',async()=>{
-    try{await agentSwitcher.handle(agentAction,value=>runtime.track('delivery',()=>outgoing.deliver(message.userId,value,{conversationControl:true})))}
-    catch(error){log('agent.switch_failed',{trace_id,...errorFields(error)});await outgoing.deliver(message.userId,'智能体切换未完成；当前底座未确认改变。错误代码：'+(/^[A-Z0-9_]+$/.test(error.message)?error.message:'AGENT_SWITCH_FAILED'),{conversationControl:true})}
+    try{await agentSwitcher.handle(agentAction,value=>runtime.track('delivery',()=>deliver(value,{conversationControl:true})))}
+    catch(error){log('agent.switch_failed',{trace_id,...errorFields(error)});await deliver('智能体切换未完成；当前底座未确认改变。错误代码：'+(/^[A-Z0-9_]+$/.test(error.message)?error.message:'AGENT_SWITCH_FAILED'),{conversationControl:true})}
     finally{jobs.acknowledge([message._ingressId].filter(Boolean))}
    });return
   }
   if(upgradeAction){
    await runtime.track('setup',async()=>{
-    try{await upgrader.handle(value=>runtime.track('delivery',()=>outgoing.deliver(message.userId,value,{conversationControl:true})))}
-    catch(error){log('upgrade.request_failed',{trace_id,...errorFields(error)});await outgoing.deliver(message.userId,'升级未安排。错误代码：'+(/^[A-Z0-9_]+$/.test(error.message)?error.message:'CHAT_UPGRADE_FAILED'),{conversationControl:true})}
+    try{await upgrader.handle(value=>runtime.track('delivery',()=>deliver(value,{conversationControl:true})))}
+    catch(error){log('upgrade.request_failed',{trace_id,...errorFields(error)});await deliver('升级未安排。错误代码：'+(/^[A-Z0-9_]+$/.test(error.message)?error.message:'CHAT_UPGRADE_FAILED'),{conversationControl:true})}
     finally{jobs.acknowledge([message._ingressId].filter(Boolean))}
    });return
   }
@@ -90,7 +91,8 @@ return async function handleMessage(message) {
   try {
     const current=()=>token.current()
     if(!current()){log('message.cancelled',{trace_id,userId:message.userId,reason:'control_cancelled'});return}
-    durable.submit(message.userId,quoteInput(text,message.references),message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
+    const quoted=quoteInput(text,message.references)
+    durable.submit(message.userId,{...(typeof quoted==='string'?{text:quoted}:quoted),traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
   }
   catch(error){log('message.dispatch_failed',{trace_id,userId:message.userId,...errorFields(error)});await reply('消息处理失败，请稍后再试。')}
 

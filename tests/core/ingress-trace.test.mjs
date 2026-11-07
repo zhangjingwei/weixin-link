@@ -10,8 +10,8 @@ test('wire, parse, callback boundaries correlate without payload secrets or mess
  const r=await bot.api.getUpdates();assert.equal(r.msgs[0],wire)
  const m=bot.parser.parse(wire);trace.callback(m)
  await bot.http.executeRequest({url:'https://example.com/ilink/bot/getupdates'})
- const received=records.find(x=>x.event==='ingress.wire_received'),cb=records.find(x=>x.event==='ingress.sdk_callback')
- assert.equal(received.trace_id,cb.trace_id);assert.equal(received.message_ref,cb.message_ref);assert.equal(received.parts,2);assert.equal(received.kind,'1-2')
+ const received=records.find(x=>x.event==='ingress.wire_received'),cb=records.find(x=>x.event==='ingress.sdk_callback'),poll=records.find(x=>x.event==='ingress.poll_started')
+ assert.equal(received.trace_id,cb.trace_id);assert.equal(trace.traceId(wire),received.trace_id);assert.equal(received.poll_id,poll.trace_id);assert.notEqual(received.trace_id,poll.trace_id);assert.equal(received.message_ref,cb.message_ref);assert.equal(received.parts,2);assert.equal(received.kind,'1-2')
  assert.ok(!JSON.stringify(records).includes('SECRET'));assert.ok(!JSON.stringify(records).includes('PRIVATE'));assert.ok(!JSON.stringify(records).includes('https://'))
  }finally{trace.close()}
 })

@@ -9,7 +9,7 @@ export class DurableIntake {
  resume(){for(const owner of new Set(this.jobs.pending().map(j=>j.owner)))if(this.manager.owners.has(owner))this.wake(owner)}
  wake(owner){if(this.closed||this.users.has(owner))return;const run=this.pump(owner).catch(e=>this.log('queue.failed',{code:e.code??'WORKER_FAILED'})).finally(()=>{this.users.delete(owner);if(!this.closed&&this.jobs.pending().some(j=>j.owner===owner))queueMicrotask(()=>this.wake(owner))});this.users.set(owner,run)}
  async pump(owner){
-  for(;;){if(this.closed)return;const job=this.jobs.pending().find(j=>j.owner===owner);if(!job)return;const token=this.manager.lifecycle.capture(owner),reply=(v,o)=>this.reply(owner,v,o)
+  for(;;){if(this.closed)return;const job=this.jobs.pending().find(j=>j.owner===owner);if(!job)return;const token=this.manager.lifecycle.capture(owner),reply=(v,o)=>this.reply(owner,v,{...o,traceId:o?.traceId??(typeof job.input==='object'?job.input.traceId:undefined)})
    try{
     if(job.state==='pending'){
      const input=typeof job.input==='string'?{text:job.input}:{...job.input};input.deliveryId=job.id

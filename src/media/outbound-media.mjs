@@ -85,32 +85,32 @@ export class OutputStore {
 }
 export class OutputTransport {
  constructor({store,send,log=()=>{},maxRetries=1,retryDelayMs=750}){Object.assign(this,{store,send,log,maxRetries,retryDelayMs});this.queues=new Map()}
- deliver(userId,value,{checkpoint=async()=>{},current=()=>true,continueTextFailure=false}={}){
-  const run=(this.queues.get(userId)??Promise.resolve()).catch(()=>{}).then(()=>this.sendOne(userId,value,checkpoint,current,continueTextFailure));this.queues.set(userId,run)
+ deliver(userId,value,{checkpoint=async()=>{},current=()=>true,continueTextFailure=false,traceId}={}){
+  const run=(this.queues.get(userId)??Promise.resolve()).catch(()=>{}).then(()=>this.sendOne(userId,value,checkpoint,current,continueTextFailure,traceId));this.queues.set(userId,run)
   return run.finally(()=>{if(this.queues.get(userId)===run)this.queues.delete(userId)})
  }
- async sendWithRetry(userId,content,{event,kind,part,parts,current=()=>true}){
+ async sendWithRetry(userId,content,{event,kind,part,parts,current=()=>true,traceId}){
   const attempts=Math.max(0,Math.trunc(this.maxRetries))+1
   for(let attempt=1;attempt<=attempts;attempt++){
    if(!current())throw Object.assign(Error('Delivery cancelled'),{code:'DELIVERY_CANCELLED'})
    try{const response=await this.send(userId,content);return {attempt,messageIds:(Array.isArray(response)?response:[response]).filter(Boolean).map(r=>r.message_id).filter(id=>id!==undefined).map(String)}}
    catch(error){
     const state=deliveryFailureState(error),finalAttempt=state!=='failed'||attempt===attempts
-    this.log(event,{userId,kind,part,parts,attempt,final_attempt:finalAttempt,...deliveryError(error),delivery_state:state})
+    this.log(event,{userId,trace_id:traceId,kind,part,parts,attempt,final_attempt:finalAttempt,...deliveryError(error),delivery_state:state})
     if(finalAttempt)throw error
     if(this.retryDelayMs>0)await new Promise(resolve=>setTimeout(resolve,this.retryDelayMs))
    }
   }
  }
- async sendOne(userId,value,checkpoint,current,continueTextFailure=false){
+ async sendOne(userId,value,checkpoint,current,continueTextFailure=false,traceId){
   const bundle=typeof value!=='string',text=bundle?value.text:value,parts=wechatParts(text)
   for(let part=0;part<parts.length;part++){
    if(!current()){if(bundle){for(const item of value.attachments)if(item.status==='pending')item.status='cancelled';await checkpoint()}return {status:'cancelled'}}
    if(bundle&&value.textParts[part])continue
    if(bundle){value.textParts[part]='sending';await checkpoint()}
    try{
-    const attempt=await this.sendWithRetry(userId,parts[part],{event:'outbound.text_failed',kind:'text',part:part+1,parts:parts.length,current})
-    this.log('outbound.text_accepted',{userId,kind:'text',part:part+1,parts:parts.length,attempt:attempt.attempt})
+    const attempt=await this.sendWithRetry(userId,parts[part],{event:'outbound.text_failed',kind:'text',part:part+1,parts:parts.length,current,traceId})
+    this.log('outbound.text_accepted',{userId,trace_id:traceId,kind:'text',part:part+1,parts:parts.length,attempt:attempt.attempt})
     if(bundle){value.textParts[part]='accepted';value.textMessageIds??={};value.textMessageIds[part]=attempt.messageIds;await checkpoint()}
    }catch(error){
     if(error.code==='DELIVERY_CANCELLED'){if(bundle){value.textParts[part]='cancelled';for(const item of value.attachments)if(item.status==='pending')item.status='cancelled';await checkpoint()}return {status:'cancelled'}}
@@ -125,11 +125,11 @@ export class OutputTransport {
   for(const item of value.attachments){
    if(item.status!=='pending')continue
    if(!current()){item.status='cancelled';await checkpoint();continue}
-   let data;try{data=await this.store.bytes(userId,item)}catch{item.status='failed';item.reason='ARTIFACT_UNAVAILABLE';this.log('outbound.media_failed',{userId,kind:item.kind,reason:item.reason});await checkpoint();continue}
+   let data;try{data=await this.store.bytes(userId,item)}catch{item.status='failed';item.reason='ARTIFACT_UNAVAILABLE';this.log('outbound.media_failed',{userId,trace_id:traceId,kind:item.kind,reason:item.reason});await checkpoint();continue}
    if(!current()){item.status='cancelled';await checkpoint();continue}
    item.status='sending';await checkpoint()
    if(!current()){item.status='cancelled';await checkpoint();continue}
-   try{const attempt=await this.sendWithRetry(userId,item.kind==='image'?{image:data}:item.kind==='video'?{video:data}:item.kind==='voice'?{voice:data}:{file:data,fileName:item.fileName},{event:'outbound.media_failed',kind:item.kind,parts:1,current});item.status='accepted';item.messageIds=attempt.messageIds;this.log('outbound.media_accepted',{userId,kind:item.kind,bytes:item.bytes,attempt:attempt.attempt})}
+   try{const attempt=await this.sendWithRetry(userId,item.kind==='image'?{image:data}:item.kind==='video'?{video:data}:item.kind==='voice'?{voice:data}:{file:data,fileName:item.fileName},{event:'outbound.media_failed',kind:item.kind,parts:1,current,traceId});item.status='accepted';item.messageIds=attempt.messageIds;this.log('outbound.media_accepted',{userId,trace_id:traceId,kind:item.kind,bytes:item.bytes,attempt:attempt.attempt})}
    catch(error){item.status=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);item.error=deliveryError(error)}
    await checkpoint()
   }
@@ -137,7 +137,7 @@ export class OutputTransport {
   const failed=value.attachments.filter(a=>['unknown','failed'].includes(a.status)).length
   if(failed&&current()&&!value.failureNotice){
    value.failureNotice='sending';await checkpoint()
-   try{await this.sendWithRetry(userId,`有 ${failed} 个附件未能确认送达。可发“结果”主动重发整组结果（含已发送附件）。`,{event:'outbound.failure_notice_failed',kind:'failure_notice',parts:1,current});value.failureNotice='accepted'}catch(error){value.failureNotice=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);value.failureNoticeError=deliveryError(error)}
+   try{await this.sendWithRetry(userId,`有 ${failed} 个附件未能确认送达。可发“结果”主动重发整组结果（含已发送附件）。`,{event:'outbound.failure_notice_failed',kind:'failure_notice',parts:1,current,traceId});value.failureNotice='accepted'}catch(error){value.failureNotice=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);value.failureNoticeError=deliveryError(error)}
    await checkpoint()
   }
   return {status:!current()?'cancelled':failed||textFailed?'partial':'accepted'}

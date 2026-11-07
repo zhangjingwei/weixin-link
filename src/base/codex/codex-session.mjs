@@ -86,7 +86,7 @@ export class SessionManager {
       if(!guard()){session.lastDelivery={status:'cancelled',updated:new Date().toISOString()};this.log('delivery.suppressed',{...context,reason:'stale_progress',delivery_state:'cancelled'});return false}
       const started=Date.now();this.log('delivery.started',{...context,chars:Array.from(typeof text==='string'?text:text.text).length})
       try{
-        const sent=await session.reply(text,{checkpoint:()=>this.save(),current:()=>session.workToken?.current()??true})
+        const sent=await session.reply(text,{checkpoint:()=>this.save(),current:()=>session.workToken?.current()??true,traceId:session.traceId})
         const state=['accepted','deferred','partial','unknown','cancelled','failed'].includes(sent?.status)?sent.status:'accepted'
         session.lastDelivery={status:state,updated:new Date().toISOString(),...(sent?.error?{error:sent.error}:{})}
         if(state==='accepted')session.contextRejected=false
@@ -301,7 +301,7 @@ export class SessionManager {
     session.lastProgress=null
     session.contextRejected=false
     session.workToken=token
-    session.traceId = randomBytes(8).toString('hex')
+    session.traceId = typeof text==='object'&&/^[a-zA-Z0-9_-]{8,64}$/.test(text.traceId??'')?text.traceId:randomBytes(8).toString('hex')
     const waiting=this.state.users[session.userId]?.waitingAttachment
     session.attachmentContinuation=hasAttachments(text)&&waiting?waiting:null
     session.localTask=session.attachmentContinuation?.task??localTaskLabel(text,typeof text==='object'&&text.deliveryId?text.deliveryId:session.traceId)

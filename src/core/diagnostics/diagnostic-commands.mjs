@@ -15,7 +15,7 @@ export async function readDiagnostics(dir){
    let r;try{r=JSON.parse(line)}catch{invalid++;continue}
    if(!r||typeof r!=='object'||typeof r.event!=='string'||!/^[a-z][a-z0-9_.]{0,79}$/.test(r.event)||!/^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(r.timestamp??'')){invalid++;continue}
    // Never return raw log fields, exception text, paths, URLs or credentials.
-   const event=/^(?:message|turn|rpc|service|wechat|delivery|receipt|inbox|output|media|setup)\.[a-z_.]{1,60}$/.test(r.event)?r.event:'other'
+   const event=/^(?:message|turn|rpc|service|wechat|delivery|receipt|inbox|output|outbound|ingress|attachments|media|setup)\.[a-z_.]{1,60}$/.test(r.event)?r.event:'other'
    records++;counts[event]=(counts[event]??0)+1;last=r.timestamp
    if(Number.isSafeInteger(r.dropped)&&r.dropped>0)dropped+=r.dropped
    const trace=typeof r.trace_id==='string'?hash(r.trace_id):null
@@ -34,7 +34,7 @@ export async function handleDiagnostic(action,reply,{stateDir=accountPaths().sta
   const serviceText=()=>status?.unknown?'服务状态：未能查询。':`服务状态：${status.active?'运行中':'未运行或状态查询失败'}${status.pid?`，PID ${status.pid}`:''}。`
   if(action==='service'){await reply(serviceText());return}
   const data=await readDiagnostics(join(stateDir,'logs'))
-  const errors=data.recent_failures.map(r=>`${r.timestamp} ${r.event}${r.code?' '+r.code:''}`)
+  const errors=data.recent_failures.map(r=>`${r.timestamp} ${r.event}${r.code?' '+r.code:''}${r.trace_ref?' trace_ref='+r.trace_ref:''}`)
   const summary=`诊断范围：当前机器人账号保留的本地日志。\n${data.files?`共 ${data.records} 条记录，最近事件：${data.last_event_at??'无'}。`:'暂无诊断日志，不能据此判断运行正常。'}\n最近错误：${errors.length} 条（最多展示20条）；未匹配结束事件：${data.unmatched_turn_count} 个（不等于任务仍在执行）。\n无效日志行：${data.invalid_lines}；记录丢弃：${data.dropped_records}。`
   if(action==='errors'){await reply(errors.length?'最近错误（最多20条）：\n'+errors.join('\n'):data.files?'保留的诊断日志中未发现错误级别事件。':'暂无诊断日志，无法查询最近错误。');return}
   if(action==='export'){
