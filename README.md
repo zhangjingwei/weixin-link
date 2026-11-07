@@ -24,7 +24,14 @@ Weixin Link 把微信私聊接到你电脑或服务器上的**智能体底座**�
     <td align="center" valign="top"><img src="docs/images/weather-conversation.png" width="320" alt="微信对话：追问城市后查询天气"></td>
     <td align="center" valign="top"><img src="docs/images/voice-story-conversation.png" width="320" alt="微信对话：语音转写后生成短篇故事"></td>
   </tr>
+  <tr><th align="center">核对可用设备</th><th align="center">查询设备读数</th></tr>
+  <tr>
+    <td align="center" valign="top"><img src="docs/images/available-devices-conversation.png" width="400" alt="微信对话示意：核对已授权的 SSH 和 Home Assistant 设备"></td>
+    <td align="center" valign="top"><img src="docs/images/temperature-conversation.png" width="400" alt="微信对话示意：查询温度并说明设备读数差异"></td>
+  </tr>
 </table>
+
+<p align="center"><sub>对话示意图根据实际交流整理；设备名称、数量和读数已替换。可用能力取决于当前授权。</sub></p>
 
 ## 快速开始
 

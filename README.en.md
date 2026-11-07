@@ -24,7 +24,14 @@ Weixin Link connects WeChat private chats to an **agent backend** on your comput
     <td align="center" valign="top"><img src="docs/images/weather-conversation.png" width="320" alt="WeChat conversation: asking for a city before checking the weather"></td>
     <td align="center" valign="top"><img src="docs/images/voice-story-conversation.png" width="320" alt="WeChat conversation: transcribing a voice message and writing a short story"></td>
   </tr>
+  <tr><th align="center">Check available devices</th><th align="center">Compare device readings</th></tr>
+  <tr>
+    <td align="center" valign="top"><img src="docs/images/available-devices-conversation.png" width="400" alt="Illustrative WeChat conversation: checking authorized SSH and Home Assistant devices"></td>
+    <td align="center" valign="top"><img src="docs/images/temperature-conversation.png" width="400" alt="Illustrative WeChat conversation: checking temperature and explaining differing device readings"></td>
+  </tr>
 </table>
+
+<p align="center"><sub>Illustrations adapted from actual conversations. Device names, counts and readings have been replaced; available capabilities depend on current permissions.</sub></p>
 
 ## Quick start
 
