@@ -76,7 +76,7 @@ return async function handleMessage(message) {
   }
   if(upgradeAction){
    await runtime.track('setup',async()=>{
-    try{await upgrader.handle(value=>runtime.track('delivery',()=>deliver(value,{conversationControl:true})))}
+    try{await upgrader.handle(value=>runtime.track('delivery',()=>deliver(value,{conversationControl:true})),{traceId:trace_id})}
     catch(error){log('upgrade.request_failed',{trace_id,...errorFields(error)});await deliver('升级未安排。错误代码：'+(/^[A-Z0-9_]+$/.test(error.message)?error.message:'CHAT_UPGRADE_FAILED'),{conversationControl:true})}
     finally{jobs.acknowledge([message._ingressId].filter(Boolean))}
    });return

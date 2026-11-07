@@ -57,3 +57,10 @@ The experimental global gate from f8146f1 is removed. Its reservation file is no
 longer read and does not block execution; this does not reconcile old tasks or
 prove their processes stopped. Drain experimental services and verify unfinished
 tasks before replacing them. This change does not delete private runtime files.
+
+Background chat upgrades preserve the originating `trace_id` in the request and
+transaction journal. Failed requests record a bounded error code and stage; raw
+subprocess output is not persisted. Upgrade subprocesses prepend the active Node
+directory to PATH, and npm is resolved beside that Node rather than via a login
+shell. A completed chat reply only confirms scheduling; the upgrade record and
+installed release marker establish the deployment result.

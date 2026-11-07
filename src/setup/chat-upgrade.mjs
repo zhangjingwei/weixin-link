@@ -25,8 +25,8 @@ export async function readChatUpgrade(home){
 }
 export async function saveChatUpgrade(home,value){await atomicConfigWrite(chatUpgradePath(home),JSON.stringify(value,null,2)+'\n',{backup:false})}
 
-export async function scheduleChatUpgrade(request,{platform=process.platform,run=exec,start=spawn,home=userHome()}={}){
- const args=[join(root,'src/setup/chat-upgrade-worker.mjs'),request.id]
+export async function scheduleChatUpgrade(request,{platform=process.platform,run=exec,start=spawn,home=userHome(),target=root}={}){
+ const args=[join(root,'src/setup/chat-upgrade-worker.mjs'),request.id,target]
  if(platform==='linux'){await run('systemd-run',['--user','--unit=wechat-chat-upgrade-'+request.id.slice(0,12),'--collect','--property=UMask=0077',process.execPath,...args],{timeout:15000});return}
  if(platform==='darwin'){
   const label='com.wechat-assistant.chat-upgrade.'+request.id.replaceAll('-','')
@@ -42,7 +42,7 @@ export async function scheduleChatUpgrade(request,{platform=process.platform,run
 
 export class ChatUpgrader{
  constructor({home=userHome(),target=root,latest=githubMainCommit,deployment=standardDeployment,schedule=scheduleChatUpgrade,lock}={}){Object.assign(this,{home,target,latest,deployment,schedule});this.lock=lock??(fn=>new RemoteStore(join(home,'.local/share/weixin-link')).locked('chat-upgrade-request',fn))}
- async handle(reply){
+ async handle(reply,{traceId}={}){
   const current=await readChatUpgrade(this.home)
   if(current&&['waiting_idle','running'].includes(current.status)){await reply('升级已安排，正在等待空闲或执行中；未重复提交。');return}
   let marker
@@ -61,9 +61,9 @@ export class ChatUpgrader{
   const outcome=await this.lock(async()=>{
    const pending=await readChatUpgrade(this.home)
    if(pending&&['waiting_idle','running'].includes(pending.status))return false
-   const request={id:randomUUID(),commit,previous:marker.commit,status:'waiting_idle'}
+   const request={id:randomUUID(),commit,previous:marker.commit,status:'waiting_idle',trace_id:/^[0-9a-f-]{36}$/i.test(traceId??'')?traceId:randomUUID()}
    await saveChatUpgrade(this.home,request)
-   try{await this.schedule(request,{home:this.home})}catch(error){await saveChatUpgrade(this.home,{...request,status:'failed'});throw error}
+   try{await this.schedule(request,{home:this.home,target:this.target})}catch(error){await saveChatUpgrade(this.home,{...request,status:'failed',stage:'schedule',error:'CHAT_UPGRADE_SCHEDULE_FAILED'});throw error}
    return true
   })
   await reply(outcome?`已安排空闲后升级到 main ${commit.slice(0,7)}。完成后发“诊断”核对服务。`:'升级已安排，未重复提交。')

@@ -2,9 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
-import {join} from 'node:path'
+import {join,dirname} from 'node:path'
 import {ChatUpgrader,chatUpgradeCommand,readChatUpgrade,scheduleChatUpgrade} from '../../src/setup/chat-upgrade.mjs'
-import {performChatUpgrade} from '../../src/setup/chat-upgrade-worker.mjs'
+import {performChatUpgrade,upgradeFailureCode} from '../../src/setup/chat-upgrade-worker.mjs'
 
 const oldCommit='a'.repeat(40),newCommit='b'.repeat(40)
 test('upgrade command matches only exact short or legacy text',()=>{
@@ -17,7 +17,8 @@ test('upgrade request checks main release and schedules once without invoking in
  const target=join(home,'source');await mkdir(target)
  await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'main',commit:oldCommit}))
  const sent=[],scheduled=[],upgrader=new ChatUpgrader({home,target,latest:async()=>newCommit,deployment:async()=>({services:[{active:true,stateDir:target}]}),schedule:async request=>scheduled.push(request)})
- await upgrader.handle(value=>sent.push(value))
+ await upgrader.handle(value=>sent.push(value),{traceId:'11111111-2222-3333-4444-555555555555'})
+ assert.equal(scheduled[0].trace_id,'11111111-2222-3333-4444-555555555555')
  assert.equal(scheduled.length,1);assert.equal((await readChatUpgrade(home)).status,'waiting_idle');assert.match(sent[0],/已安排空闲后升级/)
  await upgrader.handle(value=>sent.push(value))
  assert.equal(scheduled.length,1);assert.match(sent[1],/未重复提交/)
@@ -65,4 +66,17 @@ test('worker rejects an installed commit other than the approved target',async t
  const adapter={services:[{id:'default',active:true}],status:async()=>({ready:true,idle:true,draining:false})}
  await assert.rejects(performChatUpgrade({home:'/unused',target,requestId:request.id,read:async()=>request,save:async(_home,value)=>{request=value},deployment:async()=>adapter,run:async()=>{},attempts:1}),/CHAT_UPGRADE_VERSION_UNVERIFIED/)
  assert.equal(request.status,'failed')
+})
+
+test('worker preserves trace and bounded failure stage without persisting subprocess output',async()=>{
+ let request={id:'failure',commit:newCommit,status:'waiting_idle',trace_id:'11111111-2222-3333-4444-555555555555'}
+ const adapter={services:[{id:'default',active:true}],status:async()=>({ready:true,idle:true})}
+ await assert.rejects(performChatUpgrade({requestId:request.id,read:async()=>request,save:async(h,v)=>{request=v},deployment:async()=>adapter,run:async(bin,args,options)=>{
+  assert.equal(options.env.WEIXIN_LINK_UPGRADE_TRACE_ID,request.trace_id)
+  assert.ok(options.env.PATH.startsWith(dirname(process.execPath)))
+  throw Object.assign(Error('private body'),{stderr:'private output\n错误代码：UPGRADE_ENOENT\n'})
+ }}))
+ assert.equal(request.error,'UPGRADE_ENOENT');assert.equal(request.stage,'installer');assert.equal(request.trace_id,'11111111-2222-3333-4444-555555555555')
+ assert.equal(JSON.stringify(request).includes('private'),false)
+ assert.equal(upgradeFailureCode({stderr:'untrusted UPGRADE_BUSY text'}),'CHAT_UPGRADE_FAILED')
 })
