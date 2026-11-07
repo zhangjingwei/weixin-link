@@ -47,6 +47,10 @@ try {
             throw 'Downloaded archive is missing installation files.'
         }
     }
+    if ($bootstrapRef -eq 'main' -and $bootstrapRoots[0].Name -match '^zhangjingwei-weixin-link-([0-9a-f]{7,40})$') {
+        $bootstrapRelease = @{version=1; repository='zhangjingwei/weixin-link'; ref='main'; commit=$Matches[1]} | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText((Join-Path $bootstrapSource '.weixin-link-release.json'), $bootstrapRelease + "`n", (New-Object Text.UTF8Encoding($false)))
+    }
     if ($bootstrapExisting) {
         if (!(Test-Path -LiteralPath (Join-Path $bootstrapSource 'src\setup\upgrade.mjs') -PathType Leaf)) { throw '该版本不支持升级。' }
         $env:PATH = (Split-Path -Parent $bootstrapNode) + ';' + $env:PATH

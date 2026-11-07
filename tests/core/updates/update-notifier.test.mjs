@@ -1,0 +1,63 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises'
+import {join} from 'node:path'
+import {tmpdir} from 'node:os'
+import {UpdateNotifier} from '../../../src/core/updates/update-notifier.mjs'
+
+const old='a'.repeat(40),latest='b'.repeat(40)
+async function fixture(t,{ref='main',commit=old}={}){
+ const root=await mkdtemp(join(tmpdir(),'update-notice-'))
+ t.after(()=>rm(root,{recursive:true,force:true}))
+ await writeFile(join(root,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref,commit:commit.slice(0,7)}))
+ const sent=[]
+ const options={stateDir:root,sourceDir:root,owners:['owner'],fetchLatest:async()=>latest,send:async(owner,text)=>{sent.push({owner,text});return {status:'accepted'}}}
+ return {root,sent,options}
+}
+
+test('only a newer main commit prompts once, including after restart',async t=>{
+ const f=await fixture(t)
+ const notifier=new UpdateNotifier(f.options)
+ await notifier.tick();await notifier.tick()
+ await new UpdateNotifier(f.options).tick()
+ assert.equal(f.sent.length,1)
+ assert.match(f.sent[0].text,/需要升级吗/)
+ assert.match(f.sent[0].text,/不会自动升级/)
+ assert.equal(JSON.parse(await readFile(notifier.path('owner'),'utf8')).status,'accepted')
+})
+
+test('matching version, custom ref and unavailable release marker do not prompt',async t=>{
+ const f=await fixture(t)
+ await new UpdateNotifier({...f.options,fetchLatest:async()=>old}).tick()
+ await writeFile(join(f.root,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'feature/x',commit:old.slice(0,7)}))
+ await new UpdateNotifier(f.options).tick()
+ await rm(join(f.root,'.weixin-link-release.json'))
+ await new UpdateNotifier(f.options).tick()
+ assert.equal(f.sent.length,0)
+})
+
+test('uncertain delivery is never replayed; confirmed cancellation can retry',async t=>{
+ const f=await fixture(t)
+ const unknown=new UpdateNotifier({...f.options,send:async()=>{f.sent.push('attempt');throw Error('timeout')}})
+ await unknown.tick();await new UpdateNotifier(f.options).tick()
+ assert.equal(f.sent.length,1)
+ assert.equal(JSON.parse(await readFile(unknown.path('owner'),'utf8')).status,'unknown')
+ const g=await fixture(t)
+ const cancelled=new UpdateNotifier({...g.options,send:async()=>({status:'cancelled'})})
+ await cancelled.tick();await new UpdateNotifier(g.options).tick()
+ assert.equal(g.sent.length,1)
+})
+
+test('network failure and corrupt state do not send or overwrite the state',async t=>{
+ const f=await fixture(t)
+ const events=[]
+ await new UpdateNotifier({...f.options,fetchLatest:async()=>{throw Error('offline')},log:event=>events.push(event)}).tick()
+ assert.equal(f.sent.length,0)
+ const notifier=new UpdateNotifier({...f.options,log:event=>events.push(event)})
+ await writeFile(notifier.path('owner'),'invalid')
+ await notifier.tick()
+ assert.equal(f.sent.length,0)
+ assert.equal(await readFile(notifier.path('owner'),'utf8'),'invalid')
+ assert.ok(events.includes('update_notice.check_failed'))
+ assert.ok(events.includes('update_notice.state_invalid'))
+})

@@ -17,13 +17,13 @@ test('Windows PowerShell entry installs and upgrades with one command',{skip:pro
 async function fixture(t){
  const root=await mkdtemp(join(tmpdir(),'weixin-bootstrap-'))
  t.after(()=>rm(root,{recursive:true,force:true}))
- const bin=join(root,'bin'),source=join(root,'fixture'),dest=join(root,'source with spaces')
+ const bin=join(root,'bin'),source=join(root,'zhangjingwei-weixin-link-abc1234'),dest=join(root,'source with spaces')
  await mkdir(bin);await mkdir(join(source,'src/setup'),{recursive:true})
  await writeFile(join(source,'src/setup/unix-install.sh'),'#!/bin/sh\nprintf installed > installed.txt\n')
  await writeFile(join(source,'package.json'),'{"name":"weixin-link"}\n')
  await writeFile(join(source,'src/setup/upgrade.mjs'),'// fixture\n')
  const archive=join(root,'fixture.tar.gz')
- await exec('tar',['-czf',archive,'-C',source,'.'])
+ await exec('tar',['-czf',archive,'-C',root,'zhangjingwei-weixin-link-abc1234'])
  await writeFile(join(bin,'curl'),'#!/bin/sh\nwhile [ "$#" -gt 0 ]; do if [ "$1" = -o ]; then cp "$FIXTURE_ARCHIVE" "$2"; exit; fi; shift; done\nexit 2\n',{mode:0o755})
  await writeFile(join(bin,'launchctl'),'#!/bin/sh\nexit 113\n',{mode:0o755})
  await writeFile(join(bin,'systemctl'),'#!/bin/sh\nprintf "FragmentPath=\\n"\n',{mode:0o755})
@@ -44,6 +44,7 @@ test('one POSIX shell entry installs a fresh source tree',{skip:process.platform
  const f=await fixture(t)
  await exec('sh',['-c','cat "$BOOTSTRAP_SCRIPT" | sh'],{env:{...f.env,BOOTSTRAP_SCRIPT:bootstrap}})
  assert.equal(await readFile(join(f.dest,'installed.txt'),'utf8'),'installed')
+ assert.deepEqual(JSON.parse(await readFile(join(f.dest,'.weixin-link-release.json'),'utf8')),{version:1,repository:'zhangjingwei/weixin-link',ref:'main',commit:'abc1234'})
  assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
 })
 test('same entry routes an existing installation to upgrade without running install',{skip:process.platform==='win32'},async t=>{

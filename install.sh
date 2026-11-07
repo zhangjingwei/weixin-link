@@ -58,6 +58,11 @@ tar -xzf "$bootstrap_tmp/source.tar.gz" -C "$bootstrap_tmp/source" --strip-compo
 test -f "$bootstrap_tmp/source/src/setup/unix-install.sh" && test -f "$bootstrap_tmp/source/package.json" || {
   echo 'Downloaded archive is missing installation files.' >&2; exit 1;
 }
+bootstrap_archive_root=$(tar -tzf "$bootstrap_tmp/source.tar.gz" | sed -n '1p')
+bootstrap_commit=$(printf '%s\n' "$bootstrap_archive_root" | sed -nE 's@^zhangjingwei-weixin-link-([0-9a-f]{7,40})/$@\1@p')
+if test "$bootstrap_ref" = main && test -n "$bootstrap_commit"; then
+  printf '{"version":1,"repository":"zhangjingwei/weixin-link","ref":"main","commit":"%s"}\n' "$bootstrap_commit" > "$bootstrap_tmp/source/.weixin-link-release.json"
+fi
 if test "$bootstrap_mode" = upgrade; then
   test -f "$bootstrap_tmp/source/src/setup/upgrade.mjs" || { echo '该版本不支持升级。' >&2; exit 1; }
   echo '下载升级版本完成，正在检查已安装服务…'

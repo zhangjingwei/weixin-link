@@ -16,7 +16,7 @@ function Invoke-WebRequest {
 function Get-ScheduledTask { param([string]$TaskName, [string]$ErrorAction) return $script:fixtureTask }
 function Assert-True($condition, [string]$message) { if (!$condition) { throw $message } }
 function Make-Archive([string]$installer, [bool]$complete = $true) {
-    $source = Join-Path $fixtureRoot 'fixture-source'
+    $source = Join-Path $fixtureRoot 'zhangjingwei-weixin-link-abc1234'
     if (Test-Path -LiteralPath $source) { Remove-Item -LiteralPath $source -Recurse -Force }
     New-Item -ItemType Directory -Path (Join-Path $source 'src\setup') -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $source 'src\wechat') -Force | Out-Null
@@ -30,13 +30,16 @@ function Make-Archive([string]$installer, [bool]$complete = $true) {
 try {
     $env:WEIXIN_LINK_DIR = Join-Path $fixtureRoot 'source with spaces & symbols'
     $env:ZERO_LINK_DIR = Join-Path $fixtureRoot 'unused'
-    $env:WEIXIN_LINK_REF = 'feature/a b'
+    $env:WEIXIN_LINK_REF = 'main'
     Make-Archive 'Set-Content -LiteralPath (Join-Path $PSScriptRoot "..\..\installed.txt") -Value "installed"; exit 0'
     & $entry
     Assert-True (Test-Path -LiteralPath (Join-Path $env:WEIXIN_LINK_DIR 'installed.txt')) 'Fresh installer was not executed.'
-    Assert-True ($script:requestedUrl.EndsWith('feature%2Fa%20b')) 'Target ref was not URL-encoded.'
+    $release = Get-Content -LiteralPath (Join-Path $env:WEIXIN_LINK_DIR '.weixin-link-release.json') -Raw | ConvertFrom-Json
+    Assert-True ($release.commit -eq 'abc1234' -and $release.ref -eq 'main') 'Installed commit was not recorded.'
+    $env:WEIXIN_LINK_REF = 'feature/a b'
     $script:requestedUrl = ''
     & $entry
+    Assert-True ($script:requestedUrl.EndsWith('feature%2Fa%20b')) 'Target ref was not URL-encoded.'
     Assert-True ((Get-Content -LiteralPath $env:UPGRADE_CAPTURE -Raw) -eq $env:WEIXIN_LINK_DIR) 'Existing deployment did not run upgrade.'
     Assert-True ((Get-Content -LiteralPath (Join-Path $env:WEIXIN_LINK_DIR 'installed.txt')).Trim() -eq 'installed') 'Existing source was replaced by bootstrap.'
     $env:WEIXIN_LINK_DIR = Join-Path $fixtureRoot 'other source'

@@ -109,6 +109,8 @@ Each message is processed independently. Text and attachments in the same messag
 
 To upgrade, rerun the command for your platform in [Quick start](#quick-start). Automatic upgrades support installer-managed deployments; see [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments, QR refresh and recovery.
 
+Standard installations check GitHub `main` hourly. When a newer commit appears, the bot asks once in WeChat whether to upgrade. It upgrades only after your explicit approval. Network failures do not interrupt messages; custom refs and installations without a recorded commit do not receive these prompts.
+
 ## Refresh the login QR code
 
 Linux / macOS:
