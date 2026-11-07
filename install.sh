@@ -48,11 +48,17 @@ for bootstrap_cmd in curl tar mktemp; do
   command -v "$bootstrap_cmd" >/dev/null 2>&1 || { echo "Missing prerequisite: $bootstrap_cmd" >&2; exit 1; }
 done
 bootstrap_ref="${WEIXIN_LINK_REF:-${ZERO_LINK_REF:-main}}"
+bootstrap_expected="${WEIXIN_LINK_EXPECTED_COMMIT:-}"
+if test -n "$bootstrap_expected"; then
+  if test "$bootstrap_ref" != main || test "${#bootstrap_expected}" -ne 40; then echo 'Invalid expected main commit.' >&2; exit 1; fi
+  case "$bootstrap_expected" in *[!0-9a-f]*) echo 'Invalid expected main commit.' >&2; exit 1;; esac
+fi
+bootstrap_download_ref="${bootstrap_expected:-$bootstrap_ref}"
 mkdir -p "$(dirname -- "$bootstrap_dest")"
 bootstrap_tmp=$(mktemp -d "$(dirname -- "$bootstrap_dest")/.weixin-link-download.XXXXXX")
 trap 'rm -rf -- "$bootstrap_tmp"' EXIT
 curl -fSL --proto '=https' --tlsv1.2 \
-  "https://api.github.com/repos/zhangjingwei/weixin-link/tarball/$bootstrap_ref" -o "$bootstrap_tmp/source.tar.gz"
+  "https://api.github.com/repos/zhangjingwei/weixin-link/tarball/$bootstrap_download_ref" -o "$bootstrap_tmp/source.tar.gz"
 mkdir "$bootstrap_tmp/source"
 tar -xzf "$bootstrap_tmp/source.tar.gz" -C "$bootstrap_tmp/source" --strip-components=1
 test -f "$bootstrap_tmp/source/src/setup/unix-install.sh" && test -f "$bootstrap_tmp/source/package.json" || {
@@ -60,6 +66,10 @@ test -f "$bootstrap_tmp/source/src/setup/unix-install.sh" && test -f "$bootstrap
 }
 bootstrap_archive_root=$(tar -tzf "$bootstrap_tmp/source.tar.gz" | sed -n '1p')
 bootstrap_commit=$(printf '%s\n' "$bootstrap_archive_root" | sed -nE 's@^zhangjingwei-weixin-link-([0-9a-f]{7,40})/$@\1@p')
+if test -n "$bootstrap_expected"; then
+  if test -z "$bootstrap_commit"; then echo 'Downloaded commit could not be verified.' >&2; exit 1; fi
+  case "$bootstrap_expected" in "$bootstrap_commit"*) ;; *) echo 'Downloaded commit differs from requested commit.' >&2; exit 1;; esac
+fi
 if test "$bootstrap_ref" = main && test -n "$bootstrap_commit"; then
   printf '{"version":1,"repository":"zhangjingwei/weixin-link","ref":"main","commit":"%s"}\n' "$bootstrap_commit" > "$bootstrap_tmp/source/.weixin-link-release.json"
 fi

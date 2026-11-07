@@ -22,13 +22,13 @@ export async function performChatUpgrade({home=userHome(),target=fileURLToPath(n
    if(states.some(state=>!state.ready||!state.idle||state.draining)){await wait(1000);continue}
    await save(home,{...request,status:'running'})
    try{
-    await run(process.platform==='win32'?'powershell.exe':'/bin/sh',process.platform==='win32'?['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',join(target,'install.ps1')]:[join(target,'install.sh')],{cwd:target,env:{...process.env,HOME:home,WEIXIN_LINK_DIR:target,WEIXIN_LINK_REF:'main'},timeout:900000,maxBuffer:1024*1024})
+    await run(process.platform==='win32'?'powershell.exe':'/bin/sh',process.platform==='win32'?['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',join(target,'install.ps1')]:[join(target,'install.sh')],{cwd:target,env:{...process.env,HOME:home,WEIXIN_LINK_DIR:target,WEIXIN_LINK_REF:'main',WEIXIN_LINK_EXPECTED_COMMIT:request.commit},timeout:900000,maxBuffer:1024*1024})
    }catch(error){
     if((error.stderr??'').includes('UPGRADE_BUSY')||(error.stdout??'').includes('UPGRADE_BUSY')){await save(home,request);await wait(1000);continue}
     throw error
    }
    const marker=JSON.parse(await readFile(join(target,'.weixin-link-release.json'),'utf8'))
-   if(marker?.ref!=='main'||marker.repository!=='zhangjingwei/weixin-link'||!/^[0-9a-f]{7,40}$/.test(marker.commit??'')||marker.commit===request.previous)throw Error('CHAT_UPGRADE_VERSION_UNVERIFIED')
+   if(marker?.ref!=='main'||marker.repository!=='zhangjingwei/weixin-link'||!/^[0-9a-f]{7,40}$/.test(marker.commit??'')||!request.commit.startsWith(marker.commit))throw Error('CHAT_UPGRADE_VERSION_UNVERIFIED')
    const after=await deployment({target,home})
    for(const service of active){const current=after.services.find(item=>item.id===service.id);if(!current?.active||(await after.status(current)).ready!==true)throw Error('CHAT_UPGRADE_HEALTH_UNVERIFIED')}
    await save(home,{...request,status:'complete',installedCommit:marker.commit})

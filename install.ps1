@@ -6,6 +6,9 @@ if ([Environment]::OSVersion.Platform -ne 'Win32NT' -or $env:PROCESSOR_ARCHITECT
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $bootstrapHome = [Environment]::GetFolderPath('UserProfile')
 $bootstrapRef = if ($env:WEIXIN_LINK_REF) { $env:WEIXIN_LINK_REF } elseif ($env:ZERO_LINK_REF) { $env:ZERO_LINK_REF } else { 'main' }
+$bootstrapExpected = $env:WEIXIN_LINK_EXPECTED_COMMIT
+if ($bootstrapExpected -and ($bootstrapRef -ne 'main' -or $bootstrapExpected -cnotmatch '^[0-9a-f]{40}$')) { throw 'Invalid expected main commit.' }
+$bootstrapDownloadRef = if ($bootstrapExpected) { $bootstrapExpected } else { $bootstrapRef }
 $bootstrapDest = if ($env:WEIXIN_LINK_DIR) { $env:WEIXIN_LINK_DIR } elseif ($env:ZERO_LINK_DIR) { $env:ZERO_LINK_DIR } else { Join-Path $bootstrapHome '.local\share\weixin-link\source' }
 $bootstrapDest = [IO.Path]::GetFullPath($bootstrapDest)
 if (!$env:WEIXIN_LINK_DIR -and !$env:ZERO_LINK_DIR -and (Get-Item -LiteralPath (Join-Path $bootstrapHome '.local\share\zero-link\source') -Force -ErrorAction SilentlyContinue)) {
@@ -33,7 +36,7 @@ $bootstrapTemp = Join-Path $bootstrapParent ('.weixin-link-download-' + [Guid]::
 New-Item -ItemType Directory -Path $bootstrapTemp | Out-Null
 try {
     $bootstrapArchive = Join-Path $bootstrapTemp 'source.zip'
-    $bootstrapUrl = 'https://api.github.com/repos/zhangjingwei/weixin-link/zipball/' + [Uri]::EscapeDataString($bootstrapRef)
+    $bootstrapUrl = 'https://api.github.com/repos/zhangjingwei/weixin-link/zipball/' + [Uri]::EscapeDataString($bootstrapDownloadRef)
     Invoke-WebRequest -UseBasicParsing -Uri $bootstrapUrl -OutFile $bootstrapArchive
     $bootstrapExpanded = Join-Path $bootstrapTemp 'expanded'
     Expand-Archive -LiteralPath $bootstrapArchive -DestinationPath $bootstrapExpanded
@@ -42,6 +45,10 @@ try {
         throw 'Downloaded archive has an unexpected layout.'
     }
     $bootstrapSource = $bootstrapRoots[0].FullName
+    if ($bootstrapExpected) {
+        if ($bootstrapRoots[0].Name -cnotmatch '^zhangjingwei-weixin-link-([0-9a-f]{7,40})$') { throw 'Downloaded commit could not be verified.' }
+        if (!$bootstrapExpected.StartsWith($Matches[1], [StringComparison]::Ordinal)) { throw 'Downloaded commit differs from requested commit.' }
+    }
     foreach ($bootstrapRequired in @('src\setup\windows-install.ps1', 'package.json', 'src\setup\setup.mjs')) {
         if (!(Test-Path -LiteralPath (Join-Path $bootstrapSource $bootstrapRequired) -PathType Leaf)) {
             throw 'Downloaded archive is missing installation files.'

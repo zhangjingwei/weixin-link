@@ -15,7 +15,7 @@ import {errorFields} from '../core/diagnostics/diagnostic-log.mjs'
 import {systemNotice} from '../core/delivery/system-notice.mjs'
 import {recoverFailedFinal} from '../core/delivery/failed-final-recovery.mjs'
 
-export function createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable}){
+export function createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable,deferMaintenance}){
 return async function handleMessage(message) {
   if(message._ingressId&&!jobs.rawCurrent(message._ingressId))return
   if(message._intakeToken&&!message._intakeToken.current())return
@@ -32,7 +32,12 @@ return async function handleMessage(message) {
   const initialControl=!hasMedia(message)&&(diagnosticAction||message._setupAction||agentAction||upgradeAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
   if(runtime.sealed)return
   if(runtime.draining&&!(typeof initialControl==='string'&&/^wizardChoice:\d+:3$/.test(initialControl))&&!['stop','exit','status','result','help'].includes(initialControl?.action)){
-    jobs.acknowledge([message._ingressId].filter(Boolean))
+    if(message._ingressId){
+      deferMaintenance?.(message)
+      try{await runtime.track('delivery',()=>bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('服务正在维护，当前消息已保留，恢复后继续处理。')))}
+      catch(error){log('maintenance.notice_unconfirmed',{trace_id,...errorFields(error)})}
+      return
+    }
     await runtime.track('delivery',()=>bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('服务正在维护重启，请稍后重新发送。')));return
   }
   const setupAction=!hasMedia(message)&&message._setupAction;if(setupAction){const receipt=message._setupReceiptId?{id:message._setupReceiptId}:setupReceipts.capture(message);if(!receipt||!setupReceipts.claim(receipt.id)){if(message._recovered){await deliver('上次安装操作的结果需要核对，未重复执行。发送“安装向导”重新检测并继续。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean))}return;}const setupToken=manager.lifecycle.capture(message.userId);const setupReply=(value,options={})=>{if(!setupToken.current())throw Error('SETUP_CANCELLED');return options.sensitive?runtime.track('delivery',()=>bot.sendSensitiveText(conversations.recipient(message.userId),value)):deliver(value,{current:()=>setupToken.current(),conversationControl:true})};await runtime.track('setup',()=>setupController.handle(setupAction,setupReply,{signal:setupToken.signal,scope:message._conversationOwner??message.userId,executionKey:message.userId}));setupReceipts.finish(receipt.id);jobs.acknowledge([message._ingressId].filter(Boolean));return}

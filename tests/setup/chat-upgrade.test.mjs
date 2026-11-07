@@ -55,6 +55,14 @@ test('worker waits for all active accounts, runs installer once, then verifies b
  let request={id:'request-1',commit:newCommit,status:'waiting_idle'},busy=true,installCalls=0
  const services=[{id:'default',active:true},{id:'second',active:true}]
  const adapter={services,status:async service=>({ready:true,idle:service.id==='default'||!busy,draining:false}),}
- const result=await performChatUpgrade({home:'/unused',target,requestId:request.id,read:async()=>request,save:async(h,value)=>{request=value},deployment:async()=>adapter,run:async()=>{installCalls++;busy=false},wait:async()=>{busy=false},attempts:3})
+ const result=await performChatUpgrade({home:'/unused',target,requestId:request.id,read:async()=>request,save:async(h,value)=>{request=value},deployment:async()=>adapter,run:async(_bin,_args,options)=>{assert.equal(options.env.WEIXIN_LINK_EXPECTED_COMMIT,newCommit);installCalls++;busy=false},wait:async()=>{busy=false},attempts:3})
  assert.equal(result.status,'complete');assert.equal(installCalls,1);assert.equal(request.status,'complete')
+})
+test('worker rejects an installed commit other than the approved target',async t=>{
+ const target=await mkdtemp(join(tmpdir(),'chat-upgrade-mismatch-'));t.after(()=>rm(target,{recursive:true,force:true}))
+ await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'main',commit:'c'.repeat(7)}))
+ let request={id:'request-2',commit:newCommit,previous:oldCommit,status:'waiting_idle'}
+ const adapter={services:[{id:'default',active:true}],status:async()=>({ready:true,idle:true,draining:false})}
+ await assert.rejects(performChatUpgrade({home:'/unused',target,requestId:request.id,read:async()=>request,save:async(_home,value)=>{request=value},deployment:async()=>adapter,run:async()=>{},attempts:1}),/CHAT_UPGRADE_VERSION_UNVERIFIED/)
+ assert.equal(request.status,'failed')
 })

@@ -89,6 +89,11 @@ bot.http.apiGet = async (baseUrl, path, headers) => {
 const remoteSequences=new Map()
 let stopping=false,loggedIn=false
 const pending = new MessageDispatch()
+const maintenancePending=new Map()
+let intakeHandler
+const replayMaintenance=()=>{
+ for(const [id,message] of maintenancePending){maintenancePending.delete(id);if(jobs.rawCurrent(id))intakeHandler(message)}
+}
 const runtime=new RuntimeControl({
  backend:{id:backend.id,kind:backend.kind,agentKind:agent.kind,container:backend.container??null,memoryMode:backend.memoryMode??'wechat'},
  features:{daily_assistant:true,numeric_setup_wizard:true,setup_commands:true,codex_backend_binding:true,container_backend:backend.kind==='podman',native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,remote_stream:true,update_notice:true},
@@ -108,7 +113,8 @@ const runtime=new RuntimeControl({
  onSchedule:request=>scheduleCommand(request,{manager,conversations,service:schedules}),
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
  snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+durable.users.size,saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
- onSeal:()=>bot.stop(),onResume:()=>{void (async()=>{if(bot.runPromise)await bot.runPromise.catch(()=>{});if(!stopping)await bot.start()})().catch(e=>log('service.resume_failed',errorFields(e)))}
+ onSeal:()=>bot.stop(),onResume:()=>{void (async()=>{if(bot.runPromise)await bot.runPromise.catch(()=>{});if(!stopping){await bot.start();replayMaintenance()}})().catch(e=>log('service.resume_failed',errorFields(e)))},
+ onDrainRelease:replayMaintenance,
 })
 const mediaDependencies={
  log,
@@ -158,8 +164,8 @@ const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable})
-const intakeHandler=nonBlockingHandler(async message => {
+const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
+intakeHandler=nonBlockingHandler(async message => {
   try {
     const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
     if(control)await handleMessage(message)

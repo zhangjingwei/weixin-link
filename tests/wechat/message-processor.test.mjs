@@ -24,6 +24,16 @@ test('extracted processor retains ping handling and durable ordinary submission'
  await f.handle({userId:'owner',text:'normal request',_ingressId:'request-id'})
  assert.equal(f.submitted.length,1);assert.equal(f.submitted[0][0],'owner');assert.equal(f.submitted[0][2],'request-id')
 })
+test('maintenance keeps persisted messages pending for replay after drain',async()=>{
+ const f=fixture(),deferred=[]
+ f.deps.runtime={sealed:false,draining:true,track:async(_kind,work)=>work()}
+ f.deps.bot.reply=async()=>{throw Error('delivery uncertain')}
+ f.deps.deferMaintenance=message=>deferred.push(message)
+ f.handle=createMessageProcessor(f.deps)
+ const message={userId:'owner',text:'继续任务',_ingressId:'maintenance-id'}
+ await f.handle(message)
+ assert.deepEqual(deferred,[message]);assert.deepEqual(f.acked,[]);assert.deepEqual(f.submitted,[])
+})
 test('inbound trace is retained through message logging and durable submission',async()=>{
  const f=fixture(),events=[];f.deps.log=(event,fields)=>events.push({event,...fields});f.handle=createMessageProcessor(f.deps)
  await f.handle({userId:'owner',text:'请检查',_traceId:'message-trace-123',_ingressId:'request-id'})

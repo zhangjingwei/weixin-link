@@ -22,6 +22,15 @@ test('maintenance has an owner, abandoned leases expire, and sealed service requ
  now=120001;assert.equal(runtime.draining,false);runtime.command('drain','lease-two');runtime.command('seal','lease-two')
  now=999999;assert.equal(runtime.draining,true);runtime.command('resume','lease-two');assert.equal(resumes,1);assert.equal(runtime.draining,false)
 })
+test('released or expired drain resumes deferred intake once',async()=>{
+ let now=0,replays=0
+ const runtime=new RuntimeControl({now:()=>now,onDrainRelease:()=>{replays++}})
+ runtime.command('drain','lease-one');runtime.command('resume','lease-one')
+ assert.equal(replays,1)
+ runtime.command('drain','lease-two');now=120001;assert.equal(runtime.draining,false)
+ await new Promise(resolve=>queueMicrotask(resolve))
+ assert.equal(replays,2);assert.equal(runtime.draining,false)
+})
 test('private Unix endpoint exposes current instance and readiness without consulting log files',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'wx-control-')),path=join(dir,'runtime.sock');let ready=false
  const runtime=new RuntimeControl({ready:()=>ready})
@@ -31,6 +40,18 @@ test('private Unix endpoint exposes current instance and readiness without consu
  await controlRequest(path,'POST','/drain',{lease:'private-lease'});assert.equal((await get()).draining,true)
  await assert.rejects(controlRequest(path,'POST','/seal',{lease:'other-lease'}));await controlRequest(path,'POST','/resume',{lease:'private-lease'})
  }finally{await runtime.close();await rm(dir,{recursive:true,force:true})}
+})
+test('second instance cannot replace a live control socket',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'wx-control-collision-')),path=join(dir,'runtime.sock')
+ const first=new RuntimeControl(),second=new RuntimeControl()
+ try{
+  await first.listen(path)
+  await assert.rejects(second.listen(path),/RUNTIME_ALREADY_RUNNING/)
+  assert.equal((await controlRequest(path,'GET','/status')).instance,first.instance)
+  await first.close()
+  await second.listen(path)
+  assert.equal((await controlRequest(path,'GET','/status')).instance,second.instance)
+ }finally{await second.close();await first.close();await rm(dir,{recursive:true,force:true})}
 })
 
 test('backend identity is observable without contaminating numeric idle counters',()=>{const r=new RuntimeControl({backend:{id:'pilot-a',kind:'podman'},ready:()=>true});assert.equal(r.status().backend.id,'pilot-a');assert.equal(r.status().idle,true);assert.deepEqual(r.status().counts,{})});

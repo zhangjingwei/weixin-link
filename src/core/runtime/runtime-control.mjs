@@ -1,17 +1,38 @@
 import {isPipe} from './control-endpoint.mjs'
-import {readFile,writeFile} from 'node:fs/promises'
+import {lstat,readFile,writeFile} from 'node:fs/promises'
 import {accountPaths,listAccounts} from '../../wechat/accounts.mjs'
 import http from 'node:http'
+import net from 'node:net'
 import {randomUUID} from 'node:crypto'
 import {chmod,unlink} from 'node:fs/promises'
+import {dirname} from 'node:path'
+import lockfile from 'proper-lockfile'
+
+const sameSocket=(a,b)=>a.dev===b.dev&&a.ino===b.ino
+async function removeStaleSocket(path){
+ let original
+ try{original=await lstat(path)}catch(error){if(error.code==='ENOENT')return;throw error}
+ if(!original.isSocket())throw Error('RUNTIME_SOCKET_UNSAFE')
+ const stale=await new Promise((resolve,reject)=>{
+  const socket=net.createConnection(path)
+  socket.setTimeout(1000)
+  socket.once('connect',()=>{socket.destroy();resolve(false)})
+  socket.once('timeout',()=>{socket.destroy();reject(Error('RUNTIME_SOCKET_UNCONFIRMED'))})
+  socket.once('error',error=>error.code==='ECONNREFUSED'?resolve(true):error.code==='ENOENT'?resolve(null):reject(error))
+ })
+ if(stale===null)return
+ if(!stale)throw Error('RUNTIME_ALREADY_RUNNING')
+ const current=await lstat(path).catch(error=>{if(error.code==='ENOENT')return null;throw error})
+ if(current){if(!current.isSocket()||!sameSocket(original,current))throw Error('RUNTIME_SOCKET_CHANGED');await unlink(path)}
+}
 
 /** Private, live control plane. Logs never participate in restart decisions. */
 export class RuntimeControl {
- constructor({snapshot=()=>({}),ready=()=>false,onSeal=()=>{},onResume=()=>{},onRemoteText=async()=>{throw Error("Unavailable")},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
-  Object.assign(this,{snapshot,ready,onSeal,onResume,onRemoteText,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
+ constructor({snapshot=()=>({}),ready=()=>false,onSeal=()=>{},onResume=()=>{},onDrainRelease=()=>{},onRemoteText=async()=>{throw Error("Unavailable")},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
+  Object.assign(this,{snapshot,ready,onSeal,onResume,onDrainRelease,onRemoteText,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
  }
  get draining(){
-  if(this.lease&&!this.sealed&&this.lease.expires<=this.now())this.lease=null
+  if(this.lease&&!this.sealed&&this.lease.expires<=this.now()){this.lease=null;queueMicrotask(()=>{if(!this.lease)this.onDrainRelease()})}
   return !!this.lease
  }
  enter(kind){this.counts[kind]=(this.counts[kind]??0)+1;let done=false;return ()=>{if(!done){done=true;this.counts[kind]--}}}
@@ -31,11 +52,16 @@ export class RuntimeControl {
    if(!this.status().idle)throw Object.assign(Error('Service busy'),{statusCode:409})
    this.sealed=true;this.onSeal();return this.status()
   }
-  if(action==='resume'){const wasSealed=this.sealed;this.lease=null;this.sealed=false;if(wasSealed)this.onResume();return this.status()}
+  if(action==='resume'){const wasSealed=this.sealed;this.lease=null;this.sealed=false;if(wasSealed)this.onResume();else this.onDrainRelease();return this.status()}
   throw Object.assign(Error('Unknown command'),{statusCode:404})
  }
  async listen(path){
-  this.path=path;if(isPipe(path)){this.token=randomUUID();await writeFile(accountPaths().stateDir+'/control-token',this.token,{mode:0o600})}else await unlink(path).catch(e=>{if(e.code!=='ENOENT')throw e})
+  this.path=path
+  if(isPipe(path)){this.token=randomUUID();await writeFile(accountPaths().stateDir+'/control-token',this.token,{mode:0o600})}
+  else{
+   this.releaseSocketLock=await lockfile.lock(dirname(path),{lockfilePath:path+'.instance-lock',stale:30000,update:10000,retries:0}).catch(error=>{if(error.code==='ELOCKED')throw Error('RUNTIME_ALREADY_RUNNING');throw error})
+   try{await removeStaleSocket(path)}catch(error){await this.releaseSocketLock();this.releaseSocketLock=null;throw error}
+  }
   this.server=http.createServer(async(req,res)=>{
    try{
     if(this.token&&req.headers['x-control-token']!==this.token)throw Object.assign(Error('Unauthorized'),{statusCode:403})
@@ -55,10 +81,19 @@ export class RuntimeControl {
    }catch(error){res.writeHead(error.statusCode??400,{'content-type':'application/json'});res.end(JSON.stringify({error:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'CONTROL_REQUEST_REJECTED'}))}
   })
   this.server.requestTimeout=3000;this.server.headersTimeout=3000
-  await new Promise((resolve,reject)=>{this.server.once('error',reject);this.server.listen(path,resolve)})
-  if(!isPipe(path))await chmod(path,0o600)
+  try{
+   await new Promise((resolve,reject)=>{this.server.once('error',reject);this.server.listen(path,resolve)})
+   if(!isPipe(path)){this.socketIdentity=await lstat(path);await chmod(path,0o600)}
+  }catch(error){if(this.server?.listening)await new Promise(resolve=>this.server.close(resolve));await this.releaseSocketLock?.();this.releaseSocketLock=null;throw error}
  }
- async close(){if(this.server)await new Promise(resolve=>this.server.close(resolve));if(this.path&&!isPipe(this.path))await unlink(this.path).catch(e=>{if(e.code!=='ENOENT')throw e})}
+ async close(){
+  if(this.server?.listening)await new Promise(resolve=>this.server.close(resolve))
+  if(this.path&&!isPipe(this.path)){
+   const current=await lstat(this.path).catch(error=>{if(error.code==='ENOENT')return null;throw error})
+   if(current&&this.socketIdentity&&sameSocket(current,this.socketIdentity))await unlink(this.path)
+  }
+  await this.releaseSocketLock?.();this.releaseSocketLock=null
+ }
 }
 async function tokenFile(socket){for(const p of await listAccounts())if(p.socket===socket)return p.stateDir+'/control-token';throw Error('UNKNOWN_CONTROL_ENDPOINT')}
 export async function controlRequest(socketPath,method,path,body,timeoutMs=2500){

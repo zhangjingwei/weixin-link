@@ -13,7 +13,18 @@ import {projectPath} from './paths.mjs'
 export {projectPath,exportPath} from './paths.mjs'
 export class RemoteController{
  constructor({root,scope=process.env.CODEX_THREAD_ID??'local-console',rpcFactory=host=>new RemoteRpc(host)}={}){this.root=root;this.scope=hash(scope).slice(0,24);this.store=new RemoteStore(root);this.rpcFactory=rpcFactory}
- async usingTask(target,work){return this.using(target.host,work,{taskId:target.task_id??target.operation_id,threadId:target.thread_id,cwd:target.cwd})}
+ async verifyProject(rpc,host,cwd){
+  projectPath(host,cwd)
+  const {root}=HOSTS[host],{relative,join,sep}=hostPath(host)
+  let path=root
+  for(const part of ['',...relative(root,cwd).split(sep).filter(Boolean)]){
+   if(part)path=join(path,part)
+   const info=await rpc.call('fs/getMetadata',{path})
+   if(info.isSymlink)throw Error('PROJECT_SYMLINK_REFUSED')
+   if(!info.isDirectory)throw Error('PROJECT_NOT_DIRECTORY')
+  }
+ }
+ async usingTask(target,work){return this.using(target.host,async rpc=>{await this.verifyProject(rpc,target.host,target.cwd);return work(rpc)},{taskId:target.task_id??target.operation_id,threadId:target.thread_id,cwd:target.cwd})}
  async using(host,work,recovery){if(!HOSTS[host])throw Error('UNKNOWN_HOST');const rpc=this.rpcFactory(host);try{if(recovery?.threadId)rpc.setRecovery?.(recovery);await rpc.connect();return await work(rpc)}finally{rpc.close()}}
  async task(id){const task=(await this.store.read())[id];if(!task||task.kind!=='official-remote-task'||task.scope!==this.scope)throw Error('TASK_NOT_IN_CURRENT_CONVERSATION');projectPath(task.host,task.cwd);return {...task,task_id:id}}
  async target(input){if(input.task)return this.task(input.task);const saved=(await this.store.read())._routing?.[this.scope],host=input.host??saved?.host,cwd=projectPath(host,input.project??saved?.cwd);return {host,cwd,thread_id:input.host||input.project?undefined:saved?.thread_id}}
@@ -21,18 +32,20 @@ export class RemoteController{
  async terminals(rpc,threadId){const result=[];let cursor;for(let n=0;n<100;n++){const page=await rpc.call('thread/backgroundTerminals/list',{threadId,limit:100,...(cursor?{cursor}:{})});result.push(...page.data);cursor=page.nextCursor;if(!cursor)return result}throw Error('TERMINAL_LIST_INCOMPLETE')}
  async inspect(input){const target=await this.target(input);return this.usingTask(target,async rpc=>{
   if(!(await rpc.call('fs/getMetadata',{path:target.cwd})).isDirectory)throw Error('PROJECT_NOT_DIRECTORY')
-  const {join,parse,sep}=hostPath(target.host);const instructions=[];const dirs=[];let ancestor=parse(target.cwd).root;dirs.push(ancestor);for(const part of target.cwd.slice(ancestor.length).split(sep).filter(Boolean)){ancestor=join(ancestor,part);dirs.push(ancestor)}
+  const {join,relative,sep}=hostPath(target.host);const instructions=[];const dirs=[];let ancestor=HOSTS[target.host].root;dirs.push(ancestor);for(const part of relative(ancestor,target.cwd).split(sep).filter(Boolean)){ancestor=join(ancestor,part);dirs.push(ancestor)}
   for(const dir of dirs)try{const data=await rpc.call('fs/readFile',{path:join(dir,'AGENTS.md')});const bytes=Buffer.from(data.dataBase64,'base64');if(bytes.length>65536)throw Error('PROJECT_INSTRUCTIONS_TOO_LARGE');instructions.push({path:join(dir,'AGENTS.md'),text:bytes.toString('utf8')})}catch(e){if(e.message!=='REMOTE_RPC_ERROR')throw e}
   let codegraph=false;try{codegraph=(await rpc.call('fs/getMetadata',{path:join(target.cwd,'.codegraph')})).isDirectory}catch{}
   return {...target,instructions,codegraph}
  })}
  async select(input){const target=await this.inspect(input);await this.store.update(s=>{s._routing??={};s._routing[this.scope]={host:target.host,cwd:target.cwd,...(target.thread_id?{thread_id:target.thread_id}:{})}});return {selected:{host:target.host,project:target.cwd},instructions:target.instructions,codegraph:target.codegraph}}
  async list(input){const host=input.host??(await this.store.read())._routing?.[this.scope]?.host;if(input.limit!==undefined&&(!Number.isInteger(input.limit)||input.limit<1||input.limit>100))throw Error('INVALID_LIMIT');if(!host)throw Error('HOST_REQUIRED');return this.using(host,async rpc=>{
+  if(input.project)await this.verifyProject(rpc,host,projectPath(host,input.project))
   const page=await rpc.call('thread/list',{limit:Math.min(input.limit??25,100),...(input.project?{cwd:projectPath(host,input.project)}:{}),...(input.cursor?{cursor:input.cursor}:{}),sourceKinds:['cli','appServer','exec','vscode']})
   return {host,sessions:page.data.filter(t=>{try{projectPath(host,t.cwd);return true}catch{return false}}).map(t=>({thread_id:t.id,name:t.name,project:t.cwd,status:t.status?.type})),next_cursor:page.nextCursor}
  })}
  async attach(input){const host=input.host;if(typeof input.threadId!=='string'||!input.threadId)throw Error('THREAD_REQUIRED');return this.using(host,async rpc=>{
   const thread=(await rpc.call('thread/read',{threadId:input.threadId})).thread,cwd=projectPath(host,thread.cwd)
+  await this.verifyProject(rpc,host,cwd)
   // Existing terminal sessions may be selected/read; stopping them requires a task explicitly submitted here.
   await this.store.update(s=>{s._routing??={};s._routing[this.scope]={host,cwd,thread_id:thread.id}});return {selected:{host,project:cwd,thread_id:thread.id},status:thread.status?.type}
  })}
