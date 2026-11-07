@@ -16,14 +16,15 @@
 
 </div>
 
-Weixin Link 把微信私聊接到你电脑或服务器上的**智能体底座**。目前支持 Codex（默认）和 Claude CLI；离开工位后，你仍能发起任务、补充要求，并在微信里收到回答和生成的文件。
+Weixin Link 把微信私聊接到你电脑或服务器上的**智能体底座**。目前支持 Codex（默认）和 Claude CLI。电脑或服务器保持在线时，你可以从微信发起任务、补充要求，并接收回答和文件。
 
-<p align="center">
-  <img src="docs/images/weather-conversation.png" width="320" alt="微信对话：追问城市后查询天气">
-  <img src="docs/images/voice-story-conversation.png" width="320" alt="微信对话：语音转写后生成短篇故事">
-</p>
-
-*实际对话截图整理：追问后继续查询、语音转写后回复。电脑或服务器需要保持在线；执行范围取决于工作区与工具权限。*
+<table align="center">
+  <tr><th align="center">追问城市 · 查询天气</th><th align="center">语音转写 · 生成故事</th></tr>
+  <tr>
+    <td align="center" valign="top"><img src="docs/images/weather-conversation.png" width="320" alt="微信对话：追问城市后查询天气"></td>
+    <td align="center" valign="top"><img src="docs/images/voice-story-conversation.png" width="320" alt="微信对话：语音转写后生成短篇故事"></td>
+  </tr>
+</table>
 
 ## 快速开始
 

@@ -16,14 +16,15 @@ Start tasks · Add instructions · Check progress · Receive files
 
 </div>
 
-Weixin Link connects WeChat private chats to an **agent backend** on your computer or server. It currently supports Codex (the default) and Claude CLI. Start tasks, add instructions while you are away, and receive answers and generated files in WeChat.
+Weixin Link connects WeChat private chats to an **agent backend** on your computer or server. It currently supports Codex (the default) and Claude CLI. While your computer or server stays online, you can start tasks, add instructions and receive answers and files from WeChat.
 
-<p align="center">
-  <img src="docs/images/weather-conversation.png" width="320" alt="WeChat conversation: asking for a city before checking the weather">
-  <img src="docs/images/voice-story-conversation.png" width="320" alt="WeChat conversation: transcribing a voice message and writing a short story">
-</p>
-
-*Edited from actual conversations: clarify a request, then respond; transcribe a voice message, then write a story. Your computer or server must stay online. Execution depends on your workspace and tool permissions.*
+<table align="center">
+  <tr><th align="center">Clarify a city · Check the weather</th><th align="center">Transcribe speech · Write a story</th></tr>
+  <tr>
+    <td align="center" valign="top"><img src="docs/images/weather-conversation.png" width="320" alt="WeChat conversation: asking for a city before checking the weather"></td>
+    <td align="center" valign="top"><img src="docs/images/voice-story-conversation.png" width="320" alt="WeChat conversation: transcribing a voice message and writing a short story"></td>
+  </tr>
+</table>
 
 ## Quick start
 

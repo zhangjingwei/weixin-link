@@ -363,6 +363,80 @@ test('completion marker follows final delivery once and never marks an active pa
  const s={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>{output.push(text);return {status:'accepted'}}}
  try{await manager.event(s,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'partial',type:'agentMessage',phase:'partial_answer',text:'仍在处理。'}}});assert.equal(output.length,0);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.deepEqual(output,['仍在处理。\n\n✅ 本轮回答结束。']);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.equal(output.length,1);assert.equal(manager.state.users.owner.lastReply,'仍在处理。\n\n✅ 本轮回答结束。')}finally{manager.close();await rm(dir,{recursive:true,force:true})}
 })
+test('connection close drains a queued completion before declaring the result unknown',async()=>{
+ const output=[],events=[],callbacks={}
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],completionMarkers:true,log:event=>events.push(event),rpcFactory:options=>{callbacks.event=options.onEvent;callbacks.close=options.onClose;return {closed:false,close(){this.closed=true}}}})
+ manager.save=async()=>{};manager.state.users.owner={recovery:{execution:'running'}}
+ const session={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>{output.push(text);return {status:'accepted'}}}
+ manager.attachRpc(session)
+ callbacks.event({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'final',type:'agentMessage',phase:'final_answer',text:'最终结果。'}}})
+ callbacks.event({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
+ callbacks.close()
+ await session.events
+ assert.deepEqual(output,['最终结果。\n\n✅ 本轮回答结束。'])
+ assert.equal(manager.state.users.owner.recovery.execution,'completed')
+ assert.equal(manager.state.users.owner.recovery.delivery,'accepted')
+ assert.ok(!events.includes('delivery.suppressed'))
+})
+test('connection close without completion keeps the task result unknown',async()=>{
+ const output=[],callbacks={}
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],completionMarkers:true,rpcFactory:options=>{callbacks.event=options.onEvent;callbacks.close=options.onClose;return {closed:false,close(){this.closed=true}}}})
+ manager.save=async()=>{};manager.state.users.owner={recovery:{execution:'running'}}
+ const session={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>{output.push(text);return {status:'accepted'}}}
+ manager.attachRpc(session)
+ callbacks.event({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'progress',type:'agentMessage',phase:'commentary',text:'正在处理。'}}})
+ callbacks.close()
+ await session.events
+ assert.equal(manager.state.users.owner.recovery.execution,'unknown')
+ assert.ok(output.some(text=>text.includes('连接中断，任务结果尚未确认')))
+ assert.ok(!output.some(text=>text.includes('本轮回答结束')))
+})
+test('connection close does not submit queued work after a received completion',async()=>{
+ const output=[],calls=[],callbacks={}
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:options=>{callbacks.event=options.onEvent;callbacks.close=options.onClose;return {closed:false,close(){this.closed=true},async request(method){calls.push(method);throw Error('closed RPC must not receive a new turn')}}}})
+ manager.save=async()=>{};manager.state.users.owner={recovery:{execution:'running'}}
+ const session={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[{input:'queued work',token:manager.lifecycle.capture('owner')}],reply:async text=>{output.push(text);return {status:'accepted'}}}
+ manager.sessions.set('owner',session);manager.attachRpc(session)
+ callbacks.event({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
+ callbacks.close()
+ await session.events
+ assert.deepEqual(calls,[])
+ assert.equal(manager.state.users.owner.recovery.execution,'completed')
+ assert.equal(session.queue.length,0)
+ assert.ok(output.some(text=>text.includes('1 条排队消息尚未提交，请重新发送')))
+})
+test('delayed close and completion cannot overwrite a replacement session recovery',async()=>{
+ let releaseDelivery,deliveryStarted
+ const started=new Promise(resolve=>{deliveryStarted=resolve}),blocked=new Promise(resolve=>{releaseDelivery=resolve})
+ const callbacks={},output=[]
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:options=>{callbacks.event=options.onEvent;callbacks.close=options.onClose;return {closed:false,close(){this.closed=true}}}})
+ manager.save=async()=>{};manager.state.users.owner={recovery:{execution:'running'}}
+ const old={userId:'owner',threadId:'thread',turnId:'old-turn',turnReady:true,busy:true,finals:['旧任务结果'],items:new Map(),queue:[],reply:async text=>{output.push(text);deliveryStarted();await blocked;return {status:'accepted'}}}
+ manager.sessions.set('owner',old);manager.attachRpc(old)
+ callbacks.event({method:'turn/completed',params:{threadId:'thread',turn:{id:'old-turn',status:'completed'}}})
+ await started
+ callbacks.close()
+ const replacement={userId:'owner',threadId:'thread',busy:true},recovery={task:{id:'new-task'},execution:'running',delivery:null}
+ manager.sessions.set('owner',replacement);manager.state.users.owner.recovery=recovery
+ releaseDelivery()
+ await old.events
+ assert.equal(manager.state.users.owner.recovery,recovery)
+ assert.equal(recovery.execution,'running')
+ assert.equal(recovery.delivery,null)
+})
+test('a stale close callback leaves the replacement task running',async()=>{
+ const callbacks={}
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:options=>{callbacks.close=options.onClose;return {closed:false,close(){this.closed=true}}}})
+ manager.save=async()=>{};manager.state.users.owner={recovery:{execution:'running'}}
+ const old={userId:'owner',threadId:'thread',busy:true,queue:[],reply:async()=>({status:'accepted'})}
+ manager.sessions.set('owner',old);manager.attachRpc(old)
+ callbacks.close()
+ const replacement={userId:'owner',busy:true},recovery={execution:'running',delivery:null}
+ manager.sessions.set('owner',replacement);manager.state.users.owner.recovery=recovery
+ await old.events
+ assert.equal(manager.state.users.owner.recovery,recovery)
+ assert.equal(recovery.execution,'running')
+})
 test('failed delivery gets an uncertainty marker rather than a successful delivery claim',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'end-marker-failed-')),output=[],manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],completionMarkers:true}).init();manager.state.users.owner={}
  const s={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:['结果'],items:new Map(),queue:[],reply:async text=>{if(text.startsWith('结果'))throw Error('send failed');output.push(text)}}

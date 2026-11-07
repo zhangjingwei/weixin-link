@@ -115,13 +115,13 @@ export class SessionManager {
   }
   attachRpc(session) {
     const provider='configured',providerOptions=this.providerOptions()
-    const attempt={provider,current:true,rpc:null,providerOptions}
+    const attempt={provider,current:true,closing:false,rpc:null,providerOptions}
     session.rpcAttempt=attempt
     const rpc=this.rpcFactory({
       cwd:this.cwd,provider,providerOptions,
       log:(event,fields)=>this.diagnostic(session,event,{provider,...fields}),
       onEvent:message=>{
-        if(!attempt.current||session.rpcAttempt!==attempt)return
+        if(!attempt.current||attempt.closing||session.rpcAttempt!==attempt)return
         session.events=(session.events??Promise.resolve()).catch(()=>{}).then(()=>{
           if(!attempt.current||session.rpcAttempt!==attempt)return
           return this.event(session,message)
@@ -129,18 +129,34 @@ export class SessionManager {
         return session.events
       },
       onClose:()=>{
-        if(!attempt.current||session.rpcAttempt!==attempt)return
-        attempt.current=false
-        this.clearQuestions(session)
-        this.resolveWaiters(session, { status: 'unknown', reply: `${this.agentName} 连接中断，任务结果尚未确认。` })
-        if (session.exiting) this.finishExit(session, '未收到任务停止确认，连接已断开。').catch(() => {})
-        else if (session.busy) {
-          const record=this.state.users[session.userId]
-          if(record?.recovery?.execution==='running'){record.recovery.execution='unknown';void this.save().catch(()=>{})}
-          transition(session,'idle')
-          session.queue = []
-          this.emit(session, `${this.agentName} 连接中断，任务结果尚未确认。再次发消息可恢复对话。`)
-        }
+        if(!attempt.current||attempt.closing||session.rpcAttempt!==attempt)return
+        attempt.closing=true
+        // A completion notification may already be queued behind earlier deliveries.
+        // Drain received events before deciding whether the turn is still unknown.
+        session.events=(session.events??Promise.resolve()).catch(()=>{}).then(async()=>{
+          if(!attempt.current||session.rpcAttempt!==attempt)return
+          attempt.current=false
+          this.clearQuestions(session)
+          const queued=session.queue.length
+          session.queue=[]
+          const current=this.sessions.get(session.userId)
+          if(current&&current!==session){
+            this.resolveWaiters(session,{status:'unknown',reply:`${this.agentName} 连接中断，任务结果尚未确认。`})
+            if(queued)await this.emit(session,`连接中断，${queued} 条排队消息尚未提交，请重新发送。`)
+            return
+          }
+          if(session.busy||session.exiting){
+            this.resolveWaiters(session, { status: 'unknown', reply: `${this.agentName} 连接中断，任务结果尚未确认。` })
+            if (session.exiting) await this.finishExit(session, '未收到任务停止确认，连接已断开。')
+            else {
+              const record=this.state.users[session.userId]
+              if(record?.recovery?.execution==='running'){record.recovery.execution='unknown';await this.save().catch(()=>{})}
+              transition(session,'idle')
+              await this.emit(session, `${this.agentName} 连接中断，任务结果尚未确认。再次发消息可恢复对话。`)
+            }
+          }
+          if(queued&&!session.exiting)await this.emit(session,`连接中断，${queued} 条排队消息尚未提交，请重新发送。`)
+        }).catch(error=>this.diagnostic(session,'rpc.close_failed',errorFields(error)))
       },
     })
     attempt.rpc=rpc
@@ -361,7 +377,7 @@ export class SessionManager {
     clearTimeout(session.exitTimer)
     this.clearQuestions(session)
     this.resolveWaiters(session, { status: 'interrupted', reply: detail || '会话已退出。' })
-    this.sessions.delete(session.userId)
+    if(this.sessions.get(session.userId)===session)this.sessions.delete(session.userId)
     session.rpc.close()
     await this.emit(session, `${detail ? detail + '\n' : ''}已结束当前会话连接。聊天记录已保留，继续发消息即可恢复。`)
   }
@@ -483,6 +499,7 @@ export class SessionManager {
     }
     if (message.method === 'turn/completed' && session.busy) {
       if (p.turn?.id && p.turn.id !== session.turnId) return
+      if(this.sessions.has(session.userId)&&this.sessions.get(session.userId)!==session)return
       transition(session,'delivering')
       this.clearQuestions(session)
       const awaitingAttachment=p.turn.status==='completed'&&session.waitingAttachment&&(session.workToken?.current()??true)
@@ -509,6 +526,7 @@ export class SessionManager {
         }
       }
       session.generatedOutputs=[]
+      if(this.sessions.has(session.userId)&&this.sessions.get(session.userId)!==session)return
       this.state.users[session.userId].lastOutput=typeof output==='string'?undefined:output
       this.state.users[session.userId].recovery={task:session.localTask,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending',updated:new Date().toISOString()}
       this.state.users[session.userId].lastTask=session.localTask
@@ -522,19 +540,22 @@ export class SessionManager {
       else if(typeof output==='string'){if(display)await this.emit(session,display)}else await this.emit(session,{...output,text:display})
       const recovery=this.state.users[session.userId].recovery
       if(receivedWhileWaiting){session.lastDelivery={status:'not_required',updated:new Date().toISOString()}}
-      this.setRecoveryDelivery(recovery,session)
-      this.diagnostic(session,'delivery.state_changed',{delivery_state:recovery.delivery,status:p.turn.status})
-      try{await this.save()}catch(error){this.diagnostic(session,'recovery.save_failed',errorFields(error))}
+      const currentRecovery=this.sessions.get(session.userId)===session||!this.sessions.has(session.userId)
+      if(currentRecovery&&this.state.users[session.userId].recovery===recovery){
+        this.setRecoveryDelivery(recovery,session)
+        this.diagnostic(session,'delivery.state_changed',{delivery_state:recovery.delivery,status:p.turn.status})
+        try{await this.save()}catch(error){this.diagnostic(session,'recovery.save_failed',errorFields(error))}
+      }
       // An exceptional transport failure cannot be predicted in an already-sent footer.
       // Keep a separate warning only for failure, never a second normal completion.
-      if(mergedCompletion&&!['accepted','deferred','not_required'].includes(recovery.delivery)){
+      if(mergedCompletion&&currentRecovery&&!['accepted','deferred','not_required'].includes(recovery.delivery)){
         const warning=recovery.delivery==='failed'?'⚠️ 最终结果发送失败，结果已保存，可发 结果 重发。':'⚠️ 部分内容未确认送达，结果已保存，可发 结果 查看。'
         await this.emit(session,localCompletion(warning,session.localTask),()=>!session.exited&&(session.workToken?.current()??true))
       }
       this.resolveWaiters(session, { status: p.turn.status, reply })
       if(session.exited)return
       transition(session,'idle')
-      if (session.queue.length) {
+      if (session.queue.length&&!session.rpcAttempt?.closing&&!session.rpc?.closed) {
         try { await (()=>{const next=session.queue.shift();return typeof next==='string'?this.send(session,next):this.send(session,next.input,next.token)})() }
         catch (error) { await this.emit(session, `排队消息未能执行：${error.message}`) }
       }
