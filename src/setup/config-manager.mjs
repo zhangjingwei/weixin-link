@@ -58,7 +58,8 @@ async function probeConfiguration(kind,config,{home=currentHome(),env=process.en
   }else if(kind==='installation'){
    if(!(await stat(config.workspace)).isDirectory())throw Error()
    await access(config.workspace,fsConstants.W_OK)
-   if(config.codexBinary){const {stdout}=await exec(config.codexBinary,['--version'],{timeout:10000,maxBuffer:65536});if(!/^codex(?:-cli)?\s+\d+\.\d+/i.test(stdout.trim()))throw Error()}
+   if(config.agentBackend==='claude'){const {stdout}=await exec(config.claudeBinary,['--version'],{timeout:10000,maxBuffer:65536});const version=stdout.match(/\b(\d+)\.(\d+)\.(\d+)\b/);if(!version||Number(version[1])<2||Number(version[1])===2&&Number(version[2])<1||Number(version[1])===2&&Number(version[2])===1&&Number(version[3])<259)throw Error()}
+   else if(config.codexBinary){const {stdout}=await exec(config.codexBinary,['--version'],{timeout:10000,maxBuffer:65536});if(!/^codex(?:-cli)?\s+\d+\.\d+/i.test(stdout.trim()))throw Error()}
   }
  }catch(error){if(error instanceof ConfigError)throw error;throw new ConfigError('CONFIG_CONNECTION_CHECK_FAILED',kind)}
 }
@@ -110,7 +111,7 @@ export async function configure(kind,input,{home=currentHome(),workspace,env=pro
   committed=true
   let guidance
   if(kind==='installation'){
-   try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:config.codexBinary??findCodex(home)})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
+   try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:config.codexBinary??findCodex(home),agentBackend:config.agentBackend??'codex',claudeBinary:config.claudeBinary})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
   }
   const runtime=await release();release=async()=>({resumed:true})
   return {kind,version:config.version,verified:true,written:true,...result,effective:kind==='installation'?'next_service_start':'next_operation',runtimeResumed:runtime.resumed,...(!runtime.resumed?{warning:'CONFIG_RUNTIME_RESUME_UNCONFIRMED'}:{}),...(guidance?{guidance}:{}),restartRequired:kind==='installation'}

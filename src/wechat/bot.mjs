@@ -8,7 +8,9 @@ import {SetupController,setupCommand} from '../setup/setup-controller.mjs'
 import {installConfig} from '../setup/install-config.mjs'
 import {createToolNotifier} from './tool-status.mjs'
 import {installWeixinProtocol} from './weixin-protocol.mjs'
-import {loadBackend} from '../base/codex/codex-backend.mjs'
+import {loadAgentAdapter} from '../base/agent-adapter.mjs'
+import {ClaudeConversations} from '../base/claude/claude-conversations.mjs'
+import {ClaudeSetupController} from '../base/claude/claude-setup.mjs'
 import {TextConversations,conversationCommand} from '../core/text-conversations.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../core/intake/ingress-trace.mjs'
@@ -30,8 +32,10 @@ import { hasMedia, prepareMedia } from '../media/media-input.mjs'
 
 const account=accountPaths();await assertAccount(account.id)
 const stateDir = account.stateDir
-const cwd = installConfig().workspace
-const backend=await loadBackend(account,cwd)
+const installation=installConfig()
+const cwd = installation.workspace
+const agent=await loadAgentAdapter(account,cwd,installation)
+const backend=agent.backend
 const runtimeStateDir=backend.stateDir
 await mkdir(stateDir, { recursive: true, mode: 0o700 })
 const testing = process.argv.includes('--test-codex')
@@ -43,7 +47,7 @@ if (testing && !/^[a-zA-Z0-9_-]+$/.test(testName)) throw new Error('Invalid test
 const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-logs':'logs')})
 const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:testing?'test':'live'})
-const manager = await new SessionManager({log, completionMarkers:true, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, ...(backend.kind==='podman'?{rpcFactory:backend.rpcFactory,remoteControl:backend.remoteControl,providerEnv:{}}:{}) }).init()
+const manager = await new SessionManager({log, completionMarkers:true, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, agentKind:agent.kind, ...agent.sessionOptions, ...(backend.kind==='podman'?{rpcFactory:backend.rpcFactory,remoteControl:backend.remoteControl,providerEnv:{}}:{}) }).init()
 
 if (testing) {
   try {
@@ -54,8 +58,8 @@ if (testing) {
   process.exit(0)
 }
 
-const setupController=await new SetupController({stateDir,backend,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)}).init()
-const conversations=new TextConversations(manager,owners)
+const setupController=await (agent.kind==='claude'?new ClaudeSetupController({binary:installation.claudeBinary}):new SetupController({stateDir,backend,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)})).init()
+const conversations=agent.catalog==='local'?new ClaudeConversations(manager,owners):new TextConversations(manager,owners)
 await manager.save()
 const bot = new WeChatBot({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
 const loginValidity=trackLoginValidity(bot)

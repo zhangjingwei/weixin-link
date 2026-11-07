@@ -130,7 +130,7 @@ Prefix the command with `WEIXIN_LINK_QR_STYLE=full` for solid cells, or `WEIXIN_
 
 ## More capabilities and documentation
 
-**Codex** is the currently supported agent backend. Multiple WeChat accounts, remote hosts and isolated Linux containers can be configured later; they are not required for initial setup.
+**Codex** remains the default agent backend. A new **Claude** CLI adapter can be selected in installation configuration; it requires Claude CLI 2.1.259+ and service-side API credentials. It currently supports local tasks, session continuation, and stopping. Model catalog, native memory controls, official history search, and permanent deletion are not yet connected. See the [Claude adapter notes](src/base/claude/README.md). Multiple WeChat accounts, remote hosts, and isolated Linux containers continue to use their established Codex paths.
 
 - [User guide](USER-GUIDE.md): conversations, models, memory, attachments and results.
 - [Configuration and maintenance](CONFIGURATION.md): installation, upgrades, backups and troubleshooting.

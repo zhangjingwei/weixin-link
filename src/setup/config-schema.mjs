@@ -7,7 +7,7 @@ const absolute={...text,format:'absolute-path'}
 const object=(properties,required)=>({type:'object',properties,required,additionalProperties:false})
 const host=object({platform:{enum:['posix','win32']},binary:{...text,format:'remote-path'},root:{...text,format:'remote-path'},transport:{enum:['daemon-proxy','ssh-websocket']},port:{type:'integer',minimum:1024,maximum:65535}},['platform','binary','root','transport'])
 export const CONFIG_SCHEMAS={
- installation:object({version:{const:1},workspace:absolute,codexBinary:absolute,createdAt:{...text,format:'date-time'}},['version','workspace']),
+ installation:object({version:{const:1},workspace:absolute,codexBinary:absolute,agentBackend:{enum:['codex','claude']},claudeBinary:absolute,createdAt:{...text,format:'date-time'}},['version','workspace']),
  ...Object.fromEntries(integrations.map(item=>[item.manifest.configKind,item.schema])),
  backup:object({version:{const:1},host:{...text,pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},remoteDirectory:{...text,format:'backup-directory'}},['version','host','remoteDirectory']),
  'remote-hosts':object({version:{const:1},hosts:{type:'object',propertyNames:{pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},additionalProperties:host}},['version','hosts']),
@@ -51,6 +51,7 @@ export function validateConfig(kind,input){
  if(kind==='remote-hosts'&&!Object.hasOwn(input,'hosts')&&!Object.hasOwn(input,'version'))value={version:1,hosts:input}
  else value={version:1,...input}
  validate(schema,value)
+ if(kind==='installation'&&value.agentBackend==='claude'&&!value.claudeBinary)fail('CONFIG_REQUIRED_FIELD','claudeBinary')
  if(kind==='remote-hosts')for(const [name,entry]of Object.entries(value.hosts))validateHostConfig(name,entry)
  return structuredClone(value)
 }

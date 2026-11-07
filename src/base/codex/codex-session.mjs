@@ -26,8 +26,10 @@ export {controlCommand} from './control-command.mjs'
 export {codexProviderOptions} from './provider-options.mjs'
 
 export class SessionManager {
-  constructor({ stateDir, cwd, owners, backend = null, rpcFactory = options => new CodexRpc(options), remoteControl = remoteScope, completionMarkers = false, providerEnv = process.env, log = () => {} }) {
+  constructor({ stateDir, cwd, owners, backend = null, agentKind = 'codex', rpcFactory = options => new CodexRpc(options), remoteControl = remoteScope, completionMarkers = false, providerEnv = process.env, log = () => {} }) {
     this.log = log
+    this.agentKind=agentKind
+    this.agentName=agentKind==='claude'?'Claude':'Codex'
     this.backend=backend
     this.instructions=ASSISTANT_INSTRUCTIONS+(backend?.instructions?'\n'+backend.instructions:'')
     this.completionMarkers = completionMarkers
@@ -129,14 +131,14 @@ export class SessionManager {
         if(!attempt.current||session.rpcAttempt!==attempt)return
         attempt.current=false
         this.clearQuestions(session)
-        this.resolveWaiters(session, { status: 'unknown', reply: 'Codex 连接中断，任务结果尚未确认。' })
+        this.resolveWaiters(session, { status: 'unknown', reply: `${this.agentName} 连接中断，任务结果尚未确认。` })
         if (session.exiting) this.finishExit(session, '未收到任务停止确认，连接已断开。').catch(() => {})
         else if (session.busy) {
           const record=this.state.users[session.userId]
           if(record?.recovery?.execution==='running'){record.recovery.execution='unknown';void this.save().catch(()=>{})}
           transition(session,'idle')
           session.queue = []
-          this.emit(session, 'Codex 连接中断，任务结果尚未确认。再次发消息可恢复对话。')
+          this.emit(session, `${this.agentName} 连接中断，任务结果尚未确认。再次发消息可恢复对话。`)
         }
       },
     })
@@ -153,7 +155,9 @@ export class SessionManager {
   async sessionInstructions() {
     // Local integrations execute in this account's host environment, not a remote/container backend.
     const guidance=this.backend?'':await integrationGuidance({stateDir:this.stateDir})
-    return this.instructions+(guidance?'\n\n'+guidance:'')
+    let workspaceRules=''
+    if(this.agentKind==='claude')try{const content=await readFile(join(this.cwd,'AGENTS.md'),'utf8');if(Buffer.byteLength(content)>64*1024)throw Error('WORKSPACE_RULES_TOO_LARGE');workspaceRules='\n\n工作区规则（AGENTS.md）：\n'+content}catch(error){if(error.code!=='ENOENT')throw error}
+    return this.instructions+(guidance?'\n\n'+guidance:'')+workspaceRules
   }
   async startProvider(session) {
     const provider='configured',attempt=this.attachRpc(session)
@@ -171,8 +175,8 @@ export class SessionManager {
       }
       result??=await attempt.rpc.request('thread/start',params)
       if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
-      if(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never')throw Error('Codex 未应用配置的会话权限。')
-      await enableThreadMemory(attempt.rpc,result.thread.id)
+      if(this.agentKind==='codex'&&(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never'))throw Error('Codex 未应用配置的会话权限。')
+      if(this.agentKind==='codex')await enableThreadMemory(attempt.rpc,result.thread.id)
       if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
       session.provider=provider
       session.model=result.model
@@ -247,7 +251,7 @@ export class SessionManager {
       if(meta.status?.type==='active')throw Error('目标对话正在执行任务，未切换。')
       const selectedProvider=this.providerOptions()
       const result=await session.rpc.request('thread/resume',{config:nativeMemoryConfig,cwd:this.cwd,sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:await this.sessionInstructions(),threadId:id,excludeTurns:true,...selectedProvider.thread})
-      if(result.thread?.id!==id||result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never')throw Error('Codex 未确认目标对话与权限，未切换。')
+      if(result.thread?.id!==id||this.agentKind==='codex'&&(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never'))throw Error(`${this.agentName} 未确认目标对话，未切换。`)
       await enableThreadMemory(session.rpc,id)
       if(!token.current())return
       const previous=this.state.users[userId],oldId=session.threadId
@@ -459,7 +463,7 @@ export class SessionManager {
       const receivedWhileWaiting=awaitingAttachment&&(this.submissions?.pendingMaterials?.(session.userId,undefined)??0)>0
       let reply = session.finals.join('\n\n')
       if(receivedWhileWaiting){reply='请求已保留，正在核对已收到的附件。';this.diagnostic(session,'materials.waiting_notice_adjusted',{reason:'received_pending'})}
-      if (p.turn.status === 'failed') reply += `\nCodex 任务失败：${p.turn.error?.message ?? '未返回错误详情。'}`
+      if (p.turn.status === 'failed') reply += `\n${this.agentName} 任务失败：${p.turn.error?.message ?? '未返回错误详情。'}`
       else if (p.turn.status === 'interrupted') reply += '\n当前任务已停止。'
       else if (!reply) reply = '本轮任务已结束，但未返回文字回复。'
       // The footer describes execution completion, not delivery acceptance.
@@ -558,6 +562,7 @@ export class SessionManager {
     try {
       if(command?.action==='steer'){await this.steer(userId,command.text,reply,token);return}
       if(command?.action==='memory'){
+        if(this.agentKind==='claude'){await reply('当前 Claude 底座未接入可验证的长期记忆开关或状态；未执行记忆修改。');return}
         const session=await this.connect(userId,reply);if(command.op==='auto'){await session.rpc.request('thread/memoryMode/set',{threadId:session.threadId,mode:command.on?'enabled':'disabled'});await reply('Codex已确认当前会话原生记忆模式：'+(command.on?'开启':'关闭')+'。');}else if(command.op==='list'){const status=await session.rpc.request('memory/status',{});await reply('当前使用Codex原生记忆。\n已整合会话：'+(status.v2ConsolidatedThreads??'未知')+'；就绪：'+(status.v2Ready?'是':'否')+'。\n当前不使用微信逐条记忆库；“开启记忆”或“关闭记忆” 控制当前会话原生记忆。');}else await reply('当前使用Codex原生记忆，未执行微信逐条记忆的修改或清空。可用“记忆” 查看状态。');return
       }
       if (['approval', 'answer'].includes(command?.action)) {
@@ -581,6 +586,7 @@ export class SessionManager {
       if(command?.action==='sessions'){await this.listConversations(userId,reply);return}
       if(command?.action==='resume'){await this.resumeConversation(userId,command.selection,reply,token);return}
       if(command?.action==='models'){
+        if(this.agentKind==='claude'){await reply('Claude 底座暂未提供可核验的模型目录；未切换模型。');return}
         const session=await this.connect(userId,reply),models=[],cursors=new Set();let cursor
         for(let page=0;page<10;page++){
           const result=await session.rpc.request('model/list',{limit:50,includeHidden:false,...(cursor?{cursor}:{})})
@@ -620,7 +626,7 @@ export class SessionManager {
         // Seal remote submission before local interruption, then stop owned daemon work.
         let remoteStop
         const stopRemote=async()=>{if(!remoteStop)remoteStop=this.remoteControl(this.cwd,scopeId,'stop');const result=await remoteStop;if(result.tasks?.length)await reply(result.stop_confirmed?'本对话委托的远程任务及对应命令已确认停止。':'远程任务尚未全部确认停止，请保留会话并重试 “停止”。');if(!result.stop_confirmed)throw Error('远程停止未确认');return result}
-        if (!runtime || runtime.rpc.closed) { await stopRemote(); await reply('当前没有运行中的本地 Codex 任务。'); return }
+        if (!runtime || runtime.rpc.closed) { await stopRemote(); await reply(`当前没有运行中的本地 ${this.agentName} 任务。`); return }
         const queued=runtime.queue.length;runtime.queue=[]
         const stopTrace=runtime.traceId
         let localInterrupt
@@ -659,7 +665,7 @@ export class SessionManager {
         this.state.users[userId] = { seen: saved?.seen, previous: [...(saved?.previous ?? []), ...(saved?.threadId ? [saved.threadId] : [])].slice(-20) }
         await this.save()
         await this.connect(userId, reply)
-        await reply('已新建 Codex 对话。')
+        await reply(`已新建 ${this.agentName} 对话。`)
         return
       }
       const session = await this.connect(userId, reply)
@@ -668,7 +674,7 @@ export class SessionManager {
     } catch (error) {
       if(!command&&!token.current()){this.log('turn.cancelled',{userId,reason:'cancelled_generation'});return}
       this.log('session.handle_failed',{userId,...errorFields(error)})
-      await reply(`Codex：${error.message}`)
+      await reply(`${this.agentName}：${error.message}`)
     }
   }
   async ask(userId, text, reply = async () => {}, timeout = 180_000, token = this.lifecycle.capture(userId)) {
