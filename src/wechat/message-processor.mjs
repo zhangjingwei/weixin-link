@@ -5,6 +5,7 @@ import {welcomeGuideOnce,isWelcomeGreeting} from './welcome-guide.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
 import {conversationCommand} from '../core/text-conversations.mjs'
 import {controlCommand} from '../base/codex/control-command.mjs'
+import {agentSwitchCommand} from '../setup/agent-switch.mjs'
 import {hasMedia} from '../media/media-input.mjs'
 import {voiceTextMessage} from '../media/voice-text.mjs'
 import {receiptPolicy} from '../core/delivery/notification-policy.mjs'
@@ -12,7 +13,7 @@ import {singleMedia} from '../media/single-media.mjs'
 import {quoteInput} from './weixin-protocol.mjs'
 import {errorFields} from '../core/diagnostics/diagnostic-log.mjs'
 
-export function createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable}){
+export function createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,agentSwitcher,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable}){
 return async function handleMessage(message) {
   if(message._ingressId&&!jobs.rawCurrent(message._ingressId))return
   if(message._intakeToken&&!message._intakeToken.current())return
@@ -21,7 +22,8 @@ return async function handleMessage(message) {
   log('message.received',{trace_id,userId:message.userId,messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text',chars:message.text?.length??0})
   if (!manager.owners.has(message.userId)) {log('message.rejected',{trace_id,reason:'unauthorized'});return}
   const diagnosticAction=!hasMedia(message)&&diagnosticCommand(message.text)
-  const initialControl=!hasMedia(message)&&(diagnosticAction||message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
+  const agentAction=!hasMedia(message)&&agentSwitchCommand(message.text?.trim()??'')
+  const initialControl=!hasMedia(message)&&(diagnosticAction||message._setupAction||agentAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
   if(runtime.sealed)return
   if(runtime.draining&&!(typeof initialControl==='string'&&/^wizardChoice:\d+:3$/.test(initialControl))&&!['stop','exit','status','result','help'].includes(initialControl?.action)){
     jobs.acknowledge([message._ingressId].filter(Boolean))
@@ -49,6 +51,13 @@ return async function handleMessage(message) {
   const token=message._intakeToken??manager.lifecycle.capture(message.userId)
   const messageId = message.raw?.message_id ?? message.raw?.client_id
   if (!message._recovered&&(media||initialControl)&&initialControl?.action!=='steer'&&!await manager.acceptMessage(message.userId,messageId)) return
+  if(agentAction){
+   await runtime.track('setup',async()=>{
+    try{await agentSwitcher.handle(agentAction,value=>runtime.track('delivery',()=>outgoing.deliver(message.userId,value,{conversationControl:true})))}
+    catch(error){log('agent.switch_failed',{trace_id,...errorFields(error)});await outgoing.deliver(message.userId,'智能体切换未完成；当前底座未确认改变。错误代码：'+(/^[A-Z0-9_]+$/.test(error.message)?error.message:'AGENT_SWITCH_FAILED'),{conversationControl:true})}
+    finally{jobs.acknowledge([message._ingressId].filter(Boolean))}
+   });return
+  }
   if(!hasMedia(message)&&await conversations.control(message,reply)){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const control = !media && controlCommand(text)
   if(!control&&!token.current())return

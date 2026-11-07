@@ -628,7 +628,7 @@ export class SessionManager {
         const lines=entries.map(m=>`${m.model}${session.model===m.model?' [当前]':''}${m.isDefault?' [默认]':''}\n输入：${Array.isArray(m.inputModalities)?m.inputModalities.join('、'):'未提供'}；推理档位：${(m.supportedReasoningEfforts??[]).map(e=>e.reasoningEffort).join('、')||'未提供'}`)
         await reply('Codex 返回的模型列表（只查询，不切换）：\n'+(lines.join('\n\n')||'当前未返回可显示的模型。'));return
       }
-      if (command?.action === 'help') {await reply('直接发送需求即可。发送“使用说明”查看完整说明，“安装向导”完成首次设置。\n常用：日常助手、状态、停止、结果、恢复、退出、模型、记忆、开启记忆、关闭记忆、列表、新建 名称。\n配置远程主机、家庭设备或备份：直接说明需求，由智能体通过配置命令检查和处理；需要模型可用。\n归档保留历史；删除是不可还原的永久删除。');return}
+      if (command?.action === 'help') {await reply('直接发送需求即可。发送“使用说明”查看完整说明，“安装向导”完成首次设置。\n常用：日常助手、状态、停止、结果、恢复、退出、模型、记忆、开启记忆、关闭记忆、列表、新建 名称、切换智能体。\n配置远程主机、家庭设备或备份：直接说明需求，由智能体通过配置命令检查和处理；需要模型可用。\n归档保留历史；删除是不可还原的永久删除。');return}
       const runtime = this.sessions.get(userId)
       if(command?.action==='progress'){
         const queued=(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)
