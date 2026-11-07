@@ -14,6 +14,7 @@ import {CancellationScopes,transition} from '../../core/tasks/lifecycle.mjs'
 import {codexInput} from './codex-input.mjs'
 import {errorFields} from '../../core/diagnostics/diagnostic-log.mjs'
 import {deliveryError,deliveryFailureState} from '../../core/delivery/delivery-error.mjs'
+import {systemNotice} from '../../core/delivery/system-notice.mjs'
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
@@ -101,6 +102,7 @@ export class SessionManager {
     })
     try { return await session.delivering } catch { /* Keep the delivery outcome in lastDelivery for persisted recovery state. */ return false }
   }
+  notify(session,text,guard){return this.emit(session,systemNotice(text),guard)}
   resolveWaiters(session, result) {
     for (const resolve of session.waiters ?? []) resolve(result)
     session.waiters?.clear()
@@ -144,7 +146,7 @@ export class SessionManager {
           const current=this.sessions.get(session.userId)
           if(current&&current!==session){
             this.resolveWaiters(session,{status:'unknown',reply:`${this.agentName} 连接中断，任务结果尚未确认。`})
-            if(queued)await this.emit(session,`连接中断，${queued} 条排队消息尚未提交，请重新发送。`)
+            if(queued)await this.notify(session,`连接中断，${queued} 条排队消息尚未提交，请重新发送。`)
             return
           }
           if(session.busy||session.exiting){
@@ -154,10 +156,10 @@ export class SessionManager {
               const record=this.state.users[session.userId]
               if(record?.recovery?.execution==='running'){record.recovery.execution='unknown';await this.save().catch(()=>{})}
               transition(session,'idle')
-              await this.emit(session, `${this.agentName} 连接中断，任务结果尚未确认。再次发消息可恢复对话。`)
+              await this.notify(session, `${this.agentName} 连接中断，任务结果尚未确认。再次发消息可恢复对话。`)
             }
           }
-          if(queued&&!session.exiting)await this.emit(session,`连接中断，${queued} 条排队消息尚未提交，请重新发送。`)
+          if(queued&&!session.exiting)await this.notify(session,`连接中断，${queued} 条排队消息尚未提交，请重新发送。`)
         }).catch(error=>this.diagnostic(session,'rpc.close_failed',errorFields(error)))
       },
     })
@@ -292,7 +294,7 @@ export class SessionManager {
       if (session.queue.length >= 5) throw new Error('已排队 5 条消息，请等待当前任务完成。')
       session.queue.push({input:text,token})
       this.diagnostic(session,'turn.queued',{queue_depth:session.queue.length})
-      await this.emit(session, `消息已排队（第 ${session.queue.length} 条）。`)
+      await this.notify(session, `消息已排队（第 ${session.queue.length} 条）。`)
       return
     }
     transition(session,'running')
@@ -346,7 +348,7 @@ export class SessionManager {
     this.state.users[session.userId].hasMessages=true
     try{await this.save()}catch(error){
       this.diagnostic(session,'state.save_failed',errorFields(error))
-      await this.emit(session,'任务已启动，但微信会话状态保存失败；任务继续执行。')
+      await this.notify(session,'任务已启动，但微信会话状态保存失败；任务继续执行。')
     }
   }
   interrupt(session) {
@@ -381,7 +383,7 @@ export class SessionManager {
     this.resolveWaiters(session, { status: 'interrupted', reply: detail || '会话已退出。' })
     if(this.sessions.get(session.userId)===session)this.sessions.delete(session.userId)
     session.rpc.close()
-    await this.emit(session, `${detail ? detail + '\n' : ''}已结束当前会话连接。聊天记录已保留，继续发消息即可恢复。`)
+    await this.notify(session, `${detail ? detail + '\n' : ''}已结束当前会话连接。聊天记录已保留，继续发消息即可恢复。`)
   }
   deny(method) {
     if (method === 'item/permissions/requestApproval') return { permissions: {}, scope: 'turn' }
@@ -404,14 +406,14 @@ export class SessionManager {
       const supported = ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput']
       if (!supported.includes(message.method)) {
         session.rpc.write({ id: message.id, error: { code: -32601, message: 'Unsupported client interaction' } })
-        await this.emit(session, `Codex 请求了暂不支持的交互：${message.method}，该请求未获执行。`)
+        await this.notify(session, `Codex 请求了暂不支持的交互：${message.method}，该请求未获执行。`)
         return
       }
       const item = session.items.get(p.itemId)
       if ((message.method === 'item/tool/requestUserInput' && p.questions?.some(q => q.isSecret)) ||
           (message.method === 'item/fileChange/requestApproval' && !item?.changes?.length)) {
         session.rpc.respond(message.id, this.deny(message.method))
-        await this.emit(session, '该请求需要秘密信息或缺少可审查的变更内容，请在主机终端处理。不要在微信发送密码或令牌。')
+        await this.notify(session, '该请求需要秘密信息或缺少可审查的变更内容，请在主机终端处理。不要在微信发送密码或令牌。')
         return
       }
       const code = randomBytes(3).toString('hex')
@@ -419,7 +421,7 @@ export class SessionManager {
       question.timer = setTimeout(() => {
         this.questions.delete(code)
         try { session.rpc.respond(message.id, this.deny(message.method)) } catch {}
-        this.emit(session, `请求 ${code} 已过期，未予批准。`)
+        this.notify(session, `请求 ${code} 已过期，未予批准。`)
       }, 10 * 60_000)
       this.questions.set(code, question)
       this.diagnostic(session,'interaction.requested',{method:message.method})
@@ -430,7 +432,7 @@ export class SessionManager {
       } else {
         text = `${p.reason ?? 'Codex 请求批准操作'}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n/批准 ${code}\n/拒绝 ${code}`
       }
-      await this.emit(session, text)
+      await this.notify(session, text)
       return
     }
     if(message.method==='error'){
@@ -533,14 +535,14 @@ export class SessionManager {
       // Keep a separate warning only for failure, never a second normal completion.
       if(mergedCompletion&&currentRecovery&&!['accepted','deferred','not_required'].includes(recovery.delivery)){
         const warning=recovery.delivery==='failed'?'⚠️ 最终结果发送失败，结果已保存，可发 结果 重发。':'⚠️ 部分内容未确认送达，结果已保存，可发 结果 查看。'
-        await this.emit(session,localCompletion(warning,session.localTask),()=>!session.exited&&(session.workToken?.current()??true))
+        await this.notify(session,localCompletion(warning,session.localTask),()=>!session.exited&&(session.workToken?.current()??true))
       }
       this.resolveWaiters(session, { status: p.turn.status, reply })
       if(session.exited)return
       transition(session,'idle')
       if (session.queue.length&&!session.rpcAttempt?.closing&&!session.rpc?.closed) {
         try { await (()=>{const next=session.queue.shift();return typeof next==='string'?this.send(session,next):this.send(session,next.input,next.token)})() }
-        catch (error) { await this.emit(session, `排队消息未能执行：${error.message}`) }
+        catch (error) { await this.notify(session, `排队消息未能执行：${error.message}`) }
       }
     }
   }

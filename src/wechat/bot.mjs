@@ -1,4 +1,5 @@
 import {trackLoginValidity} from './login-validity.mjs'
+import {systemNotice} from '../core/delivery/system-notice.mjs'
 import {LifecycleNotice} from './lifecycle-notice.mjs'
 import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
@@ -117,7 +118,7 @@ const mediaDependencies={
 }
 const outgoing=new OutputTransport({store:manager.outputStore,log,send:async(userId,content)=>runtime.track('delivery',()=>content?.voice?bot.sendVoice(conversations.recipient(userId),content.voice):bot.send(conversations.recipient(userId),content))})
 const deliverOriginal=outgoing.deliver.bind(outgoing);conversations.sendOutput=deliverOriginal
-outgoing.deliver=(key,value,options)=>conversations.deliver(key,value,options,deliverOriginal)
+outgoing.deliver=(key,value,options)=>conversations.deliver(key,options?.conversationControl?systemNotice(value):value,options,deliverOriginal)
 const updates=new UpdateNotifier({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,
  ready:()=>runtime.ready()&&runtime.status().idle&&!runtime.draining&&!runtime.sealed&&!stopping,
  send:(owner,text)=>outgoing.deliver(owner,text,{conversationControl:true,current:()=>runtime.ready()&&!runtime.draining&&!runtime.sealed&&!stopping}),log})
@@ -133,7 +134,7 @@ await runtime.listen(account.socket)
 const jobs=new DurableJobs(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs
 let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(stateDir,'welcome-pending.json'),'utf8')).pending===true}catch{}
 const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,
- send:(owner,text)=>conversations.serialize(owner,async()=>{await runtime.track('delivery',()=>bot.sendAnnouncement(owner,text));return {status:'accepted'}}),log})
+ send:(owner,text)=>conversations.serialize(owner,async()=>{await runtime.track('delivery',()=>bot.sendAnnouncement(owner,systemNotice(text)));return {status:'accepted'}}),log})
 const setupReceipts=new SetupReceipts(stateDir)
 const stagedWires=new WeakMap(),originalParse=bot.parser.parse.bind(bot.parser)
 bot.parser.parse=wire=>stagedWires.get(wire)??originalParse(wire)
@@ -167,7 +168,7 @@ const intakeHandler=nonBlockingHandler(async message => {
   catch (error) {
     log('message.handler_failed',{userId:message.userId,...errorFields(error)})
     if (manager.owners.has(message.userId)) {
-      try { await bot.reply({...message,userId:conversations.recipient(message.userId)},'消息接收或附件处理失败，请稍后重试。') }
+      try { await bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('消息接收或附件处理失败，请稍后重试。')) }
       catch(error) { log('wechat.error_reply_failed',errorFields(error)) }
     }
   }
@@ -179,7 +180,7 @@ bot.onMessage(message=>{
  if(!Object.hasOwn(message,'_setupAction'))message._setupAction=message._recovered?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId)
  if(!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))){intakeHandler(message);return}
  const token=manager.lifecycle.capture(message.userId)
- void (async()=>{try{await manager.save();if(!token.current())return;const id=jobs.capture(message);if(id){log('ingress.persisted',{messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text'});intakeHandler({...message,_ingressId:id,_intakeToken:token})}}catch(error){log('ingress.persist_failed',errorFields(error));void bot.reply({...message,userId:conversations.recipient(message.userId)},'消息未能持久保存，请稍后重试。').catch(()=>{})}})()
+ void (async()=>{try{await manager.save();if(!token.current())return;const id=jobs.capture(message);if(id){log('ingress.persisted',{messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text'});intakeHandler({...message,_ingressId:id,_intakeToken:token})}}catch(error){log('ingress.persist_failed',errorFields(error));void bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('消息未能持久保存，请稍后重试。')).catch(()=>{})}})()
 })
 
 async function shutdown(signal){if(stopping)return;stopping=true;updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}

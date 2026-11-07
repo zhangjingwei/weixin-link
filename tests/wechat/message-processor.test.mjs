@@ -20,7 +20,7 @@ test('extracted message processor rejects unauthorized, cancelled and stale mess
 })
 test('extracted processor retains ping handling and durable ordinary submission',async()=>{
  const f=fixture();await f.handle({userId:'owner',text:'ping',_ingressId:'ping-id'})
- assert.deepEqual(f.sent,[['owner','pong']]);assert.deepEqual(f.acked,['ping-id'])
+ assert.deepEqual(f.sent,[['owner','pong\n〔系统通知〕']]);assert.deepEqual(f.acked,['ping-id'])
  await f.handle({userId:'owner',text:'normal request',_ingressId:'request-id'})
  assert.equal(f.submitted.length,1);assert.equal(f.submitted[0][0],'owner');assert.equal(f.submitted[0][2],'request-id')
 })

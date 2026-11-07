@@ -12,6 +12,7 @@ import {receiptPolicy} from '../core/delivery/notification-policy.mjs'
 import {singleMedia} from '../media/single-media.mjs'
 import {quoteInput} from './weixin-protocol.mjs'
 import {errorFields} from '../core/diagnostics/diagnostic-log.mjs'
+import {systemNotice} from '../core/delivery/system-notice.mjs'
 import {recoverFailedFinal} from '../core/delivery/failed-final-recovery.mjs'
 
 export function createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable}){
@@ -31,20 +32,20 @@ return async function handleMessage(message) {
   if(runtime.sealed)return
   if(runtime.draining&&!(typeof initialControl==='string'&&/^wizardChoice:\d+:3$/.test(initialControl))&&!['stop','exit','status','result','help'].includes(initialControl?.action)){
     jobs.acknowledge([message._ingressId].filter(Boolean))
-    await runtime.track('delivery',()=>bot.reply({...message,userId:conversations.recipient(message.userId)},'服务正在维护重启，请稍后重新发送。'));return
+    await runtime.track('delivery',()=>bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('服务正在维护重启，请稍后重新发送。')));return
   }
   const setupAction=!hasMedia(message)&&message._setupAction;if(setupAction){const receipt=message._setupReceiptId?{id:message._setupReceiptId}:setupReceipts.capture(message);if(!receipt||!setupReceipts.claim(receipt.id)){if(message._recovered){await outgoing.deliver(message.userId,'上次安装操作的结果需要核对，未重复执行。发送“安装向导”重新检测并继续。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean))}return;}const setupToken=manager.lifecycle.capture(message.userId);const setupReply=(value,options={})=>{if(!setupToken.current())throw Error('SETUP_CANCELLED');return options.sensitive?runtime.track('delivery',()=>bot.sendSensitiveText(conversations.recipient(message.userId),value)):outgoing.deliver(message.userId,value,{current:()=>setupToken.current(),conversationControl:true})};await runtime.track('setup',()=>setupController.handle(setupAction,setupReply,{signal:setupToken.signal,scope:message._conversationOwner??message.userId,executionKey:message.userId}));setupReceipts.finish(receipt.id);jobs.acknowledge([message._ingressId].filter(Boolean));return}
   if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>outgoing.deliver(message.userId,diagnosticAction==='export'?await new OutputStore({stateDir,cwd:process.cwd()}).package(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
-  if(!initialControl&&backend.kind==='podman'&&!manager.sessions.has(message.userId)){try{await backend.preflight(owners);backendStartupIssue=null}catch{backendStartupIssue='CONTAINER_NOT_READY'}if(backendStartupIssue){await outgoing.deliver(message.userId,'微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。');jobs.acknowledge([message._ingressId].filter(Boolean));return}}
+  if(!initialControl&&backend.kind==='podman'&&!manager.sessions.has(message.userId)){try{await backend.preflight(owners);backendStartupIssue=null}catch{backendStartupIssue='CONTAINER_NOT_READY'}if(backendStartupIssue){await outgoing.deliver(message.userId,'微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}}
   if(!initialControl&&backend.kind==='host'&&backend.agentKind!=='claude'&&!manager.sessions.has(message.userId)){
-   const ready=await codexAvailability();if(!ready.installed||!ready.loggedIn){await outgoing.deliver(message.userId,!ready.installed?'微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。':'微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。');jobs.acknowledge([message._ingressId].filter(Boolean));return}
+   const ready=await codexAvailability();if(!ready.installed||!ready.loggedIn){await outgoing.deliver(message.userId,!ready.installed?'微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。':'微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
-  if(!initialControl&&backend.agentKind==='claude'&&!manager.sessions.has(message.userId)&&!process.env.ANTHROPIC_API_KEY&&!process.env.CLAUDE_CODE_USE_BEDROCK&&!process.env.CLAUDE_CODE_USE_VERTEX&&!process.env.CLAUDE_CODE_USE_FOUNDRY){await outgoing.deliver(message.userId,'微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。');jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  if(!initialControl&&backend.agentKind==='claude'&&!manager.sessions.has(message.userId)&&!process.env.ANTHROPIC_API_KEY&&!process.env.CLAUDE_CODE_USE_BEDROCK&&!process.env.CLAUDE_CODE_USE_VERTEX&&!process.env.CLAUDE_CODE_USE_FOUNDRY){await outgoing.deliver(message.userId,'微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const transcribed=voiceTextMessage(message)
   if(transcribed){log('voice.transcript_forwarded',{trace_id,userId:message.userId,status:'wechat_asr_text'});message=transcribed}
   const media = hasMedia(message)
   if (!media && !message.text?.trim()){jobs.acknowledge([message._ingressId].filter(Boolean));return}
-  const reply = (value,options) => outgoing.deliver(message.userId,value,options)
+  const reply = (value,options) => outgoing.deliver(message.userId,options?.checkpoint?value:systemNotice(value),options)
   const text = message.text?.trim() ?? ''
   if (!media && text.toLowerCase() === 'ping') { await reply('pong');jobs.acknowledge([message._ingressId].filter(Boolean)); return }
   if (text.length > 12_000) { await reply('消息过长，请拆成几条发送。');jobs.acknowledge([message._ingressId].filter(Boolean)); return }
