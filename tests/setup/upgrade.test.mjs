@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink} from 'node:fs/promises'
+import {cp,mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {fileURLToPath} from 'node:url'
@@ -15,6 +15,17 @@ test('upgrade CLI runs when invoked through a symlinked path',async t=>{
  const entry=join(directory,'upgrade.mjs')
  await symlink(fileURLToPath(new URL('../../src/setup/upgrade.mjs',import.meta.url)),entry)
  await assert.rejects(promisify(execFile)(process.execPath,[entry]),error=>{
+  assert.equal(error.code,1)
+  assert.match(error.stderr,/用法：node src\/setup\/upgrade.mjs/)
+  return true
+ })
+})
+test('downloaded upgrade CLI loads before dependencies are installed',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'weixin-upgrade-bootstrap-'))
+ t.after(()=>rm(directory,{recursive:true,force:true}))
+ const source=fileURLToPath(new URL('../../src/',import.meta.url))
+ await cp(source,join(directory,'src'),{recursive:true})
+ await assert.rejects(promisify(execFile)(process.execPath,[join(directory,'src/setup/upgrade.mjs')]),error=>{
   assert.equal(error.code,1)
   assert.match(error.stderr,/用法：node src\/setup\/upgrade.mjs/)
   return true

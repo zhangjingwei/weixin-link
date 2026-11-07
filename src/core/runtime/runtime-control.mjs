@@ -6,7 +6,6 @@ import net from 'node:net'
 import {randomUUID} from 'node:crypto'
 import {chmod,unlink} from 'node:fs/promises'
 import {dirname} from 'node:path'
-import lockfile from 'proper-lockfile'
 
 const sameSocket=(a,b)=>a.dev===b.dev&&a.ino===b.ino
 async function removeStaleSocket(path){
@@ -59,6 +58,7 @@ export class RuntimeControl {
   this.path=path
   if(isPipe(path)){this.token=randomUUID();await writeFile(accountPaths().stateDir+'/control-token',this.token,{mode:0o600})}
   else{
+   const {default:lockfile}=await import('proper-lockfile')
    this.releaseSocketLock=await lockfile.lock(dirname(path),{lockfilePath:path+'.instance-lock',stale:30000,update:10000,retries:0}).catch(error=>{if(error.code==='ELOCKED')throw Error('RUNTIME_ALREADY_RUNNING');throw error})
    try{await removeStaleSocket(path)}catch(error){await this.releaseSocketLock();this.releaseSocketLock=null;throw error}
   }
