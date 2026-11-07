@@ -5,6 +5,7 @@ import {randomUUID} from 'node:crypto'
 import {setTimeout as delay} from 'node:timers/promises'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
+import {realpathSync} from 'node:fs'
 import {ServiceManager,userHome,serviceName,xml} from './platform-service.mjs'
 import {accountPaths,listAccounts} from '../wechat/accounts.mjs'
 import {controlRequest} from '../core/runtime/runtime-control.mjs'
@@ -172,7 +173,7 @@ const errors={
  UPGRADE_ALREADY_RUNNING:'已有升级锁。请先确认之前的升级是否完成，并检查 upgrades 下的恢复记录。',
  UPGRADE_ROLLBACK_FAILED:'自动回滚未能确认完成。备份与恢复记录已保留，请检查服务状态后按恢复记录处理。',
 }
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
  const target=process.argv[2]
  if(!target){console.error('用法：node src/setup/upgrade.mjs 已安装源码目录');process.exitCode=1}
  else try{await upgradeInstallation({source:fileURLToPath(new URL('../../',import.meta.url)),target})}

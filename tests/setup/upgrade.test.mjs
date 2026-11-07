@@ -1,9 +1,25 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,mkdir,writeFile,readFile,readdir,rm} from 'node:fs/promises'
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
+import {fileURLToPath} from 'node:url'
+import {execFile} from 'node:child_process'
+import {promisify} from 'node:util'
 import {upgradeInstallation,standardDeployment} from '../../src/setup/upgrade.mjs'
+
+test('upgrade CLI runs when invoked through a symlinked path',async t=>{
+ if(process.platform==='win32')return t.skip('file symlinks may require privileges on Windows')
+ const directory=await mkdtemp(join(tmpdir(),'weixin-upgrade-cli-'))
+ t.after(()=>rm(directory,{recursive:true,force:true}))
+ const entry=join(directory,'upgrade.mjs')
+ await symlink(fileURLToPath(new URL('../../src/setup/upgrade.mjs',import.meta.url)),entry)
+ await assert.rejects(promisify(execFile)(process.execPath,[entry]),error=>{
+  assert.equal(error.code,1)
+  assert.match(error.stderr,/用法：node src\/setup\/upgrade.mjs/)
+  return true
+ })
+})
 
 async function fixture(t){
  const home=await mkdtemp(join(tmpdir(),'weixin-upgrade-test-'))
