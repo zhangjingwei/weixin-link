@@ -11,9 +11,9 @@ test('bounded encrypted CDN download and supported key encodings', async () => {
   const cipher = createCipheriv('aes-128-ecb', key, null)
   const data = Buffer.concat([cipher.update(Buffer.from('test attachment')), cipher.final()])
   for (const aes_key of [key.toString('hex'), key.toString('base64'), Buffer.from(key.toString('hex')).toString('base64')]) {
-    assert.equal((await downloadMedia({ media: { aes_key, full_url: 'https://example.test/file' } }, async () => new Response(data))).toString(), 'test attachment')
+    assert.equal((await downloadMedia({ media: { aes_key, full_url: 'https://novac2c.cdn.weixin.qq.com/file' } }, async () => new Response(data))).toString(), 'test attachment')
   }
-  await assert.rejects(downloadMedia({ media: { full_url: 'https://example.test' } }, async () => new Response(data, { headers: { 'content-length': String(MAX_BYTES + 100) } })), /50MB/)
+  await assert.rejects(downloadMedia({ media: { full_url: 'https://novac2c.cdn.weixin.qq.com' } }, async () => new Response(data, { headers: { 'content-length': String(MAX_BYTES + 100) } })), /50MB/)
   await assert.rejects(downloadMedia({}), /下载信息/)
 })
 

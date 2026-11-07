@@ -46,7 +46,7 @@ export async function loadBackend(account,hostCwd,override){
   else if(path.startsWith('/agent/codex/generated_images/')){root=join(backend.home,'codex/generated_images');part=path.slice('/agent/codex/generated_images/'.length)}
   else throw Error('EXPORT_PATH_REFUSED')
   if(part.split('/').some(p=>!p||p==='..'||p.startsWith('.'))||/^(credentials|secrets?|tokens?|private[-_]key)/i.test(basename(part)))throw Error('EXPORT_PATH_REFUSED')
-  const candidate=join(root,part),actual=await realpath(candidate),actualRoot=await realpath(root);if(actualRoot!==resolve(root)||!within(actualRoot,actual)||(await lstat(candidate)).isSymbolicLink())throw Error('EXPORT_PATH_REFUSED');const s=await stat(actual);if(!s.isFile()||s.size<1||s.size>MAX)throw Error('FILE_SIZE_LIMIT');const data=await readFile(actual);if(data.length>MAX)throw Error('FILE_SIZE_LIMIT');return data
+  const candidate=join(root,part),actual=await realpath(candidate),actualRoot=await realpath(root);if((await lstat(root)).isSymbolicLink())throw Error('EXPORT_PATH_REFUSED');let checked=root;for(const segment of part.split('/')){checked=join(checked,segment);if((await lstat(checked)).isSymbolicLink())throw Error('EXPORT_PATH_REFUSED')}if(!within(actualRoot,actual))throw Error('EXPORT_PATH_REFUSED');const s=await stat(actual);if(!s.isFile()||s.size<1||s.size>MAX)throw Error('FILE_SIZE_LIMIT');const data=await readFile(actual);if(data.length>MAX)throw Error('FILE_SIZE_LIMIT');return data
  }
  backend.stopBackground=async session=>{
   const itemIds=new Set(session.items?.keys()??[])
