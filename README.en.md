@@ -104,7 +104,7 @@ Each message is processed independently. Text and attachments in the same messag
 
 Standard installations use the separate `upgrade.sh` / `upgrade.ps1` entry points: prepare the new source and dependencies, back up source and runtime data, switch versions and check service health. Failed checks trigger an automatic rollback attempt. **Custom services, separate release directories and local modifications require their existing deployment procedure; the upgrader does not take them over.**
 
-A successful upgrade explicitly prints a completion message and the backup location. Seeing only the download message does not confirm an upgrade; check the completion message and service status.
+A successful upgrade explicitly prints a completion message and the backup location. Repeating the same version reports that the source is already current, without another backup or service restart. Seeing only the download message does not confirm an upgrade; check the result message and service status.
 
 See [existing installations and explicit upgrades](CONFIGURATION.md#已有安装与独立升级) for commands, custom paths, QR refresh and recovery steps.
 

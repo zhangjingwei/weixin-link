@@ -47,6 +47,36 @@ test('upgrade stages first, retains old code and private state, and restarts onl
  assert.deepEqual(f.calls,['prepare','drain','seal','stop','stop','start'])
  assert(!(await readdir(join(result.recovery,'state'))).includes('tools'))
 })
+test('repeating the same upgrade skips backup, prepare and service restart',async t=>{
+ const f=await fixture(t)
+ await upgradeInstallation(f.options)
+ const before=await readdir(join(f.home,'.local/share/weixin-link/upgrades'))
+ const calls=[...f.calls]
+ await mkdir(join(f.target,'node_modules'))
+ await writeFile(join(f.target,'node_modules','installed'),'dependency')
+ const result=await upgradeInstallation(f.options)
+ assert.equal(result.status,'up_to_date')
+ assert.deepEqual(f.calls,calls)
+ assert.deepEqual(await readdir(join(f.home,'.local/share/weixin-link/upgrades')),before)
+ assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,1)
+ assert(!(await readdir(join(f.home,'.local/share/weixin-link'))).includes('upgrade.lock'))
+})
+test('matching source still refuses an unmanaged target',async t=>{
+ const f=await fixture(t)
+ await writeFile(join(f.target,'version'),'new')
+ await writeFile(join(f.target,'.env'),'private')
+ await assert.rejects(upgradeInstallation(f.options),/UPGRADE_CUSTOM_SOURCE/)
+ assert.deepEqual(f.calls,[])
+})
+test('changed installed content still runs the upgrade even with the same package version',async t=>{
+ const f=await fixture(t)
+ await upgradeInstallation(f.options)
+ await writeFile(join(f.target,'version'),'modified')
+ const result=await upgradeInstallation(f.options)
+ assert.equal(result.status,'complete')
+ assert.equal(await readFile(join(f.target,'version'),'utf8'),'new')
+ assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,2)
+})
 test('failed health check restores old source and database contents before restarting',async t=>{
  const f=await fixture(t)
  f.adapter.status=async()=>{

@@ -1,4 +1,4 @@
-import {cp,lstat,mkdir,readFile,readdir,rename,rm,writeFile,access} from 'node:fs/promises'
+import {cp,lstat,mkdir,readFile,readdir,readlink,rename,rm,writeFile,access} from 'node:fs/promises'
 import {dirname,join,resolve,relative,sep} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {randomUUID} from 'node:crypto'
@@ -15,6 +15,20 @@ import {installConfig} from './install-config.mjs'
 const exec=promisify(execFile)
 const exists=path=>access(path).then(()=>true,()=>false)
 const marker='Managed by wechat-assistant setup v1'
+
+async function sameSourceTree(source,target){
+ const [left,right]=await Promise.all([lstat(source),lstat(target)])
+ if(left.isDirectory()&&right.isDirectory()){
+  const names=async path=>(await readdir(path)).filter(name=>name!=='node_modules').sort()
+  const [a,b]=await Promise.all([names(source),names(target)])
+  if(a.length!==b.length||a.some((name,index)=>name!==b[index]))return false
+  for(const name of a)if(!await sameSourceTree(join(source,name),join(target,name)))return false
+  return true
+ }
+ if(left.isFile()&&right.isFile())return left.size===right.size&&(await readFile(source)).equals(await readFile(target))
+ if(left.isSymbolicLink()&&right.isSymbolicLink())return await readlink(source)===await readlink(target)
+ return false
+}
 
 // Source replacement keeps service configuration, overrides and workspace paths intact.
 // Reject another release layout instead of silently upgrading an unused directory.
@@ -89,6 +103,13 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
  const lock=join(home,'.local/share/weixin-link/upgrade.lock')
  await mkdir(dirname(lock),{recursive:true,mode:0o700})
  try{await mkdir(lock,{mode:0o700})}catch(e){if(e.code==='EEXIST')throw Error('UPGRADE_ALREADY_RUNNING');throw e}
+ let alreadyInstalled
+ try{alreadyInstalled=await sameSourceTree(source,target)}catch(error){await rm(lock,{recursive:true,force:true});throw error}
+ if(alreadyInstalled){
+  await rm(lock,{recursive:true,force:true})
+  log('源码已是目标版本，未备份或重启服务。')
+  return {status:'up_to_date'}
+ }
  const id=randomUUID(),stage=join(dirname(target),'.weixin-upgrade-'+id),backup=target+'.backup-'+id
  const recovery=join(home,'.local/share/weixin-link/upgrades',id),snapshot=join(recovery,'state')
  const lease=randomUUID(),active=adapter.services.filter(s=>s.active),drained=[],stopped=[]
