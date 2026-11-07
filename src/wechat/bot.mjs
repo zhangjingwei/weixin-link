@@ -1,4 +1,5 @@
 import {trackLoginValidity} from './login-validity.mjs'
+import {LifecycleNotice} from './lifecycle-notice.mjs'
 import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
 import {setupModelTest} from '../setup/setup-model-test.mjs'
@@ -72,6 +73,8 @@ const setupController=await (agent.kind==='claude'?new ClaudeSetupController({bi
 const conversations=agent.catalog==='local'?new ClaudeConversations(manager,owners):new TextConversations(manager,owners)
 await manager.save()
 const bot = new WeChatBot({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
+const notifyStart=bot.api.notifyStart.bind(bot.api)
+bot.api.notifyStart=async(...args)=>{try{const result=await notifyStart(...args);log('wechat.notify_start',{status:result?.ret===0?'accepted':'unknown'});return result}catch(error){log('wechat.notify_start_failed',errorFields(error));throw error}}
 const loginValidity=trackLoginValidity(bot)
 const typingStatus=new TypingStatus({start:userId=>bot.sendTyping(conversations.recipient(userId)),stop:userId=>bot.stopTyping(conversations.recipient(userId)),log})
 const typingTimer=setInterval(()=>typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key)))),1000);typingTimer.unref()
@@ -129,6 +132,8 @@ catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(e
 await runtime.listen(account.socket)
 const jobs=new DurableJobs(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs
 let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(stateDir,'welcome-pending.json'),'utf8')).pending===true}catch{}
+const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,
+ send:(owner,text)=>conversations.serialize(owner,async()=>{await runtime.track('delivery',()=>bot.sendAnnouncement(owner,text));return {status:'accepted'}}),log})
 const setupReceipts=new SetupReceipts(stateDir)
 const stagedWires=new WeakMap(),originalParse=bot.parser.parse.bind(bot.parser)
 bot.parser.parse=wire=>stagedWires.get(wire)??originalParse(wire)
@@ -152,7 +157,7 @@ const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable})
+const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable})
 const intakeHandler=nonBlockingHandler(async message => {
   try {
     const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
@@ -186,4 +191,5 @@ await bot.login({ callbacks: {
 } })
 const loginCheck=await assertUniqueLogin(account.id,bot.getCredentials());for(const issue of loginCheck.issues)log('account.other_profile_unreadable',{code:issue.code});await rememberIdentity(account,bot.getCredentials())
 loggedIn=true;schedules?.start();updates.start();for(const message of jobs.rawPending())intakeHandler(message);durable.resume();log('wechat.login_completed');console.log('LOGIN_OK CODEX_DEFAULT')
+bot.on('poll:start',()=>{const timer=setTimeout(()=>{if(!stopping)void lifecycleNotice.start()},100);timer.unref()})
 await bot.start()
