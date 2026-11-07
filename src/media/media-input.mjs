@@ -10,8 +10,9 @@ export async function downloadMedia(item, fetcher = fetch, signal) {
   if (!item.media) throw new Error('附件缺少下载信息，请重新发送原文件')
   const media = item.media
   const url = media.full_url?.trim() || `https://novac2c.cdn.weixin.qq.com/c2c/download?encrypted_query_param=${encodeURIComponent(media.encrypt_query_param)}`
-  if (new URL(url).protocol !== 'https:') throw new Error('附件下载地址必须是 HTTPS')
-  const response = await fetcher(url, { signal: signal?AbortSignal.any([signal,AbortSignal.timeout(60_000)]):AbortSignal.timeout(60_000) })
+  const target = new URL(url)
+  if (target.protocol !== 'https:' || target.hostname !== 'novac2c.cdn.weixin.qq.com' || target.port || target.username || target.password) throw new Error('附件下载地址不在可信 CDN 范围')
+  const response = await fetcher(url, { redirect: 'error', signal: signal?AbortSignal.any([signal,AbortSignal.timeout(60_000)]):AbortSignal.timeout(60_000) })
   if (!response.ok) throw new Error(`附件下载失败（HTTP ${response.status}）`)
   const limit = MAX_BYTES + 32
   const reader = response.body.getReader()

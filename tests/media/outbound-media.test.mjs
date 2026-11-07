@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import sharp from 'sharp'
 import {execFileSync} from 'node:child_process'
-const ffmpeg=new URL('../../node_modules/@ffmpeg-installer/linux-arm64/ffmpeg',import.meta.url).pathname
+import {ffmpegBinary as ffmpeg} from '../../src/media/media-binary.mjs'
 import {OutputStore,OutputTransport,outputLinks} from '../../src/media/outbound-media.mjs'
 import {SessionManager} from '../../src/base/codex/codex-session.mjs'
 async function fixture(work){const dir=await mkdtemp(join(tmpdir(),'wx-out-'));const cwd=join(dir,'work'),stateDir=join(dir,'state');await mkdir(cwd);const store=new OutputStore({stateDir,cwd,roots:[cwd]});try{await work({dir,cwd,store,stateDir})}finally{await rm(dir,{recursive:true,force:true})}}

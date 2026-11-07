@@ -2,7 +2,7 @@ import {homedir as platformHome} from 'node:os'
 import {ffmpegBinary} from './media-binary.mjs'
 import {deliveryError,deliveryFailureState} from '../core/delivery/delivery-error.mjs'
 import {wechatParts} from '../wechat/wechat-text.mjs'
-import {mkdir,readFile,writeFile,realpath,stat,unlink} from 'node:fs/promises'
+import {mkdir,readFile,writeFile,realpath,stat,unlink,lstat} from 'node:fs/promises'
 import {resolve,join,basename,extname,relative,isAbsolute} from 'node:path'
 import {createHash,randomUUID} from 'node:crypto'
 import {execFile} from 'node:child_process'
@@ -35,7 +35,14 @@ export class OutputStore {
    try{
     if(candidate.path&&this.fileReader){data=await this.fileReader(candidate.path,signal)}else if(candidate.path){
      const path=await realpath(candidate.path)
-     if(!this.roots.some(root=>inside(resolve(root),path))||(path.split(/[\\/]/).some(part=>part.startsWith('.'))&&!inside(generatedRoot,path))||/^(?:credentials|secrets?|tokens?|private[-_]key)/i.test(basename(path)))throw Error('EXPORT_PATH_REFUSED')
+     const roots=await Promise.all(this.roots.map(async root=>{try{return {declared:resolve(root),actual:await realpath(root)}}catch(error){if(error.code==='ENOENT')return null;throw error}}))
+     const root=roots.find(root=>root&&inside(root.actual,path)&&(inside(root.declared,resolve(candidate.path))||inside(root.actual,resolve(candidate.path))))
+     if(!root)throw Error('EXPORT_PATH_REFUSED')
+     const start=inside(root.declared,resolve(candidate.path))?root.declared:root.actual
+     let checked=start
+     for(const part of relative(start,resolve(candidate.path)).split(/[\\/]/).filter(Boolean)){checked=join(checked,part);if((await lstat(checked)).isSymbolicLink())throw Error('EXPORT_PATH_REFUSED')}
+     const actualGenerated=await realpath(generatedRoot).catch(()=>null)
+     if((path.split(/[\\/]/).some(part=>part.startsWith('.'))&&!(actualGenerated&&inside(actualGenerated,path)))||/^(?:credentials|secrets?|tokens?|private[-_]key)/i.test(basename(path)))throw Error('EXPORT_PATH_REFUSED')
      // Codex's image output directory is hidden by convention; explicitly allow only that root.
      const info=await stat(path);if(!info.isFile()||info.size>MAX||info.size<1)throw Error('FILE_SIZE_LIMIT')
      data=await readFile(path)
@@ -82,9 +89,10 @@ export class OutputTransport {
   const run=(this.queues.get(userId)??Promise.resolve()).catch(()=>{}).then(()=>this.sendOne(userId,value,checkpoint,current,continueTextFailure));this.queues.set(userId,run)
   return run.finally(()=>{if(this.queues.get(userId)===run)this.queues.delete(userId)})
  }
- async sendWithRetry(userId,content,{event,kind,part,parts}){
+ async sendWithRetry(userId,content,{event,kind,part,parts,current=()=>true}){
   const attempts=Math.max(0,Math.trunc(this.maxRetries))+1
   for(let attempt=1;attempt<=attempts;attempt++){
+   if(!current())throw Object.assign(Error('Delivery cancelled'),{code:'DELIVERY_CANCELLED'})
    try{const response=await this.send(userId,content);return {attempt,messageIds:(Array.isArray(response)?response:[response]).filter(Boolean).map(r=>r.message_id).filter(id=>id!==undefined).map(String)}}
    catch(error){
     const state=deliveryFailureState(error),finalAttempt=state!=='failed'||attempt===attempts
@@ -101,10 +109,11 @@ export class OutputTransport {
    if(bundle&&value.textParts[part])continue
    if(bundle){value.textParts[part]='sending';await checkpoint()}
    try{
-    const attempt=await this.sendWithRetry(userId,parts[part],{event:'outbound.text_failed',kind:'text',part:part+1,parts:parts.length})
+    const attempt=await this.sendWithRetry(userId,parts[part],{event:'outbound.text_failed',kind:'text',part:part+1,parts:parts.length,current})
     this.log('outbound.text_accepted',{userId,kind:'text',part:part+1,parts:parts.length,attempt:attempt.attempt})
     if(bundle){value.textParts[part]='accepted';value.textMessageIds??={};value.textMessageIds[part]=attempt.messageIds;await checkpoint()}
    }catch(error){
+    if(error.code==='DELIVERY_CANCELLED'){if(bundle){value.textParts[part]='cancelled';for(const item of value.attachments)if(item.status==='pending')item.status='cancelled';await checkpoint()}return {status:'cancelled'}}
     const state=deliveryFailureState(error)
     const priorAccepted=bundle?value.textParts.slice(0,part).includes('accepted'):part>0
     if(priorAccepted)error.deliveryState='partial'
@@ -120,17 +129,17 @@ export class OutputTransport {
    if(!current()){item.status='cancelled';await checkpoint();continue}
    item.status='sending';await checkpoint()
    if(!current()){item.status='cancelled';await checkpoint();continue}
-   try{const attempt=await this.sendWithRetry(userId,item.kind==='image'?{image:data}:item.kind==='video'?{video:data}:item.kind==='voice'?{voice:data}:{file:data,fileName:item.fileName},{event:'outbound.media_failed',kind:item.kind,parts:1});item.status='accepted';item.messageIds=attempt.messageIds;this.log('outbound.media_accepted',{userId,kind:item.kind,bytes:item.bytes,attempt:attempt.attempt})}
-   catch(error){item.status=deliveryFailureState(error);item.error=deliveryError(error)}
+   try{const attempt=await this.sendWithRetry(userId,item.kind==='image'?{image:data}:item.kind==='video'?{video:data}:item.kind==='voice'?{voice:data}:{file:data,fileName:item.fileName},{event:'outbound.media_failed',kind:item.kind,parts:1,current});item.status='accepted';item.messageIds=attempt.messageIds;this.log('outbound.media_accepted',{userId,kind:item.kind,bytes:item.bytes,attempt:attempt.attempt})}
+   catch(error){item.status=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);item.error=deliveryError(error)}
    await checkpoint()
   }
   const textFailed=value.textParts.some(s=>s!=='accepted');
   const failed=value.attachments.filter(a=>['unknown','failed'].includes(a.status)).length
   if(failed&&current()&&!value.failureNotice){
    value.failureNotice='sending';await checkpoint()
-   try{await this.sendWithRetry(userId,`有 ${failed} 个附件未能确认送达。可发“结果”主动重发整组结果（含已发送附件）。`,{event:'outbound.failure_notice_failed',kind:'failure_notice',parts:1});value.failureNotice='accepted'}catch(error){value.failureNotice=deliveryFailureState(error);value.failureNoticeError=deliveryError(error)}
+   try{await this.sendWithRetry(userId,`有 ${failed} 个附件未能确认送达。可发“结果”主动重发整组结果（含已发送附件）。`,{event:'outbound.failure_notice_failed',kind:'failure_notice',parts:1,current});value.failureNotice='accepted'}catch(error){value.failureNotice=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);value.failureNoticeError=deliveryError(error)}
    await checkpoint()
   }
-  return {status:failed||textFailed?'partial':'accepted'}
+  return {status:!current()?'cancelled':failed||textFailed?'partial':'accepted'}
  }
 }

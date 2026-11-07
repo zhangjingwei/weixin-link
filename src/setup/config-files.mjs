@@ -1,4 +1,5 @@
-import {mkdir,readFile,lstat,open,rename,unlink,rmdir} from 'node:fs/promises'
+import lockfile from 'proper-lockfile'
+import {mkdir,readFile,lstat,open,rename,unlink} from 'node:fs/promises'
 import {dirname,basename,join} from 'node:path'
 import {randomUUID,createHash} from 'node:crypto'
 import {execFile} from 'node:child_process'
@@ -21,12 +22,14 @@ async function replace(path,text,{expected}={}){
 export async function atomicConfigWrite(path,text,{expected,backup=true}={}){
  await mkdir(dirname(path),{recursive:true,mode:0o700})
  const parent=await lstat(dirname(path));if(parent.isSymbolicLink())throw new ConfigError('CONFIG_UNSAFE_DIRECTORY')
- const lock=path+'.write-lock';try{await mkdir(lock,{mode:0o700})}catch(error){if(error.code==='EEXIST')throw new ConfigError('CONFIG_BUSY');throw error}
+ // Reuse the historical lock path; heartbeat permits recovery after a crashed writer.
+ let release
+ try{release=await lockfile.lock(path,{realpath:false,lockfilePath:path+'.write-lock',stale:30000,update:10000,retries:0})}catch(error){if(error.code==='ELOCKED')throw new ConfigError('CONFIG_BUSY');throw error}
  try{
   const previous=await readPrivateFile(path)
   if(expected!==undefined&&digest(previous)!==expected)throw new ConfigError('CONFIG_CHANGED_DURING_CHECK')
   if(previous===text)return {changed:false}
   if(backup&&previous!==null){await readPrivateFile(path+'.previous');await replace(path+'.previous',previous)}
   await replace(path,text,{expected:digest(previous)});return {changed:true,backup:previous!==null&&backup}
- }finally{await rmdir(lock)}
+ }finally{await release()}
 }

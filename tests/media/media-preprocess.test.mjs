@@ -12,7 +12,7 @@ export function pdfFixture(pages=2){
  for(let i=0;i<pages;i++){const content=`BT /F1 24 Tf 20 70 Td (CODEX MEDIA 7429 PAGE ${i+1}) Tj ET`;objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 100] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5+i*2} 0 R >>`,`<< /Length ${content.length} >>\nstream\n${content}\nendstream`)}
  let result='%PDF-1.4\n',offsets=[0];for(let i=0;i<objects.length;i++){offsets.push(Buffer.byteLength(result));result+=`${i+1} 0 obj\n${objects[i]}\nendobj\n`}const offset=Buffer.byteLength(result);result+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`+offsets.slice(1).map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${offset}\n%%EOF\n`;return Buffer.from(result)
 }
-const ffmpeg=new URL('../../node_modules/@ffmpeg-installer/linux-arm64/ffmpeg',import.meta.url).pathname
+import {ffmpegBinary as ffmpeg} from '../../src/media/media-binary.mjs'
 async function fixture(fn){const dir=await mkdtemp(join(tmpdir(),'wechat-preprocess-'));try{await fn(dir)}finally{await rm(dir,{recursive:true,force:true})}}
 test('standard input uses only text/localImage/localAudio with bounded absolute paths',()=>{assert.deepEqual(codexInput({text:'read',images:['/tmp/p.png'],audios:['/tmp/a.wav']}).map(x=>x.type),['text','localImage','localAudio']);assert.throws(()=>codexInput({text:'x',images:['../x.png']}));assert.throws(()=>codexInput({text:'x',images:Array(11).fill('/tmp/p.png')}))})
 test('real image decode/orientation/resize, invalid image rejection, transcript data provenance and no filename instruction execution',()=>fixture(async dir=>{
