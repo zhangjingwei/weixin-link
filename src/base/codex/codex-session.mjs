@@ -88,11 +88,13 @@ export class SessionManager {
         const sent=await session.reply(text,{checkpoint:()=>this.save(),current:()=>session.workToken?.current()??true})
         const state=['accepted','deferred','partial','unknown','cancelled','failed'].includes(sent?.status)?sent.status:'accepted'
         session.lastDelivery={status:state,updated:new Date().toISOString(),...(sent?.error?{error:sent.error}:{})}
+        if(state==='accepted')session.contextRejected=false
         this.log('delivery.completed',{...context,status:state,delivery_state:state,duration_ms:Date.now()-started})
         return state==='accepted'||state==='deferred'
       }catch(error){
         const state=deliveryFailureState(error),detail=deliveryError(error)
         session.lastDelivery={status:state,error:detail,updated:new Date().toISOString()}
+        if(detail.api_code===-2)session.contextRejected=true
         this.log('delivery.failed',{...context,status:state,delivery_state:state,duration_ms:Date.now()-started,...detail})
         return false
       }
@@ -295,6 +297,7 @@ export class SessionManager {
     }
     transition(session,'running')
     session.lastProgress=null
+    session.contextRejected=false
     session.workToken=token
     session.traceId = randomBytes(8).toString('hex')
     const waiting=this.state.users[session.userId]?.waitingAttachment
@@ -443,6 +446,7 @@ export class SessionManager {
       if (p.turnId && p.turnId !== session.turnId) { this.diagnostic(session,'event.ignored',{reason:'old_turn',method:message.method}); return }
     }
     if(message.method==='item/agentMessage/delta'){
+      if(session.contextRejected)return
       const item=session.items.get(p.itemId)
       if(item?.type!=='agentMessage'||item.phase!=='commentary'||session.attachmentContinuation||typeof p.delta!=='string'||!p.delta)return
       session.progressChunks??=new Map()
@@ -489,6 +493,7 @@ export class SessionManager {
         if(p.item.phase==='final_answer'||!p.item.phase)session.waitingAttachment=flow.waiting
         if (p.item.phase === 'commentary') {
           const turnId = session.turnId
+          if(session.contextRejected){this.diagnostic(session,'notification.suppressed',{reason:'context_rejected'});return}
           if(session.attachmentContinuation&&emptyContinuationNotice(rest)){this.diagnostic(session,'notification.suppressed',{reason:'continuation_start'});return}
           if(rest){
             const delivered=await this.emit(session, rest, () => (session.workToken?.current()??true) && session.busy && !session.finalReceived && session.turnId === turnId)

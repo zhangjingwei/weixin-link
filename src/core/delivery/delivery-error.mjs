@@ -16,6 +16,9 @@ export function deliveryError(error) {
   const apiCode=safeInteger(error?.errcode??error?.data?.errcode??error?.response?.data?.errcode)
   if(httpStatus!==undefined)out.http_status=httpStatus
   if(apiCode!==undefined)out.api_code=apiCode
+  const apiReason=error?.payload?.errmsg
+  if(apiReason==='prepare failed')out.api_reason='prepare_failed'
+  else if(apiReason==='unknown error')out.api_reason='unknown_error'
   return out
 }
 

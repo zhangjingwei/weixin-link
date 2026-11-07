@@ -64,6 +64,17 @@ test('recovered maintenance commands are not submitted again',async()=>{
  await f.handle({userId:'owner',text:'升级',_recovered:true,_ingressId:'upgrade-recovered'})
  assert.deepEqual(f.acked,['restart-recovered','upgrade-recovered']);assert.equal(f.sent.length,2);assert.deepEqual(f.submitted,[])
 })
+test('a new ordinary message resends a definitively rejected prior text result before submission',async()=>{
+ const f=fixture(),record=f.deps.manager.state.users.owner
+ record.lastReply='上轮最终答复\n✅ 本轮回答结束。'
+ record.recovery={execution:'completed',delivery:'failed',delivery_error:{api_code:-2}}
+ f.deps.manager.save=async()=>{}
+ f.deps.outgoing.deliver=async(id,value)=>{f.sent.push([id,value]);return {status:'accepted'}}
+ f.handle=createMessageProcessor(f.deps)
+ await f.handle({userId:'owner',text:'为什么没收到结束消息',_ingressId:'new-message'})
+ assert.match(f.sent[0][1],/上轮最终答复/)
+ assert.equal(record.recovery.delivery,'accepted');assert.equal(f.submitted.length,1)
+})
 async function onboarding(t){
  const f=fixture();f.deps.stateDir=await mkdtemp(join(tmpdir(),'wechat-welcome-'))
  t.after(()=>rm(f.deps.stateDir,{recursive:true,force:true}))

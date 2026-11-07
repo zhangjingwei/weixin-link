@@ -197,6 +197,18 @@ test('explicit final rejection persists failed status and safe diagnostics',asyn
  assert.equal(manager.state.users.owner.recovery.delivery,'failed');assert.equal(manager.state.users.owner.recovery.delivery_error.error_kind,'wechat_api');assert.equal(manager.state.users.owner.recovery.delivery_error.http_status,403);assert.equal(manager.state.users.owner.recovery.delivery_error.api_code,19002);assert.equal(manager.state.users.owner.lastReply,'已保存的最终结果')
  const failed=events.find(x=>x.event==='delivery.failed');assert.equal(failed.delivery_state,'failed');assert.equal(failed.http_status,403);assert.ok(!JSON.stringify(events).includes('secret'));assert.ok(!JSON.stringify(events).includes('已保存的最终结果'))
 })
+test('context rejection stops repeated progress sends but still attempts the final',async()=>{
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={}
+ const rejection=Object.assign(Error('private response'),{name:'ApiError',code:'API_ERROR',httpStatus:200,errcode:-2})
+ let attempts=0;const session={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async()=>{attempts++;throw rejection}}
+ const item=(id,phase,text)=>({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id,type:'agentMessage',phase,text}}})
+ await manager.event(session,item('p1','commentary','第一段进展。'))
+ await manager.event(session,item('p2','commentary','第二段进展。'))
+ assert.equal(attempts,1);assert.equal(session.contextRejected,true)
+ await manager.event(session,item('final','final_answer','最终内容。'))
+ await manager.event(session,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
+ assert.equal(attempts,2);assert.equal(manager.state.users.owner.recovery.delivery,'failed')
+})
 
 test('a new message waits until the preceding final reply finishes delivery',async()=>{
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={}

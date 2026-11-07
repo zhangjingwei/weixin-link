@@ -13,6 +13,7 @@ import {receiptPolicy} from '../core/delivery/notification-policy.mjs'
 import {singleMedia} from '../media/single-media.mjs'
 import {quoteInput} from './weixin-protocol.mjs'
 import {errorFields} from '../core/diagnostics/diagnostic-log.mjs'
+import {recoverFailedFinal} from '../core/delivery/failed-final-recovery.mjs'
 
 export function createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable}){
 return async function handleMessage(message) {
@@ -56,6 +57,10 @@ return async function handleMessage(message) {
   if(message._recovered&&(agentAction?.action==='restart'||upgradeAction)){
    await runtime.track('delivery',()=>outgoing.deliver(message.userId,'上次维护指令的结果待核对，未重复执行。可发“服务状态”查看当前服务。',{conversationControl:true}))
    jobs.acknowledge([message._ingressId].filter(Boolean));return
+  }
+  if(!initialControl&&!hasMedia(message)&&!message._recovered){
+   try{const status=await recoverFailedFinal(manager,message.userId,(key,value)=>outgoing.deliver(key,value,{conversationControl:true}));if(status)log('delivery.recovery_attempt',{trace_id,status})}
+   catch(error){log('delivery.recovery_failed',{trace_id,...errorFields(error)})}
   }
   if(agentAction){
    await runtime.track('setup',async()=>{
