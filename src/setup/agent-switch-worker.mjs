@@ -13,7 +13,7 @@ export async function performAgentSwitch({account,requestId,root,home,read=readA
  const request=await read(account)
  if(request?.id!==requestId||request.status!=='waiting_idle')throw Error('AGENT_SWITCH_REQUEST_CHANGED')
  const lease=randomUUID()
- let adapter,service,sealed=false,stopped=false,changed=false
+ let adapter,service,sealed=false,stopped=false,changed=false,previousInstance
  try{
   adapter=await deployment({target:root,home})
   service=adapter.services.find(item=>item.id===account.id)
@@ -24,16 +24,16 @@ export async function performAgentSwitch({account,requestId,root,home,read=readA
    if(!current.ready||!current.idle||current.draining){await wait(1000);continue}
    const drained=await adapter.control(service,'drain',lease)
    if(!drained.idle){await adapter.control(service,'resume',lease);await wait(1000);continue}
-   await adapter.control(service,'seal',lease);sealed=true
+   await adapter.control(service,'seal',lease);sealed=true;previousInstance=current.instance
    break
   }
   if(!sealed)throw Error('AGENT_SWITCH_REMAINED_BUSY')
   await save(account,{...request,status:'committing'})
   stopped=true;await adapter.stop(service)
-  changed=true;await write(account,request.target)
+  if(request.target!==request.previous){changed=true;await write(account,request.target)}
   await adapter.start(service)
   for(let attempt=0;attempt<30;attempt++){
-   try{const state=await adapter.status(service);if(state.ready&&state.backend?.agentKind===request.target){await save(account,{...request,status:'complete'});return {status:'complete',agentKind:request.target}}}catch{}
+   try{const state=await adapter.status(service);if(state.ready&&state.backend?.agentKind===request.target&&(request.target!==request.previous||previousInstance&&state.instance&&state.instance!==previousInstance)){await save(account,{...request,status:'complete'});return {status:'complete',agentKind:request.target}}}catch{}
    await wait(1000)
   }
   throw Error('AGENT_SWITCH_HEALTH_CHECK_FAILED')

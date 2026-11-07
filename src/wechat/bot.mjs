@@ -12,6 +12,7 @@ import {installWeixinProtocol} from './weixin-protocol.mjs'
 import {loadAgentAdapter} from '../base/agent-adapter.mjs'
 import {selectedAgentKind} from '../base/agent-selection.mjs'
 import {AgentSwitcher,agentSwitchCommand} from '../setup/agent-switch.mjs'
+import {ChatUpgrader,chatUpgradeCommand} from '../setup/chat-upgrade.mjs'
 import {ClaudeConversations} from '../base/claude/claude-conversations.mjs'
 import {ClaudeSetupController} from '../base/claude/claude-setup.mjs'
 import {TextConversations,conversationCommand} from '../core/text-conversations.mjs'
@@ -56,6 +57,7 @@ log('service.started',{status:testing?'test':'live'})
 const scheduleGuidance=`定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../core/schedules/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2026-11-07T09:00:00+08:00","text":"开会"}。定时运行 Codex：{"action":"create","kind":"task","at":"2026-11-07T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":"Asia/Shanghai"} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向本会话的 Codex 任务队列提交原样文字，不预先声称任务完成。必须使用本会话的 CODEX_THREAD_ID，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
 const manager = await new SessionManager({log, completionMarkers:true, scheduleGuidance, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, agentKind:agent.kind, ...agent.sessionOptions, ...(backend.kind==='podman'?{rpcFactory:backend.rpcFactory,remoteControl:backend.remoteControl,providerEnv:{}}:{}) }).init()
 const agentSwitcher=new AgentSwitcher({account,installation,agentKind:agent.kind,backendReady:codexAvailability})
+const upgrader=new ChatUpgrader()
 
 if (testing) {
   try {
@@ -135,7 +137,7 @@ const weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:async wires=
  const received=[],setupReceived=[]
  for(const wire of wires){const parsed=originalParse(wire);if(!parsed||!conversations.realOwners.has(parsed.userId))continue
   const previous=jobs.findCaptured(parsed);const message=previous??conversations.bind(parsed);const frozenSetup=setupReceipts.get(parsed);if(frozenSetup){message._setupAction=frozenSetup.action;message._setupReceiptId=frozenSetup.id}if(!Object.hasOwn(message,'_setupAction'))message._setupAction=previous?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId);message.references??=weixin.quote(message);stagedWires.set(wire,message)
-  const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
+  const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
   if(message._setupAction)setupReceived.push(message)
   if(!control)received.push(message)
  }
@@ -150,10 +152,10 @@ const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,agentSwitcher,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable})
+const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,welcomePending,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable})
 const intakeHandler=nonBlockingHandler(async message => {
   try {
-    const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
+    const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
     if(control)await handleMessage(message)
     else await pending.enqueue(message.userId,()=>handleMessage(message),message._intakeToken)
   }
@@ -170,7 +172,7 @@ bot.onMessage(message=>{
  if(!conversations.realOwners.has(message._conversationOwner??message.userId)||runtime.sealed)return
  if(!message._conversationOwner)message=conversations.bind(message)
  if(!Object.hasOwn(message,'_setupAction'))message._setupAction=message._recovered?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId)
- if(!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))){intakeHandler(message);return}
+ if(!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))){intakeHandler(message);return}
  const token=manager.lifecycle.capture(message.userId)
  void (async()=>{try{await manager.save();if(!token.current())return;const id=jobs.capture(message);if(id){log('ingress.persisted',{messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text'});intakeHandler({...message,_ingressId:id,_intakeToken:token})}}catch(error){log('ingress.persist_failed',errorFields(error));void bot.reply({...message,userId:conversations.recipient(message.userId)},'消息未能持久保存，请稍后重试。').catch(()=>{})}})()
 })

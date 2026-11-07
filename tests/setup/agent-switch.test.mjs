@@ -8,11 +8,23 @@ import {performAgentSwitch} from '../../src/setup/agent-switch-worker.mjs'
 import {selectedAgentKind} from '../../src/base/agent-selection.mjs'
 
 test('agent command matches only explicit switches',()=>{
+ assert.deepEqual(agentSwitchCommand('重启'),{action:'restart',target:null})
  assert.deepEqual(agentSwitchCommand('切换智能体'),{action:'agent',target:null})
  assert.deepEqual(agentSwitchCommand('/agent claude'),{action:'agent',target:'claude'})
  assert.deepEqual(agentSwitchCommand('切换智能体 Codex'),{action:'agent',target:'codex'})
  assert.equal(agentSwitchCommand('帮我切换智能体'),null)
+ assert.equal(agentSwitchCommand('帮我重启'),null)
  assert.equal(agentSwitchCommand('切换智能体 OpenCode'),null)
+})
+test('restart schedules only the current account after the reply without changing agent selection',async t=>{
+ const stateDir=await mkdtemp(join(tmpdir(),'agent-restart-command-'));t.after(()=>rm(stateDir,{recursive:true,force:true}))
+ const account={id:'default',stateDir},sent=[],scheduled=[]
+ const switcher=new AgentSwitcher({account,agentKind:'codex',installation:{agentBackend:'codex'},deployment:async()=>({services:[{id:'default',active:true}]}),schedule:async(a,request)=>scheduled.push(request),targetRoot:stateDir})
+ await switcher.handle({action:'restart',target:null},value=>sent.push(value))
+ assert.equal(scheduled.length,1);assert.equal(scheduled[0].target,'codex');assert.equal(scheduled[0].previous,'codex')
+ assert.match(sent[0],/空闲后重启/)
+ await switcher.handle({action:'restart',target:null},value=>sent.push(value))
+ assert.equal(scheduled.length,1);assert.match(sent[1],/未重复安排/)
 })
 
 test('account selection remains isolated and falls back to installation default',async t=>{
@@ -77,4 +89,15 @@ test('worker rolls back selection when new backend fails health check',async()=>
  await assert.rejects(performAgentSwitch(f.options),/AGENT_SWITCH_HEALTH_CHECK_FAILED/)
  assert.equal(f.kind,'codex');assert.equal(f.request.status,'failed')
  assert.deepEqual(f.events.slice(-4),['stop','write:codex','start','save:failed'])
+})
+test('restart worker requires a new runtime instance and leaves agent selection unchanged',async()=>{
+ const f=workerFixture()
+ let request={id:'restart-1',target:'codex',previous:'codex',status:'waiting_idle'},instance='before'
+ f.options.requestId=request.id;f.options.read=async()=>request;f.options.save=async(a,value)=>{request=value;f.events.push('save:'+value.status)}
+ f.options.write=async()=>{throw Error('must not rewrite selection')}
+ f.adapter.status=async()=>({ready:true,idle:true,instance,backend:{agentKind:'codex'}})
+ f.adapter.start=async()=>{f.events.push('start');instance='after'}
+ const result=await performAgentSwitch(f.options)
+ assert.equal(result.status,'complete');assert.equal(request.status,'complete')
+ assert.deepEqual(f.events,['drain','seal','save:committing','stop','start','save:complete'])
 })

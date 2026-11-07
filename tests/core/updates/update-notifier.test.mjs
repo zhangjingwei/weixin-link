@@ -21,7 +21,7 @@ test('only a newer main commit prompts once, including after restart',async t=>{
  await notifier.tick();await notifier.tick()
  await new UpdateNotifier(f.options).tick()
  assert.equal(f.sent.length,1)
- assert.match(f.sent[0].text,/需要升级吗/)
+ assert.match(f.sent[0].text,/回复“升级”/)
  assert.match(f.sent[0].text,/不会自动升级/)
  assert.equal(JSON.parse(await readFile(notifier.path('owner'),'utf8')).status,'accepted')
 })

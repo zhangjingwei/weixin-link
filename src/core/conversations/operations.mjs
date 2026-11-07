@@ -24,7 +24,7 @@ export async function selectOfficial(context,message,reply){
    await context.manager.save();confirmed=true;
    if((cmd.action==='new'||cmd.action==='daily')&&cmd.name)await context.rename(current,cmd.name,reply);
    else if(official.name)await context.titleUpdated(tid,official.name);
-   await reply(cmd.action==='daily'?`已返回日常助手（会话${current.id}）。后续消息继续使用这个会话；发送“新建 项目名”可另开项目，发送“日常助手”随时返回。`:`Codex已确认${cmd.action==='new'?'新建':'连接'}会话${current.id}：${current.name}。后续消息进入此会话，其他会话任务继续执行。`);if(context.sendOutput)await context.replay(current.key,context.sendOutput);
+   await reply(cmd.action==='daily'?`已返回日常（会话${current.id}）。新项目发“新建 项目名”，返回时发“日常”。`:`Codex已确认${cmd.action==='new'?'新建':'连接'}会话${current.id}：${current.name}。后续消息进入此会话，其他会话任务继续执行。`);if(context.sendOutput)await context.replay(current.key,context.sendOutput);
   }finally{
    if(!confirmed&&r.selectionVersion===message._conversationSelectionVersion&&message._conversationPriorActive&&context.find(owner,message._conversationPriorActive)&&!context.find(owner,message._conversationPriorActive).archived){r.active=message._conversationPriorActive;await context.manager.save();}
   }

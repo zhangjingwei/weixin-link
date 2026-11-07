@@ -54,7 +54,7 @@ export class UpdateNotifier{
   const latest=await this.fetchLatest()
   if(typeof latest!=='string'||!FULL_COMMIT.test(latest))throw Error('UPDATE_CHECK_RESPONSE_INVALID')
   if(latest.startsWith(installed)||this.closed||!this.ready())return
-  const message=`发现微信机器人代码有新版本（当前 ${installed.slice(0,7)}，最新 ${latest.slice(0,7)}）。需要升级吗？回复“升级微信机器人”即可；不会自动升级。`
+  const message=`发现新版本（当前 ${installed.slice(0,7)}，最新 ${latest.slice(0,7)}）。回复“升级”可在空闲后安装；不会自动升级。`
   for(const owner of this.owners){
    if(this.closed||!this.ready())return
    let previous

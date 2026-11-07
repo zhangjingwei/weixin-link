@@ -3,7 +3,7 @@ import {join,resolve} from 'node:path'
 import {randomUUID,createHash} from 'node:crypto'
 import {accountPaths} from '../../wechat/accounts.mjs'
 import {ServiceManager} from '../../setup/platform-service.mjs'
-const commands={'运行诊断':'diagnose','服务状态':'service','查看最近错误':'errors','导出诊断报告':'export'}
+const commands={'诊断':'diagnose','运行诊断':'diagnose','服务状态':'service','查看最近错误':'errors','导出诊断报告':'export'}
 export const diagnosticCommand=text=>typeof text==='string'?commands[text.trim()]??null:null
 const knownCodes=new Set(['EPIPE','ECONNRESET','ECONNREFUSED','ETIMEDOUT','ENOENT','EACCES','ENOSPC','EIO','ABORT_ERR'])
 const hash=value=>createHash('sha256').update(String(value)).digest('hex').slice(0,12)

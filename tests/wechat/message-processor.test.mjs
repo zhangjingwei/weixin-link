@@ -45,6 +45,25 @@ test('agent switch command bypasses inference and acknowledges after the reply',
  assert.deepEqual(f.submitted,[])
  assert(events.includes('track:setup'))
 })
+test('short restart and upgrade commands bypass inference and acknowledge after reply',async()=>{
+ const f=fixture(),actions=[]
+ f.deps.runtime.track=async(kind,work)=>work();f.deps.manager.acceptMessage=async()=>true
+ f.deps.agentSwitcher={handle:async(command,reply)=>{actions.push(command.action);await reply('重启已安排')}}
+ f.deps.upgrader={handle:async reply=>{actions.push('upgrade');await reply('升级已安排')}}
+ f.handle=createMessageProcessor(f.deps)
+ await f.handle({userId:'owner',text:'重启',_ingressId:'restart-id'})
+ await f.handle({userId:'owner',text:'升级',_ingressId:'upgrade-id'})
+ assert.deepEqual(actions,['restart','upgrade']);assert.deepEqual(f.acked,['restart-id','upgrade-id']);assert.deepEqual(f.submitted,[])
+})
+test('recovered maintenance commands are not submitted again',async()=>{
+ const f=fixture();f.deps.runtime.track=async(kind,work)=>work()
+ f.deps.agentSwitcher={handle:async()=>{throw Error('must not restart')}}
+ f.deps.upgrader={handle:async()=>{throw Error('must not upgrade')}}
+ f.handle=createMessageProcessor(f.deps)
+ await f.handle({userId:'owner',text:'重启',_recovered:true,_ingressId:'restart-recovered'})
+ await f.handle({userId:'owner',text:'升级',_recovered:true,_ingressId:'upgrade-recovered'})
+ assert.deepEqual(f.acked,['restart-recovered','upgrade-recovered']);assert.equal(f.sent.length,2);assert.deepEqual(f.submitted,[])
+})
 async function onboarding(t){
  const f=fixture();f.deps.stateDir=await mkdtemp(join(tmpdir(),'wechat-welcome-'))
  t.after(()=>rm(f.deps.stateDir,{recursive:true,force:true}))

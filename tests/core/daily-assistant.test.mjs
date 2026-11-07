@@ -10,8 +10,9 @@ const fixture=()=>{
 }
 test('daily command is exact and media captions remain ordinary input',()=>{
  assert.deepEqual(conversationCommand('日常助手'),{action:'daily'})
+ assert.deepEqual(conversationCommand('日常'),{action:'daily'})
  assert.deepEqual(conversationCommand('返回日常助手'),{action:'daily'})
- for(const text of ['帮我设计日常助手','日常助手如何工作','日常助手 项目'])assert.equal(conversationCommand(text),null)
+ for(const text of ['帮我设计日常助手','日常助手如何工作','日常助手 项目','日常 项目'])assert.equal(conversationCommand(text),null)
  const {router}=fixture();const project=router.bind({userId:'alice',text:'新建 Project'})
  assert.equal(router.bind({userId:'alice',text:'日常助手',images:[{}]}).userId,project.userId)
 })
@@ -23,7 +24,7 @@ test('daily entry reuses original owned thread without creating threads or stopp
  assert.equal(message.userId,'alice');assert.equal(router.find('alice').key,'alice')
  assert.equal(router.ensure('alice').entries.length,count);assert.equal(manager.state.users.alice.threadId,'original-thread')
  assert.equal(manager.sessions.get(project.userId).busy,true);assert.deepEqual(manager.sessions.get(project.userId).queue,['keep'])
- assert.equal(calls.length,1);assert.match(out[0],/已返回日常助手/)
+ assert.equal(calls.length,1);assert.match(out[0],/已返回日常/)
 })
 test('daily designation survives state reload and later changes to active project',()=>{
  const {manager,router}=fixture();const project=router.bind({userId:'alice',text:'新建 Work'})
