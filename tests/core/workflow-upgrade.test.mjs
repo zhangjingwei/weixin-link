@@ -3,8 +3,6 @@ import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,rm,realpath} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {spawn} from 'node:child_process'
-import {ExecutionGate} from '../../src/core/runtime/execution-gate.mjs'
 import {DurableIntake} from '../../src/core/durable-intake.mjs'
 import {CancellationScopes} from '../../src/core/tasks/lifecycle.mjs'
 import {bindNewWorkspace} from '../../src/core/conversations/workspace.mjs'
@@ -12,35 +10,6 @@ import {conversationCommand} from '../../src/core/conversations/commands.mjs'
 import {SessionManager} from '../../src/base/codex/codex-session.mjs'
 import {OutputStore,OutputTransport} from '../../src/media/outbound-media.mjs'
 async function fixture(t){const dir=await mkdtemp(join(tmpdir(),'workflow-test-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir}
-
-test('reservation survives process exit and another account cannot steal or release it',async t=>{
- const dir=await fixture(t),module=new URL('../../src/core/runtime/execution-gate.mjs',import.meta.url).href
- const child=spawn(process.execPath,['--input-type=module','-e',`import {ExecutionGate} from ${JSON.stringify(module)};await new ExecutionGate(process.argv[1]).claim({account:'a',job:'1'})`,dir],{stdio:'ignore'})
- await new Promise((resolve,reject)=>{child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(Error('child failed')))})
- const gate=new ExecutionGate(dir)
- assert.equal(await gate.claim({account:'b',job:'2'}),false)
- await gate.release({account:'b',job:'2'})
- assert.equal(await gate.claim({account:'a',job:'1'},{recovery:true}),true)
- await gate.release({account:'a',job:'1'})
- assert.equal(await gate.claim({account:'b',job:'2'}),true)
- await gate.release({account:'b',job:'2'})
-})
-
-test('separate account queues serialize on the machine gate and cancelled waiters never start',async t=>{
- const dir=await fixture(t);let active=0,peak=0,calls=0
- const make=(name,wait)=>{
-  const pending=[{id:name,owner:name,state:'pending',input:'fixture'}],lifecycle=new CancellationScopes()
-  const manager={stateDir:name,executionGate:new ExecutionGate(dir),state:{users:{}},sessions:new Map(),lifecycle,ask:async()=>{calls++;active++;peak=Math.max(peak,active);await wait();active--;return {status:'completed'}},save:async()=>{}}
-  const jobs={pending:()=>pending,mark:()=>pending.splice(0),get:()=>pending[0]}
-  return {queue:new DurableIntake({jobs,manager,reply:async()=>{}}),lifecycle}
- }
- let release;const hold=new Promise(r=>{release=r}),a=make('a',()=>hold),b=make('b',async()=>{})
- const first=a.queue.pump('a')
- while(!calls)await new Promise(r=>setTimeout(r,5))
- const second=b.queue.pump('b');await new Promise(r=>setTimeout(r,30));b.lifecycle.cancel('b');await second
- assert.equal(calls,1);release();await first
- await b.queue.pump('b');assert.equal(calls,2);assert.equal(peak,1)
-})
 
 test('workspace binding validates existing paths, is immutable after connection and survives restart',async t=>{
  const dir=await fixture(t),project=join(dir,'project');await mkdir(project)
@@ -69,17 +38,6 @@ test('missing and mixed artifacts remain partial even if their explanation was d
  }
 })
 
-test('unknown execution retains reservation for reconciliation instead of opening the next account',async t=>{
- const dir=await fixture(t),gate=new ExecutionGate(dir),job={id:'job',owner:'owner',state:'pending',input:'fixture'}
- const jobs={pending:()=>['pending','bound'].includes(job.state)?[job]:[],get:()=>job,mark:(_,state)=>{job.state=state}}
- const manager={stateDir:'account',executionGate:gate,state:{users:{}},sessions:new Map(),lifecycle:new CancellationScopes(),save:async()=>{},ask:async()=>{job.state='bound';return {status:'unknown'}}}
- const queue=new DurableIntake({jobs,manager,reply:async()=>{}})
- await queue.pump('owner');assert.equal(job.state,'uncertain')
- assert.equal(await new ExecutionGate(dir).claim({account:'other',job:'2'}),false)
- job.state='bound';queue.recover=async()=>{job.state='done'}
- await queue.pump('owner');assert.equal(await gate.read(),null)
-})
-
 test('bound workspace reaches RPC start and output packaging, not just navigation metadata',async t=>{
  const dir=await fixture(t),project=join(dir,'project'),calls=[];await mkdir(project)
  const manager=await new SessionManager({cwd:dir,stateDir:join(dir,'state'),owners:['a'],rpcFactory:options=>{
@@ -103,11 +61,50 @@ test('final reply retains artifact preparation error through display reconstruct
  assert.equal(bundle.attachments.length,0)
 })
 
-test('startup clears an unsubmitted reservation but retains a bound uncertain job',async t=>{
- const dir=await fixture(t),gate=new ExecutionGate(dir),identity={account:'account',job:'job'},job={state:'pending',thread_id:null}
- const manager={stateDir:'account',executionGate:gate,owners:new Set()}
- const queue=new DurableIntake({manager,jobs:{get:()=>job,pending:()=>[]}})
- await gate.claim(identity);await queue.resumeQueues();assert.equal(await gate.read(),null)
- await gate.claim(identity);job.state='uncertain';job.thread_id='thread'
- await queue.resumeQueues();assert.deepEqual(await gate.read(),identity)
+function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}}
+function queueFixture(t,rows,ask){
+ const lifecycle=new CancellationScopes(),records=rows.map(([id,owner])=>({id,owner,input:id,state:'pending'}))
+ const jobs={pending:()=>records.filter(j=>j.state==='pending'),mark:(id,state)=>{records.find(j=>j.id===id).state=state},cancel:owner=>{for(const j of records)if(j.owner===owner&&j.state==='pending')j.state='cancelled'}}
+ const manager={cwd:'/shared/project',lifecycle,sessions:new Map(),state:{users:{}},ask,save:async()=>{}}
+ const intake=new DurableIntake({jobs,manager,reply:async()=>{}})
+ t.after(()=>{intake.close();lifecycle.close()})
+ return {intake,lifecycle,records}
+}
+
+test('independent account queues can overlap in the same host workspace',{timeout:3000},async t=>{
+ const enteredA=deferred(),enteredB=deferred(),release=deferred()
+ t.after(()=>release.resolve())
+ const a=queueFixture(t,[['a1','a']],async()=>{enteredA.resolve();await release.promise})
+ const b=queueFixture(t,[['b1','b']],async()=>{enteredB.resolve();await release.promise})
+ a.intake.wake('a');await enteredA.promise
+ b.intake.wake('b');await enteredB.promise
+ assert.equal(a.records[0].state,'pending');assert.equal(b.records[0].state,'pending')
+ release.resolve();await Promise.all([...a.intake.users.values(),...b.intake.users.values()])
+ assert.equal(a.records[0].state,'done');assert.equal(b.records[0].state,'done')
+})
+
+test('one conversation keeps ordinary tasks ordered even with repeated wake calls',{timeout:3000},async t=>{
+ const entered=deferred(),release=deferred(),calls=[];t.after(()=>release.resolve())
+ const {intake,records}=queueFixture(t,[['first','a'],['second','a']],async(owner,input)=>{
+  calls.push(input.text);if(input.text==='first'){entered.resolve();await release.promise}
+ })
+ intake.wake('a');intake.wake('a');await entered.promise
+ assert.deepEqual(calls,['first'])
+ release.resolve();await intake.users.get('a')
+ assert.deepEqual(calls,['first','second']);assert.ok(records.every(j=>j.state==='done'))
+})
+
+test('cancelling one conversation leaves another running and cancels only its own queue',{timeout:3000},async t=>{
+ const enteredA=deferred(),enteredB=deferred(),releaseB=deferred(),calls=[];let tokenB
+ t.after(()=>releaseB.resolve())
+ const {intake,lifecycle,records}=queueFixture(t,[['a1','a'],['a2','a'],['b1','b']],async(owner,input,reply,timeout,token)=>{
+  calls.push(input.text)
+  if(owner==='a'){enteredA.resolve();await new Promise(resolve=>token.signal.addEventListener('abort',resolve,{once:true}))}
+  else{tokenB=token;enteredB.resolve();await releaseB.promise}
+ })
+ intake.wake('a');intake.wake('b');await Promise.all([enteredA.promise,enteredB.promise])
+ intake.cancel('a');lifecycle.cancel('a');await intake.users.get('a')
+ assert.equal(tokenB.current(),true);assert.deepEqual(calls,['a1','b1'])
+ assert.equal(records[0].state,'cancelled');assert.equal(records[1].state,'cancelled');assert.equal(records[2].state,'pending')
+ releaseB.resolve();await intake.users.get('b');assert.equal(records[2].state,'done')
 })

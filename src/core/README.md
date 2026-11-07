@@ -34,27 +34,26 @@ Run `npm test`, `npm run check:codex-input`, and, after staging the intended cha
 `npm run check:release`. Tests use mocked remote RPC; they do not establish live host,
 WeChat delivery or Windows/macOS runtime verification.
 
-## Host execution reservation and project directories
+## Personal host concurrency and project directories
 
-The bot supplies one durable ExecutionGate under the OS user's shared account base
-for host backends. Each account queue claims it before execution; its identity is
-account state directory plus durable job ID. The short heartbeat mutex protects
-only reservation updates. Process death does not expire the reservation itself.
-Only a confirmed terminal result or original-job reconciliation releases it. A
-completed job left behind by a crash is cleaned on that account's queue startup.
-An unbound pending/cancelled job is also safe to release: the queue persists
-thread binding before submitting any turn.
-Missing or cancelled records with uncertain execution require operator diagnosis;
-never force-clear a reservation merely because its process has exited.
+Host backends intentionally share the OS user's filesystem. Different accounts
+and conversations can execute concurrently, including in the same directory.
+DurableIntake serializes each conversation's queue; delivery remains serialized
+per real recipient, and cancellation stays scoped to the originating conversation.
+There is no global host execution gate or default local project write lock.
 
-This is conservative host-wide foreground serialization, not a sandbox or a
-project-level file lock. External CLI tasks and detached background commands are
-outside its coverage. All participating accounts must use the same installed
-version; older processes do not acquire this gate. Containers keep their existing
-separate execution policy. Existing unresolved jobs must be reconciled before
-rolling this change into an active installation.
+Concurrent edits to the same files can conflict. Separate worktrees can separate
+code edits; use the existing isolated backend when an execution boundary is
+needed. Isolation still depends on mounts and OS permissions. Conversation
+separation alone does not isolate files. Existing remote-task coordination and
+service/configuration maintenance locks are unchanged.
 
 A newly created project can store a canonical workspace before its first thread
 connection. Existing threads retain their old directory. The same workspace is
 used for RPC creation, thread start/resume, Claude workspace guidance and output
 packaging. Project labels and directory authorization remain distinct.
+
+The experimental global gate from f8146f1 is removed. Its reservation file is no
+longer read and does not block execution; this does not reconcile old tasks or
+prove their processes stopped. Drain experimental services and verify unfinished
+tasks before replacing them. This change does not delete private runtime files.

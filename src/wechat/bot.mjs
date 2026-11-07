@@ -1,4 +1,3 @@
-import {ExecutionGate} from '../core/runtime/execution-gate.mjs'
 import {trackLoginValidity} from './login-validity.mjs'
 import {systemNotice} from '../core/delivery/system-notice.mjs'
 import {LifecycleNotice} from './lifecycle-notice.mjs'
@@ -161,7 +160,6 @@ const weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:async wires=
 const ingressTrace=traceIngress(bot,log)
 manager.onToolStatus=process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1'?createToolNotifier({send:(peer,event)=>bot.sendToolStatus(peer,event),serialize:(peer,fn)=>conversations.serialize(peer,fn),track:fn=>runtime.track('delivery',fn),recipient:key=>conversations.recipient(key),log}):undefined
 
-if(backend.kind==='host')manager.executionGate=new ExecutionGate(join(account.base,'execution-gate'))
 const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>outgoing.deliver(userId,value,options)})
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
