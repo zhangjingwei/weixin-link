@@ -1,6 +1,6 @@
 // Isolated real Codex image input check; never sends a WeChat message.
 import {SessionManager} from '../base/codex/codex-session.mjs'
-import {composeMediaInput} from './media-preprocess.mjs'
+import {composeMediaInput} from '../infrastructure/media/media-preprocess.mjs'
 import {mkdtemp,rm} from 'node:fs/promises'
 import sharp from 'sharp'
 const dir=await mkdtemp('/tmp/wechat-media-live-'),path=dir+'/picture.png'

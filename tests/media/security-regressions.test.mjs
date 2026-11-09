@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,rm,realpath,symlink} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {downloadMedia} from '../../src/media/media-input.mjs'
-import {OutputStore,OutputTransport} from '../../src/media/outbound-media.mjs'
+import {downloadMedia} from '../../src/infrastructure/media/media-input.mjs'
+import {OutputStore,OutputTransport} from '../../src/infrastructure/media/outbound-media.mjs'
 
 test('media download rejects untrusted targets before fetch and disables redirects',async()=>{
  for(const full_url of ['https://127.0.0.1/a','https://[::1]/a','https://10.0.0.1/a','https://example.com/a','http://novac2c.cdn.weixin.qq.com/a','https://novac2c.cdn.weixin.qq.com.evil.test/a','https://user:pass@novac2c.cdn.weixin.qq.com/a','https://novac2c.cdn.weixin.qq.com:8443/a']){

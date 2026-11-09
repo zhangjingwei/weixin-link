@@ -5,8 +5,8 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import sharp from 'sharp'
 import {execFileSync} from 'node:child_process'
-import {ffmpegBinary as ffmpeg} from '../../src/media/media-binary.mjs'
-import {OutputStore,OutputTransport,outputLinks} from '../../src/media/outbound-media.mjs'
+import {ffmpegBinary as ffmpeg} from '../../src/infrastructure/media/media-binary.mjs'
+import {OutputStore,OutputTransport,outputLinks} from '../../src/infrastructure/media/outbound-media.mjs'
 import {SessionManager} from '../../src/base/codex/codex-session.mjs'
 async function fixture(work){const dir=await mkdtemp(join(tmpdir(),'wx-out-'));const cwd=join(dir,'work'),stateDir=join(dir,'state');await mkdir(cwd);const store=new OutputStore({stateDir,cwd,roots:[cwd]});try{await work({dir,cwd,store,stateDir})}finally{await rm(dir,{recursive:true,force:true})}}
 async function image(cwd){const path=join(cwd,'image.png');await sharp({create:{width:64,height:64,channels:3,background:'#1a3e2f'}}).png().toFile(path);return path}

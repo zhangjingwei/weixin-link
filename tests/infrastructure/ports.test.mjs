@@ -6,7 +6,7 @@ import {createInfrastructurePorts} from '../../src/infrastructure/ports.mjs'
 import {installWeixinProtocol as legacyProtocol} from '../../src/wechat/weixin-protocol.mjs'
 import {loadAgentAdapter as legacyAgent} from '../../src/base/agent-adapter.mjs'
 import {selectedAgentKind as legacySelection} from '../../src/base/agent-selection.mjs'
-import {prepareMedia as legacyMedia} from '../../src/media/media-input.mjs'
+import {prepareMedia as mediaImplementation} from '../../src/infrastructure/media/media-input.mjs'
 import {integrationGuidance as legacyGuidance} from '../../src/integrations/runtime.mjs'
 import {RemoteStore as LegacyStore} from '../../src/infrastructure/storage/registry-lock.mjs'
 
@@ -17,7 +17,7 @@ test('external ports expose the migrated implementations without copying state',
   assert.equal(ports.wechat.confirmedFinalRejection({delivery_error: {api_code: 19001}}), false)
   assert.equal(ports.agent.load, legacyAgent)
   assert.equal(ports.agent.selectedKind, legacySelection)
-  assert.equal(ports.media.prepare, legacyMedia)
+  assert.equal(ports.media.prepare, mediaImplementation)
   assert.equal(ports.integrations.guidance, legacyGuidance)
   assert.ok(ports.storage.registryStore('/tmp') instanceof LegacyStore)
   assert.ok(Object.isFrozen(ports))

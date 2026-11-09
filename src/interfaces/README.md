@@ -7,5 +7,6 @@
 - `controllers/update-controller.mjs`：定时版本检查入口，委托 `UpdateNotifier` 去重和保存投递状态。
 - `controllers/management-controller.mjs`：聊天中的安装、切换和升级指令，以及配置 CLI 的参数入口。
 - `views/wechat-presenter.mjs`：收件人映射、系统通知格式和微信投递入口。
+- `wechat/voice-text.mjs`：从微信消息字段提取转写文字和附件指令上下文，供应用层使用。
 
 `src/wechat/bot.mjs` 仍是每账号服务的组合根；`src/setup/setup.mjs` 仍是安装 CLI 入口。底层微信协议、计划状态机、更新比较和配置存储留在原模块，由接口层调用。

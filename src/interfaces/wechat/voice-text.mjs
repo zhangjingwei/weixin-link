@@ -5,6 +5,9 @@ export function messageInstructions(message) {
  const voice=(message.voices??[]).map(v=>typeof v.text==='string'?v.text.trim():'').filter(Boolean).join('\n')
  return voice||(!['image','video','voice','file'].includes(message.type)?message.text?.trim()??'':'')
 }
+export function mediaMessageContext(message) {
+ return {instructionText:messageInstructions(message),messageId:message.raw?.message_id??message.raw?.client_id}
+}
 export function voiceTextMessage(message) {
  if(!(message.voices?.length)||['images','files','videos'].some(k=>message[k]?.length))return null
  if(message.voices.some(v=>typeof v.text!=='string'||!v.text.trim()))return null

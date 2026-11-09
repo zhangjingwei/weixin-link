@@ -17,7 +17,7 @@ if (kind === 'pdf') {
   Object.assign(globalThis, { DOMMatrix, ImageData, Path2D })
   const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const { readFile } = await import('node:fs/promises')
-  const pdf = await getDocument({ data: new Uint8Array(await readFile(resolve(input))), useSystemFonts: false, standardFontDataUrl: fileURLToPath(new URL('../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url)), disableFontFace: true, isEvalSupported: false }).promise
+  const pdf = await getDocument({ data: new Uint8Array(await readFile(resolve(input))), useSystemFonts: false, standardFontDataUrl: fileURLToPath(new URL('../../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url)), disableFontFace: true, isEvalSupported: false }).promise
   const start = Math.max(1, Number.parseInt(startArg ?? '1'))
   if (!Number.isFinite(start) || start > pdf.numPages) throw new Error('Invalid page number')
   const texts = []

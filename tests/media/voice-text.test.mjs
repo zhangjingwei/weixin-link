@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {voiceTextMessage,messageInstructions} from '../../src/media/voice-text.mjs'
+import {voiceTextMessage,messageInstructions} from '../../src/interfaces/wechat/voice-text.mjs'
 test('WeChat transcribed voice becomes ordinary user text with no audio attachment',()=>{const raw={message_id:'id',item_list:[{voice_item:{text:'查看项目进度'}}]},message={userId:'owner',type:'voice',text:'查看项目进度',voices:[{text:'查看项目进度',media:{}}],raw};const result=voiceTextMessage(message);assert.equal(result.type,'text');assert.equal(result.text,'查看项目进度');assert.deepEqual(result.voices,[]);assert.equal(result.raw,raw);assert.equal(message.voices.length,1)})
 test('mixed image and voice retains attachments but uses the transcript as its instruction',()=>{const message={type:'image',images:[{}],voices:[{text:'比较这个图'}],raw:{item_list:[{voice_item:{text:'比较这个图'}},{text_item:{text:'注意顶部'}}]}};assert.equal(voiceTextMessage(message),null);assert.equal(messageInstructions(message),'比较这个图\n注意顶部')})
 test('missing or partial voice transcription is not invented or treated as complete',()=>{assert.equal(voiceTextMessage({type:'voice',text:'[voice]',voices:[{}]}),null);assert.equal(messageInstructions({type:'voice',text:'[voice]',voices:[{}]}),'');assert.equal(voiceTextMessage({voices:[{text:'first'},{}]}),null);assert.equal(voiceTextMessage({type:'voice',voices:[{text:'原话'}]}).text,'原话')})

@@ -8,7 +8,7 @@ import {CancellationScopes} from '../../src/core/tasks/lifecycle.mjs'
 import {bindNewWorkspace} from '../../src/core/conversations/workspace.mjs'
 import {conversationCommand} from '../../src/domain/conversations/commands.mjs'
 import {SessionManager} from '../../src/base/codex/codex-session.mjs'
-import {OutputStore,OutputTransport} from '../../src/media/outbound-media.mjs'
+import {OutputStore,OutputTransport} from '../../src/infrastructure/media/outbound-media.mjs'
 async function fixture(t){const dir=await mkdtemp(join(tmpdir(),'workflow-test-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir}
 
 test('workspace binding validates existing paths, is immutable after connection and survives restart',async t=>{

@@ -1,4 +1,4 @@
-import {ffmpegBinary} from '../../media/media-binary.mjs'
+import {ffmpegBinary} from '../media/media-binary.mjs'
 import {readFileSync} from 'node:fs'
 import {createRequire} from 'node:module'
 import {dirname} from 'node:path'

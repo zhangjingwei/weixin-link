@@ -4,14 +4,14 @@ import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {MessageDispatch} from '../../src/wechat/message-dispatch.mjs'
-import {singleMedia} from '../../src/media/single-media.mjs'
+import {singleMedia} from '../../src/application/intake/single-media.mjs'
 import {DurableJobs} from '../../src/core/intake/durable-jobs.mjs'
 import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 import {SessionManager} from '../../src/base/codex/codex-session.mjs'
 test('slow attachment retains order; another user and cancellation remain independent',async()=>{
  const dispatch=new MessageDispatch(),order=[],token={current:()=>true};let release
  const gate=new Promise(r=>release=r)
- const media=dispatch.enqueue('u',()=>singleMedia({userId:'u'},token,{prepare:async()=>{await gate;return {attachments:[{}]}},compose:async()=>({}),submit:async()=>order.push('media')}),token)
+ const media=dispatch.enqueue('u',()=>singleMedia({userId:'u'},token,{prepare:async()=>{await gate;return {attachments:[{}]}},compose:async()=>({}),submit:async()=>order.push('media')},()=>({instructionText:'',messageId:undefined})),token)
  const text=dispatch.enqueue('u',()=>order.push('text'),token)
  await dispatch.enqueue('other',()=>order.push('other'),token)
  assert.deepEqual(order,['other']);release();await Promise.all([media,text]);assert.deepEqual(order,['other','media','text'])

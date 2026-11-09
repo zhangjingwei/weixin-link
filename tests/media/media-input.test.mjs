@@ -4,7 +4,7 @@ import { mkdtemp, rm, stat, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCipheriv, randomBytes } from 'node:crypto'
-import { prepareMedia, downloadMedia, MAX_BYTES } from '../../src/media/media-input.mjs'
+import { prepareMedia, downloadMedia, MAX_BYTES } from '../../src/infrastructure/media/media-input.mjs'
 
 test('bounded encrypted CDN download and supported key encodings', async () => {
   const key = randomBytes(16)

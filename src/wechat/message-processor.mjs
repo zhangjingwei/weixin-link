@@ -1,7 +1,8 @@
 import {createMessageApplication} from '../application/intake/message-application.mjs'
 import {createCommandClassifier} from './command-classifier.mjs'
 import {voiceCommandInput} from './voice-command-input.mjs'
-import {singleMedia} from '../media/single-media.mjs'
+import {singleMedia} from '../application/intake/single-media.mjs'
+import {mediaMessageContext} from '../interfaces/wechat/voice-text.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
 import {createManagementController} from '../interfaces/controllers/management-controller.mjs'
 import {createInfrastructurePorts} from '../infrastructure/ports.mjs'
@@ -17,7 +18,7 @@ export function createMessageProcessor(deps) {
     management: deps.management ?? createManagementController(deps),
     normalizeVoice: voiceCommandInput,
     hasMedia: ports.media.has,
-    singleMedia,
+    singleMedia: (message, token, mediaDependencies) => singleMedia(message, token, mediaDependencies, mediaMessageContext),
     quoteInput: ports.references.quoteInput,
     agentReadiness: deps.agentReadiness ?? ports.agent.checkReady({backend: deps.backend, owners: deps.owners, codexAvailability}),
     diagnosticPackage: ports.media.package,

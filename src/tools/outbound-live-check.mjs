@@ -4,7 +4,7 @@ import {readFile,mkdir,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {execFileSync} from 'node:child_process'
 import sharp from 'sharp'
-import {OutputStore,OutputTransport} from './outbound-media.mjs'
+import {OutputStore,OutputTransport} from '../infrastructure/media/outbound-media.mjs'
 import {createDiagnosticLog,createSdkLogger,errorFields} from '../core/diagnostics/diagnostic-log.mjs'
 const root=join(process.env.HOME,'.local/share/wechat-ping-bot'),cwd=join(process.env.HOME,'work/wechat-assistant')
 const owners=JSON.parse(await readFile(join(root,'codex-owners.json'),'utf8'))

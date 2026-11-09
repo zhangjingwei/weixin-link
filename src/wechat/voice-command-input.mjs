@@ -1,4 +1,4 @@
-import {voiceTextMessage} from '../media/voice-text.mjs'
+import {voiceTextMessage} from '../interfaces/wechat/voice-text.mjs'
 import {conversationCommand} from '../domain/conversations/commands.mjs'
 import {controlCommand} from '../base/codex/control-command.mjs'
 import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'

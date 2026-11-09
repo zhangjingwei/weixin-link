@@ -8,7 +8,7 @@ import {promisify} from 'node:util'
 import {RemoteStore} from '../../src/infrastructure/storage/registry-lock.mjs'
 import {RuntimeControl,controlRequest} from '../../src/core/runtime/runtime-control.mjs'
 import {controlEndpoint} from '../../src/core/runtime/control-endpoint.mjs'
-import {ffmpegBinary} from '../../src/media/media-binary.mjs'
+import {ffmpegBinary} from '../../src/infrastructure/media/media-binary.mjs'
 import sharp from 'sharp'
 import {DatabaseSync} from 'node:sqlite'
 // macOS TMPDIR can exceed the Unix socket address limit when used as a fake HOME.
