@@ -9,6 +9,6 @@
 - `views/wechat-presenter.mjs`：收件人映射、系统通知格式和微信投递入口。
 - `cli/`：定时与远程任务的结构化标准输入命令入口。
 - `wechat/voice-text.mjs`：从微信消息字段提取转写文字和附件指令上下文，供应用层使用。
-- `wechat/conversation-command.mjs`、`wechat/control-command.mjs`：把微信文字和斜杠命令解析成结构化动作；会话状态与权限判断仍由领域和应用层执行。
+- `wechat/conversation-command.mjs`、`wechat/control-command.mjs`：把微信中文控制文字解析成结构化动作；会话状态与权限判断仍由领域和应用层执行。
 
 `src/wechat/bot.mjs` 仍是每账号服务的组合根；`src/setup/setup.mjs` 仍是安装 CLI 入口。底层微信协议、计划状态机、更新比较和配置存储留在原模块，由接口层调用。
