@@ -2,7 +2,7 @@ import {localTaskLabel,localCompletion} from '../../domain/tasks/task-label.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 export async function recoverRemote(context,job,reply,token){
   const {RemoteController}=await import('../remote-tasks/remote-controller.mjs')
-  const controller=new RemoteController({root:context.manager.cwd,scope:job.thread_id}),entries=Object.entries(await controller.store.read()).filter(([,t])=>t?.kind==='official-remote-task'&&t.scope===controller.scope&&Date.parse(t.submitted_at)>=job.created)
+  const controller=new RemoteController({root:context.manager.cwd,scope:job.thread_id});await controller.assertAccountState();const entries=Object.entries(await controller.store.read()).filter(([,t])=>t?.kind==='official-remote-task'&&t.scope===controller.scope&&Date.parse(t.submitted_at)>=job.created)
   if(!entries.length)throw Error('LOCAL_TURN_ABANDONED')
   for(;;){if(context.closed||!token.current())return;const results=[]
    for(const [id,t] of entries){if(!t.turn_id){const r=await controller.reconcile({task:id});if(!r.turn_id)throw Error('REMOTE_SUBMISSION_UNKNOWN')}results.push(await controller.status({task:id}))}

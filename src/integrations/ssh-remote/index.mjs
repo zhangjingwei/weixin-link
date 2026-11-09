@@ -17,7 +17,7 @@ export default {
     const host = hosts[0], rpc = new RemoteRpc(host, {hostConfig: config.hosts[host], retryDelays: []})
     try { await rpc.connect(); await rpc.request('thread/list', {limit: 1}, 6000) } finally { rpc.close() }
   },
-  async invoke(config, request, {home, scope, workspace, env}) {
+  async invoke(config, request, {home, account, scope, workspace, env}) {
     if (!request || typeof request !== 'object' || Array.isArray(request) || !allowed.has(request.action)) throw Error('INTEGRATION_OPERATION_NOT_ALLOWED')
     if (typeof scope !== 'string' || !scope || scope.length > 200) throw Error('INTEGRATION_ARGUMENTS_INVALID')
     const {RemoteController} = await import('../../application/remote-tasks/remote-controller.mjs')
@@ -31,6 +31,6 @@ export default {
       catch (error) { if (error.code !== 'ENOENT') throw error }
     }
     // Use the same thread scope as the existing /stop cleanup and remote CLI.
-    return new RemoteController({root, scope, hosts: config.hosts, configPath}).run(request)
+    return new RemoteController({root, account, scope, hosts: config.hosts, configPath}).run(request)
   },
 }

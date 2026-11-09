@@ -63,7 +63,8 @@ export async function invokeIntegration(id, request, options = {}) {
   // Re-read both policy and credentials on every call; disabling does not require restarting the bot.
   const config = await configuration(item, options)
   try { return await item.invoke(config, request, {...context(options), scope: options.scope ?? process.env.CODEX_THREAD_ID}) } catch (error) {
-    const safe = ['INTEGRATION_OPERATION_NOT_ALLOWED', 'INTEGRATION_ARGUMENTS_INVALID']
+    const safe = ['INTEGRATION_OPERATION_NOT_ALLOWED', 'INTEGRATION_ARGUMENTS_INVALID',
+      'REMOTE_STATE_LOCATION_MISMATCH', 'REMOTE_LEGACY_SCOPE_UNOWNED', 'REMOTE_HOST_CONFIG_CHANGED']
     throw new ConfigError(safe.includes(error.message) ? error.message : 'INTEGRATION_CALL_FAILED')
   }
 }

@@ -36,6 +36,9 @@ test('a legacy ledger beside a custom host config is not silently replaced',asyn
  await writeFile(configPath,JSON.stringify({version:1,hosts:{example:host}}))
  await writeFile(join(legacy,'remote-sessions.json'),JSON.stringify({task:{kind:'official-remote-task'}}))
  await assert.rejects(sshRemote.invoke({version:1,hosts:{example:host}},{action:'list',host:'example'},{home,workspace,scope:'thread-1',env:{WECHAT_REMOTE_HOSTS:configPath}}),/REMOTE_STATE_LOCATION_MISMATCH/)
+ const stateDir=join(home,'state');await mkdir(stateDir)
+ await writeFile(join(stateDir,'integrations.json'),JSON.stringify({version:1,enabled:{'ssh-remote':true}}))
+ await assert.rejects(invokeIntegration('ssh-remote',{action:'list',host:'example'},{home,workspace,stateDir,account:'default',scope:'thread-1',env:{WECHAT_REMOTE_HOSTS:configPath}}),/REMOTE_STATE_LOCATION_MISMATCH/)
 })
 
 test('separate workspaces select independent ledger roots for the same session scope',async t=>{

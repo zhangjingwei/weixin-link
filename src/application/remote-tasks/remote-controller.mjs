@@ -12,7 +12,8 @@ const hostPath=(hosts,host)=>hosts[host]?.platform==='win32'?win32:posix
 import {projectPath} from '../../infrastructure/remote/path-guard.mjs'
 export {projectPath,exportPath} from '../../infrastructure/remote/path-guard.mjs'
 export class RemoteController{
- constructor({root,scope=process.env.CODEX_THREAD_ID??'local-console',hosts,configPath,rpcFactory}={}){if(typeof root!=='string'||!isAbsolute(root))throw Error('INVALID_REMOTE_WORKSPACE');this.root=root;this.scope=hash(scope).slice(0,24);this.store=new RemoteStore(root);this.configPath=configPath??process.env.WECHAT_REMOTE_HOSTS??join(root,'remote-hosts.json');this.hosts=hostSnapshot({path:this.configPath,hosts});this.rpcFactory=rpcFactory??((host,config)=>new RemoteRpc(host,{hostConfig:config}))}
+ constructor({root,scope=process.env.CODEX_THREAD_ID??'local-console',account=process.env.WECHAT_ACCOUNT??'default',hosts,configPath,rpcFactory}={}){if(typeof root!=='string'||!isAbsolute(root))throw Error('INVALID_REMOTE_WORKSPACE');if(typeof account!=='string'||! /^[a-z][a-z0-9-]{0,31}$/.test(account))throw Error('INVALID_ACCOUNT_ID');this.root=root;this.account=account;this.legacyScope=hash(scope).slice(0,24);this.scope=account==='default'?this.legacyScope:hash(account+'\0'+scope).slice(0,24);this.store=new RemoteStore(root);this.configPath=configPath??process.env.WECHAT_REMOTE_HOSTS??join(root,'remote-hosts.json');this.hosts=hostSnapshot({path:this.configPath,hosts});this.rpcFactory=rpcFactory??((host,config)=>new RemoteRpc(host,{hostConfig:config}))}
+ async assertAccountState(){if(this.account==='default')return;const state=await this.store.read();if(Object.values(state).some(task=>task?.kind==='official-remote-task'&&task.scope===this.legacyScope&&!task.account))throw Error('REMOTE_LEGACY_SCOPE_UNOWNED')}
  assertCurrentHosts(){if(JSON.stringify(this.hosts)!==JSON.stringify(hostSnapshot({path:this.configPath})))throw Error('REMOTE_HOST_CONFIG_CHANGED')}
  projectPath(host,value){return projectPath(host,value,this.hosts)}
  hostPath(host){return hostPath(this.hosts,host)}
@@ -29,7 +30,7 @@ export class RemoteController{
  }
  async usingTask(target,work){return this.using(target.host,async rpc=>{await this.verifyProject(rpc,target.host,target.cwd);return work(rpc)},{taskId:target.task_id??target.operation_id,threadId:target.thread_id,cwd:target.cwd})}
  async using(host,work,recovery){if(!this.hosts[host])throw Error('UNKNOWN_HOST');const rpc=this.rpcFactory(host,this.hosts[host]);try{if(recovery?.threadId)rpc.setRecovery?.(recovery);await rpc.connect();return await work(rpc)}finally{rpc.close()}}
- async task(id){const task=(await this.store.read())[id];if(!task||task.kind!=='official-remote-task'||task.scope!==this.scope)throw Error('TASK_NOT_IN_CURRENT_CONVERSATION');this.projectPath(task.host,task.cwd);return {...task,task_id:id}}
+ async task(id){await this.assertAccountState();const task=(await this.store.read())[id];if(!task||task.kind!=='official-remote-task'||task.scope!==this.scope||task.account&&task.account!==this.account||!task.account&&this.account!=='default')throw Error('TASK_NOT_IN_CURRENT_CONVERSATION');this.projectPath(task.host,task.cwd);return {...task,task_id:id}}
  async target(input){if(input.task)return this.task(input.task);const saved=(await this.store.read())._routing?.[this.scope],host=input.host??saved?.host,cwd=this.projectPath(host,input.project??saved?.cwd);return {host,cwd,thread_id:input.host||input.project?undefined:saved?.thread_id}}
  async turns(rpc,task){let cursor;for(let n=0;n<20;n++){const page=await rpc.call('thread/turns/list',{threadId:task.thread_id,limit:25,sortDirection:'desc',itemsView:'full',...(cursor?{cursor}:{})});const found=page.data.find(t=>t.id===task.turn_id);if(found)return found;cursor=page.nextCursor;if(!cursor)break}return null}
  async terminals(rpc,threadId){const result=[];let cursor;for(let n=0;n<100;n++){const page=await rpc.call('thread/backgroundTerminals/list',{threadId,limit:100,...(cursor?{cursor}:{})});result.push(...page.data);cursor=page.nextCursor;if(!cursor)return result}throw Error('TERMINAL_LIST_INCOMPLETE')}
@@ -52,7 +53,7 @@ export class RemoteController{
   // Existing terminal sessions may be selected/read; stopping them requires a task explicitly submitted here.
   await this.store.update(s=>{s._routing??={};s._routing[this.scope]={host,cwd,thread_id:thread.id}});return {selected:{host,project:cwd,thread_id:thread.id},status:thread.status?.type}
  })}
- async start(...args){return start(this,...args)}
+ async start(...args){await this.assertAccountState();return start(this,...args)}
  async activate(){return this.store.locked('scope-'+this.scope,()=>this.store.update(s=>{if(s._cancelled)delete s._cancelled[this.scope];return {active:true}}))}
  async seal(){return this.store.locked('scope-'+this.scope,()=>this.store.update(s=>{s._cancelled??={};s._cancelled[this.scope]=new Date().toISOString();return {sealed:true}}))}
  async stopScope(...args){return stopScope(this,...args)}
@@ -67,5 +68,5 @@ export class RemoteController{
  })}
  async stop(...args){return stop(this,...args)}
  async fetch(...args){return fetch(this,...args)}
- async run(input){if(!input||typeof input!=='object'||Array.isArray(input))throw Error('INVALID_INPUT');const actions={watch:()=>watchTask(this,input),seal:()=>this.seal(),'stop-scope':()=>this.stopScope(),activate:()=>this.activate(),reconcile:()=>this.reconcile(input),inspect:()=>this.inspect(input),select:()=>this.select(input),list:()=>this.list(input),attach:()=>this.attach(input),start:()=>this.start(input),send:()=>this.start(input),status:()=>this.status(input),result:()=>this.status(input),stop:()=>this.stop(input),fetch:()=>this.fetch(input)};if(!actions[input.action])throw Error('UNKNOWN_ACTION');if(['start','send'].includes(input.action))return actions[input.action]();return this.store.locked('host-config',()=>{this.assertCurrentHosts();return actions[input.action]()})}
+ async run(input){if(!input||typeof input!=='object'||Array.isArray(input))throw Error('INVALID_INPUT');const actions={watch:()=>watchTask(this,input),seal:()=>this.seal(),'stop-scope':()=>this.stopScope(),activate:()=>this.activate(),reconcile:()=>this.reconcile(input),inspect:()=>this.inspect(input),select:()=>this.select(input),list:()=>this.list(input),attach:()=>this.attach(input),start:()=>this.start(input),send:()=>this.start(input),status:()=>this.status(input),result:()=>this.status(input),stop:()=>this.stop(input),fetch:()=>this.fetch(input)};if(!actions[input.action])throw Error('UNKNOWN_ACTION');if(['start','send'].includes(input.action))return actions[input.action]();return this.store.locked('host-config',async()=>{this.assertCurrentHosts();await this.assertAccountState();return actions[input.action]()})}
 }
