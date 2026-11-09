@@ -44,9 +44,9 @@ export async function doctor({home=(process.env.HOME||platformHome()),root=proje
  const p=setupPaths({home,root}),checks=[];const add=(name,ok,action)=>checks.push({name,ok,action:ok?null:action})
  add('node24',Number(process.versions.node.split('.')[0])>=24,'需要 Node.js 24 或更新受支持版本')
  add('platform',supportedPlatform(platform,arch),'支持 Linux/macOS arm64/x64、Windows x64')
- add('dependencies',await exists(join(root,'node_modules/@wechatbot/wechatbot/dist/index.js')),'运行 src/setup/setup.mjs deps')
+ add('dependencies',await exists(join(root,'node_modules/wechatbot-zerolink/dist/index.js')),'运行 src/setup/setup.mjs deps')
  add('ffmpeg',await exists(join(root,'node_modules/@ffmpeg-installer/'+platform+'-'+arch+'/ffmpeg'+(platform==='win32'?'.exe':''))),'运行 src/setup/setup.mjs deps 安装对应架构的可选媒体依赖')
- let patched=false;try{patched=(await readFile(join(root,'node_modules/@wechatbot/wechatbot/dist/messaging/poller.js'),'utf8')).includes('WEIXIN_CURSOR_ORDER_V2')}catch{};add('sdkPatches',patched,'运行 src/setup/setup.mjs deps 应用已审查的 SDK 补丁')
+ let sdkContracts=false;try{const pkg=JSON.parse(await readFile(join(root,'node_modules/wechatbot-zerolink/package.json'),'utf8'));sdkContracts=pkg.name==='wechatbot-zerolink'&&pkg.version==='2.2.0-zerolink.2'&&(await readFile(join(root,'node_modules/wechatbot-zerolink/dist/messaging/poller.js'),'utf8')).includes('beforeCheckpoint')}catch{};add('sdkContracts',sdkContracts,'运行 src/setup/setup.mjs deps 安装固定版本的微信 SDK')
  add('installation',await exists(join(p.state,'installation.json')),'运行 src/setup/setup.mjs init')
  add('workspace',await exists(p.workspace),'运行 src/setup/setup.mjs init')
  if(platform==='linux')add('services',await exists(join(p.units,'wechat-ping-bot.service'))&&await exists(join(p.units,'wechat-ping-bot@.service')),'运行 src/setup/setup.mjs services');else if(platform==='darwin')add('services',await exists(new ServiceManager({platform,home,root,run}).plist('wechat-ping-bot.service')),'运行 src/setup/setup.mjs services');else {try{await run('powershell.exe',['-NoProfile','-NonInteractive','-Command',"if (!(Get-ScheduledTask -TaskName 'com.wechat-assistant.wechat-ping-bot' -ErrorAction SilentlyContinue)) {exit 1}"],{timeout:10000});add('services',true)}catch{add('services',false,'运行 src/setup/setup.mjs services')}}

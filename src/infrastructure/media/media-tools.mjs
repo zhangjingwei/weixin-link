@@ -45,7 +45,7 @@ if (kind === 'pdf') {
  else {
   const {readFile,chmod}=await import('node:fs/promises'),binary=ffmpegBinary
   const data=await readFile(resolve(input));let source=resolve(input)
-  if(data.subarray(0,16).includes(Buffer.from('#!SILK'))){const {getDuration}=await import('silk-wasm');if(data.length>2*1024*1024||getDuration(data)>120000)throw Error('SILK_DURATION_LIMIT');const {silkToWav}=await import('@wechatbot/wechatbot/media');const wav=await silkToWav(data);if(!wav)throw Error('SILK_DECODE_FAILED');source=join(dir,'decoded.wav');await writeFile(source,wav,{mode:0o600})}
+  if(data.subarray(0,16).includes(Buffer.from('#!SILK'))){const {getDuration}=await import('silk-wasm');if(data.length>2*1024*1024||getDuration(data)>120000)throw Error('SILK_DURATION_LIMIT');const {silkToWav}=await import('wechatbot-zerolink/media');const wav=await silkToWav(data);if(!wav)throw Error('SILK_DECODE_FAILED');source=join(dir,'decoded.wav');await writeFile(source,wav,{mode:0o600})}
   const path=join(dir,'audio.wav')
   await promisify(execFile)(binary,['-nostdin','-hide_banner','-loglevel','error','-threads','1','-protocol_whitelist','file,pipe','-i',source,'-t','120','-vn','-ac','1','-ar','16000','-c:a','pcm_s16le','-y',path],{timeout:60000,maxBuffer:65536})
   await chmod(path,0o600)
