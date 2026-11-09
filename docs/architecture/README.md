@@ -2,7 +2,7 @@
 
 ![目标架构](message-flow-target.svg)
 
-本项目保持每个微信账号一个本地服务实例的模块化单体。`src/interfaces/` 按四个 Controller、微信 Presenter 和结构化 CLI 组织；`src/infrastructure/` 提供外部边界；收件、会话、任务执行与恢复、远程任务、计划和通知用例位于 `src/application/`。会话、消息、任务、投递、计划和版本的不变量位于 `src/domain/`；`src/core/` 只保留旧命令路径的兼容入口。DDD 用于划清职责，不引入第二套状态仓库或空壳聚合。
+本项目保持每个微信账号一个本地服务实例的模块化单体。`src/interfaces/` 按四个 Controller、微信 Presenter 和结构化 CLI 组织；`src/infrastructure/` 提供外部边界；收件、会话、任务执行与恢复、远程任务、计划和通知用例位于 `src/application/`。会话、消息、任务、投递、计划和版本的不变量位于 `src/domain/`。DDD 用于划清职责，不引入第二套状态仓库或空壳聚合。
 
 ## 当前落地边界
 
@@ -22,7 +22,7 @@
 | 微信 View / Presenter | `src/interfaces/views/wechat-presenter.mjs`、`src/infrastructure/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
 | 基础设施端口 | `src/application/ports/infrastructure-ports.mjs`、`src/infrastructure/ports.mjs`、`src/infrastructure/storage/`、`src/infrastructure/updates/` | 组合根注入协议、底座、媒体等能力；计划与更新用例通过存储及版本查询适配器执行外部操作，不复制状态 |
 
-`message-application.mjs` 负责意图分流、权限、回执和任务提交；安装、切换与升级的具体执行委托给管理模块。调用方直接导入所属模块；旧 `src/core/` 命令路径转发到 `src/interfaces/cli/`。后续扩展应继续按职责拆分，不在此文件新增供应商协议分支。图中“显式配置的上下文准备”是预留用例，当前集成不会自动预取外部信息。
+`message-application.mjs` 负责意图分流、权限、回执和任务提交；安装、切换与升级的具体执行委托给管理模块。调用方直接导入所属模块。后续扩展应继续按职责拆分，不在此文件新增供应商协议分支。图中“显式配置的上下文准备”是预留用例，当前集成不会自动预取外部信息。
 
 ## 与消息链路相连的其他能力
 
