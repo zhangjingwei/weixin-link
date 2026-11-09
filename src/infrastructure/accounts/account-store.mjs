@@ -15,6 +15,13 @@ export async function loginHealth(p){const ids=new Set(),issues=[];let credentia
  for(const [name,field] of [['credentials.json','accountId'],['account-identity.json','accountId']]){try{const value=JSON.parse(await readFile(join(p.stateDir,name),'utf8'));if(typeof value?.[field]!=='string'||!value[field])throw Error('INVALID_IDENTITY');ids.add(value[field]);if(name==='credentials.json')credentialStatus='readable'}catch(e){if(e.code==='ENOENT')continue;issues.push(name==='credentials.json'?'CREDENTIALS_UNREADABLE':'IDENTITY_UNREADABLE');if(name==='credentials.json')credentialStatus='unreadable'}}
  return {ids:[...ids],issues,credentialStatus}
 }
+export async function bindingIdentity(account){
+ const values=[]
+ for(const name of ['credentials.json','account-identity.json']){try{const data=JSON.parse(await readFile(join(account.stateDir,name),'utf8'));if(typeof data.accountId!=='string'||!data.accountId)throw Error('INVALID_WECHAT_BINDING_IDENTITY');values.push(data.accountId)}catch(e){if(e.code!=='ENOENT')throw e}}
+ if(!values.length)throw Error('WECHAT_BINDING_IDENTITY_MISSING')
+ if(new Set(values).size!==1)throw Error('WECHAT_BINDING_IDENTITY_MISMATCH')
+ return values[0]
+}
 export async function rememberIdentity(p,credentials){const path=join(p.stateDir,'account-identity.json');await writeFile(path+'.tmp',JSON.stringify({accountId:credentials.accountId})+'\n',{mode:0o600});await rename(path+'.tmp',path)}
 export async function assertUniqueLogin(id,credentials,home){if(typeof credentials?.accountId!=='string'||!credentials.accountId)throw Error('INVALID_LOGIN');const issues=[];for(const p of await listAccounts(home)){if(p.id===id)continue;const health=await loginHealth(p);issues.push(...health.issues.map(code=>({account:p.id,code})));if(health.ids.includes(credentials.accountId))throw Error('WECHAT_ACCOUNT_ALREADY_REGISTERED')}return {issues}}
 

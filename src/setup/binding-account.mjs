@@ -1,4 +1,4 @@
-import {bindingIdentity} from '../base/codex/backend-identity.mjs'
+import {bindingIdentity} from '../infrastructure/accounts/account-store.mjs'
 import {listAccounts,assertAccount} from '../infrastructure/accounts/account-store.mjs'
 
 export async function resolveBindingAccount(selector,home){

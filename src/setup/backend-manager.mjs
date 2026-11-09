@@ -1,10 +1,10 @@
 import {fileURLToPath as repositoryFilePath} from 'node:url'
 const repositoryDirectory=repositoryFilePath(new URL('../../',import.meta.url))
 import {installConfig} from './install-config.mjs'
-import {bindingIdentity} from '../base/codex/backend-identity.mjs'
+import {bindingIdentity} from '../infrastructure/accounts/account-store.mjs'
 import {resolveBindingAccount} from './binding-account.mjs'
 import {accountPaths,assertAccount,listAccounts} from '../infrastructure/accounts/account-store.mjs'
-import {loadBackend} from '../base/codex/codex-backend.mjs'
+import {loadBackend} from '../infrastructure/agents/codex-backend.mjs'
 import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 import {readFile,writeFile,rename,unlink,access} from 'node:fs/promises'

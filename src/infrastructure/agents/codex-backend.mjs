@@ -1,19 +1,19 @@
 import {homedir as platformHome} from 'node:os'
 import {readFileSync} from 'node:fs'
-import {bindingIdentity} from './backend-identity.mjs'
+import {bindingIdentity} from '../accounts/account-store.mjs'
 import {readFile,writeFile,mkdir,realpath,stat,copyFile,chmod,lstat} from 'node:fs/promises'
 import {resolve,join,relative,isAbsolute,basename,extname} from 'node:path'
 import {createHash,randomUUID} from 'node:crypto'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
-import {PodmanRpc} from './podman-rpc.mjs'
+import {PodmanRpc} from '../../base/codex/podman-rpc.mjs'
 const exec=promisify(execFile),MAX=50*1024*1024
 const within=(root,path)=>{const r=relative(resolve(root),resolve(path));return r===''||r!=='..'&&!/^\.\.[\\/]/.test(r)&&!isAbsolute(r)}
 export function containerTarget(id,home=(process.env.HOME||platformHome())){
  if(!['pilot-a','pilot-b'].includes(id)){
   if(!/^agent-[a-f0-9]{16}$/.test(id))throw Error('UNKNOWN_CODEX_BACKEND')
   let t;try{t=JSON.parse(readFileSync(join(home,'.local/share/wechat-ping-bot/containers.json'),'utf8')).targets?.[id]}catch{throw Error('UNKNOWN_CODEX_BACKEND')}
-  const root=join(home,'.local/share/wechat-ping-bot/containers',id);if(!t||t.root!==root||t.container!=='wechat-codex-'+id||t.binary!=='/usr/local/bin/codex')throw Error('INVALID_CONTAINER_REGISTRY')
+  const root=join(home,'.local/share/wechat-ping-bot/containers',id);if(!t||t.root!==root||t.container!=='wechat-codex-'+id||t.binary!=='/usr/local/bin/codex'||t.agentKind&&t.agentKind!=='codex')throw Error('INVALID_CONTAINER_REGISTRY')
   return {id,kind:'podman',container:t.container,binary:t.binary,socket:'/run/agent/app-server.sock',cwd:'/workspace',root,workspace:join(root,'workspace'),home:join(root,'home'),memoryMode:'native',wechatAccountId:t.wechatAccountId}
  }
  const agent=id.at(-1),root=join(home,'work/wechat-assistant/.private/podman-pilot',agent)

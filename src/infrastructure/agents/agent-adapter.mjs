@@ -1,4 +1,4 @@
-import {loadBackend as loadCodexBackend} from '../../base/codex/codex-backend.mjs'
+import {loadBackend as loadCodexBackend} from './codex-backend.mjs'
 import {ClaudeRpc} from '../../base/claude/claude-rpc.mjs'
 import {listAccounts} from '../accounts/account-store.mjs'
 import {join} from 'node:path'
