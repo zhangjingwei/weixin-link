@@ -40,6 +40,7 @@
 **/.config/
 **/.local/
 **/accounts/
+!/src/infrastructure/accounts/
 **/attachments/
 **/outputs/
 **/backups/

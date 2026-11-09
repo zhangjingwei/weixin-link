@@ -6,7 +6,8 @@ const privateParts=new Set(['.ssh','.private','.codex','.config','.local','accou
 const privateNames=new Set(['ha.json','backup.json','monitor.json','credentials.json','account.json','account-identity.json','codex-owners.json','codex-sessions.json','remote-sessions.json','remote-hosts.json','targets.json','installation.json','integrations.json','notification-jobs.json','runtime.sock','wechat_hosts_config','known_hosts','authorized_keys'])
 export function checkReleaseFile(path,bytes,mode='100644'){
  const parts=path.replaceAll('\\','/').split('/'),name=parts.at(-1),issues=[]
- if(parts.some(p=>privateParts.has(p))||privateNames.has(name)||/^\.env(?:\.|$)/.test(name)||/^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:\.|$)|.*\.(?:pem|key|p12|pfx|sqlite|sqlite3|db)(?:-wal|-shm)?$|.*\.local\.(?:json|md)$)/i.test(name))issues.push('PRIVATE_PATH')
+ const sourceAccountStore=path==='src/infrastructure/accounts/account-store.mjs'
+ if((!sourceAccountStore&&parts.some(p=>privateParts.has(p)))||privateNames.has(name)||/^\.env(?:\.|$)/.test(name)||/^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:\.|$)|.*\.(?:pem|key|p12|pfx|sqlite|sqlite3|db)(?:-wal|-shm)?$|.*\.local\.(?:json|md)$)/i.test(name))issues.push('PRIVATE_PATH')
  if(mode==='120000')issues.push('SYMLINK_NOT_ALLOWED_IN_RELEASE')
  const text=bytes.toString('utf8')
  if(/-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/.test(text))issues.push('PRIVATE_KEY')
