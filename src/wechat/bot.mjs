@@ -36,6 +36,7 @@ import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { SessionManager } from './session-manager.mjs'
 
+// 每个进程只服务一个账号。先确定账号、授权用户和智能体，再装配运行组件。
 const account=accountPaths();await assertAccount(account.id)
 const stateDir = account.stateDir
 const installation=installConfig()
@@ -54,6 +55,7 @@ const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-log
 const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:testing?'test':'live'})
 const scheduleGuidance=`定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../interfaces/cli/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2027-01-01T09:00:00+08:00","text":"开会"}。定时提交任务：{"action":"create","kind":"task","at":"2027-01-01T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":"Asia/Shanghai"} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向原会话的持久任务队列提交原样文字，由该会话对应的任务执行链路处理；不预先声称任务完成。命令从环境读取当前会话标识，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
+// 会话编排由应用层负责；底座协议由所选 agent.sessionOptions 注入。
 const manager = await new SessionManager({log, completionMarkers:true, scheduleGuidance, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, ...agent.sessionOptions, ...(backend.kind==='podman'?{remoteControl:backend.remoteControl}:{}) }).init()
 const agentSwitcher=new AgentSwitcher({account,installation,agentKind:agent.kind,backendReady:codexAvailability})
 const upgrader=new ChatUpgrader()
@@ -93,6 +95,7 @@ let intakeHandler
 const replayMaintenance=()=>{
  for(const [id,message] of maintenancePending){maintenancePending.delete(id);if(jobs.rawCurrent(id))intakeHandler(message)}
 }
+// 私有控制端点可在微信登录前启动，用于状态检查和维护控制。
 const runtime=new RuntimeControl({
  backend:{id:backend.id,kind:backend.kind,agentKind:agent.kind,container:backend.container??null,memoryMode:backend.memoryMode??'wechat'},
  features:{daily_assistant:true,numeric_setup_wizard:true,setup_commands:true,codex_backend_binding:true,container_backend:backend.kind==='podman',native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,remote_stream:true,update_notice:true},
@@ -130,6 +133,7 @@ try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime
  track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 await runtime.listen(account.socket)
+// 先打开持久收件库并接好入站处理链；登录成功后才恢复未完成工作。
 const jobs=infrastructure.storage.inbox(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs
 let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(stateDir,'welcome-pending.json'),'utf8')).pending===true}catch{}
 const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,
@@ -165,9 +169,11 @@ intakeHandler=nonBlockingHandler(async message => {
 },error=>log('message.background_failed',errorFields(error)),{enter:()=>runtime.enter('ingress')})
 bot.onMessage(inbound.onMessage)
 
+// 退出时停止新工作，等待会话状态落盘，再关闭诊断与私有控制端点。
 async function shutdown(signal){if(stopping)return;stopping=true;updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})
 
+// 登录并核查账号身份后恢复积压消息，最后才启动微信轮询。
 await bot.login({ callbacks: {
   onQrUrl: url => { QRCode.toFile(join(stateDir, 'login.png'), url, { width: 480, margin: 2 }).then(() => log('wechat.qr_ready')).catch(error => log('wechat.qr_failed',errorFields(error))) },
   onScanned: () => log('wechat.qr_scanned'),
