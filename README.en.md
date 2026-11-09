@@ -109,13 +109,16 @@ Send ordinary requests directly. These fixed commands control the bridge:
 | `归档 Number` / `还原 Number` / `删除 Number` | Archive, restore, or permanently delete a project |
 | `模型` / `记忆` / `开启记忆` / `关闭记忆` | Inspect models and control native memory |
 | `Codex会话列表` / `恢复Codex会话 Number` / `重置Codex会话` | Manage underlying Codex sessions |
+| `长任务 Goal` / `长任务状态` | Save or inspect a Codex goal; send a separate request to start work |
+| `计划 Request` / `代码审查` | Start a Codex plan or review; reviews can also target a branch or commit |
+| `压缩上下文` / `分叉会话` / `Codex状态` | Control the current Codex session |
 | `批准 Code` / `拒绝 Code` / `回答 Code Answer` | Reply to a pending interaction using its displayed code |
 | `安装状态` / `安装向导` | Check setup or continue installation and authentication |
 | `切换智能体` / `切换智能体 Codex` / `切换智能体 Claude` | Show the current agent or switch this account after it becomes idle |
 | `命令列表` / `使用说明` | Read the command summary or full user guide |
 
 Each message is processed independently. Text and attachments in the same message are submitted together. See the [user guide](USER-GUIDE.md) for conversation management, attachment limits and diagnostic commands.
-Describe long tasks and code reviews in ordinary language; they are submitted as Codex tasks, without dedicated slash commands.
+These Chinese controls invoke the corresponding Codex capabilities; see the [user guide](USER-GUIDE.md) for exact forms and limits. Send other tasks as ordinary requests without slash commands.
 
 WeChat voice messages with a complete transcript also support system commands such as `列表`, `状态`, and `停止`.
 
@@ -134,6 +137,8 @@ Linux / macOS:
 ```
 
 Prefix the command with `WEIXIN_LINK_QR_STYLE=full` for solid cells, or `WEIXIN_LINK_RELOGIN=1` to sign in again after unbinding. See [QR maintenance](CONFIGURATION.md#二维码维护).
+The command targets `default` unless you select another account. From the source directory, run `sh qr.sh --relogin bot2` for a named account, or set both `WEIXIN_LINK_ACCOUNT=bot2 WEIXIN_LINK_RELOGIN=1` before the one-line command above. A running but unready account is not refreshed unless you explicitly request a relogin.
+The command waits for login after displaying the QR code. If WeChat requests a PIN, enter the digits when the same terminal prompts you; no separate verification command is needed.
 
 ## More capabilities and documentation
 

@@ -8,7 +8,7 @@
 
 仓库已公开，Linux/macOS 使用 `install.sh`，Windows x64 使用 `install.ps1`；各平台安装和升级均复用自己的同一入口。README 提供可匿名下载的命令。克隆源码后，本地安装步骤分别位于 `src/setup/unix-install.sh` 和 `src/setup/windows-install.ps1`。
 
-两个入口默认下载 `main`，支持 `WEIXIN_LINK_DIR` 指定源码保存目录、`WEIXIN_LINK_REF` 指定分支、标签或提交。默认源码目录为 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。目标目录已存在时会识别安装并执行标准升级；无法识别的目录仍拒绝覆盖。扫码刷新使用 `qr.sh`。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
+两个入口默认下载 GitHub 最新正式 Release；开发者可用 `WEIXIN_LINK_REF=main` 跟随主干，也可指定分支、标签或提交。`WEIXIN_LINK_DIR` 指定源码保存目录，默认 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。目标目录已存在时会识别安装并执行标准升级；无法识别的目录仍拒绝覆盖。扫码刷新使用 `qr.sh`。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
 
 旧版 `ZERO_LINK_DIR`、`ZERO_LINK_REF` 仍兼容，新变量优先。改名不迁移现有工作区、账号数据或服务；旧源码目录若已存在，先核实原安装再更新。
 
@@ -52,7 +52,9 @@ WEIXIN_LINK_QR_STYLE=full /bin/bash -c "$(curl -fsSL https://raw.githubuserconte
 WEIXIN_LINK_RELOGIN=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
 ```
 
-本地脚本对应 `./qr.sh --relogin` 或 `./qr.sh --relogin bot2`。不会删除账号档案或改绑另一个微信账号；如无法安全停止服务，操作失败并保留现有状态。旧部署的原停止命令若不支持当前运行状态，需要先按该部署的维护流程停止服务。
+本地脚本对应 `./qr.sh --relogin` 或 `./qr.sh --relogin bot2`；不指定账号时操作 `default`。账号服务正在运行但尚未就绪时，普通刷新返回 `ACCOUNT_RUNNING_NOT_READY`，不会自行停止；确认要重新登录后再显式加 `--relogin`。该操作不会删除账号档案或改绑另一个微信账号；如无法安全停止服务，操作失败并保留现有状态。旧部署的原停止命令若不支持当前运行状态，需要先按该部署的维护流程停止服务。
+
+二维码显示后，`qr.sh` 会继续等待微信登录结果；如果手机要求 PIN，同一个交互式终端会自动隐藏输入并提交验证码，输错后可按提示重试。请等终端出现输入提示后再键入手机上的数字，不要把 PIN 放进命令参数或聊天消息。服务端直接确认时不会要求输入。旧版安装若不支持自动输入，脚本会提示先升级源码。
 
 Linux/macOS 推荐使用独立入口，无需切换到安装目录：
 
@@ -142,7 +144,7 @@ Windows PowerShell 首次安装和标准升级使用同一入口：
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-`WEIXIN_LINK_DIR` 指向已安装源码目录，`WEIXIN_LINK_REF` 可选择目标分支、标签或提交（默认 `main`）。升级不会运行安装向导或重新扫码。先在旁边的暂存目录安装依赖，再通过控制接口确认所有已注册账号空闲，停止原先运行的服务，备份源码和运行数据，切换源码，恢复原先运行的服务并检查微信通道就绪。原先停止的账号保持停止。服务定义和覆盖配置、工作目录、Node 工具目录保持原样。
+`WEIXIN_LINK_DIR` 指向已安装源码目录，`WEIXIN_LINK_REF` 可选择目标分支、标签或提交（默认最新正式 Release）。升级不会运行安装向导或重新扫码。先在旁边的暂存目录安装依赖，再通过控制接口确认所有已注册账号空闲，停止原先运行的服务，备份源码和运行数据，切换源码，恢复原先运行的服务并检查启动状态。原本已登录的账号需恢复就绪；原本未登录的账号可稳定进入等待扫码状态，不要求升级时完成微信登录。原先停止的账号保持停止。服务定义和覆盖配置、工作目录、Node 工具目录保持原样。
 
 标准安装默认选择 GitHub 最新正式 Release，版本标签为 `vX.Y.Z`，必须与 `package.json` 版本一致。服务每小时检查正式版本，仅在版本号更高时提示；旧 main 安装可迁移。微信安排升级时同时保存版本号和对应提交，等待期间不会改变目标；提交仅用于校验，不作为用户版本号。没有正式发布时不回退 main。自定义分支保持手动维护；开发者可显式设置 `WEIXIN_LINK_REF=main` 安装开发版。旧版无版本号的待执行升级请求会失败并要求重新安排，避免继续跟随提交。
 
