@@ -8,12 +8,12 @@ import {fileURLToPath} from 'node:url'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 const exec=promisify(execFile),script=fileURLToPath(new URL('../../qr.sh',import.meta.url))
-async function fixture(t,{ready=false,running=false,account='default',legacy=false,stopFails=false}={}){
+async function fixture(t,{ready=false,running=false,account='default',legacy=false,legacyManager=false,stopFails=false}={}){
  const home=await mkdtemp(join(tmpdir(),'weixin-qr-script-'));t.after(()=>rm(home,{recursive:true,force:true}))
  const root=join(home,legacy?'.local/share/zero-link/source':'.local/share/weixin-link/source')
- await mkdir(join(root,'src/wechat'),{recursive:true})
+ await mkdir(join(root,legacyManager?'src/wechat':'src/setup'),{recursive:true})
  await writeFile(join(root,'package.json'),' {"name":"weixin-link"}')
- await writeFile(join(root,'src/wechat/account-manager.mjs'),`
+ await writeFile(join(root,legacyManager?'src/wechat/account-manager.mjs':'src/setup/account-manager.mjs'),`
  import {writeFileSync} from 'node:fs';import {fileURLToPath} from 'node:url';
  if(process.argv[2]==='list')console.log(JSON.stringify({accounts:[{account:${JSON.stringify(account)},ready:${ready},service_active:${running}}]}));
  else if(process.argv[2]==='stop'){if(${stopFails}){console.log(JSON.stringify({ok:false,error:'STOP_FAILED'}));process.exit(1)}writeFileSync(new URL('../../stopped',import.meta.url),'stopped');console.log(JSON.stringify({ok:true,status:'stopped'}))}
@@ -30,6 +30,12 @@ test('QR script refreshes a legacy JSON-only installation without leaking JSON',
  const r=await exec('sh',[script],{env:f.env})
  assert(r.stdout.includes('登录二维码已刷新'));assert(r.stdout.includes('login.png'))
  assert(!r.stdout.includes('"ok"'));assert.equal(await readFile(join(f.root,'refreshed'),'utf8'),'default')
+})
+test('QR script can refresh an older installation with the original manager path',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t,{legacyManager:true})
+ const r=await exec('sh',[script],{env:f.env})
+ assert(r.stdout.includes('登录二维码已刷新'))
+ assert.equal(await readFile(join(f.root,'refreshed'),'utf8'),'default')
 })
 test('QR script reports local readiness without claiming the remote binding is valid',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t,{ready:true,running:true})
@@ -75,7 +81,7 @@ async function terminalFixture(t,{expired=false,mismatch=false,columns=80}={}){
  await mkdir(stateDir,{recursive:true})
  await writeFile(join(stateDir,'pairing.json'),JSON.stringify({status:'waiting_scan',qr_version:version,valid_until:expired?0:Date.now()+90000}))
  await writeFile(join(stateDir,'login-'+version+'.terminal'),'▀▄█ QR-FIXTURE █▄▀')
- const manager=join(f.root,'src/wechat/account-manager.mjs')
+ const manager=join(f.root,'src/setup/account-manager.mjs')
  if(!mismatch)await writeFile(manager,(await readFile(manager,'utf8')).replace("../../login.png",'../../login-'+version+'.png'))
  const tty=join(f.home,'tty.cjs');await writeFile(tty,`process.stdout.isTTY=true;process.stdout.columns=${columns}`)
  f.env.NODE_OPTIONS=`--require=${JSON.stringify(tty)}`

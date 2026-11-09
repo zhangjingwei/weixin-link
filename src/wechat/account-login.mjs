@@ -1,6 +1,6 @@
 import {ServiceManager} from '../setup/platform-service.mjs'
 import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
-import {PairingState} from './pairing-state.mjs'
+import {PairingState} from '../infrastructure/wechat/pairing-state.mjs'
 import {createSdkLogger} from '../infrastructure/diagnostics/diagnostic-log.mjs'
 import {WeChatBot} from '@wechatbot/wechatbot'
 import QRCode from 'qrcode'
@@ -9,7 +9,7 @@ import {join} from 'node:path'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {setTimeout as delay} from 'node:timers/promises'
-import {assertAccount,registerLogin} from './accounts.mjs'
+import {assertAccount,registerLogin} from '../infrastructure/accounts/account-store.mjs'
 const exec=promisify(execFile),p=await assertAccount(process.argv[2]);
 const pairingTimeout=setTimeout(()=>process.exit(1),600000);pairingTimeout.unref()
 const pairing=new PairingState(p.stateDir),state=status=>pairing.set(status)

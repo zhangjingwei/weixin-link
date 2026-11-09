@@ -29,11 +29,11 @@ async function fixture(t){
  await writeFile(join(bin,'systemctl'),'#!/bin/sh\nprintf "FragmentPath=\\n"\n',{mode:0o755})
  return {root,bin,source,dest,archive,env:{...process.env,HOME:root,WEIXIN_LINK_DIR:dest,WEIXIN_LINK_REF:'main',PATH:bin+':'+process.env.PATH,FIXTURE_ARCHIVE:archive}}
 }
-async function installed(f){
+async function installed(f,{legacyManager=false}={}){
  await mkdir(join(f.dest,'src/wechat'),{recursive:true})
  await mkdir(join(f.dest,'src/setup'),{recursive:true})
  await writeFile(join(f.dest,'package.json'),'{"name":"weixin-link"}\n')
- await writeFile(join(f.dest,'src/wechat/account-manager.mjs'),'// fixture\n')
+ await writeFile(join(f.dest,legacyManager?'src/wechat/account-manager.mjs':'src/setup/account-manager.mjs'),'// fixture\n')
  await writeFile(join(f.dest,'src/setup/setup.mjs'),'// fixture\n')
  await writeFile(join(f.dest,'keep'),'original')
  const node=join(f.bin,'node')
@@ -54,6 +54,11 @@ test('same entry routes an existing installation to upgrade without running inst
  assert.equal(await readFile(env.UPGRADE_CAPTURE,'utf8'),f.dest)
  assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
  assert.equal((await readdir(f.dest)).includes('installed.txt'),false)
+})
+test('older manager path remains eligible for in-place upgrade',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t),env=await installed(f,{legacyManager:true})
+ await exec('sh',[bootstrap],{env})
+ assert.equal(await readFile(env.UPGRADE_CAPTURE,'utf8'),f.dest)
 })
 test('unsupported existing directory and symlink are never overwritten',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t);await mkdir(f.dest);await writeFile(join(f.dest,'keep'),'original')

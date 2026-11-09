@@ -2,10 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {WeChatBot} from '@wechatbot/wechatbot'
-import {installWeixinProtocol,quotedContext,encodeVoice} from '../../src/wechat/weixin-protocol.mjs'
+import {installWeixinProtocol as installProtocol,quotedContext,encodeVoice} from '../../src/infrastructure/wechat/weixin-protocol.mjs'
 import {codexInput} from '../../src/base/codex/codex-input.mjs'
 const logger={child(){return this},debug(){},info(){},warn(){},error(){}}
 const bot=()=>new WeChatBot({storage:'memory',logger})
+const installWeixinProtocol=(client,options)=>installProtocol(client,{...options,prepareBatch:async()=>{}})
+test('protocol installation requires the durable checkpoint callback',()=>{
+ const client=bot(),db=new DatabaseSync(':memory:')
+ try{assert.throws(()=>installProtocol(client,{db}),/WEIXIN_CHECKPOINT_REQUIRED/);assert.equal(client.poller.beforeCheckpoint,undefined)}finally{db.close()}
+})
 test('SDK parses uint64 message and quote IDs losslessly without touching message text',async()=>{const b=bot(),prior=globalThis.fetch;globalThis.fetch=async()=>new Response('{"message_id":18446744073709551615,"nested":{"svr_id":9007199254740993,"msg_id":123},"text":"message_id:9007199254740993"}');try{const r=await b.http.executeRequest({url:'https://example.invalid',method:'GET',headers:{},timeoutMs:1000});assert.equal(r.data.message_id,'18446744073709551615');assert.equal(r.data.nested.svr_id,'9007199254740993');assert.equal(r.data.nested.msg_id,'123');assert.equal(r.data.text,'message_id:9007199254740993')}finally{globalThis.fetch=prior}})
 test('uncertain message sends never auto-retry at SDK transport level',async()=>{const b=bot();let n=0;b.http.executeRequest=async()=>{n++;throw Object.assign(Error('timeout'),{name:'TimeoutError'})};await assert.rejects(b.http.request({url:'https://example.invalid/ilink/bot/sendmessage'}));assert.equal(n,1)})
 test('checkpoint waits for durable message receipt before persisting cursor',async()=>{const b=bot(),events=[];b.api.getUpdates=async()=>({get_updates_buf:'new',msgs:[{message_type:2}]});b.poller.beforeCheckpoint=async()=>events.push('durable');b.storage.set=async(k,v)=>{assert.equal(k,'cursor');events.push('cursor')};b.poller.on('messages',()=>{events.push('dispatch');b.poller.stop()});await b.poller.start('https://example.invalid','fake');assert.deepEqual(events,['durable','cursor','dispatch'])})

@@ -16,7 +16,7 @@ if test -z "${WEIXIN_LINK_DIR:-}${ZERO_LINK_DIR:-}" && { test -e "$HOME/.local/s
 fi
 if test "$#" -ne 0; then echo '用法：sh install.sh' >&2; exit 1; fi
 if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
-  if test -L "$bootstrap_dest" || ! test -d "$bootstrap_dest" || ! test -f "$bootstrap_dest/package.json" || ! test -f "$bootstrap_dest/src/wechat/account-manager.mjs" || ! test -f "$bootstrap_dest/src/setup/setup.mjs"; then
+  if test -L "$bootstrap_dest" || ! test -d "$bootstrap_dest" || ! test -f "$bootstrap_dest/package.json" || { ! test -f "$bootstrap_dest/src/setup/account-manager.mjs" && ! test -f "$bootstrap_dest/src/wechat/account-manager.mjs"; } || ! test -f "$bootstrap_dest/src/setup/setup.mjs"; then
     echo "Installation directory already exists but is not a supported installation: $bootstrap_dest" >&2; exit 1
   fi
   bootstrap_node="$HOME/.local/share/wechat-ping-bot/tools/node/bin/node"

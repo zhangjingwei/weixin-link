@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
-import {PairingState,pairingStatus,exportQr,QR_FRESHNESS_MS} from '../../src/wechat/pairing-state.mjs'
+import {PairingState,pairingStatus,exportQr,QR_FRESHNESS_MS} from '../../src/infrastructure/wechat/pairing-state.mjs'
 async function fixture(work){const dir=await mkdtemp('/tmp/qr-state-');try{await work(dir,new PairingState(dir))}finally{await rm(dir,{recursive:true,force:true})}}
 test('fresh QR exports a versioned actual copy with a local validity description',()=>fixture(async(dir,state)=>{await state.publish(Buffer.from('owned-qr'));const info=await exportQr({id:'test',stateDir:dir},join(dir,'outputs'));assert.equal((await readFile(info.path)).toString(),'owned-qr');assert.ok(info.path.includes('wechat-login-test-'));assert.ok(info.freshness_seconds<=90);assert.ok(info.validity.includes('server may expire earlier'))}))
 test('old QR, dead pairing process and explicit server expiration cannot be delivered',()=>fixture(async(dir,state)=>{await state.publish(Buffer.from('qr'));await assert.rejects(exportQr({id:'test',stateDir:dir},join(dir,'out'),{now:Date.now()+QR_FRESHNESS_MS}),/TOO_OLD/);await assert.rejects(exportQr({id:'test',stateDir:dir},join(dir,'out'),{running:false}),/REFRESH_REQUIRED/);await state.set('qr_expired');await assert.rejects(exportQr({id:'test',stateDir:dir},join(dir,'out')),/REFRESH_REQUIRED/)}))

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {defineInfrastructurePorts} from '../../src/application/ports/infrastructure-ports.mjs'
 import {messagePorts} from '../../src/application/ports/message-ports.mjs'
 import {createInfrastructurePorts} from '../../src/wechat/infrastructure-ports.mjs'
-import {installWeixinProtocol as legacyProtocol} from '../../src/wechat/weixin-protocol.mjs'
+import {installWeixinProtocol as protocolImplementation} from '../../src/infrastructure/wechat/weixin-protocol.mjs'
 import {loadAgentAdapter as legacyAgent} from '../../src/infrastructure/agents/agent-adapter.mjs'
 import {selectedAgentKind as legacySelection} from '../../src/infrastructure/agents/agent-selection.mjs'
 import {prepareMedia as mediaImplementation} from '../../src/infrastructure/media/media-input.mjs'
@@ -12,7 +12,7 @@ import {RemoteStore as LegacyStore} from '../../src/infrastructure/storage/regis
 
 test('external ports expose the migrated implementations without copying state', () => {
   const ports = createInfrastructurePorts()
-  assert.equal(ports.wechat.installProtocol, legacyProtocol)
+  assert.equal(ports.wechat.installProtocol, protocolImplementation)
   assert.equal(ports.wechat.confirmedFinalRejection({delivery_error: {api_code: -2}}), true)
   assert.equal(ports.wechat.confirmedFinalRejection({delivery_error: {api_code: 19001}}), false)
   assert.equal(ports.agent.load, legacyAgent)

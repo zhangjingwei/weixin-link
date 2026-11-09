@@ -16,19 +16,25 @@ if test -z "${WEIXIN_LINK_DIR:-}${ZERO_LINK_DIR:-}" && test -d "$HOME/.local/sha
  if test -e "$qr_root"; then echo '发现多个安装目录，请用 WEIXIN_LINK_DIR 指定。' >&2; exit 1; fi
  qr_root="$HOME/.local/share/zero-link/source"
 fi
-test -f "$qr_root/src/wechat/account-manager.mjs" || { echo '未找到安装，请通过 WEIXIN_LINK_DIR 指定源码目录。' >&2; exit 1; }
+if test -f "$qr_root/src/setup/account-manager.mjs"; then
+ qr_manager_path=src/setup/account-manager.mjs
+elif test -f "$qr_root/src/wechat/account-manager.mjs"; then
+ qr_manager_path=src/wechat/account-manager.mjs
+else
+ echo '未找到安装，请通过 WEIXIN_LINK_DIR 指定源码目录。' >&2; exit 1
+fi
 qr_node="$HOME/.local/share/wechat-ping-bot/tools/node/bin/node"
 if ! test -x "$qr_node"; then qr_node=$(command -v node || true); fi
 if test -z "$qr_node" || ! "$qr_node" -e 'process.exit(Number(process.versions.node.split(".")[0])>=24?0:1)'; then
  echo '需要已有的 Node.js 24 或更新版本。' >&2; exit 1
 fi
 PATH="$(dirname "$qr_node"):$PATH"; export PATH
-"$qr_node" - "$qr_root" "$qr_account" "$qr_relogin" <<'NODE'
+"$qr_node" - "$qr_root" "$qr_account" "$qr_relogin" "$qr_manager_path" <<'NODE'
 const {execFileSync} = require('node:child_process')
 const {resolve} = require('node:path')
 const {existsSync,readFileSync} = require('node:fs')
 const root = resolve(process.argv[2]), account = process.argv[3], relogin = process.argv[4] === '1'
-const manager = resolve(root, 'src/wechat/account-manager.mjs')
+const manager = resolve(root, process.argv[5])
 // Expand the existing SDK half-block rendering, so old installations need no upgrade.
 // Track ANSI colors: a white border glyph is not a black data module.
 function fullBlockQr(compact) {

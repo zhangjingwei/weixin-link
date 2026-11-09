@@ -10,7 +10,7 @@ import {nextOccurrence} from '../../src/domain/schedules/recurrence.mjs'
 import {scheduleCommand} from '../../src/interfaces/controllers/schedule-controller.mjs'
 import {runScheduleCommand} from '../../src/interfaces/cli/schedule-cli.mjs'
 import {RuntimeControl, controlRequest} from '../../src/infrastructure/runtime/runtime-control.mjs'
-import {accountPaths} from '../../src/wechat/accounts.mjs'
+import {accountPaths} from '../../src/infrastructure/accounts/account-store.mjs'
 import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
 import {SessionManager} from '../../src/wechat/session-manager.mjs'
 

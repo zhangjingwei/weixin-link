@@ -27,8 +27,9 @@ async function removeStaleSocket(path){
 
 /** Private, live control plane. Logs never participate in restart decisions. */
 export class RuntimeControl {
- constructor({snapshot=()=>({}),ready=()=>false,onSeal=()=>{},onResume=()=>{},onDrainRelease=()=>{},onRemoteText=async()=>{throw Error("Unavailable")},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
-  Object.assign(this,{snapshot,ready,onSeal,onResume,onDrainRelease,onRemoteText,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
+ constructor({snapshot,ready=()=>false,onSeal,onResume,onDrainRelease=()=>{},onRemoteText=async()=>{throw Error("Unavailable")},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
+  this.canSeal=typeof snapshot==='function'&&typeof onSeal==='function'&&typeof onResume==='function'
+  Object.assign(this,{snapshot:snapshot??(()=>({})),ready,onSeal:onSeal??(()=>{}),onResume:onResume??(()=>{}),onDrainRelease,onRemoteText,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
  }
  get draining(){
   if(this.lease&&!this.sealed&&this.lease.expires<=this.now()){this.lease=null;queueMicrotask(()=>{if(!this.lease)this.onDrainRelease()})}
@@ -48,6 +49,7 @@ export class RuntimeControl {
   if(action==='drain'){this.lease={id:lease,expires:this.now()+120000};return this.status()}
   if(!this.lease)throw Object.assign(Error('Drain required'),{statusCode:409})
   if(action==='seal'){
+   if(!this.canSeal)throw Object.assign(Error('Maintenance callbacks required'),{statusCode:409})
    if(!this.status().idle)throw Object.assign(Error('Service busy'),{statusCode:409})
    this.sealed=true;this.onSeal();return this.status()
   }

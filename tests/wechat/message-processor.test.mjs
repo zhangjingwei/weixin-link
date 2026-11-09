@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {createMessageProcessor} from '../../src/wechat/message-processor.mjs'
+import {createInfrastructurePorts} from '../../src/wechat/infrastructure-ports.mjs'
 function fixture(){
  const sent=[],acked=[],submitted=[]
  const token={current:()=>true},deps={
+  infrastructure:createInfrastructurePorts(),
   stateDir:'/nonexistent-wechat-diagnostic-test',bot:{contextStore:new Map()},manager:{owners:new Set(['owner']),sessions:new Map([['owner',{}]]),state:{users:{owner:{}}},lifecycle:{capture:()=>token}},
   jobs:{rawCurrent:()=>true,acknowledge:ids=>acked.push(...ids),claimReceipt:()=>false},
   conversations:{recipient:id=>id,control:async()=>false},runtime:{sealed:false,draining:false},log:()=>{},
@@ -17,6 +19,10 @@ function fixture(){
  }
  return {deps,sent,acked,submitted,handle:createMessageProcessor(deps)}
 }
+test('message processor requires infrastructure ports from its caller',()=>{
+ const {deps}=fixture()
+ assert.throws(()=>createMessageProcessor({...deps,infrastructure:undefined}),/MESSAGE_PORT_INVALID/)
+})
 test('extracted message processor rejects unauthorized, cancelled and stale messages without side effects',async()=>{
  const f=fixture()
  await f.handle({userId:'stranger',text:'ping'})

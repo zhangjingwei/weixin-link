@@ -6,13 +6,11 @@ import {mediaMessageContext} from '../interfaces/wechat/voice-text.mjs'
 import {systemNotice} from '../interfaces/views/system-notice.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
 import {createManagementController} from '../interfaces/controllers/management-controller.mjs'
-import {createInfrastructurePorts} from './infrastructure-ports.mjs'
 import {messagePorts} from '../application/ports/message-ports.mjs'
 
 /** Bind the WeChat/media adapters to the transport-neutral message use case. */
 export function createMessageProcessor(deps) {
-  const infrastructure = deps.infrastructure ?? createInfrastructurePorts()
-  const ports = messagePorts({infrastructure, delivery: deps.view, stateDir: deps.stateDir, cwd: process.cwd()})
+  const ports = messagePorts({infrastructure: deps.infrastructure, delivery: deps.view, stateDir: deps.stateDir, cwd: process.cwd()})
   return createMessageApplication({
     ...deps,
     classifyMessage: deps.classifyMessage ?? createCommandClassifier(),

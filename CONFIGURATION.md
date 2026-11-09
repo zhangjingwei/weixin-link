@@ -34,7 +34,7 @@ Git 手动安装的源码位置是克隆目录。工作区和 Codex 路径由安
 
 微信在线只代表通道建立。向导可发起一次真实模型测试；协议检查与实际推理分别报告结果。多账号需分别扫码，不复制已有凭据或授权名单。
 
-安装脚本默认显示中文步骤、完成状态和扫码提示。供程序调用的 `src/setup/setup.mjs` 和 `src/wechat/account-manager.mjs` 保留原有 JSON 输出；安装相关命令可追加 `--human` 获取易读输出，例如 `./wechat-setup qr --human`。
+安装脚本默认显示中文步骤、完成状态和扫码提示。供程序调用的 `src/setup/setup.mjs` 和 `src/setup/account-manager.mjs` 保留原有 JSON 输出；安装相关命令可追加 `--human` 获取易读输出，例如 `./wechat-setup qr --human`。
 
 ## 二维码维护
 
@@ -69,13 +69,13 @@ Linux/macOS 在安装源码目录运行 `./wechat-setup qr`，再次显示当前
 二维码过期且尚未建立微信通道时，由安装维护终端刷新默认账号：
 
 ```sh
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/wechat/account-manager.mjs refresh-qr default
+PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/account-manager.mjs refresh-qr default
 ```
 
 Windows 使用安装时准备的 Node.js，从源码目录调用同一账号工具；仅安装了私有 Node 时，可执行：
 
 ```powershell
-& "$HOME\.local\share\wechat-ping-bot\tools\node\node.exe" src/wechat/account-manager.mjs refresh-qr default
+& "$HOME\.local\share\wechat-ping-bot\tools\node\node.exe" src/setup/account-manager.mjs refresh-qr default
 ```
 
 已在线账号拒绝刷新。二维码采用 90 秒保守本地展示窗口，服务端报过期或配对退出后不继续交付旧码。微信通道建立后，其他账号的创建和二维码交付可直接委托智能体完成。
@@ -100,7 +100,7 @@ Claude 适配器通过 `installation` 配置选择：在保留现有 `workspace`
 
 安装工作区不能直接迁移。存在运行实例时，安装路径配置需先停服务；远程主机有未对账任务时，删除或改变目标会被拒绝。恢复配置同样遵守这些检查。
 
-多账号入口为 `node src/wechat/account-manager.mjs`，支持 `list`、`create`、`login`、`refresh-qr`、`qr`、`start`、`stop`、`verify`。`qr` 导出可交付文件；`stop` 等待指定账号空闲后停用，不影响其他账号。
+多账号入口为 `node src/setup/account-manager.mjs`，支持 `list`、`create`、`login`、`refresh-qr`、`qr`、`start`、`stop`、`verify`。`qr` 导出可交付文件；`stop` 等待指定账号空闲后停用，不影响其他账号。
 
 ## 远程主机与可选集成
 

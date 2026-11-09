@@ -34,7 +34,8 @@ export async function encodeVoice(data){
  if(!Number.isFinite(duration)||duration<=0||duration>60000)throw Error('VOICE_LOCAL_DURATION_LIMIT')
  return {data:Buffer.from(silk),duration}
 }
-export function installWeixinProtocol(bot,{db,prepareBatch=async()=>{},log=()=>{}}){
+export function installWeixinProtocol(bot,{db,prepareBatch,log=()=>{}}){
+ if(typeof prepareBatch!=='function')throw Error('WEIXIN_CHECKPOINT_REQUIRED')
  for(const [file,marker] of [['transport/http.js','WEIXIN_LOSSLESS_IDS_V1'],['messaging/poller.js','WEIXIN_CURSOR_ORDER_V2'],['storage/file.js','WEIXIN_ATOMIC_STORAGE_V1'],['core/client.js','WEIXIN_MEDIA_SEND_RESULT_V1']])if(!readFileSync(join(sdkRoot,file),'utf8').includes(marker))throw Error('WEIXIN_SDK_PATCH_REQUIRED')
  db.exec(`CREATE TABLE IF NOT EXISTS weixin_sent(client_id TEXT PRIMARY KEY,peer TEXT NOT NULL,message_id TEXT,state TEXT NOT NULL,text TEXT,created INTEGER NOT NULL);CREATE INDEX IF NOT EXISTS weixin_sent_lookup ON weixin_sent(peer,message_id);`)
  const sensitiveMessages=new WeakSet()

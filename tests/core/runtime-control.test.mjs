@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {RuntimeControl,controlRequest} from '../../src/infrastructure/runtime/runtime-control.mjs'
 test('drain and seal use live counts; seal refuses work racing with an idle observation',()=>{
- let sessions=1,seals=0;const runtime=new RuntimeControl({snapshot:()=>({sessions}),ready:()=>true,onSeal:()=>{seals++}})
+ let sessions=1,seals=0;const runtime=new RuntimeControl({snapshot:()=>({sessions}),ready:()=>true,onSeal:()=>{seals++},onResume:()=>{}})
  const lease='test-lease-123';runtime.command('drain',lease);assert.equal(runtime.status().idle,false)
  sessions=0;assert.equal(runtime.status().idle,true);const leave=runtime.enter('delivery')
  assert.throws(()=>runtime.command('seal',lease),e=>e.statusCode===409);assert.equal(seals,0)
@@ -17,10 +17,16 @@ test('live work is released on failure and ingress reservation occurs before asy
  assert.equal(runtime.status().idle,false);release();await assert.rejects(task);assert.equal(runtime.status().idle,true)
 })
 test('maintenance has an owner, abandoned leases expire, and sealed service requires explicit resume',()=>{
- let now=0,resumes=0;const runtime=new RuntimeControl({now:()=>now,onResume:()=>{resumes++}})
+ let now=0,resumes=0;const runtime=new RuntimeControl({now:()=>now,snapshot:()=>({}),onSeal:()=>{},onResume:()=>{resumes++}})
  runtime.command('drain','lease-one');assert.throws(()=>runtime.command('drain','lease-two'),e=>e.statusCode===409)
  now=120001;assert.equal(runtime.draining,false);runtime.command('drain','lease-two');runtime.command('seal','lease-two')
  now=999999;assert.equal(runtime.draining,true);runtime.command('resume','lease-two');assert.equal(resumes,1);assert.equal(runtime.draining,false)
+})
+test('seal refuses an unconfigured maintenance boundary',()=>{
+ const runtime=new RuntimeControl()
+ runtime.command('drain','missing-hooks-lease')
+ assert.throws(()=>runtime.command('seal','missing-hooks-lease'),error=>error.statusCode===409)
+ assert.equal(runtime.sealed,false)
 })
 test('released or expired drain resumes deferred intake once',async()=>{
  let now=0,replays=0

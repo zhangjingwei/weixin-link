@@ -68,7 +68,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     },
   }
   const replyOptions=[]
-  const reply = async (text,options) => {output.push(text);replyOptions.push(options)}
+  const reply = async (text,options) => {output.push(text);replyOptions.push(options);return {status:'accepted'}}
   const complete = async (rpc, text, status = 'completed') => {
     const threadId = rpc.calls.find(c => c.method === 'turn/start').params.threadId
     if (text) await rpc.event({ method: 'item/completed', params: { threadId, item: { id: 'answer', type: 'agentMessage', phase: 'final_answer', text } } })

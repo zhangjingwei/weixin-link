@@ -73,7 +73,7 @@ export class SessionManager {
       const started=Date.now();this.log('delivery.started',{...context,chars:Array.from(typeof text==='string'?text:text.text).length})
       try{
         const sent=await session.reply(text,{checkpoint:()=>this.save(),current:()=>session.workToken?.current()??true,traceId:session.traceId})
-        const state=['accepted','deferred','partial','unknown','cancelled','failed'].includes(sent?.status)?sent.status:'accepted'
+        const state=['accepted','deferred','partial','unknown','cancelled','failed'].includes(sent?.status)?sent.status:'unknown'
         session.lastDelivery={status:state,updated:new Date().toISOString(),...(sent?.error?{error:sent.error}:{})}
         if(state==='accepted')session.contextRejected=false
         this.log('delivery.completed',{...context,status:state,delivery_state:state,duration_ms:Date.now()-started})
