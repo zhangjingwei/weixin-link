@@ -5,8 +5,8 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {MessageDispatch} from '../../src/wechat/message-dispatch.mjs'
 import {singleMedia} from '../../src/media/single-media.mjs'
-import {DurableJobs} from '../../src/core/durable-jobs.mjs'
-import {DurableIntake} from '../../src/core/durable-intake.mjs'
+import {DurableJobs} from '../../src/core/intake/durable-jobs.mjs'
+import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 import {SessionManager} from '../../src/base/codex/codex-session.mjs'
 test('slow attachment retains order; another user and cancellation remain independent',async()=>{
  const dispatch=new MessageDispatch(),order=[],token={current:()=>true};let release

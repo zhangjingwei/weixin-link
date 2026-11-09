@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {ASSISTANT_INSTRUCTIONS} from '../../src/core/assistant-policy.mjs'
-import {currentMaterials,materialInput} from '../../src/core/material-context.mjs'
+import {ASSISTANT_INSTRUCTIONS} from '../../src/core/policy/assistant-policy.mjs'
+import {currentMaterials,materialInput} from '../../src/core/tasks/material-context.mjs'
 
 test('material labels never expose Windows or POSIX parent paths', () => {
   const rows = currentMaterials({attachments: [{path: 'C:\\Users\\alice\\private\\photo.png', kind: 'images'}, {path: '/tmp/private/secret.pdf', name: 'C:\\Users\\alice\\secret.pdf', kind: 'files'}]}, 'delivery-1')
@@ -20,7 +20,7 @@ test('unbound request cannot silently reuse historical files; pending is not a g
 import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {DurableJobs} from '../../src/core/durable-jobs.mjs'
+import {DurableJobs} from '../../src/core/intake/durable-jobs.mjs'
 test('pending material count is owner-isolated and excludes current delivery',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'material-queue-')),jobs=new DurableJobs(join(dir,'queue.sqlite'))
  try{

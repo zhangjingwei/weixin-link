@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {SessionManager,controlCommand} from '../../src/base/codex/codex-session.mjs'
 import {createCommandClassifier} from '../../src/wechat/command-classifier.mjs'
-import {transition} from '../../src/core/lifecycle.mjs'
+import {transition} from '../../src/domain/tasks/lifecycle.mjs'
 
 async function fixture(t){
  const dir=await mkdtemp(join(tmpdir(),'wechat-steer-')),calls=[],out=[]

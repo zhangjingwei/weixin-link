@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {messageIntent} from '../../src/core/intake/message-intent.mjs'
+import {messageIntent} from '../../src/application/intake/message-intent.mjs'
 
 test('intent classification has one ordered rule and ignores media', () => {
   const calls = []

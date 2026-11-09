@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {githubLatestRelease,newerRelease,releaseTag} from '../../../src/core/updates/releases.mjs'
+import {newerRelease,releaseTag} from '../../../src/domain/updates/release-version.mjs'
+import {githubLatestRelease} from '../../../src/infrastructure/updates/release-source.mjs'
 const sha='a'.repeat(40),tagSha='b'.repeat(40)
 const response=value=>({ok:true,text:async()=>JSON.stringify(value)})
 test('stable versions compare numerically and reject prereleases and downgrade',()=>{

@@ -8,7 +8,7 @@ import {loadAgentAdapter as legacyAgent} from '../../src/base/agent-adapter.mjs'
 import {selectedAgentKind as legacySelection} from '../../src/base/agent-selection.mjs'
 import {prepareMedia as legacyMedia} from '../../src/media/media-input.mjs'
 import {integrationGuidance as legacyGuidance} from '../../src/integrations/runtime.mjs'
-import {RemoteStore as LegacyStore} from '../../src/core/storage/registry-lock.mjs'
+import {RemoteStore as LegacyStore} from '../../src/infrastructure/storage/registry-lock.mjs'
 
 test('external ports expose the migrated implementations without copying state', () => {
   const ports = createInfrastructurePorts()

@@ -15,14 +15,13 @@ in `src/interfaces/controllers/`.
 - `delivery/`: transport error diagnostics, message formatting and compatibility entries for rules in `src/domain/delivery/`.
 - `diagnostics/`: redacted diagnostic logging and commands.
 - `runtime/`: account-scoped control endpoint and maintenance leases.
-- `schedules/`: schedule CLI and a compatibility entry for recurrence rules in `src/domain/schedules/`. The account-scoped use case lives in `src/application/schedules/`.
-- `updates/`: compatibility entry for release rules in `src/domain/updates/` and the GitHub source in `src/infrastructure/updates/`. The notifier lives in `src/application/notifications/`.
+- `schedules/`: schedule CLI. Recurrence rules live in `src/domain/schedules/`, and the account-scoped use case lives in `src/application/schedules/`.
 - `policy/`: assistant policy source.
-- `storage/`: shared registry locking and atomic JSON persistence.
+- Shared registry locking and atomic JSON persistence live in `src/infrastructure/storage/`.
 - `remote-tasks/`: remote coordination facade, path policy, submission/reconciliation, stopping/terminal cleanup, artifact export, progress delivery and RPC adaptation.
 
-Root-level entry points are retained for compatibility. New implementation imports use
-the domain paths. Extracted operations receive their facade explicitly as `context`;
+The root-level `text-conversations.mjs` remains the conversation facade. New implementation imports use
+the owning module paths. Extracted operations receive their facade explicitly as `context`;
 state is not copied and no prototype mutation or additional state store is introduced.
 Cross-module calls go through the facade so existing hooks and injected test doubles
 continue to work.

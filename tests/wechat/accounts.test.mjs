@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,writeFile,mkdir,rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {accountPaths,createAccount,listAccounts,assertUniqueLogin} from '../../src/wechat/accounts.mjs'
-import {DurableJobs} from '../../src/core/durable-jobs.mjs'
+import {DurableJobs} from '../../src/core/intake/durable-jobs.mjs'
 import {SessionManager} from '../../src/base/codex/codex-session.mjs'
 test('default retains legacy paths and invalid account ids cannot traverse directories',()=>{assert.equal(accountPaths('default','/tmp/home').stateDir,'/tmp/home/.local/share/wechat-ping-bot');for(const id of ['../default','a/b','a;id','DEFAULT','', '-bad'])assert.throws(()=>accountPaths(id,'/tmp/home'));assert.notEqual(accountPaths('one','/tmp/home').socket,accountPaths('two','/tmp/home').socket)})
 test('profiles reject accidental overwrite and duplicate WeChat credentials',async()=>{const home=await mkdtemp('/tmp/accounts-');try{const a=await createAccount('one',home),b=await createAccount('two',home);await assert.rejects(createAccount('one',home));await writeFile(join(a.stateDir,'credentials.json'),JSON.stringify({accountId:'same',token:'not-returned'}));await assert.rejects(assertUniqueLogin('two',{accountId:'same'},home),/ALREADY_REGISTERED/);await assertUniqueLogin('two',{accountId:'different'},home);assert.deepEqual((await listAccounts(home)).map(p=>p.id).sort(),['default','one','two'])}finally{await rm(home,{recursive:true,force:true})}})

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {receiptPolicy,emptyContinuationNotice} from '../../src/core/notification-policy.mjs'
+import {receiptPolicy,emptyContinuationNotice} from '../../src/core/delivery/notification-policy.mjs'
 test('receipt waits for known association without merging distinct tasks',()=>{
  assert.equal(receiptPolicy({media:true,busy:true}),'defer')
  assert.equal(receiptPolicy({media:true,waiting:true}),'suppress')

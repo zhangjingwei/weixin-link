@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,readFile,readdir,rm,stat,writeFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {createDiagnosticLog,safeRecord,errorFields,createSdkLogger} from '../../src/core/diagnostic-log.mjs'
+import {createDiagnosticLog,safeRecord,errorFields,createSdkLogger} from '../../src/core/diagnostics/diagnostic-log.mjs'
 
 test('diagnostic logs exclude bodies, secrets, raw exceptions, URLs and identifiable account IDs',()=>{
  const record=safeRecord('message.received',{userId:'real-wechat-user',messageId:'real-message-id',trace_id:'trace-1',chars:42,text:'secret password',body:'private conversation',token:'sk-secret',url:'https://private/?token=secret',...errorFields(new Error('password=secret'))})
