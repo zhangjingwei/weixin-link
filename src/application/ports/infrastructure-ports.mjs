@@ -3,7 +3,7 @@
  * provider credentials, SDK objects, files and delivery uncertainty.
  */
 const METHODS = {
-  wechat: ['createClient', 'installProtocol', 'quoteInput', 'createOutbound'],
+  wechat: ['createClient', 'installProtocol', 'quoteInput', 'createOutbound', 'confirmedFinalRejection'],
   agent: ['load', 'readiness', 'selectedKind', 'writeKind'],
   media: ['has', 'prepare', 'compose', 'outputStore', 'outputTransport'],
   integrations: ['guidance', 'status', 'check', 'invoke'],

@@ -13,6 +13,8 @@ import {RemoteStore as LegacyStore} from '../../src/core/storage/registry-lock.m
 test('external ports expose the migrated implementations without copying state', () => {
   const ports = createInfrastructurePorts()
   assert.equal(ports.wechat.installProtocol, legacyProtocol)
+  assert.equal(ports.wechat.confirmedFinalRejection({delivery_error: {api_code: -2}}), true)
+  assert.equal(ports.wechat.confirmedFinalRejection({delivery_error: {api_code: 19001}}), false)
   assert.equal(ports.agent.load, legacyAgent)
   assert.equal(ports.agent.selectedKind, legacySelection)
   assert.equal(ports.media.prepare, legacyMedia)
@@ -33,6 +35,7 @@ test('message use case receives narrow functions rather than an SDK client facto
   assert.equal(typeof ports.media.prepare, 'function')
   assert.equal(typeof ports.agent.checkReady, 'function')
   assert.equal(typeof ports.delivery.deliver, 'function')
+  assert.equal(typeof ports.delivery.confirmedRejection, 'function')
   assert.equal(typeof ports.media.package, 'function')
   assert.equal(ports.media.outputStore, undefined)
   assert.equal(ports.references.createClient, undefined)

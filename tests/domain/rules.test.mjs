@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {messageOwner, externalMessageId, ingressId, taskId} from '../../src/domain/messages/message-identity.mjs'
+import {ingressId, taskId} from '../../src/domain/messages/message-identity.mjs'
+import {messageOwner, externalMessageId} from '../../src/infrastructure/storage/ingress-envelope.mjs'
+import {confirmedFinalRejection} from '../../src/infrastructure/wechat/delivery-evidence.mjs'
 import {conversationHasUnfinishedWork, canSubmitScheduledTask} from '../../src/domain/conversations/eligibility.mjs'
 import {shouldPromptForUpdate, canRecoverFailedFinal} from '../../src/domain/delivery/notification-state.mjs'
 import {executionState} from '../../src/domain/tasks/execution-state.mjs'
@@ -29,9 +31,11 @@ test('unknown notifications are not replayed and only a confirmed rejected final
   assert.equal(shouldPromptForUpdate({tag: 'v1.1.0', status: 'unknown'}, 'v1.1.0'), false)
   assert.equal(shouldPromptForUpdate({tag: 'v1.1.0', status: 'deferred'}, 'v1.1.0'), true)
   const record = {lastReply: 'saved', recovery: {execution: 'completed', delivery: 'failed', delivery_error: {api_code: -2}}}
-  assert.equal(canRecoverFailedFinal(record, null), true)
-  assert.equal(canRecoverFailedFinal(record, {busy: true}), false)
-  assert.equal(canRecoverFailedFinal({...record, recovery: {...record.recovery, autoResend: 'attempted'}}, null), false)
+  assert.equal(confirmedFinalRejection(record.recovery), true)
+  assert.equal(canRecoverFailedFinal(record, null, confirmedFinalRejection(record.recovery)), true)
+  assert.equal(canRecoverFailedFinal(record, {busy: true}, true), false)
+  assert.equal(canRecoverFailedFinal({...record, recovery: {...record.recovery, autoResend: 'attempted'}}, null, true), false)
+  assert.equal(canRecoverFailedFinal(record, null, false), false)
   assert.equal(executionState('completed', true), 'waiting_attachment')
   assert.equal(executionState('running'), 'unknown')
 })

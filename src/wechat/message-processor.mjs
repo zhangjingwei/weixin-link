@@ -21,5 +21,6 @@ export function createMessageProcessor(deps) {
     quoteInput: ports.references.quoteInput,
     agentReadiness: deps.agentReadiness ?? ports.agent.checkReady({backend: deps.backend, owners: deps.owners, codexAvailability}),
     diagnosticPackage: ports.media.package,
+    confirmedRejection: ports.delivery.confirmedRejection,
   })
 }

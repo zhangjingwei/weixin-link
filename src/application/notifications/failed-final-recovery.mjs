@@ -2,10 +2,11 @@ import {deliveryError,deliveryFailureState} from '../../core/delivery/delivery-e
 import {canRecoverFailedFinal} from '../../domain/delivery/notification-state.mjs'
 
 /** Retry a definitively rejected text final once after a fresh inbound message. */
-export async function recoverFailedFinal(manager,key,deliver){
+export async function recoverFailedFinal(manager,key,deliver,confirmedRejection){
  const record=manager.state.users[key],recovery=record?.recovery
  const session=manager.sessions.get(key)
- if(!canRecoverFailedFinal(record,session))return null
+ if(typeof confirmedRejection!=='function')throw Error('DELIVERY_EVIDENCE_PORT_INVALID')
+ if(!canRecoverFailedFinal(record,session,confirmedRejection(recovery)))return null
  recovery.autoResend='sending'
  await manager.save()
  let status='unknown',errorDetail

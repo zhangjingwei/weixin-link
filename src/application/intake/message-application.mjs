@@ -12,7 +12,7 @@ const READINESS_NOTICE = {
   CLAUDE_CREDENTIALS_REQUIRED: '微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。',
 }
 
-export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,deferMaintenance}){
+export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,confirmedRejection,deferMaintenance}){
 return async function handleMessage(message) {
   if(message._ingressId&&!jobs.rawCurrent(message._ingressId))return
   if(message._intakeToken&&!message._intakeToken.current())return
@@ -62,7 +62,7 @@ return async function handleMessage(message) {
   }
   let recoveryDelivery
   if(!initialControl&&!hasMedia(message)&&!message._recovered){
-   try{recoveryDelivery=await recoverFailedFinal(manager,message.userId,(key,value)=>view.deliver(key,value,{conversationControl:true,traceId:trace_id}));if(recoveryDelivery)log('delivery.recovery_attempt',{trace_id,status:recoveryDelivery})}
+   try{recoveryDelivery=await recoverFailedFinal(manager,message.userId,(key,value)=>view.deliver(key,value,{conversationControl:true,traceId:trace_id}),confirmedRejection);if(recoveryDelivery)log('delivery.recovery_attempt',{trace_id,status:recoveryDelivery})}
    catch(error){log('delivery.recovery_failed',{trace_id,...errorFields(error)})}
   }
   if(agentAction){await management.agent(agentAction,message,deliver,trace_id);return}

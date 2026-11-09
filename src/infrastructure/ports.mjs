@@ -2,6 +2,7 @@ import {WeChatBot} from '@wechatbot/wechatbot'
 import {defineInfrastructurePorts} from '../application/ports/infrastructure-ports.mjs'
 import {installWeixinProtocol, quoteInput} from './wechat/weixin-protocol.mjs'
 import {createWeChatOutbound} from './wechat/wechat-outbound.mjs'
+import {confirmedFinalRejection} from './wechat/delivery-evidence.mjs'
 import {loadAgentAdapter} from './agents/agent-adapter.mjs'
 import {createAgentReadiness} from './agents/agent-readiness.mjs'
 import {selectedAgentKind, writeAgentKind} from './agents/agent-selection.mjs'
@@ -17,7 +18,7 @@ import {DurableJobs} from '../core/intake/durable-jobs.mjs'
  */
 export function createInfrastructurePorts() {
   return defineInfrastructurePorts({
-    wechat: {createClient: options => new WeChatBot(options), installProtocol: installWeixinProtocol, quoteInput, createOutbound: createWeChatOutbound},
+    wechat: {createClient: options => new WeChatBot(options), installProtocol: installWeixinProtocol, quoteInput, createOutbound: createWeChatOutbound, confirmedFinalRejection},
     agent: {load: loadAgentAdapter, readiness: createAgentReadiness, selectedKind: selectedAgentKind, writeKind: writeAgentKind},
     media: {has: hasMedia, prepare: prepareMedia, compose: composeMediaInput,
       outputStore: options => new OutputStore(options), outputTransport: options => new OutputTransport(options)},

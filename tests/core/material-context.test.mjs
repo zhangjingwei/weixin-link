@@ -2,6 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {ASSISTANT_INSTRUCTIONS} from '../../src/core/assistant-policy.mjs'
 import {currentMaterials,materialInput} from '../../src/core/material-context.mjs'
+
+test('material labels never expose Windows or POSIX parent paths', () => {
+  const rows = currentMaterials({attachments: [{path: 'C:\\Users\\alice\\private\\photo.png', kind: 'images'}, {path: '/tmp/private/secret.pdf', name: 'C:\\Users\\alice\\secret.pdf', kind: 'files'}]}, 'delivery-1')
+  assert.deepEqual(rows.map(item => item.name), ['photo.png', 'secret.pdf'])
+  assert.equal(materialInput({materials: rows}).text.includes('Users'), false)
+})
 test('material IDs are stable per delivery, distinct across deliveries, and deduplicate visual aliases',()=>{
  const input={attachments:[{path:'/private/a.jpg',name:'a.jpg',kind:'images'}],images:['/private/a.jpg']}
  const a=currentMaterials(input,'one');assert.equal(a.length,1);assert.deepEqual(a,currentMaterials(input,'one'));assert.notEqual(a[0].id,currentMaterials(input,'two')[0].id);assert.ok(!JSON.stringify(a).includes('/private'))

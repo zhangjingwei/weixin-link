@@ -8,7 +8,7 @@ export function messagePorts({infrastructure, delivery, stateDir, cwd}) {
       package: typeof infrastructure?.media?.outputStore === 'function' && typeof stateDir === 'string' && typeof cwd === 'string'
         ? (userId, value) => infrastructure.media.outputStore({stateDir, cwd}).package(userId, value) : undefined},
     references: {quoteInput: infrastructure?.wechat?.quoteInput},
-    delivery: {deliver: delivery?.deliver},
+    delivery: {deliver: delivery?.deliver, confirmedRejection: infrastructure?.wechat?.confirmedFinalRejection},
   }
   if (Object.values(candidate).some(group => Object.values(group).some(value => typeof value !== 'function'))) throw Error('MESSAGE_PORT_INVALID')
   return Object.freeze(Object.fromEntries(Object.entries(candidate).map(([name, group]) => [name, Object.freeze(group)])))
