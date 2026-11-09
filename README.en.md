@@ -18,7 +18,7 @@ Start tasks · Add instructions · Check progress · Receive files
 
 Weixin Link connects WeChat private chats to an **agent backend** on your computer or server. It currently supports Codex (the default) and Claude CLI. While your computer or server stays online, you can start tasks, add instructions and receive answers and files from WeChat.
 
-The pinned [WeChat SDK package](vendor/README.md) is built from the independent `wechatbot-zerolink` fork; its source commit and checksum are recorded there.
+The pinned [WeChat SDK](https://www.npmjs.com/package/wechatbot-zerolink) is published from the independent `wechatbot-zerolink` repository; its version and integrity checksum are recorded in the lockfile.
 
 <table align="center">
   <tr><th align="center">Clarify a city · Check the weather</th><th align="center">Transcribe speech · Write a story</th></tr>

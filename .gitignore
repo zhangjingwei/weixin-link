@@ -6,9 +6,6 @@
 !/AGENTS.md
 !/package.json
 !/package-lock.json
-!/vendor/
-!/vendor/README.md
-!/vendor/wechatbot-zerolink-2.2.0-zerolink.2.tgz
 !/install.sh
 !/qr.sh
 

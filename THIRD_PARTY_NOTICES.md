@@ -7,7 +7,7 @@
 以下依据本仓库 package-lock.json 中声明的版本和 license 字段整理。它是清单，不替代各包随附的 LICENSE、NOTICE、源码提供要求或实际构建核查。
 
 - `@napi-rs/canvas` 1.0.11：MIT。
-- `wechatbot-zerolink` 2.2.0-zerolink.2：MIT，基于 `@wechatbot/wechatbot` 2.2.0；来源提交与校验值见 `vendor/README.md`，包内保留原许可证。
+- `wechatbot-zerolink` 2.2.0-zerolink.2：MIT，基于 `@wechatbot/wechatbot` 2.2.0；来源为 npm 发布包，校验值见 `package-lock.json`，包内保留原许可证。
 - `pdfjs-dist` 6.4.299：Apache-2.0。
 - `qrcode` 1.5.4：MIT。
 - `sharp` 0.35.5：Apache-2.0。
@@ -27,7 +27,7 @@ FFmpeg 平台包的许可声明并不一致：当前锁文件中 Linux arm64/x64
 
 ## SDK 修改与传递依赖
 
-本仓库分发来自独立 `wechatbot-zerolink` 项目的固定 SDK 包。该包保留上游 MIT 许可证与归属说明，源码修改包括绑定协议兼容、游标持久化、发送结果、精确消息 ID、引用字段、原子存储和上传超时。安装时不修改 `node_modules`。
+本仓库使用来自独立 `wechatbot-zerolink` 项目的固定 npm SDK 包。该包保留上游 MIT 许可证与归属说明，源码修改包括绑定协议兼容、游标持久化、发送结果、精确消息 ID、引用字段、原子存储和上传超时。安装时不修改 `node_modules`。
 
 升级依赖时同步更新本清单；传递依赖以锁文件和实际安装内容为准，本清单未穷举。部署者安装的 Codex、Podman、Python 库、浏览器、字体与其他外部工具各自遵循上游许可证和使用条件。
 

@@ -137,7 +137,7 @@ Linux / macOS：
 - [远程连接](src/infrastructure/remote/README.md)：连接已授权的远程工作区。
 - [可选集成](src/integrations/README.md)：HA 只读查询、SSH 远程 Codex 任务和 RSSHub 新闻源，按账号显式启用；备份统一接入仍待迁移。
 - [消息架构](docs/architecture/README.md)：微信入口、任务执行、智能体底座与投递的模块边界。
-- [微信 SDK 来源](vendor/README.md)：固定版本、源码提交与包校验值。
+- [微信 SDK](https://www.npmjs.com/package/wechatbot-zerolink)：固定版本与包校验值见 `package-lock.json`。
 - [配置示例](config-templates/)：部署配置参考。
 - [参与贡献](CONTRIBUTING.md)：问题反馈与代码贡献。
 
