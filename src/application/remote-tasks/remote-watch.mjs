@@ -13,7 +13,7 @@ export async function watchTask(controller,input){
  if(input.timeoutMs!==undefined&&(!Number.isInteger(input.timeoutMs)||input.timeoutMs<1000||input.timeoutMs>300000))throw Error('INVALID_WATCH_TIMEOUT')
  const task=await controller.task(input.task),offsets=task.stream_offsets??{},pendingFinal=[];const label='【'+({spark:'Spark',server:'服务器'}[task.host]??task.host)+'｜'+(task.cwd.includes('\\')?win32.basename(task.cwd):basename(task.cwd))+'｜任务 '+input.task.replace(/^remote-/,'').slice(0,8)+'】';let seq=0,delivered=0,lastTurn,tail=Promise.resolve(),failure
  async function stage(item){
-  if(item?.type!=='agentMessage'||!item.text||item.phase==='partial_answer')return
+  if(item?.type!=='answer'||!item.text||item.phase==='partial_answer')return
   const saved=offsets[item.id];if(saved&&saved.state!=='accepted')throw Error('REMOTE_STREAM_DELIVERY_UNCERTAIN')
   const prefix=item.text.slice(0,saved?.offset??0)
   if(saved&&(prefix.length!==saved.offset||digest(prefix)!==saved.hash))throw Error('REMOTE_STREAM_PREFIX_MISMATCH')
@@ -27,15 +27,15 @@ export async function watchTask(controller,input){
   }catch(error){entry.state='unknown';await controller.store.update(s=>{s[input.task].stream_offsets[item.id]=entry});throw error}
  }
  return controller.usingTask(task,async rpc=>{
-  rpc.onEvent=event=>{const p=event.params??{};if(p.threadId!==task.thread_id||p.turnId!==task.turn_id)return
-   if(event.method==='item/completed'&&p.item?.phase==='commentary')tail=tail.then(()=>{if(!failure)return stage(p.item)}).catch(error=>{failure=error})
+  rpc.onEvent=event=>{if(event.threadId!==task.thread_id||event.turnId!==task.turn_id)return
+   if(event.type==='itemCompleted'&&event.item?.phase==='commentary')tail=tail.then(()=>{if(!failure)return stage(event.item)}).catch(error=>{failure=error})
   }
   try{
    const end=Date.now()+(input.timeoutMs??120000)
    do{if(failure)throw failure;lastTurn=await controller.turns(rpc,task);if(!lastTurn||!['inProgress','in_progress'].includes(lastTurn.status))break;await delay(1000)}while(Date.now()<end)
    await tail;if(failure)throw failure
    const complete=!!lastTurn&&!['inProgress','in_progress'].includes(lastTurn.status)
-   if(complete){for(const item of lastTurn.items??[])await stage(item);await stage({type:'agentMessage',id:'completion:'+task.turn_id,text:({completed:pendingFinal.length?'✅ 远程任务执行已完成，完整结果由主助手整理。':'✅ 远程任务已完成。',failed:'⚠️ 远程任务执行失败。',interrupted:'⏹ 远程任务已停止。'}[lastTurn.status]??'远程轮次已结束。')})}
+   if(complete){for(const item of lastTurn.items??[])await stage(item);await stage({type:'answer',id:'completion:'+task.turn_id,text:({completed:pendingFinal.length?'✅ 远程任务执行已完成，完整结果由主助手整理。':'✅ 远程任务已完成。',failed:'⚠️ 远程任务执行失败。',interrupted:'⏹ 远程任务已停止。'}[lastTurn.status]??'远程轮次已结束。')})}
    return {task:input.task,turn_status:lastTurn?.status??'unknown',streamed:delivered>0,stages:delivered,chunks:delivered,pending_final:pendingFinal,complete}
   }finally{rpc.onEvent=()=>{};await tail}
  })
