@@ -87,3 +87,6 @@
 # Local CodeGraph configuration and generated indexes.
 /codegraph.config.json
 **/.codegraph/
+
+# Local prerelease upgrade helper.
+/upgrade-main.sh
