@@ -4,6 +4,7 @@ import {readFile,mkdir,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {execFileSync} from 'node:child_process'
 import sharp from 'sharp'
+import {ffmpegBinary} from '../infrastructure/media/media-binary.mjs'
 import {OutputStore,OutputTransport} from '../infrastructure/media/outbound-media.mjs'
 import {createDiagnosticLog,createSdkLogger,errorFields} from '../core/diagnostics/diagnostic-log.mjs'
 const root=join(process.env.HOME,'.local/share/wechat-ping-bot'),cwd=join(process.env.HOME,'work/wechat-assistant')
@@ -12,7 +13,7 @@ if(owners.length!==1)throw Error('Live media check requires one explicitly selec
 const userId=owners[0],dir=join(cwd,'outputs','wechat-media-check-'+Date.now());await mkdir(dir,{recursive:true,mode:0o700})
 const png=join(dir,'wechat-image-test.png'),video=join(dir,'wechat-video-test.mp4'),file=join(dir,'wechat-file-test.txt')
 await sharp({create:{width:640,height:360,channels:3,background:'#1a3e2f'}}).png().toFile(png)
-execFileSync(new URL('../../node_modules/@ffmpeg-installer/linux-arm64/ffmpeg',import.meta.url).pathname,['-loglevel','error','-f','lavfi','-i','color=blue:s=320x240:d=1','-c:v','libx264','-threads','1','-pix_fmt','yuv420p','-movflags','+faststart','-y',video])
+execFileSync(ffmpegBinary,['-loglevel','error','-f','lavfi','-i','color=blue:s=320x240:d=1','-c:v','libx264','-threads','1','-pix_fmt','yuv420p','-movflags','+faststart','-y',video])
 await writeFile(file,'微信富媒体发件测试。此文件、纯色图片和1秒视频均为合成测试产物。\n',{mode:0o600})
 const diagnostic=createDiagnosticLog({dir:join(root,'integration-logs')}),log=(event,fields)=>{void diagnostic.log(event,fields)}
 const bot=new WeChatBot({storage:'file',storageDir:root,logger:createSdkLogger(log)})
