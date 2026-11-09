@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createMessageView} from '../../src/wechat/message-view.mjs'
+import {createWeChatPresenter} from '../../../src/interfaces/views/wechat-presenter.mjs'
 
 test('WeChat view maps conversation keys only at the SDK boundary', async () => {
   const calls = []
@@ -11,7 +11,7 @@ test('WeChat view maps conversation keys only at the SDK boundary', async () => 
     sendAnnouncement: async (userId, text) => calls.push(['announcement', userId, text]),
   }
   const conversations = {recipient: () => 'real-peer', deliver: (key, value, options, send) => send(key, value, options), serialize: (_key, work) => work()}
-  const view = createMessageView({bot, conversations,
+  const view = createWeChatPresenter({bot, conversations,
     outgoing: {deliver: async (key, value) => calls.push(['deliver', key, value])},
     runtime: {track: async (_kind, work) => work()}})
   view.context('conversation-key', 'context-token')

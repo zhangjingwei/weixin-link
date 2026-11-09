@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createChatManagement} from '../../src/setup/chat-management.mjs'
+import {createManagementController, runConfigurationAction} from '../../../src/interfaces/controllers/management-controller.mjs'
 
 test('management setup claims one receipt and does not repeat a recovered operation', async () => {
   const events = [], sent = []
-  const management = createChatManagement({
+  const management = createManagementController({
     manager: {lifecycle: {capture: () => ({current: () => true, signal: null})}},
     jobs: {acknowledge: ids => events.push(['ack', ids])},
     runtime: {track: async (_kind, work) => work()},
@@ -20,7 +20,7 @@ test('management setup claims one receipt and does not repeat a recovered operat
 
 test('management switch failure uses a bounded public code and acknowledges once', async () => {
   const events = [], sent = []
-  const management = createChatManagement({
+  const management = createManagementController({
     jobs: {acknowledge: ids => events.push(['ack', ids])},
     runtime: {track: async (_kind, work) => work()},
     agentSwitcher: {handle: async () => {throw Error('secret details: token=private')}},
@@ -31,4 +31,11 @@ test('management switch failure uses a bounded public code and acknowledges once
   assert.match(sent[0], /AGENT_SWITCH_FAILED/)
   assert.doesNotMatch(sent[0], /private/)
   assert.deepEqual(events.at(-1), ['ack', ['inbox']])
+})
+
+test('configuration entry validates the command boundary and delegates schema reads', async () => {
+  const schema = await runConfigurationAction('config-schema', ['ha'])
+  assert.equal(schema.properties.version.const, 1)
+  await assert.rejects(runConfigurationAction('config-status', ['unexpected']), /CONFIG_ARGUMENTS_INVALID/)
+  await assert.rejects(runConfigurationAction('config-set', []), /CONFIG_ARGUMENTS_INVALID/)
 })

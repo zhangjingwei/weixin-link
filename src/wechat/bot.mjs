@@ -3,8 +3,10 @@ import {trackLoginValidity} from './login-validity.mjs'
 import {LifecycleNotice} from './lifecycle-notice.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
 import {createCommandClassifier} from './command-classifier.mjs'
-import {createInboundController} from './inbound-controller.mjs'
-import {createMessageView} from './message-view.mjs'
+import {createWeChatController} from '../interfaces/controllers/wechat-controller.mjs'
+import {createWeChatPresenter} from '../interfaces/views/wechat-presenter.mjs'
+import {createScheduleController} from '../interfaces/controllers/schedule-controller.mjs'
+import {createUpdateController} from '../interfaces/controllers/update-controller.mjs'
 import {setupModelTest} from '../setup/setup-model-test.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
 import {SetupReceipts} from '../setup/setup-receipts.mjs'
@@ -28,9 +30,6 @@ import {DurableIntake} from '../core/durable-intake.mjs'
 import {OutputTransport} from '../media/outbound-media.mjs'
 import {composeMediaInput} from '../media/media-preprocess.mjs'
 import {RuntimeControl} from '../core/runtime/runtime-control.mjs'
-import {ScheduleService} from '../core/schedules/schedule-service.mjs'
-import {UpdateNotifier} from '../core/updates/update-notifier.mjs'
-import {scheduleCommand} from '../core/schedules/schedule-commands.mjs'
 import {nonBlockingHandler} from './message-handler.mjs'
 import {MessageDispatch} from './message-dispatch.mjs'
 import {createDiagnosticLog,errorFields,createSdkLogger} from '../core/diagnostics/diagnostic-log.mjs'
@@ -112,7 +111,7 @@ const runtime=new RuntimeControl({
   const sent=await manager.emit(session,text,()=>session.busy&&(session.workToken?.current()??false));if(!sent)throw Error('Delivery not confirmed')
   return {accepted:true}
  },
- onSchedule:request=>scheduleCommand(request,{manager,conversations,service:schedules}),
+ onSchedule:request=>{if(!schedules)throw Error('SCHEDULE_STATE_UNAVAILABLE');return schedules.onRequest(request)},
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
  snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+durable.users.size,saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
  onSeal:()=>bot.stop(),onResume:()=>{void (async()=>{if(bot.runPromise)await bot.runPromise.catch(()=>{});if(!stopping){await bot.start();replayMaintenance()}})().catch(e=>log('service.resume_failed',errorFields(e)))},
@@ -125,17 +124,12 @@ const mediaDependencies={
  submit:(owner,input,token,ingressId)=>{if(token.current())durable.submit(owner,input,ingressId,[ingressId].filter(Boolean))},
 }
 const outgoing=new OutputTransport({store:manager.outputStore,log,send:async(userId,content)=>runtime.track('delivery',()=>content?.voice?bot.sendVoice(conversations.recipient(userId),content.voice):bot.send(conversations.recipient(userId),content))})
-const view=createMessageView({bot,conversations,outgoing,runtime})
-const updates=new UpdateNotifier({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,
- ready:()=>runtime.ready()&&runtime.status().idle&&!runtime.draining&&!runtime.sealed&&!stopping,
- send:(owner,text)=>view.notice(owner,text,{current:()=>runtime.ready()&&!runtime.draining&&!runtime.sealed&&!stopping}),log})
+const view=createWeChatPresenter({bot,conversations,outgoing,runtime})
+const updates=createUpdateController({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,
+ ready:()=>runtime.ready()&&runtime.status().idle&&!runtime.draining&&!runtime.sealed&&!stopping,view,log})
 let schedules
-try {schedules=await new ScheduleService({stateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,track:work=>runtime.track('schedule',work),send:(owner,text)=>view.notice(owner,text),submitTask:(owner,key,text,id,at)=>{
- const entry=conversations.entry(key)
- if(agent.kind!=='codex'||backend.kind!=='host'||!entry||entry.owner!==owner||entry.deleted||entry.archived)throw Object.assign(Error('SCHEDULE_TASK_UNAVAILABLE'),{deliveryState:'failed'})
- const submissionId=durable.submit(key,{text},'schedule:'+id+':'+at)
- return {status:'accepted',submissionId}
-},log}).init()}
+try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,
+ track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),agent,backend,view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 await runtime.listen(account.socket)
 const jobs=new DurableJobs(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs
@@ -144,7 +138,7 @@ const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.d
  send:(owner,text)=>view.announcement(owner,text),log})
 const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace
-const inbound=createInboundController({bot,view,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
+const inbound=createWeChatController({bot,view,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
  traceWire:wire=>ingressTrace.traceId(wire),traceMessage:message=>ingressTrace.callback(message),quote:message=>weixin.quote(message),dispatch:message=>intakeHandler(message),log})
 weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:inbound.prepareBatch})
 ingressTrace=traceIngress(bot,log)

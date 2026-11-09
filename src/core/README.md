@@ -6,7 +6,8 @@ implementations stay in `src/wechat`, `src/remote` and `src/base`.
 The message entry and execution boundaries are documented in
 [`docs/architecture/README.md`](../../docs/architecture/README.md). The pure
 `intake/message-intent.mjs` selects an application intent from injected parsers;
-the WeChat parser registry and SDK Controller live in `src/wechat`.
+the WeChat parser registry lives in `src/wechat`, and the SDK Controller lives
+in `src/interfaces/controllers/`.
 
 - `conversations/`: command parsing, official catalog synchronization, archive/delete/selection operations, ordered delivery and history rendering. `text-conversations.mjs` remains the public facade and owns shared state and locks.
 - `intake/`: SQLite inbox/jobs, ingress tracing, local turn reconciliation and remote recovery. `durable-intake.mjs` owns queue workers and cancellation checks.

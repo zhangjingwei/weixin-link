@@ -2,26 +2,28 @@
 
 ![目标架构](message-flow-target.svg)
 
-本项目保持每个微信账号一个本地服务实例的模块化单体。MVC 用于描述接口边界：微信 SDK 回调由 Controller 接收，回复由 View 适配后发送；中间通过应用用例和领域规则协作。DDD 在这里用于划清账号、会话、消息、任务和投递的职责，不引入第二套状态仓库或空壳聚合。
+本项目保持每个微信账号一个本地服务实例的模块化单体。`src/interfaces/` 已按图中的四个 Controller 与微信 Presenter 组织；`src/application/`、`src/domain/`、`src/infrastructure/` 先记录现有实现映射，代码仍在原模块，后续按不变量分阶段迁移。DDD 在这里用于划清账号、会话、消息、任务和投递的职责，不引入第二套状态仓库或空壳聚合。
 
 ## 当前落地边界
 
 | 职责 | 实现位置 | 规则 |
 | --- | --- | --- |
 | 组合根 | `src/wechat/bot.mjs` | 为本账号装配依赖，不再重复写命令判定或 SDK 入站流程 |
-| 入站 Controller | `src/wechat/inbound-controller.mjs` | SDK 消息转换、账号过滤、原消息持久化和游标前检查；失败不能确认收件 |
+| 微信入口 Controller | `src/interfaces/controllers/wechat-controller.mjs` | SDK 消息转换、账号过滤、原消息持久化和游标前检查；失败不能确认收件 |
+| 计划触发 Controller | `src/interfaces/controllers/schedule-controller.mjs` | 将计划 API 请求映射到当前会话；到期提醒走 Presenter，到期任务走共享持久队列；计划状态仍由 `ScheduleService` 持有 |
+| 更新检查 Controller | `src/interfaces/controllers/update-controller.mjs` | 接入定时检查；版本比较、提示去重及未知投递状态仍由 `UpdateNotifier` 持有 |
+| 管理 Controller | `src/interfaces/controllers/management-controller.mjs` | 接入微信安装、切换、升级命令与配置 CLI 参数；执行委托原管理和配置模块 |
 | 命令意图 | `src/core/intake/message-intent.mjs` + `src/wechat/command-classifier.mjs` | 纯意图决策与微信命令解析分开；重放时按同一规则重新判定，不另存意图状态 |
 | 消息应用处理 | `src/core/intake/message-application.mjs`、`src/core/durable-intake.mjs` | 控制命令立即处理；普通任务经持久队列逐会话执行、恢复和取消；`src/wechat/message-processor.mjs` 只绑定微信、媒体等适配 |
-| 聊天管理 | `src/setup/chat-management.mjs` | 安装、切换底座和升级命令在管理边界执行，不进入普通模型任务队列 |
 | 会话与底座 | `src/base/codex/codex-session.mjs`、`src/base/agent-adapter.mjs`、`src/base/agent-readiness.mjs` | 共享会话管理；账号启动时选择底座，新会话的底座就绪检查不进入消息应用处理 |
-| 微信 View | `src/wechat/message-view.mjs`、`src/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
+| 微信 View / Presenter | `src/interfaces/views/wechat-presenter.mjs`、`src/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
 
 `message-application.mjs` 负责意图分流、权限、回执和任务提交；安装、切换与升级的具体执行委托给管理模块。后续扩展应继续按职责拆分，不在此文件新增供应商协议分支。图中“显式配置的上下文准备”是预留用例，当前集成不会自动预取外部信息。
 
 ## 与消息链路相连的其他能力
 
-- `src/core/schedules/`：定时任务调用既有任务提交入口；提醒通过微信 View 调用通知投递入口。
-- `src/core/updates/`：版本检查只产生升级提示，通过微信 View 调用同一投递入口，不自动升级。
+- `src/core/schedules/`：保留计划持久化和到期状态机；计划 Controller 把任务提交到既有队列，提醒通过微信 Presenter 投递。
+- `src/core/updates/`：保留版本比较和提示状态；更新 Controller 只发升级提示，通过微信 Presenter 投递，不自动升级。
 - `src/setup/`：安装、账号启用和配置属于组合与管理边界，不是消息执行旁路。
 - `src/integrations/`：按账号启用，运行时重新核验；本机智能体按需调用。SSH 远程 Codex 是此类集成和 `src/core/remote-tasks/` 的协作，不是消息处理器里的另一个智能体底座。
 - 权限、账号隔离、去重、取消代际、未知投递结果和运行控制跨越上述边界，继续使用现有状态来源。

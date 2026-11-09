@@ -12,13 +12,8 @@ const human=process.argv.includes('--human')
 const report=(action,result)=>console.log(human?setupMessage(action,result):JSON.stringify(result))
 try{
  if(human&&setupProgress[action])console.log(setupProgress[action])
- if(['config-schema','config-check','config-set','config-restore'].includes(action)&&args.length!==1||action==='config-status'&&args.length)throw Error('CONFIG_ARGUMENTS_INVALID')
  if(action.startsWith('integration-')){const {runIntegrationCommand}=await import('../integrations/cli.mjs');console.log(JSON.stringify(await runIntegrationCommand(action.slice('integration-'.length),args)))}
- else if(action==='config-schema'){const {configSchema}=await import('./config-schema.mjs');console.log(JSON.stringify(configSchema(args[0]),null,2))}
- else if(action==='config-check'){const {validateConfig}=await import('./config-schema.mjs');const {readConfigStdin}=await import('./config-manager.mjs');const config=validateConfig(args[0],await readConfigStdin());console.log(JSON.stringify({kind:args[0],valid:true,version:config.version}))}
- else if(action==='config-set'){const {configure,readConfigStdin}=await import('./config-manager.mjs');console.log(JSON.stringify(await configure(args[0],await readConfigStdin())))}
- else if(action==='config-restore'){const {restoreConfiguration}=await import('./config-manager.mjs');console.log(JSON.stringify(await restoreConfiguration(args[0])))}
- else if(action==='config-status'){const {configStatus}=await import('./config-manager.mjs');console.log(JSON.stringify(await configStatus()))}
+ else if(['config-schema','config-check','config-set','config-restore','config-status'].includes(action)){const {runConfigurationAction}=await import('../interfaces/controllers/management-controller.mjs');const result=await runConfigurationAction(action,args);console.log(JSON.stringify(result,null,action==='config-schema'?2:0))}
  else if(action==='init')report(action,await initInstallation(args[0]?{workspace:args[0]}:{}))
  else if(action==='services')report(action,await installServices())
  else if(action==='doctor')console.log(JSON.stringify(await doctor(),null,2))

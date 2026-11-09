@@ -6,7 +6,7 @@ import {singleMedia} from '../media/single-media.mjs'
 import {quoteInput} from './weixin-protocol.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
 import {createAgentReadiness} from '../base/agent-readiness.mjs'
-import {createChatManagement} from '../setup/chat-management.mjs'
+import {createManagementController} from '../interfaces/controllers/management-controller.mjs'
 import {OutputStore} from '../media/outbound-media.mjs'
 
 /** Bind the WeChat/media adapters to the transport-neutral message use case. */
@@ -14,7 +14,7 @@ export function createMessageProcessor(deps) {
   return createMessageApplication({
     ...deps,
     classifyMessage: deps.classifyMessage ?? createCommandClassifier(),
-    management: deps.management ?? createChatManagement(deps),
+    management: deps.management ?? createManagementController(deps),
     normalizeVoice: voiceCommandInput,
     hasMedia,
     singleMedia,

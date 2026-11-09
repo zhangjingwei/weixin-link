@@ -1,9 +1,9 @@
-import {errorFields} from '../core/diagnostics/diagnostic-log.mjs'
+import {errorFields} from '../../core/diagnostics/diagnostic-log.mjs'
 
 /** Management commands from WeChat. Installation, backend switching and
  * upgrades remain outside the ordinary model task queue.
  */
-export function createChatManagement({manager, jobs, runtime, setupReceipts, setupController, agentSwitcher, upgrader, view, log}) {
+export function createManagementController({manager, jobs, runtime, setupReceipts, setupController, agentSwitcher, upgrader, view, log}) {
   const acknowledge = message => jobs.acknowledge([message._ingressId].filter(Boolean))
   return {
     async setup(action, message, deliver) {
@@ -47,4 +47,29 @@ export function createChatManagement({manager, jobs, runtime, setupReceipts, set
       })
     },
   }
+}
+
+/** Management CLI entry for configuration. Validation and storage remain in
+ * setup; the interface keeps action and argument parsing out of setup.mjs.
+ */
+export async function runConfigurationAction(action, args = [], input = process.stdin) {
+  if (action === 'config-status') {
+    if (args.length) throw Error('CONFIG_ARGUMENTS_INVALID')
+    const {configStatus} = await import('../../setup/config-manager.mjs')
+    return configStatus()
+  }
+  if (!['config-schema', 'config-check', 'config-set', 'config-restore'].includes(action) || args.length !== 1) throw Error('CONFIG_ARGUMENTS_INVALID')
+  const kind = args[0]
+  if (action === 'config-schema') {
+    const {configSchema} = await import('../../setup/config-schema.mjs')
+    return configSchema(kind)
+  }
+  if (action === 'config-check') {
+    const {validateConfig} = await import('../../setup/config-schema.mjs')
+    const {readConfigStdin} = await import('../../setup/config-manager.mjs')
+    const config = validateConfig(kind, await readConfigStdin(input))
+    return {kind, valid: true, version: config.version}
+  }
+  const {configure, readConfigStdin, restoreConfiguration} = await import('../../setup/config-manager.mjs')
+  return action === 'config-set' ? configure(kind, await readConfigStdin(input)) : restoreConfiguration(kind)
 }

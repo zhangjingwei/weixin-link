@@ -1,9 +1,9 @@
-import {systemNotice} from '../core/delivery/system-notice.mjs'
+import {systemNotice} from '../../core/delivery/system-notice.mjs'
 
 /** WeChat View adapter. Application handlers provide content and delivery
  * options; recipient mapping and SDK-specific response shapes stay here.
  */
-export function createMessageView({bot, conversations, outgoing, runtime}) {
+export function createWeChatPresenter({bot, conversations, outgoing, runtime}) {
   const rawDeliver = outgoing.deliver.bind(outgoing)
   conversations.sendOutput = rawDeliver
   const deliver = (userId, value, options) => conversations.deliver(

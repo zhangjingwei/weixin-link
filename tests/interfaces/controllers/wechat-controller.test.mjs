@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createInboundController} from '../../src/wechat/inbound-controller.mjs'
+import {createWeChatController} from '../../../src/interfaces/controllers/wechat-controller.mjs'
 
 function fixture() {
   const captured = [], dispatched = [], replies = [], events = []
@@ -13,7 +13,7 @@ function fixture() {
   const setupController = {command: () => null}
   const setupReceipts = {get: () => null, capture: () => null}
   const view = {directNotice: (message, text) => bot.reply({...message, userId: conversations.recipient(message.userId)}, text)}
-  const controller = createInboundController({bot, view, manager, jobs, conversations, runtime, setupController, setupReceipts,
+  const controller = createWeChatController({bot, view, manager, jobs, conversations, runtime, setupController, setupReceipts,
     classifyMessage: message => message.text === '停止' ? {kind: 'session', value: {action: 'stop'}} : null,
     traceWire: () => 'wire-trace', traceMessage: () => {events.push('trace'); return 'message-trace'}, quote: () => [],
     dispatch: message => dispatched.push(message), log: () => {}})
