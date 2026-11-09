@@ -5,7 +5,7 @@ import {currentMaterials,hasAttachments} from '../../domain/messages/material-as
 import {executionState} from '../../domain/tasks/execution-state.mjs'
 import {publicMemoryText,nativeMemoryConfig,enableThreadMemory} from './native-memory.mjs'
 import {localTaskLabel,localCompletion} from '../../domain/tasks/task-label.mjs'
-import {CancellationScopes,transition} from '../../domain/tasks/lifecycle.mjs'
+import {transition} from '../../domain/tasks/lifecycle.mjs'
 import {codexInput} from './codex-input.mjs'
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -19,7 +19,7 @@ export {codexProviderOptions} from './provider-options.mjs'
 export class SessionManager {
   constructor({ stateDir, cwd, owners, backend = null, agentKind = 'codex', rpcFactory = options => new CodexRpc(options), remoteControl, sessionPorts, completionMarkers = false, providerEnv = process.env, scheduleGuidance = '', log = () => {} }) {
     if (typeof remoteControl !== 'function' || typeof sessionPorts?.assistantInstructions !== 'string' ||
-      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
+      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
     this.ports=sessionPorts
     this.log = log
     this.agentKind=agentKind
@@ -28,7 +28,7 @@ export class SessionManager {
     this.instructions=this.ports.assistantInstructions+(backend?.instructions?'\n'+backend.instructions:'')
     this.completionMarkers = completionMarkers
     this.remoteControl = remoteControl
-    this.lifecycle = new CancellationScopes()
+    this.lifecycle = this.ports.cancellationScopes()
     this.stateDir = stateDir
     this.cwd = cwd
     this.submissions=null

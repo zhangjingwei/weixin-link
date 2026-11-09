@@ -4,7 +4,7 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
-import {CancellationScopes} from '../../src/domain/tasks/lifecycle.mjs'
+import {CancellationScopes} from '../../src/infrastructure/runtime/cancellation-scopes.mjs'
 for(const config of ['{invalid json',JSON.stringify({hosts:[{id:'wrong-host',aliases:['开发机']}],projects:[{id:'wrong-project',aliases:['演示项目'],host:'wrong-host',path:'/wrong/path'}]})]){
  for(const structured of [false,true])test('legacy project config cannot rewrite or block '+(structured?'structured':'text')+' requests ('+(config[0]==='{'&&config.includes('invalid')?'invalid':'valid')+')',async()=>{
   const root=await mkdtemp(join(tmpdir(),'original-request-'))
