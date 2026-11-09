@@ -1,10 +1,7 @@
 import {randomUUID} from 'node:crypto'
-import {mkdir, open, readFile, rename, unlink, lstat} from 'node:fs/promises'
-import {join} from 'node:path'
 import {deliveryFailureState} from '../../core/delivery/delivery-error.mjs'
 import {validateRepeat, nextOccurrence, localDateAt} from '../../core/schedules/recurrence.mjs'
 
-const MAX_FILE_BYTES = 1024 * 1024
 const MAX_TEXT = 1000
 const MAX_JOBS = 500
 const MAX_FUTURE_MS = 366 * 24 * 60 * 60 * 1000
@@ -17,9 +14,9 @@ function validJob(id, job) {
 }
 
 export class ScheduleService {
-  constructor({stateDir, owners, send, submitTask = async () => {throw Object.assign(code('SCHEDULE_TASK_UNAVAILABLE'), {deliveryState: 'failed'})}, ready = () => true, track = work => work(), now = Date.now, log = () => {}}) {
-    Object.assign(this, {stateDir, owners: new Set(owners), send, submitTask, ready, track, now, log})
-    this.path = join(stateDir, 'schedules.json')
+  constructor({stateStore, owners, send, submitTask = async () => {throw Object.assign(code('SCHEDULE_TASK_UNAVAILABLE'), {deliveryState: 'failed'})}, ready = () => true, track = work => work(), now = Date.now, log = () => {}}) {
+    if (!stateStore || typeof stateStore.load !== 'function' || typeof stateStore.save !== 'function') throw code('SCHEDULE_STATE_STORE_INVALID')
+    Object.assign(this, {stateStore, owners: new Set(owners), send, submitTask, ready, track, now, log})
     this.state = {version: 1, jobs: {}}
     this.queue = Promise.resolve()
     this.closed = false
@@ -31,37 +28,17 @@ export class ScheduleService {
     return task
   }
   async init() {
-    await mkdir(this.stateDir, {recursive: true, mode: 0o700})
-    try {
-      const info = await lstat(this.path)
-      if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > MAX_FILE_BYTES) throw code('SCHEDULE_STATE_INVALID')
-      const value = JSON.parse(await readFile(this.path, 'utf8'))
+    const value = await this.stateStore.load()
+    if (value !== null) {
       if (value.version !== 1 || !value.jobs || typeof value.jobs !== 'object' || Array.isArray(value.jobs) || Object.keys(value.jobs).length > MAX_JOBS || Object.entries(value.jobs).some(([id, job]) => !validJob(id, job))) throw code('SCHEDULE_STATE_INVALID')
       this.state = value
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw code('SCHEDULE_STATE_INVALID')
     }
     let recovered = false
     for (const job of Object.values(this.state.jobs)) if (job.status === 'sending') {job.status = 'unknown'; recovered = true}
     if (recovered) await this.save()
     return this
   }
-  async save() {
-    const text = JSON.stringify(this.state) + '\n'
-    if (Buffer.byteLength(text) > MAX_FILE_BYTES) throw code('SCHEDULE_LIMIT')
-    const temp = this.path + '.' + randomUUID() + '.tmp'
-    let file
-    try {
-      file = await open(temp, 'wx', 0o600)
-      await file.writeFile(text)
-      await file.sync()
-      await file.close(); file = null
-      await rename(temp, this.path)
-    } finally {
-      await file?.close()
-      await unlink(temp).catch(error => {if (error.code !== 'ENOENT') throw error})
-    }
-  }
+  async save() {await this.stateStore.save(this.state)}
   checkOwner(owner) {if (!this.owners.has(owner)) throw code('SCHEDULE_OWNER_DENIED')}
   async create(owner, request, conversationKey) {
     this.checkOwner(owner)

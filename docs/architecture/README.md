@@ -9,7 +9,7 @@
 | 职责 | 实现位置 | 规则 |
 | --- | --- | --- |
 | 组合根 | `src/wechat/bot.mjs` | 为本账号装配依赖，不再重复写命令判定或 SDK 入站流程 |
-| 微信入口 Controller | `src/interfaces/controllers/wechat-controller.mjs` | SDK 消息转换、账号过滤与游标前钩子；收件保存和队列捕获交给应用用例，失败不能确认收件 |
+| 微信入口 Controller | `src/interfaces/controllers/wechat-controller.mjs` | SDK 消息解析、账号过滤与游标前钩子；查重、设置指令冻结、控制分流、收件保存和队列捕获交给应用用例，失败不能确认收件 |
 | 计划触发 Controller | `src/interfaces/controllers/schedule-controller.mjs` | 接入计划 API 与到期检查；请求授权和任务归属由应用层处理，提醒走 Presenter，任务走共享持久队列 |
 | 更新检查 Controller | `src/interfaces/controllers/update-controller.mjs` | 接入定时检查；版本比较、提示去重及未知投递状态由应用层 `UpdateNotifier` 持有 |
 | 管理 Controller | `src/interfaces/controllers/management-controller.mjs` | 接入微信安装、切换、升级命令与配置 CLI 参数；执行委托原管理和配置模块 |
@@ -17,14 +17,14 @@
 | 消息应用处理 | `src/application/intake/receive-message.mjs`、`message-application.mjs`、`src/application/tasks/durable-intake.mjs` | 游标前保存后入队；控制命令立即处理；普通任务经持久队列逐会话执行、恢复和取消 |
 | 会话与底座 | `src/base/codex/codex-session.mjs`、`src/infrastructure/agents/` | 共享会话管理；账号启动时选择底座，新会话的底座就绪检查不进入消息应用处理 |
 | 微信 View / Presenter | `src/interfaces/views/wechat-presenter.mjs`、`src/infrastructure/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
-| 基础设施端口 | `src/application/ports/infrastructure-ports.mjs`、`src/infrastructure/ports.mjs` | 五组函数接口由组合根注入；协议、底座、媒体、集成及锁存储不复制状态 |
+| 基础设施端口 | `src/application/ports/infrastructure-ports.mjs`、`src/infrastructure/ports.mjs`、`src/infrastructure/storage/`、`src/infrastructure/updates/` | 组合根注入协议、底座、媒体等能力；计划与更新用例通过存储及版本查询适配器执行外部操作，不复制状态 |
 
 `message-application.mjs` 负责意图分流、权限、回执和任务提交；安装、切换与升级的具体执行委托给管理模块。旧 `src/core/` 路径保留重导出兼容入口。后续扩展应继续按职责拆分，不在此文件新增供应商协议分支。图中“显式配置的上下文准备”是预留用例，当前集成不会自动预取外部信息。
 
 ## 与消息链路相连的其他能力
 
-- `src/application/schedules/`：计划用例管理持久化和到期状态；到期任务提交到既有队列，提醒通过微信 Presenter 投递。时间规则仍在 `src/core/schedules/`。
-- `src/application/notifications/`：版本提示和失败终答复恢复用例；版本比较规则仍在 `src/core/updates/`。更新 Controller 只触发检查，不自动升级。
+- `src/application/schedules/`：计划用例管理到期状态，注入的 `src/infrastructure/storage/schedule-state.mjs` 保存计划；到期任务提交到既有队列，提醒通过微信 Presenter 投递。时间规则仍在 `src/core/schedules/`。
+- `src/application/notifications/`：版本提示和失败终答复恢复用例；通知状态与版本查询由 `src/infrastructure/` 适配，版本比较规则仍在 `src/core/updates/`。更新 Controller 只触发检查，不自动升级。
 - `src/setup/`：安装、账号启用和配置属于组合与管理边界，不是消息执行旁路。
 - `src/integrations/`：按账号启用，运行时重新核验；本机智能体按需调用。SSH 远程 Codex 是此类集成和 `src/core/remote-tasks/` 的协作，不是消息处理器里的另一个智能体底座。
 - 权限、账号隔离、去重、取消代际、未知投递结果和运行控制跨越上述边界，继续使用现有状态来源。
@@ -32,7 +32,7 @@
 ## 消息顺序
 
 1. SDK 批次在推进轮询游标前检查消息、保存会话状态并持久化需排队的原消息；失败时向上抛错。
-2. Controller 复用已解析的消息并识别控制命令。控制命令保留现有快速通道；普通消息持久化后交给应用处理。
+2. Controller 复用已解析的消息，应用用例按注入的命令解析器分流。控制命令保留现有快速通道；普通消息持久化后交给任务处理。
 3. 应用处理按统一规则分流，普通任务由 `DurableJobs` 与 `DurableIntake` 去重、排队和恢复，再交给当前账号的 `SessionManager`。
 4. 智能体事件经现有会话与投递状态处理，由微信 View 和串行出站适配发送。
 

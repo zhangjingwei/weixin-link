@@ -1,5 +1,6 @@
 import {ScheduleService} from '../../application/schedules/schedule-service.mjs'
 import {createScheduledTaskSubmission, scheduleCommand} from '../../application/schedules/schedule-actions.mjs'
+import {createScheduleStateStore} from '../../infrastructure/storage/schedule-state.mjs'
 
 export {scheduleCommand} from '../../application/schedules/schedule-actions.mjs'
 
@@ -9,7 +10,7 @@ export {scheduleCommand} from '../../application/schedules/schedule-actions.mjs'
  */
 export async function createScheduleController({stateDir, owners, ready, track, manager, conversations, enqueueTask, agent, backend, view, log, now}) {
   const service = await new ScheduleService({
-    stateDir, owners, ready, track, log, ...(now ? {now} : {}),
+    stateStore: createScheduleStateStore(stateDir), owners, ready, track, log, ...(now ? {now} : {}),
     send: (owner, text) => view.notice(owner, text),
     submitTask: createScheduledTaskSubmission({conversations, enqueueTask, agent, backend}),
   }).init()

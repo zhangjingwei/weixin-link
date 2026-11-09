@@ -8,42 +8,27 @@ import {createReceiveMessage} from '../../application/intake/receive-message.mjs
  */
 export function createWeChatController({bot, view, manager, jobs, conversations, runtime, setupController, setupReceipts, classifyMessage, traceWire, traceMessage, quote, dispatch, log = () => {}}) {
   const stagedWires = new WeakMap()
-  const receive = createReceiveMessage({manager, jobs, view, dispatch, hasMedia, log})
+  const receive = createReceiveMessage({manager, jobs, view, dispatch, hasMedia, conversations, runtime, setupController, setupReceipts, normalizeVoice: voiceCommandInput, classifyMessage, log})
   const originalParse = bot.parser.parse.bind(bot.parser)
   bot.parser.parse = wire => stagedWires.get(wire) ?? originalParse(wire)
 
   async function prepareBatch(wires) {
     if (runtime.sealed) throw Error('INGRESS_SEALED')
-    const received = [], setupReceived = []
+    const messages = []
     for (const wire of wires) {
       const parsed = originalParse(wire)
       if (!parsed || !conversations.realOwners.has(parsed.userId)) continue
-      const previous = jobs.findCaptured(parsed)
-      const message = previous ?? conversations.bind(voiceCommandInput(parsed))
-      message._traceId ??= traceWire(wire)
-      const frozenSetup = setupReceipts.get(parsed)
-      if (frozenSetup) {
-        message._setupAction = frozenSetup.action
-        message._setupReceiptId = frozenSetup.id
-      }
-      if (!Object.hasOwn(message, '_setupAction')) message._setupAction = previous ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
-      message.references ??= quote(message)
+      const message = receive.prepare(parsed, {traceId: traceWire(wire), quote})
       stagedWires.set(wire, message)
-      if (message._setupAction) setupReceived.push(message)
-      if (!classifyMessage(message)) received.push(message)
+      messages.push(message)
     }
-    await receive.captureBatch(received, setupReceived, setupReceipts)
+    await receive.captureBatch(messages)
   }
 
   function onMessage(message) {
     const inboundTrace = traceMessage(message)
     message._traceId ??= inboundTrace
-    if (!conversations.realOwners.has(message._conversationOwner ?? message.userId) || runtime.sealed) return
-    message = voiceCommandInput(message)
-    if (!message._conversationOwner) message = conversations.bind(message)
-    if (!Object.hasOwn(message, '_setupAction')) message._setupAction = message._recovered ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
-    if (classifyMessage(message)) { dispatch(message); return }
-    receive.captureOrdinary(message)
+    receive.onMessage(message)
   }
 
   return {prepareBatch, onMessage}

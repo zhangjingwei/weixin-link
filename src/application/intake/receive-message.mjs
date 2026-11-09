@@ -1,10 +1,25 @@
 import {errorFields} from '../../core/diagnostics/diagnostic-log.mjs'
 
-/** Persist an ordinary message before it enters the execution queue. */
-export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, log = () => {}}) {
+/** Own receipt and fast-control decisions after the transport parses a wire. */
+export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, conversations, runtime, setupController, setupReceipts, normalizeVoice, classifyMessage, log = () => {}}) {
   return {
-    async captureBatch(ordinary, setup, setupReceipts) {
-      // The caller's beforeCheckpoint hook awaits this whole operation.
+    prepare(parsed, {traceId, quote}) {
+      const previous = jobs.findCaptured(parsed)
+      const message = previous ?? conversations.bind(normalizeVoice(parsed))
+      message._traceId ??= traceId
+      const frozenSetup = setupReceipts.get(parsed)
+      if (frozenSetup) {
+        message._setupAction = frozenSetup.action
+        message._setupReceiptId = frozenSetup.id
+      }
+      if (!Object.hasOwn(message, '_setupAction')) message._setupAction = previous ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
+      message.references ??= quote(message)
+      return message
+    },
+    async captureBatch(messages) {
+      // beforeCheckpoint awaits this whole operation; failure blocks the cursor.
+      const ordinary = messages.filter(message => !classifyMessage(message))
+      const setup = messages.filter(message => message._setupAction)
       await manager.save()
       for (const message of ordinary) jobs.capture(message)
       for (const message of setup) {
@@ -16,7 +31,12 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, l
         }
       }
     },
-    captureOrdinary(message) {
+    onMessage(message) {
+      if (!conversations.realOwners.has(message._conversationOwner ?? message.userId) || runtime.sealed) return
+      message = normalizeVoice(message)
+      if (!message._conversationOwner) message = conversations.bind(message)
+      if (!Object.hasOwn(message, '_setupAction')) message._setupAction = message._recovered ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
+      if (classifyMessage(message)) { dispatch(message); return }
       const token = manager.lifecycle.capture(message.userId)
       void (async () => {
         try {
@@ -29,7 +49,7 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, l
           }
         } catch (error) {
           log('ingress.persist_failed', {trace_id: message._traceId, ...errorFields(error)})
-          void view.directNotice(message, '消息未能持久保存，请稍后重试。').catch(() => {})
+          try {void Promise.resolve(view.directNotice(message, '消息未能持久保存，请稍后重试。')).catch(() => {})} catch {}
         }
       })()
     },
