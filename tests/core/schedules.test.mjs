@@ -158,7 +158,7 @@ test('reminder command resolves the real owner from an active session', async t 
   assert.equal(scheduleCommand({action: 'list', threadId: 'thread-alice'}, context).items.length, 1)
 })
 
-test('scheduled Codex task enters the durable queue once with the original conversation', async t => {
+test('scheduled task enters the durable queue once with the original conversation', async t => {
   const stateDir = await mkdtemp(join(tmpdir(), 'scheduled-task-'))
   t.after(() => rm(stateDir, {recursive: true, force: true}))
   const jobs = new DurableJobs(join(stateDir, 'inbox.sqlite'))
@@ -219,11 +219,11 @@ test('repeating task advances after queue acceptance and unavailable target paus
   assert.equal(calls, 2)
 })
 
-test('schedule instructions are available only to the local Codex backend', async t => {
+test('schedule instructions are available to local agents, independent of model kind', async t => {
   const {stateDir} = await fixture(t)
   const guidance = 'SCHEDULE_TOOL_MARKER'
   const make = (backend, agentKind = 'codex') => new SessionManager({stateDir, cwd: stateDir, owners: [], backend, agentKind, scheduleGuidance: guidance})
   assert.match(await make({kind: 'host'}).sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
   assert.doesNotMatch(await make({kind: 'podman'}).sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
-  assert.doesNotMatch(await make({kind: 'host'}, 'claude').sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
+  assert.match(await make({kind: 'host'}, 'claude').sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
 })

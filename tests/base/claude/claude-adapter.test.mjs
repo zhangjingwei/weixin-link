@@ -5,7 +5,8 @@ import {mkdtemp,writeFile,chmod,readFile,rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {ClaudeRpc} from '../../../src/base/claude/claude-rpc.mjs'
-import {ClaudeConversations} from '../../../src/application/conversations/claude-conversations.mjs'
+import {TextConversations} from '../../../src/application/conversations/text-conversations.mjs'
+import {createLocalConversationBackend} from '../../../src/infrastructure/agents/local-conversation-backend.mjs'
 import {SessionManager} from '../../../src/wechat/session-manager.mjs'
 import {validateConfig} from '../../../src/setup/config-schema.mjs'
 import {configure} from '../../../src/setup/config-manager.mjs'
@@ -64,7 +65,7 @@ test('installation selects Claude only with an absolute CLI path',()=>{
 test('Claude navigation stays local and refuses permanent deletion',async t=>{
  const f=await fixture(t),manager=await new SessionManager({stateDir:join(f.dir,'state'),cwd:f.dir,owners:['owner'],agentKind:'claude',rpcFactory:options=>new ClaudeRpc({...options,binary:f.binary,env:f.env})}).init()
  t.after(()=>manager.close())
- const conversations=new ClaudeConversations(manager,['owner'],conversationInput),output=[]
+ const conversations=new TextConversations(manager,['owner'],conversationInput,createLocalConversationBackend()),output=[]
  const message=conversations.bind({userId:'owner',text:'新建 项目'})
  assert.equal(await conversations.control(message,text=>output.push(text)),true)
  assert.equal(conversations.ensure('owner').entries.length,2)

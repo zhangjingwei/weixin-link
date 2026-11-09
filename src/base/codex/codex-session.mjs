@@ -173,7 +173,7 @@ export class SessionManager {
     const guidance=this.backend && this.backend.kind !== 'host' ? '' : await this.ports.integrationGuidance({stateDir:this.stateDir})
     let workspaceRules=''
     if(this.agentKind==='claude')try{const content=await readFile(join(this.workspaceFor(userId),'AGENTS.md'),'utf8');if(Buffer.byteLength(content)>64*1024)throw Error('WORKSPACE_RULES_TOO_LARGE');workspaceRules='\n\n工作区规则（AGENTS.md）：\n'+content}catch(error){if(error.code!=='ENOENT')throw error}
-    return this.instructions+(this.backend?.kind === 'host' && this.agentKind === 'codex' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules
+    return this.instructions+(this.backend?.kind === 'host' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules
   }
   async startProvider(session) {
     const provider='configured',attempt=this.attachRpc(session)

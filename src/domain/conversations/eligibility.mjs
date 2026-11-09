@@ -9,6 +9,6 @@ export function conversationHasUnfinishedWork({session, recovery, pending = fals
 }
 
 /** A scheduled model task must remain in its original, usable conversation. */
-export function canSubmitScheduledTask({owner, entry, taskSupported}) {
-  return !!taskSupported && !!entry && entry.owner === owner && !entry.deleted && !entry.archived
+export function canSubmitScheduledTask({owner, entry}) {
+  return !!entry && entry.owner === owner && !entry.deleted && !entry.archived
 }

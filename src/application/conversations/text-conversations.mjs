@@ -1,12 +1,13 @@
 import {workspaceText} from './workspace.mjs'
-import {installOfficialHooks,titleUpdated,withCatalogRpc,officialCatalog,applyCatalog,refreshTitles} from './catalog.mjs'
+import {installOfficialHooks,titleUpdated,withBackend,officialCatalog,applyCatalog,refreshTitles} from './catalog.mjs'
 import {label,serialize,flush,deliver,replay} from './delivery.mjs'
-import {rename,selectOfficial,archive,markDeleted,deleteConversation} from './operations.mjs'
+import {rename,selectConversation,archive,markDeleted,deleteConversation} from './operations.mjs'
 import {history} from './history.mjs'
 import {randomUUID} from 'node:crypto'
+import {defineConversationBackendPort} from '../ports/conversation-backend-port.mjs'
 export {historyText} from './history.mjs'
 export class TextConversations{
- constructor(manager,owners,parseInput){if(typeof parseInput!=='function')throw Error('CONVERSATION_INPUT_PARSER_REQUIRED');this.parseInput=parseInput;this.manager=manager;this.realOwners=new Set(owners);manager.state.textConversations??={};this.root=manager.state.textConversations;this.pages=new Map();for(const owner of owners)this.ensure(owner);manager.onConversationTitle=(threadId,name)=>this.titleUpdated(threadId,name);this.installOfficialHooks()}
+ constructor(manager,owners,parseInput,backendPort){if(typeof parseInput!=='function')throw Error('CONVERSATION_INPUT_PARSER_REQUIRED');this.parseInput=parseInput;this.backendPort=backendPort?defineConversationBackendPort(backendPort):null;this.manager=manager;this.realOwners=new Set(owners);manager.state.textConversations??={};this.root=manager.state.textConversations;this.pages=new Map();for(const owner of owners)this.ensure(owner);manager.onConversationTitle=(threadId,name)=>this.titleUpdated(threadId,name);if(this.backendPort?.capabilities.catalog!==false)this.installOfficialHooks()}
  installOfficialHooks(...args){return installOfficialHooks(this,...args)}
  ensure(owner){if(!this.realOwners.has(owner))throw Error('未授权用户');if(!this.root[owner]){const saved=this.manager.state.users[owner]??{};const entries=[{id:'1',key:owner,name:'原有对话'}];for(const tid of [...new Set(saved.previous??[])].filter(t=>t!==saved.threadId)){const key=owner+'#conversation#'+randomUUID();entries.push({id:String(entries.length+1),key,name:'历史对话 '+(entries.length+1)});this.manager.state.users[key]={threadId:tid,hasMessages:true};}this.root[owner]={active:'1',entries};}const r=this.root[owner];if(!Object.hasOwn(r,'dailyId'))r.dailyId=(r.entries.find(e=>e.key===owner&&!e.deleted)??r.entries.find(e=>e.id===r.active&&!e.deleted)??r.entries.find(e=>!e.deleted))?.id??null;for(const e of this.root[owner].entries)this.manager.owners.add(e.key);return this.root[owner]}
  entry(key){for(const [owner,r]of Object.entries(this.root)){const entry=r.entries.find(e=>e.key===key);if(entry)return {...entry,owner};}return null}
@@ -37,20 +38,52 @@ export class TextConversations{
  replay(...args){return replay(this,...args)}
  titleUpdated(...args){return titleUpdated(this,...args)}
  async rename(...args){return rename(this,...args)}
- // Codex is authoritative for persisted threads. Local archived is only a verified cache.
- async withCatalogRpc(...args){return withCatalogRpc(this,...args)}
+ // Catalog reconciliation is used only when the backend has an authoritative catalog.
+ async withBackend(...args){return withBackend(this,...args)}
  async officialCatalog(...args){return officialCatalog(this,...args)}
  applyCatalog(...args){return applyCatalog(this,...args)}
  async refreshTitles(...args){return refreshTitles(this,...args)}
- async control(message,reply){const cmd=message._conversationCommand;if(!cmd)return false;const originalReply=reply;reply=(value,options)=>originalReply(value,{...options,conversationControl:true});await this.manager.save();const owner=message._conversationOwner;if(cmd.action==='switch'&&this.find(owner,cmd.id))delete message._conversationError;if(message._conversationError){await reply(message._conversationError);return true;}
- const r=this.ensure(owner),e=this.find(owner,cmd.id);if(cmd.action==='workspace'){await reply(`当前项目：${this.find(owner)?.name??'日常'}\n目录：${workspaceText(this,message.userId)}\n底座：${this.manager.agentName??'Codex'}\n目录是执行起点，不是操作系统隔离边界。`)}
- else if(cmd.action==='list'){await this.refreshTitles(owner,reply);const lines=r.entries.filter(e=>e.id!==r.dailyId&&!e.archived&&!e.deleted).map(e=>{const s=this.manager.sessions.get(e.key),state=this.manager.state.users[e.key]?.recovery?.execution;return `${e.id}. ${e.name}${e.id===r.active?' [当前]':''} · ${s?.busy||e.officialStatus==='active'?'执行中':s?.finishing?'发送中':e.deleteIntent?'删除状态待核对':e.archiveSync==='missing'?'Codex记录缺失':e.archiveIntent!==undefined?'归档状态待核对':state==='unknown'?'结果待核对':!this.manager.state.users[e.key]?.threadId?'尚未连接Codex':'空闲'}`});await reply('项目列表\n'+(lines.length?lines.join('\n'):'暂无项目')+'\n新建 项目名｜切换编号｜命名 名称｜历史｜归档编号｜还原编号｜删除编号（永久删除，含派生子会话）\n日常对话独立保留，发“日常”进入；停止只影响当前对话。');}
- else if(cmd.action==='delete'){await this.deleteConversation(owner,e,reply);}
- else if(cmd.action==='archive'||cmd.action==='unarchive'){await this.archive(owner,e,cmd.action==='archive',reply);}
- else if(cmd.action==='rename'){const current=this.find(owner);await this.rename(current,cmd.name,reply);await reply(`会话${current.id}的Codex标题已更新为：${current.name}。`);}
- else if(['new','switch','daily'].includes(cmd.action)){await this.selectOfficial(message,reply);}
- else{if(!e&&cmd.action!=='older'){await reply('会话不存在。');return true;}await this.history(owner,e,cmd,reply);}return true;}
- async selectOfficial(...args){return selectOfficial(this,...args)}
+ async listProjects(owner,reply){
+  if(this.backendPort?.capabilities.catalog!==false)await this.refreshTitles(owner)
+  const r=this.ensure(owner),local=this.backendPort?.capabilities.catalog===false
+  const lines=r.entries.filter(e=>e.id!==r.dailyId&&!e.archived&&!e.deleted).map(e=>{
+   const session=this.manager.sessions.get(e.key),current=e.id===r.active?' [当前]':''
+   if(local)return `${e.id}. ${e.name}${current}${session?.busy?' · 执行中':''}`
+   const recovery=this.manager.state.users[e.key]?.recovery?.execution
+   const status=session?.busy||e.officialStatus==='active'?'执行中':session?.finishing?'发送中':e.deleteIntent?'删除状态待核对':e.archiveSync==='missing'?'Codex记录缺失':e.archiveIntent!==undefined?'归档状态待核对':recovery==='unknown'?'结果待核对':!this.manager.state.users[e.key]?.threadId?'尚未连接Codex':'空闲'
+   return `${e.id}. ${e.name}${current} · ${status}`
+  })
+  const help=local?'新建 项目名｜切换编号｜日常。当前底座暂不支持项目归档、永久删除和历史检索。':'新建 项目名｜切换编号｜命名 名称｜历史｜归档编号｜还原编号｜删除编号（永久删除，含派生子会话）\n日常对话独立保留，发“日常”进入；停止只影响当前对话。'
+  await reply('项目列表\n'+(lines.length?lines.join('\n'):'暂无项目')+'\n'+help)
+ }
+ async control(message,reply){
+  const cmd=message._conversationCommand
+  if(!cmd)return false
+  const originalReply=reply
+  reply=(value,options)=>originalReply(value,{...options,conversationControl:true})
+  await this.manager.save()
+  const owner=message._conversationOwner
+  if(cmd.action==='switch'&&this.find(owner,cmd.id))delete message._conversationError
+  if(message._conversationError){await reply(message._conversationError);return true}
+  const e=this.find(owner,cmd.id)
+  if(cmd.action==='workspace')await reply(`当前项目：${this.find(owner)?.name??'日常'}\n目录：${workspaceText(this,message.userId)}\n底座：${this.manager.agentName??'Codex'}\n目录是执行起点，不是操作系统隔离边界。`)
+  else if(cmd.action==='list')await this.listProjects(owner,reply)
+  else if(cmd.action==='delete'&&this.backendPort?.capabilities.delete)await this.deleteConversation(owner,e,reply)
+  else if((cmd.action==='archive'||cmd.action==='unarchive')&&this.backendPort?.capabilities.archive)await this.archive(owner,e,cmd.action==='archive',reply)
+  else if(cmd.action==='rename'){
+   const current=this.find(owner)
+   await this.rename(current,cmd.name,reply)
+   await reply(this.backendPort?.capabilities.remoteRename?`会话${current.id}的Codex标题已更新为：${current.name}。`:`已命名会话${current.id}：${current.name}。`)
+  }
+  else if(['new','switch','daily'].includes(cmd.action))await this.selectConversation(message,reply)
+  else if(['delete','archive','unarchive','history','older','search'].includes(cmd.action)&&this.backendPort?.capabilities.catalog===false)await reply('当前底座暂不支持该会话操作；未修改会话或历史。')
+  else{
+   if(!e&&cmd.action!=='older'){await reply('会话不存在。');return true}
+   await this.history(owner,e,cmd,reply)
+  }
+  return true
+ }
+ async selectConversation(...args){return selectConversation(this,...args)}
  async archive(...args){return archive(this,...args)}
  markDeleted(...args){return markDeleted(this,...args)}
  async deleteConversation(...args){return deleteConversation(this,...args)}

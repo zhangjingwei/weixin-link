@@ -19,9 +19,10 @@ import {createToolNotifier} from './tool-status.mjs'
 import {createInfrastructurePorts} from './infrastructure-ports.mjs'
 import {AgentSwitcher} from '../setup/agent-switch.mjs'
 import {ChatUpgrader} from '../setup/chat-upgrade.mjs'
-import {ClaudeConversations} from '../application/conversations/claude-conversations.mjs'
 import {ClaudeSetupController} from '../setup/claude-setup.mjs'
 import {TextConversations} from '../application/conversations/text-conversations.mjs'
+import {createCodexConversationBackend} from '../infrastructure/agents/codex-conversation-backend.mjs'
+import {createLocalConversationBackend} from '../infrastructure/agents/local-conversation-backend.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
 import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from './accounts.mjs'
@@ -52,7 +53,7 @@ if (testing && !/^[a-zA-Z0-9_-]+$/.test(testName)) throw new Error('Invalid test
 const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-logs':'logs')})
 const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:testing?'test':'live'})
-const scheduleGuidance=`定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../interfaces/cli/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2026-11-07T09:00:00+08:00","text":"开会"}。定时运行 Codex：{"action":"create","kind":"task","at":"2026-11-07T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":"Asia/Shanghai"} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向本会话的 Codex 任务队列提交原样文字，不预先声称任务完成。必须使用本会话的 CODEX_THREAD_ID，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
+const scheduleGuidance=`定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../interfaces/cli/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2027-01-01T09:00:00+08:00","text":"开会"}。定时提交任务：{"action":"create","kind":"task","at":"2027-01-01T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":"Asia/Shanghai"} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向原会话的持久任务队列提交原样文字，由该会话对应的任务执行链路处理；不预先声称任务完成。命令从环境读取当前会话标识，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
 const manager = await new SessionManager({log, completionMarkers:true, scheduleGuidance, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, agentKind:agent.kind, ...agent.sessionOptions, ...(backend.kind==='podman'?{rpcFactory:backend.rpcFactory,remoteControl:backend.remoteControl,providerEnv:{}}:{}) }).init()
 const agentSwitcher=new AgentSwitcher({account,installation,agentKind:agent.kind,backendReady:codexAvailability})
 const upgrader=new ChatUpgrader()
@@ -68,7 +69,8 @@ if (testing) {
 
 const setupController=await (agent.kind==='claude'?new ClaudeSetupController({binary:installation.claudeBinary}):new SetupController({stateDir,backend,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)})).init()
 const classifyMessage=createCommandClassifier()
-const conversations=agent.catalog==='local'?new ClaudeConversations(manager,owners,conversationInput):new TextConversations(manager,owners,conversationInput)
+const conversationBackend=agent.catalog==='local'?createLocalConversationBackend():createCodexConversationBackend(manager)
+const conversations=new TextConversations(manager,owners,conversationInput,conversationBackend)
 await manager.save()
 const bot = infrastructure.wechat.createClient({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
 const notifyStart=bot.api.notifyStart.bind(bot.api)
@@ -125,7 +127,7 @@ const updates=createUpdateController({stateDir,sourceDir:join(import.meta.dirnam
  ready:()=>runtime.ready()&&runtime.status().idle&&!runtime.draining&&!runtime.sealed&&!stopping,view,log})
 let schedules
 try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,
- track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),agent,backend,view,log})}
+ track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 await runtime.listen(account.socket)
 const jobs=infrastructure.storage.inbox(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs

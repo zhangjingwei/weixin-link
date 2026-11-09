@@ -21,10 +21,10 @@ test('busy or uncertain conversations cannot be changed or used as a scheduled t
   assert.equal(conversationHasUnfinishedWork({recovery: {execution: 'unknown'}}), true)
   assert.equal(conversationHasUnfinishedWork({pending: true}), true)
   assert.equal(conversationHasUnfinishedWork({session: {state: 'idle'}}), false)
-  assert.equal(canSubmitScheduledTask({owner: 'alice', entry: {owner: 'alice'}, taskSupported: true}), true)
-  assert.equal(canSubmitScheduledTask({owner: 'alice', entry: {owner: 'bob'}, taskSupported: true}), false)
-  assert.equal(canSubmitScheduledTask({owner: 'alice', entry: {owner: 'alice', archived: true}, taskSupported: true}), false)
-  assert.equal(canSubmitScheduledTask({owner: 'alice', entry: {owner: 'alice'}, taskSupported: false}), false)
+  assert.equal(canSubmitScheduledTask({owner: 'alice', entry: {owner: 'alice'}}), true)
+  assert.equal(canSubmitScheduledTask({owner: 'alice', entry: {owner: 'bob'}}), false)
+  assert.equal(canSubmitScheduledTask({owner: 'alice', entry: {owner: 'alice', archived: true}}), false)
+  assert.equal(canSubmitScheduledTask({owner: 'alice', entry: {owner: 'alice', deleted: true}}), false)
 })
 
 test('unknown notifications are not replayed and only a confirmed rejected final can recover once', () => {

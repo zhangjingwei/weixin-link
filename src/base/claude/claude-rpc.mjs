@@ -47,7 +47,7 @@ export class ClaudeRpc{
   const args=['--bare','-p','--output-format','stream-json','--verbose','--permission-mode','bypassPermissions','--permission-prompts','none',...(instructionPath?['--append-system-prompt-file',instructionPath]:[]),...(this.started?.has(threadId)?['--resume',threadId]:['--session-id',threadId]),'请处理标准输入中的用户请求。']
   // One process per turn keeps the official Claude transcript authoritative.
   let child
-  try{child=this.spawnProcess(this.binary,args,{cwd:this.cwd,env:this.env,stdio:['pipe','pipe','pipe']})}catch(error){if(instructionPath)await unlink(instructionPath);throw definitive('CLAUDE_START_FAILED: '+error.code)}
+  try{child=this.spawnProcess(this.binary,args,{cwd:this.cwd,env:{...this.env,WECHAT_CONVERSATION_ID:threadId},stdio:['pipe','pipe','pipe']})}catch(error){if(instructionPath)await unlink(instructionPath);throw definitive('CLAUDE_START_FAILED: '+error.code)}
   const active={child,threadId,turnId,instructionPath,buffer:'',bytes:0,stderr:'',result:null,started:false,interrupted:false,completed:false}
   this.active=active
   child.stdin.on('error',()=>{active.stdinFailed=true;this.abort(active,Error('CLAUDE_INPUT_FAILED'))})

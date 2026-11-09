@@ -8,11 +8,11 @@ export {scheduleCommand} from '../../application/schedules/schedule-actions.mjs'
  * The service owns persistence and retry state; this controller maps due
  * actions to the shared task queue or WeChat presenter.
  */
-export async function createScheduleController({stateDir, owners, ready, track, manager, conversations, enqueueTask, agent, backend, view, log, now}) {
+export async function createScheduleController({stateDir, owners, ready, track, manager, conversations, enqueueTask, view, log, now}) {
   const service = await new ScheduleService({
     stateStore: createScheduleStateStore(stateDir), owners, ready, track, log, ...(now ? {now} : {}),
     send: (owner, text) => view.notice(owner, text),
-    submitTask: createScheduledTaskSubmission({conversations, enqueueTask, agent, backend}),
+    submitTask: createScheduledTaskSubmission({conversations, enqueueTask}),
   }).init()
   return {
     onRequest: request => scheduleCommand(request, {manager, conversations, service}),

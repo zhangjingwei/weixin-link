@@ -2,9 +2,10 @@ import {conversationCommand,conversationInput} from '../../src/interfaces/wechat
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {TextConversations} from '../../src/application/conversations/text-conversations.mjs'
+import {createCodexConversationBackend} from '../../src/infrastructure/agents/codex-conversation-backend.mjs'
 const fixture=()=>{
  const calls=[],manager={state:{users:{alice:{threadId:'original-thread'}}},owners:new Set(['alice','bob']),sessions:new Map(),questions:new Map(),save:async()=>{}}
- const router=new TextConversations(manager,['alice','bob'],conversationInput)
+ const router=new TextConversations(manager,['alice','bob'],conversationInput,createCodexConversationBackend(manager))
  router.refreshTitles=async()=>{}
  manager.connect=async key=>{const id=manager.state.users[key]?.threadId??'project-thread';return {threadId:id,rpc:{request:async(method,p)=>{calls.push([method,p]);assert.equal(method,'thread/read');return {thread:{id,name:'Existing conversation'}}}}}}
  return {manager,router,calls}
