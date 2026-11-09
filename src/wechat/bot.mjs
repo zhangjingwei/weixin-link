@@ -27,6 +27,7 @@ import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
 import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from './accounts.mjs'
 import {DurableIntake} from '../application/tasks/durable-intake.mjs'
+import {createRemoteProgressDelivery} from '../application/remote-tasks/remote-progress-delivery.mjs'
 import {RuntimeControl} from '../infrastructure/runtime/runtime-control.mjs'
 import {nonBlockingHandler} from './message-handler.mjs'
 import {MessageDispatch} from './message-dispatch.mjs'
@@ -87,34 +88,30 @@ bot.http.apiGet = async (baseUrl, path, headers) => {
   return (await bot.http.request({ method: 'GET', url: new URL(path, baseUrl).toString(), headers, timeoutMs: 65_000 })).data
 }
 
-const remoteSequences=new Map()
 let stopping=false,loggedIn=false
 const pending = new MessageDispatch()
 const maintenancePending=new Map()
-let intakeHandler
+let intakeHandler,durable
 const replayMaintenance=()=>{
  for(const [id,message] of maintenancePending){maintenancePending.delete(id);if(jobs.rawCurrent(id))intakeHandler(message)}
 }
+const deliverRemoteProgress=createRemoteProgressDelivery({
+ findSession:scope=>[...manager.sessions.values()].find(session=>session.threadId===scope),
+ verifyTask:async(scope,task)=>{
+  const {RemoteController}=await import('../application/remote-tasks/remote-controller.mjs')
+  const controller=new RemoteController({root:cwd,scope}),record=await controller.task(task)
+  if(record.stop_confirmed||(await controller.store.read())._cancelled?.[controller.scope])throw Error('Cancelled task')
+ },
+ deliver:(session,text,current)=>manager.emit(session,text,current,true),
+})
 // 私有控制端点可在微信登录前启动，用于状态检查和维护控制。
 const runtime=new RuntimeControl({
  backend:{id:backend.id,kind:backend.kind,agentKind:agent.kind,container:backend.container??null,memoryMode:backend.memoryMode??'wechat'},
  features:{daily_assistant:true,numeric_setup_wizard:true,setup_commands:true,codex_backend_binding:true,container_backend:backend.kind==='podman',native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,remote_stream:true,update_notice:true},
- onRemoteText:async({scope,task,seq,chunkId,text})=>{
-  if(typeof scope!=='string'||typeof task!=='string'||!Number.isSafeInteger(seq)||seq<1||typeof text!=='string'||text.length>6000)throw Error('Invalid progress')
-  const session=[...manager.sessions.values()].find(s=>s.threadId===scope)
-  if(!session?.busy||session.exited||!(session.workToken?.current()??false))throw Error('Inactive scope')
-  const {RemoteController}=await import('../application/remote-tasks/remote-controller.mjs'),controller=new RemoteController({root:cwd,scope}),record=await controller.task(task)
-  if(record.stop_confirmed||(await controller.store.read())._cancelled?.[controller.scope])throw Error('Cancelled task')
-  if(typeof chunkId!=='string'||!/^[a-f0-9]{64}$/.test(chunkId))throw Error('Invalid chunk')
-  const key=task+':'+chunkId;if(remoteSequences.has(key))return {accepted:true,duplicate:true}
-  if(remoteSequences.size>1000)remoteSequences.delete(remoteSequences.keys().next().value)
-  remoteSequences.set(key,seq)
-  const sent=await manager.emit(session,text,()=>session.busy&&(session.workToken?.current()??false));if(!sent)throw Error('Delivery not confirmed')
-  return {accepted:true}
- },
+ onRemoteText:deliverRemoteProgress,
  onSchedule:request=>{if(!schedules)throw Error('SCHEDULE_STATE_UNAVAILABLE');return schedules.onRequest(request)},
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
- snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+durable.users.size,saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
+ snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+(durable?.users.size??0),saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
  onSeal:()=>bot.stop(),onResume:()=>{void (async()=>{if(bot.runPromise)await bot.runPromise.catch(()=>{});if(!stopping){await bot.start();replayMaintenance()}})().catch(e=>log('service.resume_failed',errorFields(e)))},
  onDrainRelease:replayMaintenance,
 })
@@ -147,7 +144,7 @@ weixin=infrastructure.wechat.installProtocol(bot,{db:jobs.db,log,prepareBatch:in
 ingressTrace=traceIngress(bot,log)
 manager.onToolStatus=process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1'?createToolNotifier({send:(peer,event)=>bot.sendToolStatus(peer,event),serialize:(peer,fn)=>conversations.serialize(peer,fn),track:fn=>runtime.track('delivery',fn),recipient:key=>conversations.recipient(key),log}):undefined
 
-const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>view.deliver(userId,value,options)})
+durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>view.deliver(userId,value,options)})
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
@@ -169,8 +166,8 @@ intakeHandler=nonBlockingHandler(async message => {
 },error=>log('message.background_failed',errorFields(error)),{enter:()=>runtime.enter('ingress')})
 bot.onMessage(inbound.onMessage)
 
-// 退出时停止新工作，等待会话状态落盘，再关闭诊断与私有控制端点。
-async function shutdown(signal){if(stopping)return;stopping=true;updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
+// 退出时停止新工作，等待微信上下文与会话状态落盘，再关闭控制端点。
+async function shutdown(signal){if(stopping)return;stopping=true;updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})
 
 // 登录并核查账号身份后恢复积压消息，最后才启动微信轮询。

@@ -66,7 +66,7 @@ export class SessionManager {
     if(['partial','unknown','cancelled','failed'].includes(delivery)&&session.lastDelivery?.error)record.delivery_error=session.lastDelivery.error
     else delete record.delivery_error
   }
-  async emit(session, text, guard = () => true) {
+  async emit(session, text, guard = () => true, acceptedOnly = false) {
     const context={userId:session.userId,thread_id:session.threadId,turn_id:session.turnId,trace_id:session.traceId}
     session.delivering = (session.delivering ?? Promise.resolve()).catch(() => {}).then(async()=>{
       if(!guard()){session.lastDelivery={status:'cancelled',updated:new Date().toISOString()};this.log('delivery.suppressed',{...context,reason:'stale_progress',delivery_state:'cancelled'});return false}
@@ -77,7 +77,7 @@ export class SessionManager {
         session.lastDelivery={status:state,updated:new Date().toISOString(),...(sent?.error?{error:sent.error}:{})}
         if(state==='accepted')session.contextRejected=false
         this.log('delivery.completed',{...context,status:state,delivery_state:state,duration_ms:Date.now()-started})
-        return state==='accepted'||state==='deferred'
+        return state==='accepted'||!acceptedOnly&&state==='deferred'
       }catch(error){
         const state=this.ports.deliveryFailureState(error),detail=this.ports.deliveryError(error)
         session.lastDelivery={status:state,error:detail,updated:new Date().toISOString()}
