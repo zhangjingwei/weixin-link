@@ -1,4 +1,14 @@
 import {bindNewWorkspace,workspaceText} from './workspace.mjs'
+import {conversationHasUnfinishedWork} from '../../domain/conversations/eligibility.mjs'
+
+function hasUnfinishedWork(context, key) {
+  return conversationHasUnfinishedWork({
+    session: context.manager.sessions.get(key),
+    recovery: context.manager.state.users[key]?.recovery,
+    pending: () => (context.manager.submissions?.pending?.() ?? []).some(job => job.owner === key),
+    uncertain: () => context.manager.submissions?.uncertainCount?.(key),
+  })
+}
 
 export async function rename(context,entry,name,reply){
  const session=await context.manager.connect(entry.key,context.manager.sessions.get(entry.key)?.reply??reply),threadId=context.manager.state.users[entry.key]?.threadId??session.threadId;
@@ -36,7 +46,7 @@ export async function archive(context,owner,entry,archived,reply){
   if(!entry){await reply('会话不存在，请先发“列表”。');return;}
   if(entry.deleted||entry.deleteIntent){await reply(entry.deleted?'该会话已永久删除，不能归档或还原。':'该会话的删除结果尚未确认，先用“列表”核对。');return;}
   const r=context.ensure(owner),session=context.manager.sessions.get(entry.key),saved=context.manager.state.users[entry.key];
-  const blocked=()=>session&&(session.busy||session.finishing||session.connecting||session.selecting||session.exiting||session.queue?.length||session.state==='stopping')||['unknown','running','submitted'].includes(saved?.recovery?.execution)||(context.manager.submissions?.pending?.()??[]).some(j=>j.owner===entry.key)||context.manager.submissions?.uncertainCount?.(entry.key);
+  const blocked=()=>hasUnfinishedWork(context,entry.key);
   if(blocked()){await reply('该会话仍有执行、排队或未确认任务，暂不能更改归档。');return;}
   if(context.archiveLocks?.has(entry.key)){await reply('该会话的归档状态正在核对。');return;}
   context.archiveLocks??=new Set();context.archiveLocks.add(entry.key);
@@ -84,7 +94,7 @@ export async function deleteConversation(context,owner,entry,reply){
   if(!entry||context.find(owner,entry.id)?.key!==entry.key){await reply('会话不存在，请先查看列表。');return;}
   if(entry.deleted){await reply(`会话${entry.id}已永久删除，不能还原。`);return;}
   const r=context.ensure(owner),session=context.manager.sessions.get(entry.key),saved=context.manager.state.users[entry.key],tid=saved?.threadId;
-  const busy=key=>{const s=context.manager.sessions.get(key),v=context.manager.state.users[key];return s&&(s.busy||s.finishing||s.connecting||s.selecting||s.exiting||s.queue?.length||s.state==='stopping')||['unknown','running','submitted'].includes(v?.recovery?.execution)||(context.manager.submissions?.pending?.()??[]).some(j=>j.owner===key)||context.manager.submissions?.uncertainCount?.(key)};
+  const busy=key=>hasUnfinishedWork(context,key);
   if(busy(entry.key)){await reply('该会话仍有执行、排队或未确认任务，暂不能永久删除。');return;}
   if(context.archiveLocks?.has(entry.key)){await reply('该会话正在更改状态，暂不能永久删除。');return;}
   if(!tid){await reply('该条目尚无Codex会话，不能调用thread/delete；未冒称永久删除成功。');return;}

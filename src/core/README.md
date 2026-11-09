@@ -9,14 +9,14 @@ The message entry and execution boundaries are documented in
 the WeChat parser registry lives in `src/wechat`, and the SDK Controller lives
 in `src/interfaces/controllers/`.
 
-- `conversations/`: command parsing, official catalog synchronization, archive/delete/selection operations, ordered delivery and history rendering. `text-conversations.mjs` remains the public facade and owns shared state and locks.
-- `intake/`: SQLite inbox/jobs, ingress tracing, local turn reconciliation and remote recovery. Queue workers and cancellation checks live in `src/application/tasks/durable-intake.mjs`.
-- `tasks/`: cancellation generations, lifecycle projections, attachment context, task-flow markers and recovery states.
-- `delivery/`: delivery errors, notification policy and task labels.
+- `conversations/`: official catalog synchronization, archive/delete/selection operations, ordered delivery and history rendering. Command and eligibility rules live in `src/domain/conversations/`; `text-conversations.mjs` remains the public facade and owns shared state and locks.
+- `intake/`: SQLite inbox/jobs, ingress tracing, local turn reconciliation and remote recovery. Message identity lives in `src/domain/messages/`; queue workers live in `src/application/tasks/durable-intake.mjs`.
+- `tasks/`: task-flow protocol markers, material-context rendering and recovery text; cancellation and execution-state rules live in `src/domain/tasks/`.
+- `delivery/`: transport error diagnostics, message formatting and compatibility entries for rules in `src/domain/delivery/`.
 - `diagnostics/`: redacted diagnostic logging and commands.
 - `runtime/`: account-scoped control endpoint and maintenance leases.
-- `schedules/`: recurrence rules and a compatibility entry for the account-scoped schedule use case in `src/application/schedules/`.
-- `updates/`: release comparison rules and a compatibility entry for the approval notifier in `src/application/notifications/`; it never starts an upgrade.
+- `schedules/`: compatibility entry for recurrence rules in `src/domain/schedules/` and for the account-scoped use case in `src/application/schedules/`.
+- `updates/`: compatibility entry for release rules in `src/domain/updates/`, the GitHub source in `src/infrastructure/updates/`, and the notifier in `src/application/notifications/`.
 - `policy/`: assistant policy source.
 - `storage/`: shared registry locking and atomic JSON persistence.
 - `remote-tasks/`: remote coordination facade, path policy, submission/reconciliation, stopping/terminal cleanup, artifact export, progress delivery and RPC adaptation.

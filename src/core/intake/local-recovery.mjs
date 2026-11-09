@@ -1,7 +1,8 @@
-import {stripTaskFlow,executionState} from '../tasks/task-flow.mjs'
+import {stripTaskFlow} from '../tasks/task-flow.mjs'
+import {executionState} from '../../domain/tasks/execution-state.mjs'
 import {publicMemoryText} from '../../base/codex/native-memory.mjs'
 import {localTaskLabel,localCompletion} from '../delivery/task-label.mjs'
-import {transition} from '../tasks/lifecycle.mjs'
+import {transition} from '../../domain/tasks/lifecycle.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 export async function recover(context,job,reply,token){
   const session=await context.manager.connect(job.owner,reply)

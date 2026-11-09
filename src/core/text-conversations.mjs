@@ -4,8 +4,8 @@ import {label,serialize,flush,deliver,replay} from './conversations/delivery.mjs
 import {rename,selectOfficial,archive,markDeleted,deleteConversation} from './conversations/operations.mjs'
 import {history} from './conversations/history.mjs'
 import {randomUUID} from 'node:crypto'
-import {conversationCommand} from './conversations/commands.mjs'
-export {conversationCommand} from './conversations/commands.mjs'
+import {conversationCommand} from '../domain/conversations/commands.mjs'
+export {conversationCommand} from '../domain/conversations/commands.mjs'
 export {historyText} from './conversations/history.mjs'
 export class TextConversations{
  constructor(manager,owners){this.manager=manager;this.realOwners=new Set(owners);manager.state.textConversations??={};this.root=manager.state.textConversations;this.pages=new Map();for(const owner of owners)this.ensure(owner);manager.onConversationTitle=(threadId,name)=>this.titleUpdated(threadId,name);this.installOfficialHooks()}

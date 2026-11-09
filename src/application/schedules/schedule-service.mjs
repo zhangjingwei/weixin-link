@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto'
 import {deliveryFailureState} from '../../core/delivery/delivery-error.mjs'
-import {validateRepeat, nextOccurrence, localDateAt} from '../../core/schedules/recurrence.mjs'
+import {validateRepeat, nextOccurrence, localDateAt} from '../../domain/schedules/recurrence.mjs'
 
 const MAX_TEXT = 1000
 const MAX_JOBS = 500

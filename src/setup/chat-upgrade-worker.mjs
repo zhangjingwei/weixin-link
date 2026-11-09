@@ -8,7 +8,7 @@ import {userHome} from './platform-service.mjs'
 import {standardDeployment} from './upgrade.mjs'
 import {readChatUpgrade,saveChatUpgrade} from './chat-upgrade.mjs'
 
-import {releaseTag} from '../core/updates/releases.mjs'
+import {releaseTag} from '../domain/updates/release-version.mjs'
 import {nodeEnvironment} from './platform-command.mjs'
 const exec=promisify(execFile)
 export function upgradeFailureCode(error){

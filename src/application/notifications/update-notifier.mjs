@@ -1,5 +1,6 @@
-import {releaseTag,newerRelease,installedRelease} from '../../core/updates/releases.mjs'
+import {releaseTag,newerRelease,installedRelease} from '../../domain/updates/release-version.mjs'
 import {deliveryFailureState} from '../../core/delivery/delivery-error.mjs'
+import {shouldPromptForUpdate} from '../../domain/delivery/notification-state.mjs'
 
 const FULL_COMMIT=/^[0-9a-f]{40}$/
 const CHECK_INTERVAL=60*60*1000
@@ -36,7 +37,7 @@ export class UpdateNotifier{
    if(this.closed||!this.ready())return
    let previous
    try{previous=await this.readState(owner)}catch{this.log('update_notice.state_invalid',{code:'UPDATE_NOTICE_STATE_INVALID'});continue}
-   if(previous?.tag===latest.tag&&previous.status!=='deferred')continue
+   if(!shouldPromptForUpdate(previous,latest.tag))continue
    await this.writeState(owner,latest.tag,'sending')
    let status='unknown'
    try{const result=await this.send(owner,message);status=result?.status==='accepted'?'accepted':result?.status==='cancelled'?'deferred':'unknown'}

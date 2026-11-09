@@ -1,5 +1,5 @@
 import {voiceTextMessage} from '../media/voice-text.mjs'
-import {conversationCommand} from '../core/conversations/commands.mjs'
+import {conversationCommand} from '../domain/conversations/commands.mjs'
 import {controlCommand} from '../base/codex/control-command.mjs'
 import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'
 import {setupCommand} from '../setup/setup-controller.mjs'

@@ -7,7 +7,8 @@ import {writeFile,unlink} from 'node:fs/promises'
 import {xml,userHome} from './platform-service.mjs'
 import {readPrivateFile,atomicConfigWrite} from './config-files.mjs'
 import {standardDeployment} from './upgrade.mjs'
-import {githubLatestRelease,releaseTag,newerRelease,installedRelease} from '../core/updates/releases.mjs'
+import {releaseTag,newerRelease,installedRelease} from '../domain/updates/release-version.mjs'
+import {githubLatestRelease} from '../infrastructure/updates/release-source.mjs'
 import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 
 const exec=promisify(execFile)
