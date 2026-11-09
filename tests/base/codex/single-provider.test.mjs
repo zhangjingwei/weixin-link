@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
-import {SessionManager,codexProviderOptions} from '../../../src/base/codex/codex-session.mjs'
+import {SessionManager,codexProviderOptions} from '../../../src/wechat/session-manager.mjs'
 const retiredEnv={WECHAT_CODEX_FALLBACK_PROVIDER:'retired',WECHAT_CODEX_FALLBACK_MODEL:'retired-model',WECHAT_CODEX_FALLBACK_BASE_URL:'https://retired.example.com'}
 async function fixture(t,fail){
  const dir=await mkdtemp(join(tmpdir(),'single-provider-'));t.after(()=>rm(dir,{recursive:true,force:true}));const clients=[],calls=[]

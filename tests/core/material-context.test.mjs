@@ -30,7 +30,7 @@ test('pending material count is owner-isolated and excludes current delivery',as
  assert.equal(jobs.pendingMaterials('u',id),1);assert.equal(jobs.pendingMaterials('other',id),1);assert.equal(jobs.pendingMaterials('none',id),0)
  }finally{jobs.close();await rm(dir,{recursive:true,force:true})}
 })
-import {SessionManager} from '../../src/base/codex/codex-session.mjs'
+import {SessionManager} from '../../src/wechat/session-manager.mjs'
 test('official submission carries original text, scoped material context and durable binding snapshot',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'material-submit-')),calls=[];let snapshot
  const m=await new SessionManager({stateDir:dir,cwd:dir,owners:['u'],remoteControl:async()=>({}),rpcFactory:()=>({closed:false,write(){},close(){},async request(method,params){calls.push({method,params});return method.startsWith('thread/')?{thread:{id:'t'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'}:{turn:{id:'turn'}}}})}).init()

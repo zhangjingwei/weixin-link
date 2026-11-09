@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { SessionManager as ActualSessionManager, controlCommand, codexProviderOptions } from '../../../src/base/codex/codex-session.mjs'
+import { SessionManager as ActualSessionManager, controlCommand, codexProviderOptions } from '../../../src/wechat/session-manager.mjs'
 
 // Fake-RPC tests must not inherit live provider settings or contact remote hosts.
 class SessionManager extends ActualSessionManager { constructor(options){super({providerEnv:{},remoteControl:async()=>({stop_confirmed:true,tasks:[]}),...options})} }

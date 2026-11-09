@@ -14,3 +14,8 @@ test('domain source never references a concrete agent backend',async()=>{
   assert.doesNotMatch(source,/(?:src\/base\/|(?:\.\.\/)+base\/)/,name)
  }
 })
+
+test('shared SessionManager has no static dependency on application, infrastructure or views',async()=>{
+ const source=await readFile(fileURLToPath(new URL('../../src/base/codex/codex-session.mjs',import.meta.url)),'utf8')
+ assert.doesNotMatch(source,/(?:from\s*|import\(\s*)['"](?:\.\.\/)+(?:application|infrastructure|interfaces)\//)
+})

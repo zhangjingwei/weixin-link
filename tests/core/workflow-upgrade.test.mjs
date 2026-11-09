@@ -7,7 +7,7 @@ import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 import {CancellationScopes} from '../../src/domain/tasks/lifecycle.mjs'
 import {bindNewWorkspace} from '../../src/application/conversations/workspace.mjs'
 import {conversationCommand} from '../../src/domain/conversations/commands.mjs'
-import {SessionManager} from '../../src/base/codex/codex-session.mjs'
+import {SessionManager} from '../../src/wechat/session-manager.mjs'
 import {OutputStore,OutputTransport} from '../../src/infrastructure/media/outbound-media.mjs'
 async function fixture(t){const dir=await mkdtemp(join(tmpdir(),'workflow-test-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir}
 

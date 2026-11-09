@@ -5,7 +5,7 @@ import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {ClaudeRpc} from '../../../src/base/claude/claude-rpc.mjs'
 import {ClaudeConversations} from '../../../src/base/claude/claude-conversations.mjs'
-import {SessionManager} from '../../../src/base/codex/codex-session.mjs'
+import {SessionManager} from '../../../src/wechat/session-manager.mjs'
 import {validateConfig} from '../../../src/setup/config-schema.mjs'
 import {configure} from '../../../src/setup/config-manager.mjs'
 

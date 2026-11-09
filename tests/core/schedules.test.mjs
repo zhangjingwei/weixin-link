@@ -12,7 +12,7 @@ import {runScheduleCommand} from '../../src/interfaces/cli/schedule-cli.mjs'
 import {RuntimeControl, controlRequest} from '../../src/infrastructure/runtime/runtime-control.mjs'
 import {accountPaths} from '../../src/wechat/accounts.mjs'
 import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
-import {SessionManager} from '../../src/base/codex/codex-session.mjs'
+import {SessionManager} from '../../src/wechat/session-manager.mjs'
 
 async function fixture(t, send = async () => ({status: 'accepted'})) {
   const stateDir = await mkdtemp(join(tmpdir(), 'reminders-'))

@@ -1,4 +1,4 @@
-import {CodexRpc} from '../../base/codex/codex-session.mjs'
+import {CodexRpc} from '../../base/codex/codex-rpc.mjs'
 export function installOfficialHooks(context){
   context.manager.beforeConversationConnect=async key=>{
    if(context.archiveLocks?.has(key))throw Error('该会话正在更改归档状态，请稍后继续。');

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm,readFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {SessionManager,controlCommand} from '../../src/base/codex/codex-session.mjs'
+import {SessionManager,controlCommand} from '../../src/wechat/session-manager.mjs'
 import {createCommandClassifier} from '../../src/wechat/command-classifier.mjs'
 import {transition} from '../../src/domain/tasks/lifecycle.mjs'
 

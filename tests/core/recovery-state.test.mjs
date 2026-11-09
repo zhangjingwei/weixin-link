@@ -4,7 +4,7 @@ import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
-import {SessionManager,controlCommand} from '../../src/base/codex/codex-session.mjs'
+import {SessionManager,controlCommand} from '../../src/wechat/session-manager.mjs'
 import {recoveryText} from '../../src/application/tasks/recovery-state.mjs'
 test('recheck only reopens uncertain owner-linked work for reconciliation',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'recheck-')),jobs=new DurableJobs(join(dir,'jobs.sqlite'))

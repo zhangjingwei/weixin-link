@@ -8,7 +8,7 @@ import {configure, configPath} from '../../src/setup/config-manager.mjs'
 import {createHaClient} from '../../src/integrations/home-assistant/client.mjs'
 import {integrationGuidance, integrationStatus, setIntegrationEnabled, invokeIntegration, checkIntegration} from '../../src/integrations/runtime.mjs'
 import {runIntegrationCommand} from '../../src/integrations/cli.mjs'
-import {SessionManager} from '../../src/base/codex/codex-session.mjs'
+import {SessionManager} from '../../src/wechat/session-manager.mjs'
 
 const id = 'home-assistant'
 async function fixture(t) {

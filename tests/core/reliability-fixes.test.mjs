@@ -7,7 +7,7 @@ import {MessageDispatch} from '../../src/wechat/message-dispatch.mjs'
 import {singleMedia} from '../../src/application/intake/single-media.mjs'
 import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
 import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
-import {SessionManager} from '../../src/base/codex/codex-session.mjs'
+import {SessionManager} from '../../src/wechat/session-manager.mjs'
 test('slow attachment retains order; another user and cancellation remain independent',async()=>{
  const dispatch=new MessageDispatch(),order=[],token={current:()=>true};let release
  const gate=new Promise(r=>release=r)

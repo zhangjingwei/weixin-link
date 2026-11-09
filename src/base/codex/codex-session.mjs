@@ -1,22 +1,12 @@
-import {integrationGuidance} from '../../infrastructure/integrations/runtime.mjs'
 import {initializeCodex} from './protocol-operations.mjs'
 import {homedir as platformHome} from 'node:os'
 import {emptyContinuationNotice} from '../../domain/delivery/notification-policy.mjs'
 import {currentMaterials,hasAttachments} from '../../domain/messages/material-association.mjs'
-import {materialInput} from '../../infrastructure/agents/material-context.mjs'
-import {flowInput,stripTaskFlow} from '../../infrastructure/agents/task-flow.mjs'
 import {executionState} from '../../domain/tasks/execution-state.mjs'
-import {recoveryText} from '../../application/tasks/recovery-state.mjs'
 import {publicMemoryText,nativeMemoryConfig,enableThreadMemory} from './native-memory.mjs'
-import {ASSISTANT_INSTRUCTIONS} from '../../infrastructure/agents/assistant-policy.mjs'
 import {localTaskLabel,localCompletion} from '../../domain/tasks/task-label.mjs'
-import {remoteScope} from '../../application/remote-tasks/remote-stop.mjs'
-import {OutputStore,outputLinks} from '../../infrastructure/media/outbound-media.mjs'
 import {CancellationScopes,transition} from '../../domain/tasks/lifecycle.mjs'
 import {codexInput} from './codex-input.mjs'
-import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
-import {deliveryError,deliveryFailureState} from '../../infrastructure/wechat/delivery-error.mjs'
-import {systemNotice} from '../../interfaces/views/system-notice.mjs'
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
@@ -29,19 +19,22 @@ export {controlCommand} from './control-command.mjs'
 export {codexProviderOptions} from './provider-options.mjs'
 
 export class SessionManager {
-  constructor({ stateDir, cwd, owners, backend = null, agentKind = 'codex', rpcFactory = options => new CodexRpc(options), remoteControl = remoteScope, completionMarkers = false, providerEnv = process.env, scheduleGuidance = '', log = () => {} }) {
+  constructor({ stateDir, cwd, owners, backend = null, agentKind = 'codex', rpcFactory = options => new CodexRpc(options), remoteControl, sessionPorts, completionMarkers = false, providerEnv = process.env, scheduleGuidance = '', log = () => {} }) {
+    if (typeof remoteControl !== 'function' || typeof sessionPorts?.assistantInstructions !== 'string' ||
+      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
+    this.ports=sessionPorts
     this.log = log
     this.agentKind=agentKind
     this.agentName=agentKind==='claude'?'Claude':'Codex'
     this.backend=backend
-    this.instructions=ASSISTANT_INSTRUCTIONS+(backend?.instructions?'\n'+backend.instructions:'')
+    this.instructions=this.ports.assistantInstructions+(backend?.instructions?'\n'+backend.instructions:'')
     this.completionMarkers = completionMarkers
     this.remoteControl = remoteControl
     this.lifecycle = new CancellationScopes()
     this.stateDir = stateDir
     this.cwd = cwd
     this.submissions=null
-    this.outputStore=new OutputStore({stateDir,cwd:backend?.workspace??cwd,fileReader:backend?.fileReader,voiceMode:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1'?'native':'file'})
+    this.outputStore=this.ports.outputStore({stateDir,cwd:backend?.workspace??cwd,fileReader:backend?.fileReader,voiceMode:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1'?'native':'file'})
     this.owners = new Set(owners)
     this.rpcFactory = rpcFactory
     this.providerEnv = providerEnv
@@ -95,7 +88,7 @@ export class SessionManager {
         this.log('delivery.completed',{...context,status:state,delivery_state:state,duration_ms:Date.now()-started})
         return state==='accepted'||state==='deferred'
       }catch(error){
-        const state=deliveryFailureState(error),detail=deliveryError(error)
+        const state=this.ports.deliveryFailureState(error),detail=this.ports.deliveryError(error)
         session.lastDelivery={status:state,error:detail,updated:new Date().toISOString()}
         if(detail.api_code===-2)session.contextRejected=true
         this.log('delivery.failed',{...context,status:state,delivery_state:state,duration_ms:Date.now()-started,...detail})
@@ -104,7 +97,7 @@ export class SessionManager {
     })
     try { return await session.delivering } catch { /* Keep the delivery outcome in lastDelivery for persisted recovery state. */ return false }
   }
-  notify(session,text,guard){return this.emit(session,systemNotice(text),guard)}
+  notify(session,text,guard){return this.emit(session,this.ports.systemNotice(text),guard)}
   resolveWaiters(session, result) {
     for (const resolve of session.waiters ?? []) resolve(result)
     session.waiters?.clear()
@@ -116,7 +109,7 @@ export class SessionManager {
     }
   }
   workspaceFor(userId){return this.state.users[userId]?.workspace??this.cwd}
-  outputStoreFor(userId){return this.state.users[userId]?.workspace?new OutputStore({stateDir:this.stateDir,cwd:this.workspaceFor(userId),voiceMode:this.outputStore.voiceMode}):this.outputStore}
+  outputStoreFor(userId){return this.state.users[userId]?.workspace?this.ports.outputStore({stateDir:this.stateDir,cwd:this.workspaceFor(userId),voiceMode:this.outputStore.voiceMode}):this.outputStore}
   createCatalogRpc(){return this.rpcFactory({cwd:this.cwd,provider:'configured',providerOptions:this.providerOptions(),onEvent:()=>{},onClose:()=>{},log:this.log})}
   providerOptions() {
     return codexProviderOptions(this.providerEnv)
@@ -164,7 +157,7 @@ export class SessionManager {
             }
           }
           if(queued&&!session.exiting)await this.notify(session,`连接中断，${queued} 条排队消息尚未提交，请重新发送。`)
-        }).catch(error=>this.diagnostic(session,'rpc.close_failed',errorFields(error)))
+        }).catch(error=>this.diagnostic(session,'rpc.close_failed',this.ports.errorFields(error)))
       },
     })
     attempt.rpc=rpc
@@ -179,7 +172,7 @@ export class SessionManager {
   }
   async sessionInstructions(userId) {
     // Local integrations execute in this account's host environment, not a remote/container backend.
-    const guidance=this.backend && this.backend.kind !== 'host' ? '' : await integrationGuidance({stateDir:this.stateDir})
+    const guidance=this.backend && this.backend.kind !== 'host' ? '' : await this.ports.integrationGuidance({stateDir:this.stateDir})
     let workspaceRules=''
     if(this.agentKind==='claude')try{const content=await readFile(join(this.workspaceFor(userId),'AGENTS.md'),'utf8');if(Buffer.byteLength(content)>64*1024)throw Error('WORKSPACE_RULES_TOO_LARGE');workspaceRules='\n\n工作区规则（AGENTS.md）：\n'+content}catch(error){if(error.code!=='ENOENT')throw error}
     return this.instructions+(this.backend?.kind === 'host' && this.agentKind === 'codex' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules
@@ -336,7 +329,7 @@ export class SessionManager {
       session.materials=materials
       this.diagnostic(session,'materials.context',{count:materials.length,queue_depth:pendingMaterials,reason:session.attachmentContinuation?'continuation':materials.length?'current':'unbound'})
       const runtimeInput=this.backend?.prepareInput?await this.backend.prepareInput(text,{signal:token.signal}):text
-      const turnParams={threadId:session.threadId,input:[...codexInput(runtimeInput),flowInput(session.traceId),materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
+      const turnParams={threadId:session.threadId,input:[...codexInput(runtimeInput),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
       result=await session.rpc.request('turn/start',turnParams)
       if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment
@@ -351,7 +344,7 @@ export class SessionManager {
     session.turnReady=true
     this.state.users[session.userId].hasMessages=true
     try{await this.save()}catch(error){
-      this.diagnostic(session,'state.save_failed',errorFields(error))
+      this.diagnostic(session,'state.save_failed',this.ports.errorFields(error))
       await this.notify(session,'任务已启动，但微信会话状态保存失败；任务继续执行。')
     }
   }
@@ -472,7 +465,7 @@ export class SessionManager {
       if (p.item?.type === 'webSearch') this.diagnostic(session,'tool.completed',{kind:'webSearch'})
       if(p.item?.type&&p.item.type!=='agentMessage'&&p.item.type!=='webSearch')this.diagnostic(session,'tool.completed',{kind:p.item.type,status:p.item.status,exit_code:p.item.exitCode})
       if (p.item?.type === 'agentMessage' && p.item.text) {
-        const flow=stripTaskFlow(publicMemoryText(p.item.text),session.traceId)
+        const flow=this.ports.stripTaskFlow(publicMemoryText(p.item.text),session.traceId)
         const rest=flow.text
         if(p.item.phase==='final_answer'||!p.item.phase)session.waitingAttachment=flow.waiting
         if (p.item.phase === 'commentary') {
@@ -507,10 +500,10 @@ export class SessionManager {
         reply+='\n\n'+localCompletion(marker,session.localTask)
       }
       let output=reply
-      if((session.workToken?.current()??true)&&(session.generatedOutputs?.length||outputLinks(reply).length)){
+      if((session.workToken?.current()??true)&&(session.generatedOutputs?.length||this.ports.outputLinks(reply).length)){
         try{output=await this.outputStoreFor(session.userId).package(session.userId,reply,session.generatedOutputs??[],session.workToken?.signal)}catch(error){
           if(session.workToken&&!session.workToken.current())reply+='\n附件发送已取消。'
-          else{this.diagnostic(session,'outbound.prepare_failed',errorFields(error));reply+='\n附件准备失败，可稍后重试。'}
+          else{this.diagnostic(session,'outbound.prepare_failed',this.ports.errorFields(error));reply+='\n附件准备失败，可稍后重试。'}
           output=reply
         }
       }
@@ -520,7 +513,7 @@ export class SessionManager {
       this.state.users[session.userId].recovery={task:session.localTask,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending',updated:new Date().toISOString()}
       this.state.users[session.userId].lastTask=session.localTask
       this.state.users[session.userId].lastReply = reply
-      try { await this.save() } catch(error) { this.diagnostic(session,'state.save_failed',errorFields(error));reply+='\n（微信会话状态保存失败，本轮回复可能无法在重启后恢复。）';this.state.users[session.userId].lastReply=reply }
+      try { await this.save() } catch(error) { this.diagnostic(session,'state.save_failed',this.ports.errorFields(error));reply+='\n（微信会话状态保存失败，本轮回复可能无法在重启后恢复。）';this.state.users[session.userId].lastReply=reply }
       this.diagnostic(session,'turn.completed',{status:p.turn.status,provider:session.provider,model:session.model,model_provider:session.modelProvider,duration_ms:Date.now()-(session.startedAt??Date.now()),chars:Array.from(reply).length})
       if (session.exited) return
       if (session.exiting) { await this.finishExit(session, p.turn.status === 'interrupted' ? '当前任务已停止。' : '本轮任务已结束。'); return }
@@ -533,7 +526,7 @@ export class SessionManager {
       if(currentRecovery&&this.state.users[session.userId].recovery===recovery){
         this.setRecoveryDelivery(recovery,session)
         this.diagnostic(session,'delivery.state_changed',{delivery_state:recovery.delivery,status:p.turn.status})
-        try{await this.save()}catch(error){this.diagnostic(session,'recovery.save_failed',errorFields(error))}
+        try{await this.save()}catch(error){this.diagnostic(session,'recovery.save_failed',this.ports.errorFields(error))}
       }
       // An exceptional transport failure cannot be predicted in an already-sent footer.
       // Keep a separate warning only for failure, never a second normal completion.
@@ -586,9 +579,9 @@ export class SessionManager {
     }catch(error){
       entry.status=error.definitiveRpcError?'rejected':'unknown'
       notice=entry.status==='rejected'?'补充未被当前任务接收，可能已结束或暂不支持；本条未排队。':'补充提交结果不确定，未自动重发或排队，避免重复执行。'
-      this.diagnostic(session,'turn.steer_failed',{target_turn_id:turnId,status:entry.status,...errorFields(error)})
+      this.diagnostic(session,'turn.steer_failed',{target_turn_id:turnId,status:entry.status,...this.ports.errorFields(error)})
     }
-    try{await this.save()}catch(error){notice+=' 接入层记录保存失败。';this.diagnostic(session,'state.save_failed',errorFields(error))}
+    try{await this.save()}catch(error){notice+=' 接入层记录保存失败。';this.diagnostic(session,'state.save_failed',this.ports.errorFields(error))}
     await reply(notice)
   }
   async handle(userId, text, reply, messageId, token = this.lifecycle.capture(userId)) {
@@ -649,7 +642,7 @@ export class SessionManager {
         await reply(`${label}${queued?`；排队 ${queued} 条`:''}。${latest||(['running','connecting'].includes(state)?'\n尚无新的阶段信息。':'')}`)
         return
       }
-      if (command?.action === 'status') { try{const root=join((process.env.HOME||platformHome()),'.local/share/wechat-assistant-backups');let b;try{b=JSON.parse(await readFile(join(root,'last-failure.json'),'utf8'));await reply('备份：最近一次失败或因忙碌延后，请检查备份服务。')}catch{b=JSON.parse(await readFile(join(root,'latest.json'),'utf8'));await reply(b.status==='verified'?'备份：'+b.generation+'，NAS校验及隔离恢复通过。':'备份：最近一次未验证成功。')}}catch{} const recovery=recoveryText(this.state.users[userId]?.recovery);if(recovery)await reply(recovery);await reply(`会话：${this.state.users[userId]?.threadId ?? '尚未创建'}\n状态：${({connecting:'正在连接',idle:'空闲',running:'处理中',stopping:'正在停止',delivering:'正在发送最终回复',closed:'已断开'})[runtime?.state] ?? (runtime?.connecting?'正在连接':runtime?.busy?'处理中':runtime?.finishing?'正在发送最终回复':'空闲')}，排队 ${(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)} 条，待答复 ${[...this.questions.values()].filter(q => q.session.userId === userId).length} 条。\n未确认任务：${this.submissions?.uncertainCount?.(userId)??0} 条，需核对后再决定是否重试。\n目录：${this.workspaceFor(userId)}\n底座：${this.agentName}\n运行环境：${this.backend?.kind==='podman'?'独立容器 '+this.backend.id:'宿主机'}。`); return }
+      if (command?.action === 'status') { try{const root=join((process.env.HOME||platformHome()),'.local/share/wechat-assistant-backups');let b;try{b=JSON.parse(await readFile(join(root,'last-failure.json'),'utf8'));await reply('备份：最近一次失败或因忙碌延后，请检查备份服务。')}catch{b=JSON.parse(await readFile(join(root,'latest.json'),'utf8'));await reply(b.status==='verified'?'备份：'+b.generation+'，NAS校验及隔离恢复通过。':'备份：最近一次未验证成功。')}}catch{} const recovery=this.ports.recoveryText(this.state.users[userId]?.recovery);if(recovery)await reply(recovery);await reply(`会话：${this.state.users[userId]?.threadId ?? '尚未创建'}\n状态：${({connecting:'正在连接',idle:'空闲',running:'处理中',stopping:'正在停止',delivering:'正在发送最终回复',closed:'已断开'})[runtime?.state] ?? (runtime?.connecting?'正在连接':runtime?.busy?'处理中':runtime?.finishing?'正在发送最终回复':'空闲')}，排队 ${(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)} 条，待答复 ${[...this.questions.values()].filter(q => q.session.userId === userId).length} 条。\n未确认任务：${this.submissions?.uncertainCount?.(userId)??0} 条，需核对后再决定是否重试。\n目录：${this.workspaceFor(userId)}\n底座：${this.agentName}\n运行环境：${this.backend?.kind==='podman'?'独立容器 '+this.backend.id:'宿主机'}。`); return }
       if(command?.action==='recover'){
         const n=this.submissions?.recheck?.(userId)??0
         if(n)this.wakeRecovery?.(userId)
@@ -658,7 +651,7 @@ export class SessionManager {
       }
       if (command?.action === 'result') {
         const record=this.state.users[userId]
-        if(record?.recovery)await reply(recoveryText(record.recovery))
+        if(record?.recovery)await reply(this.ports.recoveryText(record.recovery))
         if(['running','unknown','waiting_attachment'].includes(record?.recovery?.execution))return
         const resultSession={userId,reply,workToken:token}
         if(record?.lastOutput){const output=this.outputStore.replay(record.lastOutput);record.lastOutput=output;await this.save();await this.emit(resultSession,output);this.setRecoveryDelivery(record.recovery,resultSession);await this.save()}
@@ -719,7 +712,7 @@ export class SessionManager {
       await this.send(session, text, token)
     } catch (error) {
       if(!command&&!token.current()){this.log('turn.cancelled',{userId,reason:'cancelled_generation'});return}
-      this.log('session.handle_failed',{userId,...errorFields(error)})
+      this.log('session.handle_failed',{userId,...this.ports.errorFields(error)})
       await reply(`${this.agentName}：${error.message}`)
     }
   }

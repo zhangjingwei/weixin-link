@@ -31,7 +31,7 @@ import {createDiagnosticLog,errorFields,createSdkLogger} from '../infrastructure
 import QRCode from 'qrcode'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { SessionManager } from '../base/codex/codex-session.mjs'
+import { SessionManager } from './session-manager.mjs'
 
 const account=accountPaths();await assertAccount(account.id)
 const stateDir = account.stateDir
