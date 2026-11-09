@@ -34,7 +34,7 @@ Git 手动安装的源码位置是克隆目录。工作区和 Codex 路径由安
 
 微信在线只代表通道建立。向导可发起一次真实模型测试；协议检查与实际推理分别报告结果。多账号需分别扫码，不复制已有凭据或授权名单。
 
-安装脚本默认显示中文步骤、完成状态和扫码提示。供程序调用的 `src/setup/setup.mjs` 和 `src/setup/account-manager.mjs` 保留原有 JSON 输出；安装相关命令可追加 `--human` 获取易读输出，例如 `./wechat-setup qr --human`。
+安装脚本默认显示中文步骤、完成状态和扫码提示。Linux/macOS 首次安装通过 `qr.sh` 发起配对并显示二维码。供程序调用的 `src/setup/setup.mjs` 和 `src/setup/account-manager.mjs` 保留原有 JSON 输出；安装相关命令可追加 `--human` 获取易读输出。
 
 ## 二维码维护
 
@@ -64,7 +64,7 @@ Linux/macOS 推荐使用独立入口，无需切换到安装目录：
 
 也可在源码目录运行 `./qr.sh`，或 `./qr.sh bot2` 刷新已创建的指定账号。远程一行命令可通过 `WEIXIN_LINK_ACCOUNT=bot2` 选择账号，通过 `WEIXIN_LINK_DIR=/实际源码目录` 选择自定义安装。未指定目录时识别标准路径与旧版 zero-link 路径；若两者同时存在则要求指定目录。脚本不会安装依赖、升级源码或停止在线账号。SSH 或无图形界面的交互终端会显示当前有效的字符二维码，可直接扫码；终端过窄时提示放大窗口，并始终保留 PNG 路径。若字体行距造成断缝或扫码失败，可下载 PNG 扫码。有图形环境的本机终端会尝试自动打开图片。
 
-Linux/macOS 在安装源码目录运行 `./wechat-setup qr`，再次显示当前二维码。使用引导脚本默认目录时先运行 `cd ~/.local/share/weixin-link/source`。
+Linux/macOS 再次获取二维码使用 `qr.sh`；如账号服务仍在运行且需要重新授权，显式使用 `./qr.sh --relogin [账号名]`。新账号须先创建账号档案，然后运行 `./qr.sh [账号名]`。
 
 本机 macOS 或 Linux 图形桌面安装时会自动打开 PNG 二维码，避免终端字体、行距造成变形或断缝。若未自动打开，可手动打开输出的 PNG 路径。SSH 会话不会自动打开图片；终端过窄时跳过字符二维码，仍输出图片路径。
 
@@ -84,7 +84,7 @@ Windows 使用安装时准备的 Node.js，从源码目录调用同一账号工�
 
 ## 智能体与维护者接口
 
-以下是源码目录下的底层接口，不是用户在微信中需要记忆的英文命令。运行时需使用 Node.js 24+；Linux/macOS 若只安装了私有 Node，先将其 bin 目录加入当前命令的 PATH，或通过 `./wechat-setup` 调用配置入口。
+以下是源码目录下的底层接口，不是用户在微信中需要记忆的英文命令。运行时需使用 Node.js 24+；Linux/macOS 若只安装了私有 Node，先将 `$HOME/.local/share/wechat-ping-bot/tools/node/bin` 加入当前命令的 PATH。
 
 ```sh
 node src/setup/setup.mjs config-schema ha

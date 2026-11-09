@@ -66,7 +66,7 @@ Scan and confirm the pairing QR code in WeChat, then send **安装向导** (setu
 
 Linux/macOS require curl and tar, plus a SHA-256 verification tool when installing private Node.js. The installer verifies official checksums and does not replace system Node.js. Windows ARM64 is not supported, and the installer does not change persistent execution policies.
 
-[v1.3.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.0) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details. Supporting guides are currently in Chinese.
+[v1.3.1](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.1) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details. Supporting guides are currently in Chinese.
 
 </details>
 
@@ -128,17 +128,37 @@ To upgrade, rerun the command for your platform in [Quick start](#quick-start). 
 
 Standard installations check stable GitHub Releases (`vX.Y.Z`) hourly and offer upgrades by version, never by new main commits. Prereleases and automatic downgrades are excluded. Approval pins the release commit for verification. No stable release means no upgrade; there is no fallback to main. Uncertain notification delivery is not automatically retried.
 
-## Refresh the login QR code
+## Login QR codes
 
-Linux / macOS:
+The commands below apply to Linux/macOS. On Windows, the installer provides the initial QR code.
+
+### First login
+
+Run the [installation command](#quick-start); the installer prepares the service and shows the QR code for the default account. If already installed but not yet paired, run:
 
 ```sh
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
 ```
 
-Prefix the command with `WEIXIN_LINK_QR_STYLE=full` for solid cells, or `WEIXIN_LINK_RELOGIN=1` to sign in again after unbinding. See [QR maintenance](CONFIGURATION.md#二维码维护).
-The command targets `default` unless you select another account. From the source directory, run `sh qr.sh --relogin bot2` for a named account, or set both `WEIXIN_LINK_ACCOUNT=bot2 WEIXIN_LINK_RELOGIN=1` before the one-line command above. A running but unready account is not refreshed unless you explicitly request a relogin.
-The command waits for login after displaying the QR code. If WeChat requests a PIN, enter the digits when the same terminal prompts you; no separate verification command is needed.
+### Login again after an upgrade
+
+Upgrading does not require another scan while the WeChat binding is valid. If the account was unbound, or its service is running but not ready, explicitly start a new login:
+
+```sh
+WEIXIN_LINK_RELOGIN=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+```
+
+### Login with another account
+
+Use a separate profile for each WeChat account. Create the profile in the installed source directory, then get its QR code. Skip the creation command if the profile already exists:
+
+```sh
+cd ~/.local/share/weixin-link/source
+PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/account-manager.mjs create bot2
+./qr.sh bot2
+```
+
+If the `bot2` service is still running and needs a new login, use `./qr.sh --relogin bot2`. The command waits for login; if WeChat requests a PIN, enter it when prompted in the same terminal. Set `WEIXIN_LINK_QR_STYLE=full` if terminal QR cells have gaps. See [QR maintenance](CONFIGURATION.md#二维码维护) for custom installation paths and other options.
 
 ## More capabilities and documentation
 

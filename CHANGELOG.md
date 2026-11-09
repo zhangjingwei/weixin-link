@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1 — 2026-11-09
+
+- Use `qr.sh` directly for the initial Linux/macOS pairing flow, including the existing same-terminal PIN prompt.
+- Remove the redundant `wechat-setup` shell wrapper and document first login, login after an upgrade, and separate account profiles.
+
+Automated installation and QR tests passed. Live pairing for this patch was not repeated; Windows installation is unchanged.
+
 ## 1.3.0 — 2026-11-09
 
 - Switched to the independently published, pinned `wechatbot-zerolink` SDK and removed local SDK postinstall patches.

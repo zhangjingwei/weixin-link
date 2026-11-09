@@ -64,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 
 Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验工具。安装器验证官方校验和，不覆盖系统 Node.js。Windows ARM64 暂不支持，安装器不修改持久执行策略。
 
-已发布正式版 [v1.3.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.0)，尚无长期版本兼容承诺。更多要求与维护步骤见 [配置说明](CONFIGURATION.md)。
+已发布正式版 [v1.3.1](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.1)，尚无长期版本兼容承诺。更多要求与维护步骤见 [配置说明](CONFIGURATION.md)。
 
 </details>
 
@@ -127,17 +127,37 @@ Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验
 
 标准安装每小时检查 GitHub 正式 Release（`vX.Y.Z`），按版本号提示升级，不跟随主干提交、不自动降级，也不选择预发布版。只有明确同意才会升级；执行时固定该版本对应的提交用于完整性校验。没有正式 Release 时不会回退到主干。投递结果不明的提醒不自动重发。
 
-## 重新获取登录二维码
+## 登录二维码
 
-Linux / macOS：
+以下命令适用于 Linux/macOS。Windows 首次登录由安装器提供二维码。
+
+### 首次登录
+
+运行[安装命令](#快速开始)，安装器会准备服务并显示默认账号的二维码。已经安装、但尚未扫码时，可单独运行：
 
 ```sh
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
 ```
 
-二维码有断缝时，加 `WEIXIN_LINK_QR_STYLE=full`；解绑后重新登录，加 `WEIXIN_LINK_RELOGIN=1`。参数放在命令前，详见 [二维码维护](CONFIGURATION.md#二维码维护)。
-命令默认操作 `default` 账号；指定其他账号可在源码目录运行 `sh qr.sh --relogin bot2`，或为上面的一行命令同时设置 `WEIXIN_LINK_ACCOUNT=bot2 WEIXIN_LINK_RELOGIN=1`。服务正在运行但未就绪时，普通刷新会拒绝操作；确认要重新登录后再显式使用 `--relogin`。
-扫码后命令会继续等待登录结果；如果微信要求 PIN，同一个终端会自动提示输入，无需再运行验证命令。请等提示出现后再输入手机显示的数字。
+### 升级后再次登录
+
+升级不会要求重新扫码；如果微信绑定仍有效，无需运行二维码命令。若已解绑，或账号服务仍在运行但尚未就绪，明确选择重新登录：
+
+```sh
+WEIXIN_LINK_RELOGIN=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+```
+
+### 登录不同账号
+
+每个微信账号使用单独的账号档案。先在安装源码目录创建新档案，再获取它的二维码；已创建过的档案可跳过创建命令：
+
+```sh
+cd ~/.local/share/weixin-link/source
+PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/account-manager.mjs create bot2
+./qr.sh bot2
+```
+
+如果 `bot2` 的服务仍在运行且需要重新授权，使用 `./qr.sh --relogin bot2`。扫码后命令会等待登录结果；若手机要求 PIN，同一个终端会提示输入，无需再运行验证命令。二维码有断缝时，可设置 `WEIXIN_LINK_QR_STYLE=full`。自定义安装目录和其他维护方式见[二维码维护](CONFIGURATION.md#二维码维护)。
 
 ## 更多能力与文档
 

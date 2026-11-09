@@ -54,5 +54,4 @@ cd "$setup_root"
 node src/setup/setup.mjs init --human
 node src/setup/setup.mjs deps --human
 node src/setup/setup.mjs services --human
-node src/setup/setup.mjs pair --human
-./wechat-setup qr --human
+WEIXIN_LINK_DIR="$setup_root" ./qr.sh
