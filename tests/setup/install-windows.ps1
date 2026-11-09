@@ -6,14 +6,15 @@ foreach ($name in @('WEIXIN_LINK_DIR','WEIXIN_LINK_REF','ZERO_LINK_DIR','ZERO_LI
 $entry = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\install.ps1'))
 $env:TEST_ARCHIVE = Join-Path $fixtureRoot 'fixture.zip'
 $env:UPGRADE_CAPTURE = Join-Path $fixtureRoot 'upgraded-target.txt'
-$script:requestedUrl = ''
-$script:fixtureTask = $null
+# Mutate one shared object: $script: inside mocks resolves to the invoked installer,
+# not this fixture's script scope. Keep URL capture and service state visible to both.
+$fixtureState = @{ RequestedUrl = ''; Task = $null }
 function Invoke-WebRequest {
     param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
-    $script:requestedUrl = $Uri
+    $fixtureState.RequestedUrl = $Uri
     Copy-Item -LiteralPath $env:TEST_ARCHIVE -Destination $OutFile
 }
-function Get-ScheduledTask { param([string]$TaskName, [string]$ErrorAction) return $script:fixtureTask }
+function Get-ScheduledTask { param([string]$TaskName, [string]$ErrorAction) return $fixtureState.Task }
 function Assert-True($condition, [string]$message) { if (!$condition) { throw $message } }
 function Make-Archive([string]$installer, [bool]$complete = $true) {
     $source = Join-Path $fixtureRoot 'zhangjingwei-weixin-link-abc1234'
@@ -33,23 +34,24 @@ try {
     $env:WEIXIN_LINK_REF = 'main'
     Make-Archive 'Set-Content -LiteralPath (Join-Path $PSScriptRoot "..\..\installed.txt") -Value "installed"; exit 0'
     & $entry
+    Assert-True ($fixtureState.RequestedUrl -ceq 'https://api.github.com/repos/zhangjingwei/weixin-link/zipball/main') 'Fresh install did not request the selected ref.'
     Assert-True (Test-Path -LiteralPath (Join-Path $env:WEIXIN_LINK_DIR 'installed.txt')) 'Fresh installer was not executed.'
     $release = Get-Content -LiteralPath (Join-Path $env:WEIXIN_LINK_DIR '.weixin-link-release.json') -Raw | ConvertFrom-Json
     Assert-True ($release.commit -eq 'abc1234' -and $release.ref -eq 'main') 'Installed commit was not recorded.'
     $env:WEIXIN_LINK_REF = 'feature/a b'
-    $script:requestedUrl = ''
+    $fixtureState.RequestedUrl = ''
     & $entry
-    Assert-True ($script:requestedUrl.EndsWith('feature%2Fa%20b')) 'Target ref was not URL-encoded.'
+    Assert-True ($fixtureState.RequestedUrl -ceq 'https://api.github.com/repos/zhangjingwei/weixin-link/zipball/feature%2Fa%20b') 'Target ref was not URL-encoded.'
     Assert-True ((Get-Content -LiteralPath $env:UPGRADE_CAPTURE -Raw) -eq $env:WEIXIN_LINK_DIR) 'Existing deployment did not run upgrade.'
     Assert-True ((Get-Content -LiteralPath (Join-Path $env:WEIXIN_LINK_DIR 'installed.txt')).Trim() -eq 'installed') 'Existing source was replaced by bootstrap.'
     $env:WEIXIN_LINK_DIR = Join-Path $fixtureRoot 'other source'
-    $script:fixtureTask = [pscustomobject]@{State='Running'}
-    $script:requestedUrl = ''
+    $fixtureState.Task = [pscustomobject]@{State='Running'}
+    $fixtureState.RequestedUrl = ''
     $refused = $false
     try { & $entry } catch { $refused = $_.Exception.Message -like '*WEIXIN_LINK_DIR*' }
     Assert-True $refused 'Registered service without selected source was not refused.'
-    Assert-True ($script:requestedUrl -eq '') 'Registered service triggered a download.'
-    $script:fixtureTask = $null
+    Assert-True ($fixtureState.RequestedUrl -eq '') 'Registered service triggered a download.'
+    $fixtureState.Task = $null
     New-Item -ItemType Directory -Path $env:WEIXIN_LINK_DIR | Out-Null
     Set-Content -LiteralPath (Join-Path $env:WEIXIN_LINK_DIR 'keep') -Value 'original'
     $refused = $false
