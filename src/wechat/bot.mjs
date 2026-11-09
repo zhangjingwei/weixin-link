@@ -2,8 +2,10 @@ import {voiceCommandInput} from './voice-command-input.mjs'
 import {trackLoginValidity} from './login-validity.mjs'
 import {systemNotice} from '../core/delivery/system-notice.mjs'
 import {LifecycleNotice} from './lifecycle-notice.mjs'
-import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
+import {createCommandClassifier} from './command-classifier.mjs'
+import {createInboundController} from './inbound-controller.mjs'
+import {createMessageView} from './message-view.mjs'
 import {setupModelTest} from '../setup/setup-model-test.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
 import {SetupReceipts} from '../setup/setup-receipts.mjs'
@@ -14,11 +16,11 @@ import {createToolNotifier} from './tool-status.mjs'
 import {installWeixinProtocol} from './weixin-protocol.mjs'
 import {loadAgentAdapter} from '../base/agent-adapter.mjs'
 import {selectedAgentKind} from '../base/agent-selection.mjs'
-import {AgentSwitcher,agentSwitchCommand} from '../setup/agent-switch.mjs'
-import {ChatUpgrader,chatUpgradeCommand} from '../setup/chat-upgrade.mjs'
+import {AgentSwitcher} from '../setup/agent-switch.mjs'
+import {ChatUpgrader} from '../setup/chat-upgrade.mjs'
 import {ClaudeConversations} from '../base/claude/claude-conversations.mjs'
 import {ClaudeSetupController} from '../base/claude/claude-setup.mjs'
-import {TextConversations,conversationCommand} from '../core/text-conversations.mjs'
+import {TextConversations} from '../core/text-conversations.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../core/intake/ingress-trace.mjs'
 import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from './accounts.mjs'
@@ -37,7 +39,7 @@ import { WeChatBot } from '@wechatbot/wechatbot'
 import QRCode from 'qrcode'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { SessionManager, controlCommand } from '../base/codex/codex-session.mjs'
+import { SessionManager } from '../base/codex/codex-session.mjs'
 import { hasMedia, prepareMedia } from '../media/media-input.mjs'
 
 const account=accountPaths();await assertAccount(account.id)
@@ -72,6 +74,7 @@ if (testing) {
 }
 
 const setupController=await (agent.kind==='claude'?new ClaudeSetupController({binary:installation.claudeBinary}):new SetupController({stateDir,backend,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)})).init()
+const classifyMessage=createCommandClassifier()
 const conversations=agent.catalog==='local'?new ClaudeConversations(manager,owners):new TextConversations(manager,owners)
 await manager.save()
 const bot = new WeChatBot({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
@@ -126,6 +129,7 @@ const mediaDependencies={
 const outgoing=new OutputTransport({store:manager.outputStore,log,send:async(userId,content)=>runtime.track('delivery',()=>content?.voice?bot.sendVoice(conversations.recipient(userId),content.voice):bot.send(conversations.recipient(userId),content))})
 const deliverOriginal=outgoing.deliver.bind(outgoing);conversations.sendOutput=deliverOriginal
 outgoing.deliver=(key,value,options)=>conversations.deliver(key,options?.conversationControl?systemNotice(value):value,options,deliverOriginal)
+const view=createMessageView({bot,conversations,outgoing,runtime})
 const updates=new UpdateNotifier({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,
  ready:()=>runtime.ready()&&runtime.status().idle&&!runtime.draining&&!runtime.sealed&&!stopping,
  send:(owner,text)=>outgoing.deliver(owner,text,{conversationControl:true,current:()=>runtime.ready()&&!runtime.draining&&!runtime.sealed&&!stopping}),log})
@@ -143,33 +147,22 @@ let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(state
 const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,
  send:(owner,text)=>conversations.serialize(owner,async()=>{await runtime.track('delivery',()=>bot.sendAnnouncement(owner,systemNotice(text)));return {status:'accepted'}}),log})
 const setupReceipts=new SetupReceipts(stateDir)
-const stagedWires=new WeakMap(),originalParse=bot.parser.parse.bind(bot.parser)
-bot.parser.parse=wire=>stagedWires.get(wire)??originalParse(wire)
-const weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:async wires=>{
- if(runtime.sealed)throw Error('INGRESS_SEALED')
- const received=[],setupReceived=[]
- for(const wire of wires){const parsed=originalParse(wire);if(!parsed||!conversations.realOwners.has(parsed.userId))continue
-  const previous=jobs.findCaptured(parsed);const message=previous??conversations.bind(voiceCommandInput(parsed));message._traceId??=ingressTrace.traceId(wire);const frozenSetup=setupReceipts.get(parsed);if(frozenSetup){message._setupAction=frozenSetup.action;message._setupReceiptId=frozenSetup.id}if(!Object.hasOwn(message,'_setupAction'))message._setupAction=previous?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId);message.references??=weixin.quote(message);stagedWires.set(wire,message)
-  const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
-  if(message._setupAction)setupReceived.push(message)
-  if(!control)received.push(message)
- }
- await manager.save()
- for(const message of received)jobs.capture(message)
- for(const message of setupReceived){message._ingressId=jobs.capture(message)??message._ingressId;const receipt=setupReceipts.capture(message);if(receipt){message._setupAction=receipt.action;message._setupReceiptId=receipt.id}}
-}})
-const ingressTrace=traceIngress(bot,log)
+let weixin,ingressTrace
+const inbound=createInboundController({bot,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
+ traceWire:wire=>ingressTrace.traceId(wire),traceMessage:message=>ingressTrace.callback(message),quote:message=>weixin.quote(message),dispatch:message=>intakeHandler(message),log})
+weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:inbound.prepareBatch})
+ingressTrace=traceIngress(bot,log)
 manager.onToolStatus=process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1'?createToolNotifier({send:(peer,event)=>bot.sendToolStatus(peer,event),serialize:(peer,fn)=>conversations.serialize(peer,fn),track:fn=>runtime.track('delivery',fn),recipient:key=>conversations.recipient(key),log}):undefined
 
 const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>outgoing.deliver(userId,value,options)})
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const handleMessage=createMessageProcessor({bot,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,outgoing,mediaDependencies,durable,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
+const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,mediaDependencies,durable,classifyMessage,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
 intakeHandler=nonBlockingHandler(async message => {
   try {
     message=voiceCommandInput(message)
-    const control=!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))
+    const control=classifyMessage(message)
     if(control)await handleMessage(message)
     else await pending.enqueue(message.userId,()=>handleMessage(message),message._intakeToken)
   }
@@ -181,16 +174,7 @@ intakeHandler=nonBlockingHandler(async message => {
     }
   }
 },error=>log('message.background_failed',errorFields(error)),{enter:()=>runtime.enter('ingress')})
-bot.onMessage(message=>{
- const inboundTrace=ingressTrace.callback(message);message._traceId??=inboundTrace
- if(!conversations.realOwners.has(message._conversationOwner??message.userId)||runtime.sealed)return
- message=voiceCommandInput(message)
- if(!message._conversationOwner)message=conversations.bind(message)
- if(!Object.hasOwn(message,'_setupAction'))message._setupAction=message._recovered?null:setupController.command(message.text,message._conversationOwner??message.userId,message.userId)
- if(!hasMedia(message)&&(diagnosticCommand(message.text)||message._setupAction||agentSwitchCommand(message.text?.trim()??'')||chatUpgradeCommand(message.text)||conversationCommand(message.text?.trim()??'')||controlCommand(message.text?.trim()??''))){intakeHandler(message);return}
- const token=manager.lifecycle.capture(message.userId)
- void (async()=>{try{await manager.save();if(!token.current())return;const id=jobs.capture(message);if(id){log('ingress.persisted',{trace_id:message._traceId,messageId:message.raw?.message_id??message.raw?.client_id,kind:hasMedia(message)?'media':'text'});intakeHandler({...message,_ingressId:id,_intakeToken:token})}}catch(error){log('ingress.persist_failed',{trace_id:message._traceId,...errorFields(error)});void bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('消息未能持久保存，请稍后重试。')).catch(()=>{})}})()
-})
+bot.onMessage(inbound.onMessage)
 
 async function shutdown(signal){if(stopping)return;stopping=true;updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})

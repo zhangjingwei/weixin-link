@@ -4,6 +4,7 @@ import {mkdtemp,rm,readFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {SessionManager,controlCommand} from '../../src/base/codex/codex-session.mjs'
+import {createCommandClassifier} from '../../src/wechat/command-classifier.mjs'
 import {transition} from '../../src/core/lifecycle.mjs'
 
 async function fixture(t){
@@ -69,9 +70,11 @@ test('storage failure before submission prevents RPC',async t=>{
  assert.equal(f.calls.length,0)
 })
 test('bot classifies supplement as a control at ingress and dispatch, without a queued receipt',async()=>{
+ const intent=createCommandClassifier()({userId:'owner',text:'补充 保留接口'})
+ assert.equal(intent.kind,'session');assert.equal(intent.value.action,'steer')
  const bot=await readFile(new URL('../../src/wechat/bot.mjs',import.meta.url),'utf8')
  assert.match(bot,/if\(control\)await handleMessage\(message\)/)
- const processor=await readFile(new URL('../../src/wechat/message-processor.mjs',import.meta.url),'utf8')
- assert.match(processor,/if\(!control&&notice/)
- assert.match(processor,/control.action==='steer'\?messageId:undefined/)
+ const application=await readFile(new URL('../../src/core/intake/message-application.mjs',import.meta.url),'utf8')
+ assert.match(application,/if\(!control&&notice/)
+ assert.match(application,/control.action==='steer'\?messageId:undefined/)
 })

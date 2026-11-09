@@ -9,6 +9,12 @@ function fixture(){
   conversations:{recipient:id=>id,control:async()=>false},runtime:{sealed:false,draining:false},log:()=>{},
   backend:{kind:'host'},owners:['owner'],outgoing:{deliver:async(id,value)=>sent.push([id,value])},durable:{submit:(...args)=>submitted.push(args)}
  }
+ deps.view={
+  context:(userId,value)=>{if(value)deps.bot.contextStore.set(deps.conversations.recipient(userId),value)},
+  deliver:(...args)=>deps.outgoing.deliver(...args),
+  directNotice:(message,text)=>deps.runtime.track('delivery',()=>deps.bot.reply({...message,userId:deps.conversations.recipient(message.userId)},text)),
+  sensitive:(userId,text)=>deps.runtime.track('delivery',()=>deps.bot.sendSensitiveText(deps.conversations.recipient(userId),text)),
+ }
  return {deps,sent,acked,submitted,handle:createMessageProcessor(deps)}
 }
 test('extracted message processor rejects unauthorized, cancelled and stale messages without side effects',async()=>{
