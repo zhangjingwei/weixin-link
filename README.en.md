@@ -132,7 +132,7 @@ The supported agent backends are **Codex** (default) and **Claude CLI** (explici
 
 - [User guide](USER-GUIDE.md): conversations, models, memory, attachments and results.
 - [Configuration and maintenance](CONFIGURATION.md): installation, upgrades, backups and troubleshooting.
-- [Remote connections](src/remote/README.md): connect authorized remote workspaces.
+- [Remote connections](src/infrastructure/remote/README.md): connect authorized remote workspaces.
 - [Configuration examples](config-templates/): deployment references.
 - [Contributing](CONTRIBUTING.md): report issues and contribute changes.
 

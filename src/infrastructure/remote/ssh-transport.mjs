@@ -1,7 +1,7 @@
 import {spawn} from 'node:child_process'
 import net from 'node:net'
-import {HOSTS,sshConfig,shellQuote,configuredHost,validateHostConfig} from './remote-config.mjs'
-export {HOSTS} from './remote-config.mjs'
+import {HOSTS,sshConfig,shellQuote,configuredHost,validateHostConfig} from './host-config.mjs'
+export {HOSTS} from './host-config.mjs'
 export class RemoteTransport {
  constructor(host,{onMessage=()=>{},onDisconnect=()=>{},config}={}){const hostConfig=config??configuredHost(host);validateHostConfig(host,hostConfig);Object.assign(this,{host,config:structuredClone(hostConfig),onMessage,onDisconnect});this.closed=false;this.opened=false}
  async connect(){

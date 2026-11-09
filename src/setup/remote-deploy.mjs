@@ -3,9 +3,9 @@
 import {spawn} from 'node:child_process'
 import {join} from 'node:path'
 import {pathToFileURL} from 'node:url'
-import {HOSTS} from '../remote/remote-config.mjs'
+import {hostSnapshot} from '../infrastructure/remote/host-config.mjs'
 import {RemoteRpc} from '../infrastructure/agents/remote-rpc.mjs'
-import {sshConfig} from '../remote/remote-config.mjs'
+import {sshConfig} from '../infrastructure/remote/host-config.mjs'
 export function windowsDeployment(config){
  if(config.platform!=='win32'||config.transport!=='ssh-websocket'||!Number.isInteger(config.port)||config.port<1024||config.port>65535||typeof config.binary!=='string'||! /^[A-Za-z]:[\\/]/.test(config.binary)||/[\r\n\0]/.test(config.binary))throw Error('INVALID_WINDOWS_DEPLOY_CONFIG')
  const data=Buffer.from(JSON.stringify({binary:config.binary,port:config.port})).toString('base64')
@@ -66,8 +66,8 @@ if(!$listener.Count){
 @{version=$version;task=$taskName;changed=$changed;started=$started;restarted=$false;listenerPid=$listenerPid;hidden=$true;port=$config.port} | ConvertTo-Json -Compress
 `
 }
-export function runSsh(host,script){
- if(!Object.hasOwn(HOSTS,host)||!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(host))throw Error('UNKNOWN_HOST')
+export function runSsh(host,script,hosts=hostSnapshot()){
+ if(!Object.hasOwn(hosts,host)||!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(host))throw Error('UNKNOWN_HOST')
  const encoded=Buffer.from(script,'utf16le').toString('base64')
  const runner=Buffer.from("& ([scriptblock]::Create([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd()))))",'utf16le').toString('base64')
  return new Promise((resolve,reject)=>{
@@ -77,11 +77,11 @@ export function runSsh(host,script){
  })
 }
 export async function deploy(host,{check=false}={}){
- if(!Object.hasOwn(HOSTS,host))throw Error('UNKNOWN_HOST')
- const config=HOSTS[host];let result={host,changed:false,checkOnly:check}
- if(!check&&config.platform==='win32')result={...result,...await runSsh(host,windowsDeployment(config))}
+ const hosts=hostSnapshot();if(!Object.hasOwn(hosts,host))throw Error('UNKNOWN_HOST')
+ const config=hosts[host];let result={host,changed:false,checkOnly:check}
+ if(!check&&config.platform==='win32')result={...result,...await runSsh(host,windowsDeployment(config),hosts)}
  // Unix retains its official daemon management; deployment does not restart either platform.
- const rpc=new RemoteRpc(host)
+ const rpc=new RemoteRpc(host,{hostConfig:config})
  try{await rpc.connect();await rpc.call('thread/list',{limit:1});return {...result,connectionVerified:true}}finally{rpc.close()}
 }
 export async function runDeploymentCli(){

@@ -111,7 +111,7 @@ Claude 适配器通过 `installation` 配置选择：在保留现有 `workspace`
 
 运行时可通过 `WECHAT_REMOTE_HOSTS`、`WECHAT_BACKUP_CONFIG` 指向外部配置；配置管理接口不接管自定义路径，遇到不一致时返回 `CONFIG_CUSTOM_PATH_UNMANAGED`。远程工作区可用 `WECHAT_REMOTE_WORKSPACE` 指定。
 
-项目定位由智能体结合请求和实际目录处理，主机注册与允许根目录只限定执行边界。远程连接入口见 [远程连接文档](src/remote/README.md)，无需向私有工作区复制执行脚本。
+项目定位由智能体结合请求和实际目录处理，主机注册与允许根目录只限定执行边界。远程连接入口见 [远程连接文档](src/infrastructure/remote/README.md)，无需向私有工作区复制执行脚本。
 
 ## 升级与验证
 

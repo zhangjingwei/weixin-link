@@ -7,3 +7,5 @@
 remote-controller.mjs 负责项目边界、会话归属、提交、对账、指定轮次停止、后台命令清理和文件交付。持久化复用 `src/infrastructure/storage/registry-lock.mjs`；remote-watch.mjs 负责进度去重和投递；remote-stop.mjs 接入本地停止流程。
 
 `src/interfaces/cli/remote-cli.mjs` 是结构化 JSON 命令入口；`src/remote/remote-codex.mjs` 转发到同一入口。凭据、主机配置和 remote-sessions.json 继续位于用户私有工作目录，不随源码发布。
+
+协调器在单次操作中使用同一份已验证的主机配置：路径授权、RPC 重连和 SSH 传输都由该快照决定。配置更新共用账本所在工作目录的 `host-config` 锁；未结束任务的主机不可被静默撤销或重定向，结果未知的写请求仍需对账。

@@ -134,7 +134,7 @@ Linux / macOS：
 
 - [使用指南](USER-GUIDE.md)：会话、模型、记忆、附件与结果。
 - [配置与维护](CONFIGURATION.md)：安装、升级、备份和故障处理。
-- [远程连接](src/remote/README.md)：连接已授权的远程工作区。
+- [远程连接](src/infrastructure/remote/README.md)：连接已授权的远程工作区。
 - [可选集成](src/integrations/README.md)：HA 只读查询、SSH 远程 Codex 任务和 RSSHub 新闻源，按账号显式启用；备份统一接入仍待迁移。
 - [消息架构](docs/architecture/README.md)：微信入口、任务执行、智能体底座与投递的模块边界。
 - [配置示例](config-templates/)：部署配置参考。

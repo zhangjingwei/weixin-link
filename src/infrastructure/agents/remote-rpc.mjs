@@ -1,12 +1,14 @@
 import {CodexProtocolClient,remoteRpcErrors} from '../../base/codex/protocol-client.mjs'
 import {initializeCodex,isReadOnlyCodexMethod} from '../../base/codex/protocol-operations.mjs'
-import {RemoteTransport} from '../../remote/ssh-transport.mjs'
-import {ReconnectingConnection,isTransientConnectionError} from '../../remote/reconnecting-connection.mjs'
-import {configuredHost,validateHostConfig} from '../../remote/remote-config.mjs'
+import {RemoteTransport} from '../remote/ssh-transport.mjs'
+import {ReconnectingConnection,isTransientConnectionError} from '../remote/reconnecting-connection.mjs'
+import {configuredHost,validateHostConfig} from '../remote/host-config.mjs'
 // Codex session recovery and replay policy are coordination, never SSH transport behavior.
 export class RemoteRpc {
- constructor(host,{onEvent=()=>{},hostConfig,transportFactory=(h,o)=>new RemoteTransport(h,{...o,config:hostConfig}),retryDelays=[250,1000,2500]}={}){
+ constructor(host,{onEvent=()=>{},hostConfig,transportFactory,retryDelays=[250,1000,2500]}={}){
   const config=hostConfig??configuredHost(host);validateHostConfig(host,config)
+  this.hostConfig=Object.freeze(structuredClone(config))
+  transportFactory??=(h,o)=>new RemoteTransport(h,{...o,config:this.hostConfig})
   Object.assign(this,{host,onEvent});this.recovery=null
   this.connection=new ReconnectingConnection({retryDelays,
    transportFactory:options=>transportFactory(host,{...options,onEvent:event=>this.onEvent(event)}),

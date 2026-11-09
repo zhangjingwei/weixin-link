@@ -1,11 +1,11 @@
-import {remoteWorkspace} from '../../remote/remote-paths.mjs'
+import {resolveRemoteWorkspace} from '../../infrastructure/remote/workspace.mjs'
 import {RemoteController} from '../../application/remote-tasks/remote-controller.mjs'
 import {RemoteRpc} from '../../infrastructure/agents/remote-rpc.mjs'
 import {randomUUID} from 'node:crypto'
 import {writeFile} from 'node:fs/promises'
 import {setTimeout as delay} from 'node:timers/promises'
 const host=process.argv[2];if(!host||!process.argv[3])throw Error('HOST_REQUIRED')
-const root=remoteWorkspace,project=process.argv[3],scope='full-stop-'+host+'-'+randomUUID(),c=new RemoteController({root,scope}),guard=new RemoteController({root,scope:scope+'-guard'}),report={host,scope,checks:[]};let main,guardTask
+const root=resolveRemoteWorkspace(),project=process.argv[3],scope='full-stop-'+host+'-'+randomUUID(),c=new RemoteController({root,scope}),guard=new RemoteController({root,scope:scope+'-guard'}),report={host,scope,checks:[]};let main,guardTask
 async function waitCommand(controller,task){for(let n=0;n<80;n++){const s=await controller.status({task});if(s.background_commands.length||s.commands.some(v=>v.status==='inProgress'))return s;if(['failed','completed'].includes(s.turn_status))throw Error('COMMAND_NOT_RUNNING');await delay(500)}throw Error('COMMAND_START_TIMEOUT')}
 try{
  main=await c.start({host,project,newThread:true,prompt:"Isolated full-stop test: execute exactly sh -c 'sleep 180 & wait' and wait for completion. Do not run other commands."});report.main=main;await waitCommand(c,main.task)

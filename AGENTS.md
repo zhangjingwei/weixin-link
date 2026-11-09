@@ -17,7 +17,7 @@
 - **应用层 `src/application/`**：`intake/` 负责收件、命令/意图分流，`tasks/` 负责持久任务执行与恢复，`conversations/` 负责会话操作与有序投递，`remote-tasks/` 负责远程任务协调，`schedules/` 负责计划，`notifications/` 负责版本提示和终答复恢复，`diagnostics/` 负责诊断命令；`ports/` 定义外部能力的窄接口。沿用既有状态，不另建状态仓库。
 - **领域层 `src/domain/`**：会话、消息、任务、投递、计划和版本规则保护授权归属、消息身份、状态转换、取消代际和未知投递结果等不变量。不为贴合图示增加空壳聚合或第二套状态。
 - **基础设施与外部适配 `src/infrastructure/`**：`wechat/` 接微信协议、入站追踪与出站，`agents/` 选择底座、适配远程 RPC 和提示元数据，`media/` 处理附件，`storage/` 提供持久化与锁，`runtime/` 提供账号私有控制端点，`diagnostics/` 保存脱敏事件。`ports.mjs` 装配实现；底层 Codex/Claude 协议仍在 `src/base/`，集成插件仍在 `src/integrations/`。
-- **部署、配置与横切策略**：`src/setup/` 负责安装、配置、服务和账号绑定；`src/wechat/` 保留账号档案与组合根；`src/remote/` 负责 SSH 传输。权限、账号隔离、审计、幂等和运行控制贯穿各层。`src/tools/` 放开发、验收和 SDK 补丁工具，`tests/` 按职责组织测试。
+- **部署、配置与横切策略**：`src/setup/` 负责安装、配置、服务和账号绑定；`src/wechat/` 保留账号档案与组合根；`src/infrastructure/remote/` 负责 SSH 传输、主机配置快照和路径边界，`src/remote/` 仅保留旧命令与 RPC 兼容入口。权限、账号隔离、审计、幂等和运行控制贯穿各层。`src/tools/` 放开发、验收和 SDK 补丁工具，`tests/` 按职责组织测试。
 
 主链路为：微信入口 Controller → 接收与意图用例 → 会话/任务规则 → 已选智能体适配 → 投递用例 → 微信 Presenter → 微信出站。计划触发进入任务或通知用例；更新检查只产生升级提示，不自行升级。新增功能先确定所属层和端口，保持账号、收件、任务及投递状态的单一来源。详见 `docs/architecture/README.md` 的目标图和当前落地说明。
 

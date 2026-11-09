@@ -1,8 +1,8 @@
-import {remoteWorkspace} from '../../remote/remote-paths.mjs'
+import {resolveRemoteWorkspace} from '../../infrastructure/remote/workspace.mjs'
 import {RemoteController} from '../../application/remote-tasks/remote-controller.mjs'
 import {readFile,writeFile} from 'node:fs/promises'
 import {setTimeout as delay} from 'node:timers/promises'
-const root=remoteWorkspace,c=new RemoteController({root,scope:'production-adapter-verification-20261018'})
+const root=resolveRemoteWorkspace(),c=new RemoteController({root,scope:'production-adapter-verification-20261018'})
 const host=process.argv[2];if(!host||!process.argv[3])throw Error('Usage: node remote-live-check.mjs HOST ABSOLUTE_TEST_PROJECT');const project=process.argv[3],report={host,checks:[]}
 async function done(task){for(let n=0;n<90;n++){const s=await c.status({task});if(s.turn_status==='completed'){if(s.error)throw Error(JSON.stringify(s.error));return s}if(['failed','interrupted'].includes(s.turn_status))throw Error(JSON.stringify(s));await delay(1000)}throw Error('TASK_TIMEOUT')}
 try{

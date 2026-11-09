@@ -9,7 +9,7 @@ export async function remoteScope(cwd,threadId,action){
   try{await access(path);enabled=true;break}catch(error){if(error.code!=='ENOENT')throw error}
  }
  if(!enabled)return {stop_confirmed:true,tasks:[]}
- const {remoteConfigStatus}=await import('../../remote/remote-config.mjs')
+ const {remoteConfigStatus}=await import('../../infrastructure/remote/host-config.mjs')
  const config=remoteConfigStatus()
  if(!config.valid){
   if(action==='activate')return {stop_confirmed:true,tasks:[],remoteDisabled:true,error:config.error}
@@ -17,5 +17,5 @@ export async function remoteScope(cwd,threadId,action){
  }
  const {RemoteController}=await import('./remote-controller.mjs')
  const controller=new RemoteController({root:cwd,scope:threadId})
- return action==='activate'?controller.activate():action==='seal'?controller.seal():controller.stopScope()
+ return controller.run({action:action==='activate'?'activate':action==='seal'?'seal':'stop-scope'})
 }

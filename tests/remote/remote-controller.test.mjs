@@ -1,13 +1,31 @@
 import './remote-test-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,readFile} from 'node:fs/promises'
+import {mkdtemp,readFile,writeFile} from 'node:fs/promises'
+import {join} from 'node:path'
 import {RemoteController,projectPath,exportPath} from '../../src/application/remote-tasks/remote-controller.mjs'
 import {RemoteStore} from '../../src/infrastructure/storage/registry-lock.mjs'
 const cwd='/home/example/work/test'
 async function setup(handler,{symlinkPath}={}){const root=await mkdtemp('/tmp/remote-controller-test-'),calls=[];const c=new RemoteController({root,scope:'test',rpcFactory:()=>({async connect(){},close(){},async call(m,p){calls.push([m,p]);if(m==='fs/getMetadata'&&['/home/example/work',cwd].includes(p.path))return {isDirectory:true,isSymlink:p.path===symlinkPath};return handler(m,p)}})});return {root,c,calls}}
 async function own(c,extra={}){await c.store.update(s=>{s.t={kind:'official-remote-task',scope:c.scope,host:'spark',cwd,thread_id:'thread',turn_id:'old',...extra}})}
 test('project and export paths cannot escape authorized roots',()=>{for(const p of ['/etc','/home/example/work/../x','/home/example/work/.secret'])assert.throws(()=>projectPath('spark',p));assert.equal(projectPath('spark',cwd),cwd);for(const p of ['/etc/passwd',cwd+'/.env',cwd+'/private_key.pem'])assert.throws(()=>exportPath(cwd,p))})
+test('one action keeps its validated host snapshot and refuses a changed config before RPC',async()=>{
+ const root=await mkdtemp('/tmp/remote-snapshot-'),configPath=join(root,'remote-hosts.json')
+ const original={platform:'posix',binary:'/opt/codex',root:'/home/example/work',transport:'daemon-proxy'}
+ await writeFile(configPath,JSON.stringify({version:1,hosts:{spark:original}}))
+ let connected=false,seen
+ const c=new RemoteController({root,configPath,scope:'snapshot',rpcFactory:(_host,config)=>{seen=config;return {async connect(){connected=true},close(){}}}})
+ assert.equal(c.projectPath('spark',cwd),cwd)
+ await c.using('spark',async()=>{})
+ assert.equal(seen.root,original.root)
+ assert.equal(Object.isFrozen(seen),true)
+ await writeFile(configPath,JSON.stringify({version:1,hosts:{spark:{...original,root:'/other'}}}))
+ assert.equal(c.projectPath('spark',cwd),cwd)
+ await assert.rejects(c.run({action:'inspect',host:'spark',project:cwd}),/REMOTE_HOST_CONFIG_CHANGED/)
+ connected=false
+ await assert.rejects(c.run({action:'start',host:'spark',project:cwd,prompt:'hello'}),/REMOTE_HOST_CONFIG_CHANGED/)
+ assert.equal(connected,false)
+})
 test('concurrent registry updates preserve every entry and legacy state',async()=>{const {root}=await setup(()=>{}),store=new RemoteStore(root);await store.update(s=>{s.legacy={id:1}});await Promise.all(Array.from({length:12},(_,i)=>store.update(s=>{s[i]=i})));const s=await store.read();assert.equal(Object.keys(s).length,13);assert.deepEqual(s.legacy,{id:1})})
 test('lock is released when operation fails',async()=>{const {c}=await setup(()=>{});await assert.rejects(c.store.locked('test',()=>{throw Error('expected')}));assert.equal(await c.store.locked('test',()=>42),42)})
 test('another conversation cannot query or cancel a task',async()=>{const {c,calls}=await setup(()=>{});await own(c,{scope:'someone-else'});await assert.rejects(c.stop({task:'t'}),/TASK_NOT/);assert.equal(calls.length,0)})
