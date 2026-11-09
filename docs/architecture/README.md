@@ -20,7 +20,7 @@
 | 会话与远程任务协调 | `src/application/conversations/`、`tasks/local-recovery.mjs`、`tasks/remote-recovery.mjs`、`remote-tasks/` | 沿用原会话状态、任务账本和锁；未知提交先对账，停止只作用于本会话任务 |
 | 附件消息 | `src/interfaces/wechat/voice-text.mjs`、`src/application/intake/single-media.mjs`、`src/infrastructure/media/` | 接口层提取微信转写和消息 ID；应用层提交单条附件任务；基础设施层下载、解析和交付文件 |
 | 领域规则 | `src/domain/conversations/`、`messages/`、`tasks/`、`delivery/`、`schedules/`、`updates/` | 以归一化的会话归属、外部消息 ID、已确认拒绝证据判断状态；不读取微信原始字段或 API 错误码，不直接执行 I/O |
-| 会话与底座 | `src/base/codex/codex-session.mjs`、`src/wechat/session-manager.mjs`、`src/infrastructure/agents/` | 共享会话管理器通过构造端口接收应用格式化与外部适配；组合根提供实际实现，账号启动时选择底座 |
+| 会话与底座 | `src/application/conversations/session-manager.mjs`、`src/wechat/session-manager.mjs`、`src/infrastructure/agents/session-protocol.mjs` | 应用层管理会话归属、排队、状态与投递；基础设施适配器封装底座建连、输入、恢复和能力；组合根按账号注入所选适配器 |
 | 微信 View / Presenter | `src/interfaces/views/wechat-presenter.mjs`、`src/infrastructure/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
 | 基础设施端口 | `src/application/ports/infrastructure-ports.mjs`、`src/wechat/infrastructure-ports.mjs`、`src/infrastructure/storage/`、`src/infrastructure/updates/` | 组合根注入协议、底座、媒体等能力；计划与更新用例通过存储及版本查询适配器执行外部操作，不复制状态 |
 

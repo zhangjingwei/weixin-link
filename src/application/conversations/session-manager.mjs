@@ -1,29 +1,23 @@
-import {initializeCodex} from './protocol-operations.mjs'
 import {homedir as platformHome} from 'node:os'
 import {emptyContinuationNotice} from '../../domain/delivery/notification-policy.mjs'
 import {currentMaterials,hasAttachments} from '../../domain/messages/material-association.mjs'
 import {executionState} from '../../domain/tasks/execution-state.mjs'
-import {publicMemoryText,nativeMemoryConfig,enableThreadMemory} from './native-memory.mjs'
 import {localTaskLabel,localCompletion} from '../../domain/tasks/task-label.mjs'
 import {transition} from '../../domain/tasks/lifecycle.mjs'
-import {codexInput} from './codex-input.mjs'
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
 
-import {CodexRpc} from './codex-rpc.mjs'
-import {codexProviderOptions,providerEventCode} from './provider-options.mjs'
-export {CodexRpc} from './codex-rpc.mjs'
-export {codexProviderOptions} from './provider-options.mjs'
 
 export class SessionManager {
-  constructor({ stateDir, cwd, owners, backend = null, agentKind = 'codex', rpcFactory = options => new CodexRpc(options), remoteControl, sessionPorts, completionMarkers = false, providerEnv = process.env, scheduleGuidance = '', log = () => {} }) {
+  constructor({ stateDir, cwd, owners, backend = null, sessionProtocol, remoteControl, sessionPorts, completionMarkers = false, scheduleGuidance = '', log = () => {} }) {
     if (typeof remoteControl !== 'function' || typeof sessionPorts?.assistantInstructions !== 'string' ||
-      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes','codexBinary'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
+      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
     this.ports=sessionPorts
     this.log = log
-    this.agentKind=agentKind
-    this.agentName=agentKind==='claude'?'Claude':'Codex'
+    if(!sessionProtocol)throw Error('SESSION_PROTOCOL_REQUIRED')
+    this.protocol=sessionProtocol
+    this.agentName=sessionProtocol.name
     this.backend=backend
     this.instructions=this.ports.assistantInstructions+(backend?.instructions?'\n'+backend.instructions:'')
     this.completionMarkers = completionMarkers
@@ -34,8 +28,7 @@ export class SessionManager {
     this.submissions=null
     this.outputStore=this.ports.outputStore({stateDir,cwd:backend?.workspace??cwd,fileReader:backend?.fileReader,voiceMode:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1'?'native':'file'})
     this.owners = new Set(owners)
-    this.rpcFactory = options => rpcFactory({...options,errorFields:this.ports.errorFields,...(this.agentKind==='codex'?{binary:options.binary??this.ports.codexBinary()}:{})})
-    this.providerEnv = providerEnv
+    this.rpcFactory = options => sessionProtocol.createRpc({...options,errorFields:this.ports.errorFields})
     this.scheduleGuidance = scheduleGuidance
     this.state = { version: 1, users: {} }
     this.sessions = new Map()
@@ -110,7 +103,7 @@ export class SessionManager {
   outputStoreFor(userId){return this.state.users[userId]?.workspace?this.ports.outputStore({stateDir:this.stateDir,cwd:this.workspaceFor(userId),voiceMode:this.outputStore.voiceMode}):this.outputStore}
   createCatalogRpc(){return this.rpcFactory({cwd:this.cwd,provider:'configured',providerOptions:this.providerOptions(),onEvent:()=>{},onClose:()=>{},log:this.log})}
   providerOptions() {
-    return codexProviderOptions(this.providerEnv)
+    return this.protocol.providerOptions()
   }
   attachRpc(session) {
     const provider='configured',providerOptions=this.providerOptions()
@@ -171,28 +164,16 @@ export class SessionManager {
   async sessionInstructions(userId) {
     // Local integrations execute in this account's host environment, not a remote/container backend.
     const guidance=this.backend && this.backend.kind !== 'host' ? '' : await this.ports.integrationGuidance({stateDir:this.stateDir})
-    let workspaceRules=''
-    if(this.agentKind==='claude')try{const content=await readFile(join(this.workspaceFor(userId),'AGENTS.md'),'utf8');if(Buffer.byteLength(content)>64*1024)throw Error('WORKSPACE_RULES_TOO_LARGE');workspaceRules='\n\n工作区规则（AGENTS.md）：\n'+content}catch(error){if(error.code!=='ENOENT')throw error}
+    const workspaceRules=await this.protocol.workspaceRules(this.workspaceFor(userId))
     return this.instructions+(this.backend?.kind === 'host' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules
   }
   async startProvider(session) {
     const provider='configured',attempt=this.attachRpc(session)
     const saved=this.state.users[session.userId]??={}
     try {
-      await initializeCodex(attempt.rpc,{name:'wechat_codex',title:'WeChat',version:'3.0.0'})
+      await this.protocol.initialize(attempt.rpc)
       if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
-      const params={config:nativeMemoryConfig,cwd:this.workspaceFor(session.userId),sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:await this.sessionInstructions(session.userId),...attempt.providerOptions.thread}
-      let result
-      if(saved.threadId){
-        try{result=await attempt.rpc.request('thread/resume',{...params,threadId:saved.threadId,excludeTurns:true})}
-        catch(error){
-          if(saved.hasMessages||!error.message.includes('no rollout found for thread id'))throw error
-        }
-      }
-      result??=await attempt.rpc.request('thread/start',params)
-      if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
-      if(this.agentKind==='codex'&&(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never'))throw Error('Codex 未应用配置的会话权限。')
-      if(this.agentKind==='codex')await enableThreadMemory(attempt.rpc,result.thread.id)
+      const result=await this.protocol.open(attempt.rpc,{saved,cwd:this.workspaceFor(session.userId),instructions:await this.sessionInstructions(session.userId),provider:attempt.providerOptions})
       if(session.exited||attempt.rpc.closed)throw Error('会话已取消连接。')
       session.provider=provider
       session.model=result.model
@@ -240,7 +221,7 @@ export class SessionManager {
     const session=await this.connect(userId,reply),lines=[]
     for(const [index,id] of ids.entries()){
       let title='历史对话'
-      try{const r=await session.rpc.request('thread/read',{threadId:id,includeTurns:false});if(r.thread?.id===id&&r.thread.name)title=String(r.thread.name).replace(/[\r\n]/g,' ').slice(0,60)}catch{title='暂不可读取，恢复时会核验'}
+      try{const thread=await this.protocol.read(session.rpc,id);if(thread?.id===id&&thread.name)title=String(thread.name).replace(/[\r\n]/g,' ').slice(0,60)}catch{title='暂不可读取，恢复时会核验'}
       lines.push(`${index+1}. ${id===session.threadId?'[当前] ':''}${title}（${id}）`)
     }
     this.state.users[userId].conversationChoices=ids;await this.save()
@@ -262,13 +243,11 @@ export class SessionManager {
       const scope=createHash('sha256').update(session.threadId).digest('hex').slice(0,24)
       let remote={};try{remote=JSON.parse(await readFile(join(this.cwd,'remote-sessions.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}
       if(Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed))throw Error('当前对话仍有未确认停止的远程任务，请先用 “停止” 核实，再切换。')
-      const meta=(await session.rpc.request('thread/read',{threadId:id,includeTurns:false})).thread
+      const meta=await this.protocol.read(session.rpc,id)
       if(meta?.id!==id||meta.cwd&&meta.cwd!==this.workspaceFor(userId))throw Error('历史对话目录不匹配，未切换。')
       if(meta.status?.type==='active')throw Error('目标对话正在执行任务，未切换。')
       const selectedProvider=this.providerOptions()
-      const result=await session.rpc.request('thread/resume',{config:nativeMemoryConfig,cwd:this.workspaceFor(session.userId),sandbox:'danger-full-access',approvalPolicy:'never',developerInstructions:await this.sessionInstructions(session.userId),threadId:id,excludeTurns:true,...selectedProvider.thread})
-      if(result.thread?.id!==id||this.agentKind==='codex'&&(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never'))throw Error(`${this.agentName} 未确认目标对话，未切换。`)
-      await enableThreadMemory(session.rpc,id)
+      const result=await this.protocol.resume(session.rpc,{threadId:id,cwd:this.workspaceFor(session.userId),instructions:await this.sessionInstructions(session.userId),provider:selectedProvider})
       if(!token.current())return
       const previous=this.state.users[userId],oldId=session.threadId
       const next={seen:previous.seen,workspace:previous.workspace,previous:ids.filter(v=>v!==id).reverse().slice(-20),threadId:id,hasMessages:true,conversationChoices:previous.conversationChoices}
@@ -327,8 +306,8 @@ export class SessionManager {
       session.materials=materials
       this.diagnostic(session,'materials.context',{count:materials.length,queue_depth:pendingMaterials,reason:session.attachmentContinuation?'continuation':materials.length?'current':'unbound'})
       const runtimeInput=this.backend?.prepareInput?await this.backend.prepareInput(text,{signal:token.signal}):text
-      const turnParams={threadId:session.threadId,input:[...codexInput(runtimeInput),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
-      result=await session.rpc.request('turn/start',turnParams)
+      const turnParams={threadId:session.threadId,input:[...this.protocol.input(runtimeInput),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
+      result=await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId})
       if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment
     } catch(error) {
@@ -362,7 +341,7 @@ export class SessionManager {
     if(session.traceId!==traceId)return
     if (session.busy && !session.turnReady) throw new Error('等待任务启动确认超时。')
     for (let attempt = 0; attempt < 20 && session.traceId===traceId && session.busy && !session.rpc.closed; attempt++) {
-      try { const result=await session.rpc.request('turn/interrupt', { threadId: session.threadId, turnId: session.turnId });if(this.backend?.stopBackground)await this.backend.stopBackground(session);return result }
+      try { const result=await this.protocol.interrupt(session.rpc,session.threadId,session.turnId);if(this.backend?.stopBackground)await this.backend.stopBackground(session);return result }
       catch (error) {
         if (!error.message.includes('no active turn to interrupt') || attempt === 19) throw error
         await new Promise(resolve => setTimeout(resolve, 100))
@@ -401,7 +380,7 @@ export class SessionManager {
       const supported = ['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput']
       if (!supported.includes(message.method)) {
         session.rpc.write({ id: message.id, error: { code: -32601, message: 'Unsupported client interaction' } })
-        await this.notify(session, `Codex 请求了暂不支持的交互：${message.method}，该请求未获执行。`)
+        await this.notify(session, `${this.agentName} 请求了暂不支持的交互：${message.method}，该请求未获执行。`)
         return
       }
       const item = session.items.get(p.itemId)
@@ -425,13 +404,13 @@ export class SessionManager {
         text = p.questions.map((q, i) => `${i + 1}. ${q.question}${q.options?.length ? '\n' + q.options.map(o => `${o.label}：${o.description}`).join('\n') : ''}`).join('\n\n')
         text += `\n\n/回答 ${code} 你的答案\n多个问题的答案用 | 分隔。`
       } else {
-        text = `${p.reason ?? 'Codex 请求批准操作'}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n/批准 ${code}\n/拒绝 ${code}`
+        text = `${p.reason ?? `${this.agentName} 请求批准操作`}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n/批准 ${code}\n/拒绝 ${code}`
       }
       await this.notify(session, text)
       return
     }
     if(message.method==='error'){
-      const code=providerEventCode(p)
+      const code=this.protocol.eventCode(p)
       if(code)this.diagnostic(session,'provider.event_error',{provider:session.provider,stage:session.turnStarted?'turn':'turn_start',reason:code,rpc_code:code})
       return
     }
@@ -463,7 +442,7 @@ export class SessionManager {
       if (p.item?.type === 'webSearch') this.diagnostic(session,'tool.completed',{kind:'webSearch'})
       if(p.item?.type&&p.item.type!=='agentMessage'&&p.item.type!=='webSearch')this.diagnostic(session,'tool.completed',{kind:p.item.type,status:p.item.status,exit_code:p.item.exitCode})
       if (p.item?.type === 'agentMessage' && p.item.text) {
-        const flow=this.ports.stripTaskFlow(publicMemoryText(p.item.text),session.traceId)
+        const flow=this.ports.stripTaskFlow(this.protocol.cleanOutputText(p.item.text),session.traceId)
         const rest=flow.text
         if(p.item.phase==='final_answer'||!p.item.phase)session.waitingAttachment=flow.waiting
         if (p.item.phase === 'commentary') {
@@ -569,7 +548,7 @@ export class SessionManager {
     }
     let notice
     try{
-      const result=await rpc.request('turn/steer',{threadId,expectedTurnId:turnId,input:[{type:'text',text}]})
+      const result=await this.protocol.steer(rpc,threadId,turnId,text)
       if(result?.turnId!==turnId)throw Error('补充回执未匹配原任务。')
       entry.status='accepted'
       notice='补充已提交给当前任务，将在后续处理时参考。'
@@ -591,8 +570,9 @@ export class SessionManager {
     try {
       if(command?.action==='steer'){await this.steer(userId,command.text,reply,token);return}
       if(command?.action==='memory'){
-        if(this.agentKind==='claude'){await reply('当前 Claude 底座未接入可验证的长期记忆开关或状态；未执行记忆修改。');return}
-        const session=await this.connect(userId,reply);if(command.op==='auto'){await session.rpc.request('thread/memoryMode/set',{threadId:session.threadId,mode:command.on?'enabled':'disabled'});await reply('Codex已确认当前会话原生记忆模式：'+(command.on?'开启':'关闭')+'。');}else if(command.op==='list'){const status=await session.rpc.request('memory/status',{});await reply('当前使用Codex原生记忆。\n已整合会话：'+(status.v2ConsolidatedThreads??'未知')+'；就绪：'+(status.v2Ready?'是':'否')+'。\n当前不使用微信逐条记忆库；“开启记忆”或“关闭记忆” 控制当前会话原生记忆。');}else await reply('当前使用Codex原生记忆，未执行微信逐条记忆的修改或清空。可用“记忆” 查看状态。');return
+        if(!this.protocol.supportsMemory){await reply(await this.protocol.memory(null,null,command));return}
+        const session=await this.connect(userId,reply)
+        await reply(await this.protocol.memory(session.rpc,session.threadId,command));return
       }
       if (['approval', 'answer'].includes(command?.action)) {
         const question = this.questions.get(command.code)
@@ -609,26 +589,15 @@ export class SessionManager {
         session.rpc.respond(message.id, result)
         clearTimeout(question.timer)
         this.questions.delete(command.code)
-        await reply('已将答复发送给 Codex。')
+        await reply(`已将答复发送给 ${this.agentName}。`)
         return
       }
       if(command?.action==='sessions'){await this.listConversations(userId,reply);return}
       if(command?.action==='resume'){await this.resumeConversation(userId,command.selection,reply,token);return}
       if(command?.action==='models'){
-        if(this.agentKind==='claude'){await reply('Claude 底座暂未提供可核验的模型目录；未切换模型。');return}
-        const session=await this.connect(userId,reply),models=[],cursors=new Set();let cursor
-        for(let page=0;page<10;page++){
-          const result=await session.rpc.request('model/list',{limit:50,includeHidden:false,...(cursor?{cursor}:{})})
-          if(!Array.isArray(result.data))throw Error('Codex 未返回有效的模型列表。')
-          models.push(...result.data);cursor=result.nextCursor
-          if(!cursor)break
-          if(cursors.has(cursor))throw Error('Codex 模型列表分页异常，请稍后重试。')
-          cursors.add(cursor)
-        }
-        if(cursor)throw Error('模型列表超过查询上限，请在主机查看。')
-        const entries=[...new Map(models.filter(m=>typeof m.model==='string'&&!m.hidden).map(m=>[m.model,m])).values()]
-        const lines=entries.map(m=>`${m.model}${session.model===m.model?' [当前]':''}${m.isDefault?' [默认]':''}\n输入：${Array.isArray(m.inputModalities)?m.inputModalities.join('、'):'未提供'}；推理档位：${(m.supportedReasoningEfforts??[]).map(e=>e.reasoningEffort).join('、')||'未提供'}`)
-        await reply('Codex 返回的模型列表（只查询，不切换）：\n'+(lines.join('\n\n')||'当前未返回可显示的模型。'));return
+        if(!this.protocol.supportsModels){await reply(await this.protocol.models(null));return}
+        const session=await this.connect(userId,reply)
+        await reply(await this.protocol.models(session.rpc,session.model));return
       }
       if (command?.action === 'help') {await reply('直接发送需求即可。发送“使用说明”查看完整说明，“安装向导”完成首次设置。\n常用：日常助手、状态、停止、结果、恢复、退出、模型、记忆、开启记忆、关闭记忆、列表、新建 名称、切换智能体。\n配置远程主机、家庭设备或备份：直接说明需求，由智能体通过配置命令检查和处理；需要模型可用。\n归档保留历史；删除是不可还原的永久删除。');return}
       const runtime = this.sessions.get(userId)
@@ -725,7 +694,7 @@ export class SessionManager {
       resolveResult = value => { clearTimeout(timer); resolve(value) }
       session.waiters ??= new Set()
       session.waiters.add(resolveResult)
-      timer = setTimeout(() => { session.waiters.delete(resolveResult); reject(new Error('Codex test timed out')) }, timeout)
+      timer = setTimeout(() => { session.waiters.delete(resolveResult); reject(new Error('Agent test timed out')) }, timeout)
     })
     try { await this.send(session, text, token); return await result }
     finally { clearTimeout(timer); session.waiters.delete(resolveResult) }

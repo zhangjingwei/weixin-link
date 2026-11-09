@@ -16,7 +16,7 @@ test('domain source avoids concrete agent backends and abort mechanisms',async()
  }
 })
 
-test('shared SessionManager has no static dependency on application, infrastructure or views',async()=>{
- const source=await readFile(fileURLToPath(new URL('../../src/base/codex/codex-session.mjs',import.meta.url)),'utf8')
- assert.doesNotMatch(source,/(?:from\s*|import\(\s*)['"](?:\.\.\/)+(?:application|infrastructure|interfaces)\//)
+test('application SessionManager has no static dependency on infrastructure or views',async()=>{
+ const source=await readFile(fileURLToPath(new URL('../../src/application/conversations/session-manager.mjs',import.meta.url)),'utf8')
+ assert.doesNotMatch(source,/(?:from\s*|import\(\s*)['"](?:\.\.\/)+(?:infrastructure|interfaces)\//)
 })

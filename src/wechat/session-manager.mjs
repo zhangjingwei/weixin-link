@@ -1,4 +1,5 @@
-import {SessionManager} from '../base/codex/codex-session.mjs'
+import {SessionManager} from '../application/conversations/session-manager.mjs'
+import {createSessionProtocol} from '../infrastructure/agents/session-protocol.mjs'
 import {remoteScope} from '../application/remote-tasks/remote-stop.mjs'
 import {recoveryText} from '../application/tasks/recovery-state.mjs'
 import {integrationGuidance} from '../integrations/runtime.mjs'
@@ -26,9 +27,10 @@ export const sessionPorts = Object.freeze({
 
 export class ConfiguredSessionManager extends SessionManager {
   constructor(options) {
-    super({sessionPorts, remoteControl: remoteScope, ...options})
+    const {agentKind='codex',rpcFactory,providerEnv,sessionProtocol,...rest}=options
+    super({sessionPorts, remoteControl: remoteScope, ...rest,sessionProtocol:sessionProtocol??createSessionProtocol({kind:agentKind,rpcFactory,providerEnv,codexBinary:sessionPorts.codexBinary})})
   }
 }
 export {ConfiguredSessionManager as SessionManager}
 export {controlCommand} from '../interfaces/wechat/control-command.mjs'
-export {codexProviderOptions} from '../base/codex/codex-session.mjs'
+export {codexProviderOptions} from '../base/codex/provider-options.mjs'
