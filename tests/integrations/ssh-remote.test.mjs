@@ -4,7 +4,7 @@ import {mkdtemp, mkdir, writeFile, rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {integrationStatus, invokeIntegration} from '../../src/integrations/runtime.mjs'
-import {RemoteController} from '../../src/core/remote-tasks/remote-controller.mjs'
+import {RemoteController} from '../../src/application/remote-tasks/remote-controller.mjs'
 
 test('SSH plugin discovers existing host config but stays disabled and rejects calls without a session scope', async t => {
   const home = await mkdtemp(join(tmpdir(), 'integration-ssh-'))

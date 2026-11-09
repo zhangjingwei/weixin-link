@@ -1,4 +1,4 @@
-import {controlEndpoint} from '../core/runtime/control-endpoint.mjs'
+import {controlEndpoint} from '../infrastructure/runtime/control-endpoint.mjs'
 import {homedir as platformHome} from 'node:os'
 import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 import {join} from 'node:path'

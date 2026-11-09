@@ -1,4 +1,4 @@
-import {errorFields} from '../../core/diagnostics/diagnostic-log.mjs'
+import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 
 /** Own receipt and fast-control decisions after the transport parses a wire. */
 export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, conversations, runtime, setupController, setupReceipts, normalizeVoice, classifyMessage, log = () => {}}) {

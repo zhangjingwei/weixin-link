@@ -12,14 +12,14 @@ export default {
   async health(config) {
     const hosts = Object.keys(config.hosts)
     if (!hosts.length) throw Error('REMOTE_HOSTS_REQUIRED')
-    const {RemoteRpc} = await import('../../core/remote-tasks/remote-task-client.mjs')
+    const {RemoteRpc} = await import('../../infrastructure/agents/remote-rpc.mjs')
     const host = hosts[0], rpc = new RemoteRpc(host, {hostConfig: config.hosts[host], retryDelays: []})
     try { await rpc.connect(); await rpc.request('thread/list', {limit: 1}, 6000) } finally { rpc.close() }
   },
   async invoke(_config, request, {home, scope, workspace, env}) {
     if (!request || typeof request !== 'object' || Array.isArray(request) || !allowed.has(request.action)) throw Error('INTEGRATION_OPERATION_NOT_ALLOWED')
     if (typeof scope !== 'string' || !scope || scope.length > 200) throw Error('INTEGRATION_ARGUMENTS_INVALID')
-    const {RemoteController} = await import('../../core/remote-tasks/remote-controller.mjs')
+    const {RemoteController} = await import('../../application/remote-tasks/remote-controller.mjs')
     const root = dirname(await this.configPath({home, workspace, env}))
     // Use the same thread scope as the existing /stop cleanup and remote CLI.
     return new RemoteController({root, scope}).run(request)

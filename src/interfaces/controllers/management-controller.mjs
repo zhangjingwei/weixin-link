@@ -1,4 +1,4 @@
-import {errorFields} from '../../core/diagnostics/diagnostic-log.mjs'
+import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 
 /** Management commands from WeChat. Installation, backend switching and
  * upgrades remain outside the ordinary model task queue.

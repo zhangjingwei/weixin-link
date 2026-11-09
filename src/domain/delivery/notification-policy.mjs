@@ -1,4 +1,4 @@
-export {receiptPolicy} from '../../domain/delivery/receipt-policy.mjs'
+export {receiptPolicy} from './receipt-policy.mjs'
 // Exact empty templates only. Never classify meaningful progress using a keyword blacklist.
 const emptyStarts=new Set([
  '我会读取压缩包中的聊天记录，按上一条要求汇总',

@@ -19,15 +19,15 @@ import {AgentSwitcher} from '../setup/agent-switch.mjs'
 import {ChatUpgrader} from '../setup/chat-upgrade.mjs'
 import {ClaudeConversations} from '../base/claude/claude-conversations.mjs'
 import {ClaudeSetupController} from '../base/claude/claude-setup.mjs'
-import {TextConversations} from '../core/text-conversations.mjs'
+import {TextConversations} from '../application/conversations/text-conversations.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
-import {traceIngress} from '../core/intake/ingress-trace.mjs'
+import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
 import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from './accounts.mjs'
 import {DurableIntake} from '../application/tasks/durable-intake.mjs'
-import {RuntimeControl} from '../core/runtime/runtime-control.mjs'
+import {RuntimeControl} from '../infrastructure/runtime/runtime-control.mjs'
 import {nonBlockingHandler} from './message-handler.mjs'
 import {MessageDispatch} from './message-dispatch.mjs'
-import {createDiagnosticLog,errorFields,createSdkLogger} from '../core/diagnostics/diagnostic-log.mjs'
+import {createDiagnosticLog,errorFields,createSdkLogger} from '../infrastructure/diagnostics/diagnostic-log.mjs'
 import QRCode from 'qrcode'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -50,7 +50,7 @@ if (testing && !/^[a-zA-Z0-9_-]+$/.test(testName)) throw new Error('Invalid test
 const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-logs':'logs')})
 const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:testing?'test':'live'})
-const scheduleGuidance=`定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../core/schedules/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2026-11-07T09:00:00+08:00","text":"开会"}。定时运行 Codex：{"action":"create","kind":"task","at":"2026-11-07T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":"Asia/Shanghai"} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向本会话的 Codex 任务队列提交原样文字，不预先声称任务完成。必须使用本会话的 CODEX_THREAD_ID，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
+const scheduleGuidance=`定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../interfaces/cli/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2026-11-07T09:00:00+08:00","text":"开会"}。定时运行 Codex：{"action":"create","kind":"task","at":"2026-11-07T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":"Asia/Shanghai"} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向本会话的 Codex 任务队列提交原样文字，不预先声称任务完成。必须使用本会话的 CODEX_THREAD_ID，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
 const manager = await new SessionManager({log, completionMarkers:true, scheduleGuidance, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, agentKind:agent.kind, ...agent.sessionOptions, ...(backend.kind==='podman'?{rpcFactory:backend.rpcFactory,remoteControl:backend.remoteControl,providerEnv:{}}:{}) }).init()
 const agentSwitcher=new AgentSwitcher({account,installation,agentKind:agent.kind,backendReady:codexAvailability})
 const upgrader=new ChatUpgrader()
@@ -96,7 +96,7 @@ const runtime=new RuntimeControl({
   if(typeof scope!=='string'||typeof task!=='string'||!Number.isSafeInteger(seq)||seq<1||typeof text!=='string'||text.length>6000)throw Error('Invalid progress')
   const session=[...manager.sessions.values()].find(s=>s.threadId===scope)
   if(!session?.busy||session.exited||!(session.workToken?.current()??false))throw Error('Inactive scope')
-  const {RemoteController}=await import('../core/remote-tasks/remote-controller.mjs'),controller=new RemoteController({root:cwd,scope}),record=await controller.task(task)
+  const {RemoteController}=await import('../application/remote-tasks/remote-controller.mjs'),controller=new RemoteController({root:cwd,scope}),record=await controller.task(task)
   if(record.stop_confirmed||(await controller.store.read())._cancelled?.[controller.scope])throw Error('Cancelled task')
   if(typeof chunkId!=='string'||!/^[a-f0-9]{64}$/.test(chunkId))throw Error('Invalid chunk')
   const key=task+':'+chunkId;if(remoteSequences.has(key))return {accepted:true,duplicate:true}

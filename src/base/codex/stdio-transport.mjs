@@ -1,6 +1,6 @@
 import {spawn} from 'node:child_process'
 import {createInterface} from 'node:readline'
-import {errorFields} from '../../core/diagnostics/diagnostic-log.mjs'
+import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 export class StdioTransport {
  constructor({binary,args,cwd,env,log=()=>{}}){
   this.log=log;this.closed=false;this.onMessage=()=>{};this.onClose=()=>{}

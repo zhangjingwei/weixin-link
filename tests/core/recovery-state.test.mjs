@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {DurableJobs} from '../../src/core/intake/durable-jobs.mjs'
+import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
 import {SessionManager,controlCommand} from '../../src/base/codex/codex-session.mjs'
-import {recoveryText} from '../../src/core/tasks/recovery-state.mjs'
+import {recoveryText} from '../../src/application/tasks/recovery-state.mjs'
 test('recheck only reopens uncertain owner-linked work for reconciliation',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'recheck-')),jobs=new DurableJobs(join(dir,'jobs.sqlite'))
  try{

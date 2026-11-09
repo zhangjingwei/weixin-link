@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {diagnosticCommand,handleDiagnostic} from '../../src/core/diagnostics/diagnostic-commands.mjs'
+import {diagnosticCommand,handleDiagnostic} from '../../src/application/diagnostics/diagnostic-commands.mjs'
 test('exact commands only',()=>{assert.equal(diagnosticCommand('诊断'),'diagnose');assert.equal(diagnosticCommand(' 运行诊断 '),'diagnose');assert.equal(diagnosticCommand('请解释运行诊断'),null)})
 test('account scoped report excludes raw secret fields and handles malformed records',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'diagnostic-'));try{

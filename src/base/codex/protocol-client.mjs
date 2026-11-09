@@ -1,5 +1,5 @@
 // Shared Codex JSON-RPC protocol. Transports only send/receive messages.
-import {errorFields} from '../../core/diagnostics/diagnostic-log.mjs'
+import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 export const localRpcErrors={
  disconnected:method=>Object.assign(Error('Codex 连接已断开。'),{connectionClosed:true,method}),
  timeout:method=>Object.assign(Error(`Codex ${method} 响应超时。`),{requestTimeout:true,method}),

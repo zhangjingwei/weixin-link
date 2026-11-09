@@ -2,8 +2,8 @@ import './remote-test-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,readFile} from 'node:fs/promises'
-import {RemoteController,projectPath,exportPath} from '../../src/core/remote-tasks/remote-controller.mjs'
-import {RemoteStore} from '../../src/core/remote-tasks/remote-store.mjs'
+import {RemoteController,projectPath,exportPath} from '../../src/application/remote-tasks/remote-controller.mjs'
+import {RemoteStore} from '../../src/infrastructure/storage/registry-lock.mjs'
 const cwd='/home/example/work/test'
 async function setup(handler,{symlinkPath}={}){const root=await mkdtemp('/tmp/remote-controller-test-'),calls=[];const c=new RemoteController({root,scope:'test',rpcFactory:()=>({async connect(){},close(){},async call(m,p){calls.push([m,p]);if(m==='fs/getMetadata'&&['/home/example/work',cwd].includes(p.path))return {isDirectory:true,isSymlink:p.path===symlinkPath};return handler(m,p)}})});return {root,c,calls}}
 async function own(c,extra={}){await c.store.update(s=>{s.t={kind:'official-remote-task',scope:c.scope,host:'spark',cwd,thread_id:'thread',turn_id:'old',...extra}})}

@@ -1,7 +1,7 @@
 import { mkdir, stat, chmod, appendFile, rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import {deliveryError} from '../delivery/delivery-error.mjs'
+import {deliveryError} from '../wechat/delivery-error.mjs'
 const identifiers = new Set(['trace_id','poll_id','thread_id','turn_id','rpc_id','rpc_code','method','status','reason','kind','phase','code','signal','error_type','error_kind','error_code','api_reason','delivery_state','stage','provider','model','model_provider'])
 const numbers = new Set(['seq','source_ms','duration_ms','queue_depth','bytes','chars','parts','part','count','attempt','http_status','api_code','pid','exit_code','dropped'])
 const booleans = new Set(['final_attempt'])

@@ -11,7 +11,7 @@ import {composeMediaInput} from './media/media-preprocess.mjs'
 import {OutputStore, OutputTransport} from './media/outbound-media.mjs'
 import {integrationGuidance, integrationStatus, checkIntegration, invokeIntegration} from './integrations/runtime.mjs'
 import {RemoteStore} from './storage/registry-lock.mjs'
-import {DurableJobs} from '../core/intake/durable-jobs.mjs'
+import {DurableJobs} from './storage/durable-jobs.mjs'
 
 /** Compose existing external implementations without creating another state
  * store. Pass the returned ports into application use cases as needed.

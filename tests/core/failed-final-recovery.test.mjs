@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {recoverFailedFinal} from '../../src/application/notifications/failed-final-recovery.mjs'
 import {confirmedFinalRejection} from '../../src/infrastructure/wechat/delivery-evidence.mjs'
-import {deliveryError} from '../../src/core/delivery/delivery-error.mjs'
-import {safeRecord} from '../../src/core/diagnostics/diagnostic-log.mjs'
+import {deliveryError} from '../../src/infrastructure/wechat/delivery-error.mjs'
+import {safeRecord} from '../../src/infrastructure/diagnostics/diagnostic-log.mjs'
 
 const fixture=()=>{
  const record={lastReply:'最终结果\n\n✅ 本轮回答结束。',recovery:{execution:'completed',delivery:'failed',delivery_error:{api_code:-2}}}

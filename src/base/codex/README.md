@@ -6,4 +6,4 @@ protocol-operations.mjs 提供初始化握手及 Codex 只读重试白名单。�
 
 thread、turn、fs、backgroundTerminals 等操作统一走 request(method, params)。命令实际由对应连接背后的官方 app-server 执行；远端路径不会转换成微信主机上的本地 shell 命令。
 
-远程重连时的会话恢复、任务归属和停止核验在 core/remote-tasks/；SSH 与隧道在 remote/。模型底座不负责授权另一个会话的任务。
+远程重连的协议适配在 infrastructure/agents/remote-rpc.mjs，任务归属和停止核验在 application/remote-tasks/；SSH 与隧道在 remote/。模型底座不负责授权另一个会话的任务。

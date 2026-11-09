@@ -1,4 +1,4 @@
-import {deliveryError,deliveryFailureState} from '../../core/delivery/delivery-error.mjs'
+import {deliveryError,deliveryFailureState} from '../../infrastructure/wechat/delivery-error.mjs'
 import {canRecoverFailedFinal} from '../../domain/delivery/notification-state.mjs'
 
 /** Retry a definitively rejected text final once after a fresh inbound message. */

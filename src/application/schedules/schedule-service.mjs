@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto'
-import {deliveryFailureState} from '../../core/delivery/delivery-error.mjs'
+import {deliveryFailureState} from '../../infrastructure/wechat/delivery-error.mjs'
 import {validateRepeat, nextOccurrence, localDateAt} from '../../domain/schedules/recurrence.mjs'
 
 const MAX_TEXT = 1000

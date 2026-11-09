@@ -1,7 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto'
 import {readFile,writeFile,rename,unlink,lstat} from 'node:fs/promises'
 import {join} from 'node:path'
-import {deliveryError} from '../core/delivery/delivery-error.mjs'
+import {deliveryError} from '../infrastructure/wechat/delivery-error.mjs'
 
 const RELEASE=/^[0-9a-f]{7,40}$/
 export const WELCOME_MESSAGE='微信助手已连接。直接发送问题、图片或文件即可使用；发「日常」进入日常会话，发「状态」查看任务，发「使用说明」查看完整帮助。需要配置时发「安装向导」。'

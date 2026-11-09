@@ -4,7 +4,7 @@ import {spawn} from 'node:child_process'
 import {join} from 'node:path'
 import {pathToFileURL} from 'node:url'
 import {HOSTS} from '../remote/remote-config.mjs'
-import {RemoteRpc} from '../core/remote-tasks/remote-task-client.mjs'
+import {RemoteRpc} from '../infrastructure/agents/remote-rpc.mjs'
 import {sshConfig} from '../remote/remote-config.mjs'
 export function windowsDeployment(config){
  if(config.platform!=='win32'||config.transport!=='ssh-websocket'||!Number.isInteger(config.port)||config.port<1024||config.port>65535||typeof config.binary!=='string'||! /^[A-Za-z]:[\\/]/.test(config.binary)||/[\r\n\0]/.test(config.binary))throw Error('INVALID_WINDOWS_DEPLOY_CONFIG')

@@ -8,7 +8,7 @@ import {promisify} from 'node:util'
 import {realpathSync} from 'node:fs'
 import {ServiceManager,userHome,serviceName,xml} from './platform-service.mjs'
 import {accountPaths,listAccounts} from '../wechat/accounts.mjs'
-import {controlRequest} from '../core/runtime/runtime-control.mjs'
+import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {npmCommand,nodeEnvironment} from './platform-command.mjs'
 import {installConfig} from './install-config.mjs'
 

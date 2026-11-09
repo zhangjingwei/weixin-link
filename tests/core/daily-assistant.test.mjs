@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {TextConversations,conversationCommand} from '../../src/core/text-conversations.mjs'
+import {TextConversations,conversationCommand} from '../../src/application/conversations/text-conversations.mjs'
 const fixture=()=>{
  const calls=[],manager={state:{users:{alice:{threadId:'original-thread'}}},owners:new Set(['alice','bob']),sessions:new Map(),questions:new Map(),save:async()=>{}}
  const router=new TextConversations(manager,['alice','bob'])

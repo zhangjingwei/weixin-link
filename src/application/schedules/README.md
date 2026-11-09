@@ -1,11 +1,11 @@
 # 通用提醒
 
-这是 `src/core/` 的账号内基础能力，不属于可选集成插件，也不依赖外部日历。模型解析用户意图并调用 `schedule-cli.mjs`；调度、保存、投递与状态恢复由本地服务负责。每条计划配置触发时间、动作类型和文字内容；动作类型 `reminder` 发送固定提醒，`task` 将文字原样交给现有 Codex 任务队列。两种动作均支持单次、每天和每周，以及分页查看和取消。
+这是账号内的基础能力，不属于可选集成插件，也不依赖外部日历。模型解析用户意图并调用 `src/interfaces/cli/schedule-cli.mjs`；调度、保存、投递与状态恢复由本地服务负责。每条计划配置触发时间、动作类型和文字内容；动作类型 `reminder` 发送固定提醒，`task` 将文字原样交给现有 Codex 任务队列。两种动作均支持单次、每天和每周，以及分页查看和取消。
 
 本机 Codex 会话中的调用示例：
 
 ```sh
-node src/core/schedules/schedule-cli.mjs <<'JSON'
+node src/interfaces/cli/schedule-cli.mjs <<'JSON'
 {"action":"create","kind":"reminder","at":"2026-11-07T09:00:00+08:00","text":"开会"}
 JSON
 ```

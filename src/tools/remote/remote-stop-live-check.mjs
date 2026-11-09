@@ -1,6 +1,6 @@
 import {remoteWorkspace} from '../../remote/remote-paths.mjs'
-import {RemoteController} from '../../core/remote-tasks/remote-controller.mjs'
-import {RemoteRpc} from '../../core/remote-tasks/remote-task-client.mjs'
+import {RemoteController} from '../../application/remote-tasks/remote-controller.mjs'
+import {RemoteRpc} from '../../infrastructure/agents/remote-rpc.mjs'
 import {randomUUID} from 'node:crypto'
 import {writeFile} from 'node:fs/promises'
 import {setTimeout as delay} from 'node:timers/promises'

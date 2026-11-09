@@ -1,5 +1,5 @@
 import {releaseTag,newerRelease,installedRelease} from '../../domain/updates/release-version.mjs'
-import {deliveryFailureState} from '../../core/delivery/delivery-error.mjs'
+import {deliveryFailureState} from '../../infrastructure/wechat/delivery-error.mjs'
 import {shouldPromptForUpdate} from '../../domain/delivery/notification-state.mjs'
 
 const FULL_COMMIT=/^[0-9a-f]{40}$/

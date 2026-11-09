@@ -8,10 +8,10 @@ import {ScheduleService} from '../../src/application/schedules/schedule-service.
 import {createScheduleStateStore} from '../../src/infrastructure/storage/schedule-state.mjs'
 import {nextOccurrence} from '../../src/domain/schedules/recurrence.mjs'
 import {scheduleCommand} from '../../src/interfaces/controllers/schedule-controller.mjs'
-import {runScheduleCommand} from '../../src/core/schedules/schedule-cli.mjs'
-import {RuntimeControl, controlRequest} from '../../src/core/runtime/runtime-control.mjs'
+import {runScheduleCommand} from '../../src/interfaces/cli/schedule-cli.mjs'
+import {RuntimeControl, controlRequest} from '../../src/infrastructure/runtime/runtime-control.mjs'
 import {accountPaths} from '../../src/wechat/accounts.mjs'
-import {DurableJobs} from '../../src/core/intake/durable-jobs.mjs'
+import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
 import {SessionManager} from '../../src/base/codex/codex-session.mjs'
 
 async function fixture(t, send = async () => ({status: 'accepted'})) {

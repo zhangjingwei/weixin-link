@@ -1,8 +1,8 @@
-import {handleDiagnostic} from '../../core/diagnostics/diagnostic-commands.mjs'
+import {handleDiagnostic} from '../diagnostics/diagnostic-commands.mjs'
 import {randomUUID} from 'node:crypto'
 import {receiptPolicy} from '../../domain/delivery/receipt-policy.mjs'
-import {errorFields} from '../../core/diagnostics/diagnostic-log.mjs'
-import {systemNotice} from '../../core/delivery/system-notice.mjs'
+import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
+import {systemNotice} from '../../interfaces/views/system-notice.mjs'
 import {recoverFailedFinal} from '../notifications/failed-final-recovery.mjs'
 
 const READINESS_NOTICE = {

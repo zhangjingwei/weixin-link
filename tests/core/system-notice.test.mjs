@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {systemNotice} from '../../src/core/delivery/system-notice.mjs'
+import {systemNotice} from '../../src/interfaces/views/system-notice.mjs'
 
 test('program notices add one label in the same text or attachment packet',()=>{
  assert.equal(systemNotice('服务已连接。'),'服务已连接。\n〔系统通知〕')

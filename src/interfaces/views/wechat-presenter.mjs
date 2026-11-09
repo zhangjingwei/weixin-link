@@ -1,4 +1,4 @@
-import {systemNotice} from '../../core/delivery/system-notice.mjs'
+import {systemNotice} from './system-notice.mjs'
 
 /** WeChat View adapter. Application handlers provide content and delivery
  * options; recipient mapping and SDK-specific response shapes stay here.

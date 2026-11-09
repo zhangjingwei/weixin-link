@@ -1,12 +1,12 @@
-import {workspaceText} from './conversations/workspace.mjs'
-import {installOfficialHooks,titleUpdated,withCatalogRpc,officialCatalog,applyCatalog,refreshTitles} from './conversations/catalog.mjs'
-import {label,serialize,flush,deliver,replay} from './conversations/delivery.mjs'
-import {rename,selectOfficial,archive,markDeleted,deleteConversation} from './conversations/operations.mjs'
-import {history} from './conversations/history.mjs'
+import {workspaceText} from './workspace.mjs'
+import {installOfficialHooks,titleUpdated,withCatalogRpc,officialCatalog,applyCatalog,refreshTitles} from './catalog.mjs'
+import {label,serialize,flush,deliver,replay} from './delivery.mjs'
+import {rename,selectOfficial,archive,markDeleted,deleteConversation} from './operations.mjs'
+import {history} from './history.mjs'
 import {randomUUID} from 'node:crypto'
-import {conversationCommand} from '../domain/conversations/commands.mjs'
-export {conversationCommand} from '../domain/conversations/commands.mjs'
-export {historyText} from './conversations/history.mjs'
+import {conversationCommand} from '../../domain/conversations/commands.mjs'
+export {conversationCommand} from '../../domain/conversations/commands.mjs'
+export {historyText} from './history.mjs'
 export class TextConversations{
  constructor(manager,owners){this.manager=manager;this.realOwners=new Set(owners);manager.state.textConversations??={};this.root=manager.state.textConversations;this.pages=new Map();for(const owner of owners)this.ensure(owner);manager.onConversationTitle=(threadId,name)=>this.titleUpdated(threadId,name);this.installOfficialHooks()}
  installOfficialHooks(...args){return installOfficialHooks(this,...args)}

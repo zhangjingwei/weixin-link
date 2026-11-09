@@ -1,6 +1,6 @@
 import {homedir as platformHome} from 'node:os'
 import {ffmpegBinary} from './media-binary.mjs'
-import {deliveryError,deliveryFailureState} from '../../core/delivery/delivery-error.mjs'
+import {deliveryError,deliveryFailureState} from '../wechat/delivery-error.mjs'
 import {wechatParts} from '../../wechat/wechat-text.mjs'
 import {mkdir,readFile,writeFile,realpath,stat,unlink,lstat} from 'node:fs/promises'
 import {resolve,join,basename,extname,relative,isAbsolute} from 'node:path'

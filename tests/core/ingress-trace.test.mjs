@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {traceIngress} from '../../src/core/intake/ingress-trace.mjs'
-import {safeRecord} from '../../src/core/diagnostics/diagnostic-log.mjs'
+import {traceIngress} from '../../src/infrastructure/wechat/ingress-trace.mjs'
+import {safeRecord} from '../../src/infrastructure/diagnostics/diagnostic-log.mjs'
 test('wire, parse, callback boundaries correlate without payload secrets or message splitting',async()=>{
  const records=[],wire={message_id:123,seq:7,create_time_ms:1000,context_token:'SECRET',item_list:[{type:1,text_item:{text:'PRIVATE'}},{type:2,image_item:{url:'https://secret'}}]}
  const bot={api:{async getUpdates(){return {msgs:[wire]}}},http:{async executeRequest(){return {data:{msgs:[wire]}}}},parser:{parse:w=>({raw:w})}}

@@ -1,4 +1,4 @@
-import {ASSISTANT_INSTRUCTIONS} from '../../../src/core/policy/assistant-policy.mjs'
+import {ASSISTANT_INSTRUCTIONS} from '../../../src/infrastructure/agents/assistant-policy.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'

@@ -3,7 +3,7 @@ const repositoryDirectory=repositoryFilePath(new URL('../../',import.meta.url))
 import {BindingPermit} from './setup-binding-permit.mjs'
 // Deferred maintenance worker: let the WeChat control reply finish before switching its service.
 import {containerForAccount} from './setup-container.mjs'
-import {controlRequest} from '../core/runtime/runtime-control.mjs'
+import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {writeFile} from 'node:fs/promises'

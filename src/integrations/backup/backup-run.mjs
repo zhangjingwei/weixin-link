@@ -1,4 +1,4 @@
-import {controlRequest} from '../../core/runtime/runtime-control.mjs'
+import {controlRequest} from '../../infrastructure/runtime/runtime-control.mjs'
 import {readdir,access,mkdir,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {randomUUID} from 'node:crypto'

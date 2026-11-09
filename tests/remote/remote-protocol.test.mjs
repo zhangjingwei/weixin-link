@@ -1,7 +1,7 @@
 import './remote-test-config.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {RemoteRpc} from '../../src/core/remote-tasks/remote-task-client.mjs'
+import {RemoteRpc} from '../../src/infrastructure/agents/remote-rpc.mjs'
 import {CodexProtocolClient} from '../../src/base/codex/protocol-client.mjs'
 function fixture(handler){
  const wires=[],calls=[]

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm,stat} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {RuntimeControl,controlRequest} from '../../src/core/runtime/runtime-control.mjs'
+import {RuntimeControl,controlRequest} from '../../src/infrastructure/runtime/runtime-control.mjs'
 test('drain and seal use live counts; seal refuses work racing with an idle observation',()=>{
  let sessions=1,seals=0;const runtime=new RuntimeControl({snapshot:()=>({sessions}),ready:()=>true,onSeal:()=>{seals++}})
  const lease='test-lease-123';runtime.command('drain',lease);assert.equal(runtime.status().idle,false)

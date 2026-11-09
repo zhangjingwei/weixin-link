@@ -1,6 +1,6 @@
-import {recover} from '../../core/intake/local-recovery.mjs'
-import {recoverRemote} from '../../core/intake/remote-recovery.mjs'
-import {localTaskLabel} from '../../core/delivery/task-label.mjs'
+import {recover} from './local-recovery.mjs'
+import {recoverRemote} from './remote-recovery.mjs'
+import {localTaskLabel} from '../../domain/tasks/task-label.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 export class DurableIntake {
  constructor({jobs,manager,reply,log=()=>{}}){Object.assign(this,{jobs,manager,reply,log});this.users=new Map();this.closed=false}

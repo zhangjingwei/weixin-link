@@ -1,4 +1,4 @@
-import {localTaskLabel,localCompletion} from '../delivery/task-label.mjs'
+import {localTaskLabel,localCompletion} from '../../domain/tasks/task-label.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 export async function recoverRemote(context,job,reply,token){
   const {RemoteController}=await import('../remote-tasks/remote-controller.mjs')

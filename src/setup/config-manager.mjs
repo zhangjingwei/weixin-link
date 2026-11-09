@@ -50,7 +50,7 @@ async function probeConfiguration(kind,config,{home=currentHome(),env=process.en
    const command='test -d '+quote(config.remoteDirectory)+' && test -w '+quote(config.remoteDirectory)+' && test -r .config/wechat-backup-key/private.pem'
    await exec('ssh',['-F',env.WECHAT_SSH_CONFIG??join(home,'.ssh/wechat_hosts_config'),'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=6',config.host,command],{timeout:12000,maxBuffer:65536})
   }else if(kind==='remote-hosts'){
-   const {RemoteRpc}=await import('../core/remote-tasks/remote-task-client.mjs')
+   const {RemoteRpc}=await import('../infrastructure/agents/remote-rpc.mjs')
    for(const [host,hostConfig]of Object.entries(config.hosts)){
     const rpc=new RemoteRpc(host,{hostConfig,retryDelays:[]})
     try{await rpc.connect();await rpc.request('thread/list',{limit:1},6000);if(!(await rpc.request('fs/getMetadata',{path:hostConfig.root},6000)).isDirectory)throw Error();if(hostConfig.transport==='ssh-websocket'&&!(await rpc.request('fs/getMetadata',{path:hostConfig.binary},6000)).isFile)throw Error();for(const task of remoteTasks.filter(t=>t.host===host)){if(!task.thread_id)throw Error();const result=await rpc.request('thread/read',{threadId:task.thread_id,includeTurns:false},6000);if(result.thread?.id!==task.thread_id||result.thread?.cwd!==task.cwd)throw Error()}}finally{rpc.close()}
@@ -71,7 +71,7 @@ export async function runtimeEndpoints(home=currentHome()){
  return endpoints
 }
 export async function guardRemoteConfiguration({home=currentHome(),endpoints,control}={}){
- if(!control)control=(await import('../core/runtime/runtime-control.mjs')).controlRequest
+ if(!control)control=(await import('../infrastructure/runtime/runtime-control.mjs')).controlRequest
  endpoints??=await runtimeEndpoints(home)
  const lease='config-'+randomUUID(),attempted=[]
  const release=async()=>{const failed=[];for(const endpoint of attempted.slice().reverse()){try{await control(endpoint,'POST','/resume',{lease},5000)}catch{failed.push(endpoint)}}return {resumed:failed.length===0}}

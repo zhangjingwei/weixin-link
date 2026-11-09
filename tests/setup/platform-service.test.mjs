@@ -4,7 +4,7 @@ import {mkdtemp,readFile,writeFile,rm,mkdir} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {ServiceManager,launchAgent,serviceName,supportedPlatform} from '../../src/setup/platform-service.mjs'
-import {controlEndpoint,isPipe} from '../../src/core/runtime/control-endpoint.mjs'
+import {controlEndpoint,isPipe} from '../../src/infrastructure/runtime/control-endpoint.mjs'
 import {installServices,doctor} from '../../src/setup/setup-core.mjs'
 const fixture=async t=>{const home=await mkdtemp(join(tmpdir(),'wechat-platform-'));t.after(()=>rm(home,{recursive:true,force:true}));return home}
 test('support matrix rejects unsupported architectures and arbitrary service names',()=>{for(const platform of ['linux','darwin'])for(const arch of ['x64','arm64'])assert(supportedPlatform(platform,arch));assert(supportedPlatform('win32','x64'));assert(!supportedPlatform('win32','arm64'));assert(!supportedPlatform('freebsd','x64'));assert.throws(()=>serviceName('other.service'));assert.throws(()=>serviceName('wechat-pair-a;touch.service'))})

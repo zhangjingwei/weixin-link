@@ -6,7 +6,7 @@ import {join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {execFileSync} from 'node:child_process'
 const repository=fileURLToPath(new URL('../../',import.meta.url))
-for(const entry of ['src/remote/remote-codex.mjs','src/core/remote-tasks/remote-cli.mjs'])test(entry+' keeps state in the explicit workspace without connecting a host',()=>{
+for(const entry of ['src/remote/remote-codex.mjs','src/core/remote-tasks/remote-cli.mjs','src/interfaces/cli/remote-cli.mjs'])test(entry+' keeps state in the explicit workspace without connecting a host',()=>{
  const root=mkdtempSync(join(tmpdir(),'remote-entry-')),config=join(root,'hosts.json')
  try{
   writeFileSync(config,'{}')

@@ -1,9 +1,9 @@
 import {messageIntent} from '../application/intake/message-intent.mjs'
 import {hasMedia} from '../infrastructure/media/media-input.mjs'
-import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'
+import {diagnosticCommand} from '../application/diagnostics/diagnostic-commands.mjs'
 import {agentSwitchCommand} from '../setup/agent-switch.mjs'
 import {chatUpgradeCommand} from '../setup/chat-upgrade.mjs'
-import {conversationCommand} from '../core/text-conversations.mjs'
+import {conversationCommand} from '../application/conversations/text-conversations.mjs'
 import {controlCommand} from '../base/codex/control-command.mjs'
 
 /** Transport-side parser registry; command precedence is defined once. */
