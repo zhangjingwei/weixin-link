@@ -12,15 +12,16 @@
 | 入站 Controller | `src/wechat/inbound-controller.mjs` | SDK 消息转换、账号过滤、原消息持久化和游标前检查；失败不能确认收件 |
 | 命令意图 | `src/core/intake/message-intent.mjs` + `src/wechat/command-classifier.mjs` | 纯意图决策与微信命令解析分开；重放时按同一规则重新判定，不另存意图状态 |
 | 消息应用处理 | `src/core/intake/message-application.mjs`、`src/core/durable-intake.mjs` | 控制命令立即处理；普通任务经持久队列逐会话执行、恢复和取消；`src/wechat/message-processor.mjs` 只绑定微信、媒体等适配 |
-| 会话与底座 | `src/base/codex/codex-session.mjs`、`src/base/agent-adapter.mjs` | 共享会话管理；账号启动时选择底座，底座协议不进入微信入站控制器 |
-| 微信 View | `src/wechat/message-view.mjs`、`src/media/outbound-media.mjs` | 映射收件人、格式化系统通知并经串行投递发送；结果不明时保留状态 |
+| 聊天管理 | `src/setup/chat-management.mjs` | 安装、切换底座和升级命令在管理边界执行，不进入普通模型任务队列 |
+| 会话与底座 | `src/base/codex/codex-session.mjs`、`src/base/agent-adapter.mjs`、`src/base/agent-readiness.mjs` | 共享会话管理；账号启动时选择底座，新会话的底座就绪检查不进入消息应用处理 |
+| 微信 View | `src/wechat/message-view.mjs`、`src/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
 
-`message-application.mjs` 仍负责现有安装、诊断、会话和任务命令的应用协调。后续扩展应继续按职责拆分，不在此文件新增供应商协议分支。图中“显式配置的上下文准备”是预留用例，当前集成不会自动预取外部信息。
+`message-application.mjs` 负责意图分流、权限、回执和任务提交；安装、切换与升级的具体执行委托给管理模块。后续扩展应继续按职责拆分，不在此文件新增供应商协议分支。图中“显式配置的上下文准备”是预留用例，当前集成不会自动预取外部信息。
 
 ## 与消息链路相连的其他能力
 
-- `src/core/schedules/`：定时任务调用既有任务提交入口；提醒调用通知投递入口。
-- `src/core/updates/`：版本检查只产生升级提示，走同一投递入口，不自动升级。
+- `src/core/schedules/`：定时任务调用既有任务提交入口；提醒通过微信 View 调用通知投递入口。
+- `src/core/updates/`：版本检查只产生升级提示，通过微信 View 调用同一投递入口，不自动升级。
 - `src/setup/`：安装、账号启用和配置属于组合与管理边界，不是消息执行旁路。
 - `src/integrations/`：按账号启用，运行时重新核验；本机智能体按需调用。SSH 远程 Codex 是此类集成和 `src/core/remote-tasks/` 的协作，不是消息处理器里的另一个智能体底座。
 - 权限、账号隔离、去重、取消代际、未知投递结果和运行控制跨越上述边界，继续使用现有状态来源。

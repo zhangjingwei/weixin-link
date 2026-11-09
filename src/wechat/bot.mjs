@@ -1,6 +1,5 @@
 import {voiceCommandInput} from './voice-command-input.mjs'
 import {trackLoginValidity} from './login-validity.mjs'
-import {systemNotice} from '../core/delivery/system-notice.mjs'
 import {LifecycleNotice} from './lifecycle-notice.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
 import {createCommandClassifier} from './command-classifier.mjs'
@@ -53,7 +52,6 @@ await mkdir(stateDir, { recursive: true, mode: 0o700 })
 const testing = process.argv.includes('--test-codex')
 const owners = testing ? ['integration'] : JSON.parse(await readFile(join(stateDir, 'codex-owners.json'), 'utf8'))
 if (!Array.isArray(owners) || !owners.length || !owners.every(id => typeof id === 'string')) throw new Error('Configure authorized WeChat owners first')
-let backendStartupIssue=null;if(backend.kind==='podman')try{await backend.preflight(owners)}catch{backendStartupIssue='CONTAINER_NOT_READY'}
 const testName = process.env.CODEX_TEST_SESSION ?? `${Date.now()}-${process.pid}`
 if (testing && !/^[a-zA-Z0-9_-]+$/.test(testName)) throw new Error('Invalid test session name')
 const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-logs':'logs')})
@@ -127,14 +125,12 @@ const mediaDependencies={
  submit:(owner,input,token,ingressId)=>{if(token.current())durable.submit(owner,input,ingressId,[ingressId].filter(Boolean))},
 }
 const outgoing=new OutputTransport({store:manager.outputStore,log,send:async(userId,content)=>runtime.track('delivery',()=>content?.voice?bot.sendVoice(conversations.recipient(userId),content.voice):bot.send(conversations.recipient(userId),content))})
-const deliverOriginal=outgoing.deliver.bind(outgoing);conversations.sendOutput=deliverOriginal
-outgoing.deliver=(key,value,options)=>conversations.deliver(key,options?.conversationControl?systemNotice(value):value,options,deliverOriginal)
 const view=createMessageView({bot,conversations,outgoing,runtime})
 const updates=new UpdateNotifier({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,
  ready:()=>runtime.ready()&&runtime.status().idle&&!runtime.draining&&!runtime.sealed&&!stopping,
- send:(owner,text)=>outgoing.deliver(owner,text,{conversationControl:true,current:()=>runtime.ready()&&!runtime.draining&&!runtime.sealed&&!stopping}),log})
+ send:(owner,text)=>view.notice(owner,text,{current:()=>runtime.ready()&&!runtime.draining&&!runtime.sealed&&!stopping}),log})
 let schedules
-try {schedules=await new ScheduleService({stateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,track:work=>runtime.track('schedule',work),send:(owner,text)=>outgoing.deliver(owner,text,{conversationControl:true}),submitTask:(owner,key,text,id,at)=>{
+try {schedules=await new ScheduleService({stateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,track:work=>runtime.track('schedule',work),send:(owner,text)=>view.notice(owner,text),submitTask:(owner,key,text,id,at)=>{
  const entry=conversations.entry(key)
  if(agent.kind!=='codex'||backend.kind!=='host'||!entry||entry.owner!==owner||entry.deleted||entry.archived)throw Object.assign(Error('SCHEDULE_TASK_UNAVAILABLE'),{deliveryState:'failed'})
  const submissionId=durable.submit(key,{text},'schedule:'+id+':'+at)
@@ -145,20 +141,20 @@ await runtime.listen(account.socket)
 const jobs=new DurableJobs(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs
 let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(stateDir,'welcome-pending.json'),'utf8')).pending===true}catch{}
 const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,
- send:(owner,text)=>conversations.serialize(owner,async()=>{await runtime.track('delivery',()=>bot.sendAnnouncement(owner,systemNotice(text)));return {status:'accepted'}}),log})
+ send:(owner,text)=>view.announcement(owner,text),log})
 const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace
-const inbound=createInboundController({bot,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
+const inbound=createInboundController({bot,view,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
  traceWire:wire=>ingressTrace.traceId(wire),traceMessage:message=>ingressTrace.callback(message),quote:message=>weixin.quote(message),dispatch:message=>intakeHandler(message),log})
 weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:inbound.prepareBatch})
 ingressTrace=traceIngress(bot,log)
 manager.onToolStatus=process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1'?createToolNotifier({send:(peer,event)=>bot.sendToolStatus(peer,event),serialize:(peer,fn)=>conversations.serialize(peer,fn),track:fn=>runtime.track('delivery',fn),recipient:key=>conversations.recipient(key),log}):undefined
 
-const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>outgoing.deliver(userId,value,options)})
+const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>view.deliver(userId,value,options)})
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,mediaDependencies,durable,classifyMessage,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
+const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,mediaDependencies,durable,classifyMessage,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
 intakeHandler=nonBlockingHandler(async message => {
   try {
     message=voiceCommandInput(message)
@@ -169,7 +165,7 @@ intakeHandler=nonBlockingHandler(async message => {
   catch (error) {
     log('message.handler_failed',{userId:message.userId,...errorFields(error)})
     if (manager.owners.has(message.userId)) {
-      try { await bot.reply({...message,userId:conversations.recipient(message.userId)},systemNotice('消息接收或附件处理失败，请稍后重试。')) }
+      try { await view.directNotice(message,'消息接收或附件处理失败，请稍后重试。') }
       catch(error) { log('wechat.error_reply_failed',errorFields(error)) }
     }
   }

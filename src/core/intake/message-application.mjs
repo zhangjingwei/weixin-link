@@ -5,7 +5,14 @@ import {errorFields} from '../diagnostics/diagnostic-log.mjs'
 import {systemNotice} from '../delivery/system-notice.mjs'
 import {recoverFailedFinal} from '../delivery/failed-final-recovery.mjs'
 
-export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,backendStartupIssue,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,codexAvailability,claudeCredentialsAvailable,diagnosticPackage,deferMaintenance}){
+const READINESS_NOTICE = {
+  CONTAINER_NOT_READY: '微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。',
+  CODEX_NOT_INSTALLED: '微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。',
+  CODEX_NOT_LOGGED_IN: '微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。',
+  CLAUDE_CREDENTIALS_REQUIRED: '微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。',
+}
+
+export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,deferMaintenance}){
 return async function handleMessage(message) {
   if(message._ingressId&&!jobs.rawCurrent(message._ingressId))return
   if(message._intakeToken&&!message._intakeToken.current())return
@@ -33,13 +40,13 @@ return async function handleMessage(message) {
     }
     await view.directNotice(message,'服务正在维护重启，请稍后重新发送。');return
   }
-  const setupAction=intent?.kind==='setup'?intent.value:null;if(setupAction){const receipt=message._setupReceiptId?{id:message._setupReceiptId}:setupReceipts.capture(message);if(!receipt||!setupReceipts.claim(receipt.id)){if(message._recovered){await deliver('上次安装操作的结果需要核对，未重复执行。发送“安装向导”重新检测并继续。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean))}return;}const setupToken=manager.lifecycle.capture(message.userId);const setupReply=(value,options={})=>{if(!setupToken.current())throw Error('SETUP_CANCELLED');return options.sensitive?view.sensitive(message.userId,value):deliver(value,{current:()=>setupToken.current(),conversationControl:true})};await runtime.track('setup',()=>setupController.handle(setupAction,setupReply,{signal:setupToken.signal,scope:message._conversationOwner??message.userId,executionKey:message.userId}));setupReceipts.finish(receipt.id);jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  const setupAction=intent?.kind==='setup'?intent.value:null
+  if(setupAction){await management.setup(setupAction,message,deliver);return}
   if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>deliver(diagnosticAction==='export'?await diagnosticPackage(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
-  if(!initialControl&&backend.kind==='podman'&&!manager.sessions.has(message.userId)){try{await backend.preflight(owners);backendStartupIssue=null}catch{backendStartupIssue='CONTAINER_NOT_READY'}if(backendStartupIssue){await deliver('微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}}
-  if(!initialControl&&backend.kind==='host'&&backend.agentKind!=='claude'&&!manager.sessions.has(message.userId)){
-   const ready=await codexAvailability();if(!ready.installed||!ready.loggedIn){await deliver(!ready.installed?'微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。':'微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  if(!initialControl&&!manager.sessions.has(message.userId)){
+   const issue=await agentReadiness()
+   if(issue){await deliver(READINESS_NOTICE[issue]??'微信已连通，但当前智能体未就绪。本条没有提交给模型；可发送“安装状态”核对配置。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
-  if(!initialControl&&backend.agentKind==='claude'&&!manager.sessions.has(message.userId)&&!claudeCredentialsAvailable()){await deliver('微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const media = hasMedia(message)
   if (!media && !message.text?.trim()){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const reply = (value,options) => deliver(options?.checkpoint?value:systemNotice(value),options)
@@ -58,20 +65,8 @@ return async function handleMessage(message) {
    try{recoveryDelivery=await recoverFailedFinal(manager,message.userId,(key,value)=>view.deliver(key,value,{conversationControl:true,traceId:trace_id}));if(recoveryDelivery)log('delivery.recovery_attempt',{trace_id,status:recoveryDelivery})}
    catch(error){log('delivery.recovery_failed',{trace_id,...errorFields(error)})}
   }
-  if(agentAction){
-   await runtime.track('setup',async()=>{
-    try{await agentSwitcher.handle(agentAction,value=>runtime.track('delivery',()=>deliver(value,{conversationControl:true})))}
-    catch(error){log('agent.switch_failed',{trace_id,...errorFields(error)});await deliver('智能体切换未完成；当前底座未确认改变。错误代码：'+(/^[A-Z0-9_]+$/.test(error.message)?error.message:'AGENT_SWITCH_FAILED'),{conversationControl:true})}
-    finally{jobs.acknowledge([message._ingressId].filter(Boolean))}
-   });return
-  }
-  if(upgradeAction){
-   await runtime.track('setup',async()=>{
-    try{await upgrader.handle(value=>runtime.track('delivery',()=>deliver(value,{conversationControl:true})),{traceId:trace_id})}
-    catch(error){log('upgrade.request_failed',{trace_id,...errorFields(error)});await deliver('升级未安排。错误代码：'+(/^[A-Z0-9_]+$/.test(error.message)?error.message:'CHAT_UPGRADE_FAILED'),{conversationControl:true})}
-    finally{jobs.acknowledge([message._ingressId].filter(Boolean))}
-   });return
-  }
+  if(agentAction){await management.agent(agentAction,message,deliver,trace_id);return}
+  if(upgradeAction){await management.upgrade(message,deliver,trace_id);return}
   if(!hasMedia(message)&&await conversations.control(message,reply)){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const control = intent?.kind==='session'?intent.value:null
   if(!control&&!token.current())return

@@ -4,12 +4,27 @@ import {systemNotice} from '../core/delivery/system-notice.mjs'
  * options; recipient mapping and SDK-specific response shapes stay here.
  */
 export function createMessageView({bot, conversations, outgoing, runtime}) {
+  const rawDeliver = outgoing.deliver.bind(outgoing)
+  conversations.sendOutput = rawDeliver
+  const deliver = (userId, value, options) => conversations.deliver(
+    userId,
+    options?.conversationControl ? systemNotice(value) : value,
+    options,
+    rawDeliver,
+  )
   return {
     context(userId, token) {
       if (token) bot.contextStore.set(conversations.recipient(userId), token)
     },
-    deliver(userId, value, options) {
-      return outgoing.deliver(userId, value, options)
+    deliver,
+    notice(userId, text, options) {
+      return deliver(userId, text, {...options, conversationControl: true})
+    },
+    announcement(userId, text) {
+      return conversations.serialize(userId, async () => {
+        await runtime.track('delivery', () => bot.sendAnnouncement(userId, systemNotice(text)))
+        return {status: 'accepted'}
+      })
     },
     directNotice(message, text) {
       return runtime.track('delivery', () => bot.reply({...message, userId: conversations.recipient(message.userId)}, systemNotice(text)))

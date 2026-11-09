@@ -1,13 +1,12 @@
 import {voiceCommandInput} from './voice-command-input.mjs'
 import {hasMedia} from '../media/media-input.mjs'
-import {systemNotice} from '../core/delivery/system-notice.mjs'
 import {errorFields} from '../core/diagnostics/diagnostic-log.mjs'
 
 /** WeChat controller: converts SDK callbacks into captured application messages.
  * The protocol's beforeCheckpoint hook awaits prepareBatch, so failures must
  * propagate instead of advancing the polling cursor.
  */
-export function createInboundController({bot, manager, jobs, conversations, runtime, setupController, setupReceipts, classifyMessage, traceWire, traceMessage, quote, dispatch, log = () => {}}) {
+export function createInboundController({bot, view, manager, jobs, conversations, runtime, setupController, setupReceipts, classifyMessage, traceWire, traceMessage, quote, dispatch, log = () => {}}) {
   const stagedWires = new WeakMap()
   const originalParse = bot.parser.parse.bind(bot.parser)
   bot.parser.parse = wire => stagedWires.get(wire) ?? originalParse(wire)
@@ -64,7 +63,7 @@ export function createInboundController({bot, manager, jobs, conversations, runt
         }
       } catch (error) {
         log('ingress.persist_failed', {trace_id: message._traceId, ...errorFields(error)})
-        void bot.reply({...message, userId: conversations.recipient(message.userId)}, systemNotice('消息未能持久保存，请稍后重试。')).catch(() => {})
+        void view.directNotice(message, '消息未能持久保存，请稍后重试。').catch(() => {})
       }
     })()
   }
