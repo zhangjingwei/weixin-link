@@ -74,7 +74,7 @@ test('bot classifies supplement as a control at ingress and dispatch, without a 
  assert.equal(intent.kind,'session');assert.equal(intent.value.action,'steer')
  const bot=await readFile(new URL('../../src/wechat/bot.mjs',import.meta.url),'utf8')
  assert.match(bot,/if\(control\)await handleMessage\(message\)/)
- const application=await readFile(new URL('../../src/core/intake/message-application.mjs',import.meta.url),'utf8')
+ const application=await readFile(new URL('../../src/application/intake/message-application.mjs',import.meta.url),'utf8')
  assert.match(application,/if\(!control&&notice/)
  assert.match(application,/control.action==='steer'\?messageId:undefined/)
 })

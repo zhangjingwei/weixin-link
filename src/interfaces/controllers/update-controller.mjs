@@ -1,4 +1,4 @@
-import {UpdateNotifier} from '../../core/updates/update-notifier.mjs'
+import {UpdateNotifier} from '../../application/notifications/update-notifier.mjs'
 
 /** Periodic release checks enter through this controller. Version comparison,
  * deduplication and unknown-delivery state stay in UpdateNotifier.

@@ -41,6 +41,22 @@ test('failed pre-checkpoint save does not capture or advance the batch', async (
   assert.equal(f.captured.length, 0)
 })
 
+test('setup receipt is captured after the saved session and retains its frozen action', async () => {
+  const f = fixture()
+  const message = {userId: 'owner', text: '安装状态'}
+  const controller = createWeChatController({
+    bot: f.bot, view: {directNotice: async () => {}}, manager: f.manager, jobs: f.jobs,
+    conversations: {realOwners: new Set(['owner']), bind: value => value}, runtime: f.runtime,
+    setupController: {command: () => 'setup-status'},
+    setupReceipts: {get: () => null, capture: () => ({action: 'setup-status', id: 'receipt-1'})},
+    classifyMessage: () => ({kind: 'setup'}), traceWire: () => 'trace', traceMessage: () => 'trace', quote: () => [], dispatch: () => {},
+  })
+  await controller.prepareBatch([{message}])
+  assert.deepEqual(f.events, ['save', 'capture'])
+  assert.equal(message._setupAction, 'setup-status')
+  assert.equal(message._setupReceiptId, 'receipt-1')
+})
+
 test('controls bypass ordinary inbox capture and unauthorized messages are ignored', async () => {
   const f = fixture()
   f.controller.onMessage({userId: 'owner', text: '停止'})

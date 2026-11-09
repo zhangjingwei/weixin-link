@@ -5,18 +5,18 @@ implementations stay in `src/wechat`, `src/remote` and `src/base`.
 
 The message entry and execution boundaries are documented in
 [`docs/architecture/README.md`](../../docs/architecture/README.md). The pure
-`intake/message-intent.mjs` selects an application intent from injected parsers;
+`src/application/intake/message-intent.mjs` selects an application intent from injected parsers;
 the WeChat parser registry lives in `src/wechat`, and the SDK Controller lives
 in `src/interfaces/controllers/`.
 
 - `conversations/`: command parsing, official catalog synchronization, archive/delete/selection operations, ordered delivery and history rendering. `text-conversations.mjs` remains the public facade and owns shared state and locks.
-- `intake/`: SQLite inbox/jobs, ingress tracing, local turn reconciliation and remote recovery. `durable-intake.mjs` owns queue workers and cancellation checks.
+- `intake/`: SQLite inbox/jobs, ingress tracing, local turn reconciliation and remote recovery. Queue workers and cancellation checks live in `src/application/tasks/durable-intake.mjs`.
 - `tasks/`: cancellation generations, lifecycle projections, attachment context, task-flow markers and recovery states.
 - `delivery/`: delivery errors, notification policy and task labels.
 - `diagnostics/`: redacted diagnostic logging and commands.
 - `runtime/`: account-scoped control endpoint and maintenance leases.
-- `schedules/`: account-scoped one-time, daily and weekly schedules. A schedule either sends fixed reminder text or submits a configured prompt to the existing durable Codex task queue.
-- `updates/`: checks stable GitHub Releases against the installed semantic version and sends one approval prompt per newer version; it never starts an upgrade.
+- `schedules/`: recurrence rules and a compatibility entry for the account-scoped schedule use case in `src/application/schedules/`.
+- `updates/`: release comparison rules and a compatibility entry for the approval notifier in `src/application/notifications/`; it never starts an upgrade.
 - `policy/`: assistant policy source.
 - `storage/`: shared registry locking and atomic JSON persistence.
 - `remote-tasks/`: remote coordination facade, path policy, submission/reconciliation, stopping/terminal cleanup, artifact export, progress delivery and RPC adaptation.
@@ -44,7 +44,7 @@ WeChat delivery or Windows/macOS runtime verification.
 
 Host backends intentionally share the OS user's filesystem. Different accounts
 and conversations can execute concurrently, including in the same directory.
-DurableIntake serializes each conversation's queue; delivery remains serialized
+The application DurableIntake serializes each conversation's queue; delivery remains serialized
 per real recipient, and cancellation stays scoped to the originating conversation.
 There is no global host execution gate or default local project write lock.
 

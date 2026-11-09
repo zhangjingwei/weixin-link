@@ -1,4 +1,4 @@
-import {createMessageApplication} from '../core/intake/message-application.mjs'
+import {createMessageApplication} from '../application/intake/message-application.mjs'
 import {createCommandClassifier} from './command-classifier.mjs'
 import {voiceCommandInput} from './voice-command-input.mjs'
 import {singleMedia} from '../media/single-media.mjs'

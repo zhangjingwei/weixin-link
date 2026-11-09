@@ -1,4 +1,4 @@
-import {messageIntent} from '../core/intake/message-intent.mjs'
+import {messageIntent} from '../application/intake/message-intent.mjs'
 import {hasMedia} from '../infrastructure/media/media-input.mjs'
 import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'
 import {agentSwitchCommand} from '../setup/agent-switch.mjs'

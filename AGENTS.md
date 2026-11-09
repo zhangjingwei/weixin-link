@@ -13,8 +13,8 @@
 
 目标采用**模块化单体 + 领域边界 + MVC 接口组织**：每个微信账号运行一个本地服务实例，`src/wechat/bot.mjs` 是组合根，负责按账号装配依赖。微信、智能体和可选集成是外部系统。按职责划分模块，不为每项能力拆服务，不复制状态来源。
 
-- **接口层 `src/interfaces/`**：四个 Controller 分别接收微信消息、计划到期与计划请求、版本检查触发、安装/配置/切换等管理动作；`views/wechat-presenter.mjs` 负责状态、进度、结果和通知的微信呈现。Controller 将请求交给应用用例，微信 SDK 对象和发送细节不进入应用层。当前收件与计划 Controller 仍直接调用部分核心持久化和队列能力，后续迁移须保留游标前保存与任务归属规则。
-- **应用层 `src/application/`**：接收消息、命令/意图路由、任务执行、通知/投递是目标用例边界；`ports/` 定义向外部能力请求的窄接口。现有用例主要仍在 `src/core/intake/`、`src/core/durable-intake.mjs`、`src/core/schedules/` 和 `src/core/updates/`；迁移时通过注入端口协作，不在用例中直接操作 SDK 或读取私有配置。
+- **接口层 `src/interfaces/`**：四个 Controller 分别接收微信消息、计划到期与计划请求、版本检查触发、安装/配置/切换等管理动作；`views/wechat-presenter.mjs` 负责状态、进度、结果和通知的微信呈现。Controller 负责协议转换并调用应用用例。微信 Controller 的游标前解析仍属于接口层，保存与入队由应用用例负责。
+- **应用层 `src/application/`**：`intake/` 负责收件、命令/意图分流，`tasks/` 负责持久任务执行，`schedules/` 负责计划授权、调度与任务提交，`notifications/` 负责版本提示和终答复恢复；`ports/` 定义外部能力的窄接口。旧 `src/core/` 入口提供兼容重导出；应用用例通过注入的既有状态与适配器协作，不另建状态仓库。
 - **领域层 `src/domain/`**：按账号/会话、消息/命令、任务/执行、投递/通知组织规则，保护授权归属、消息身份、状态转换、取消代际和未知投递结果等不变量。现有规则主要仍在 `src/core/conversations/`、`src/core/intake/`、`src/core/tasks/`、`src/core/delivery/`。当前未建立统一聚合、仓储或领域事件框架；不要为贴合图示增加空壳抽象或第二套状态。
 - **基础设施与外部适配 `src/infrastructure/`**：`wechat/` 接微信协议与出站，`agents/` 选择 Codex/Claude 底座，`media/` 处理附件和出站文件，`integrations/` 负责按账号启用并在调用时复核授权，`storage/` 提供持久化和跨进程锁。`ports.mjs` 装配实现；`src/application/ports/message-ports.mjs` 仅向消息用例暴露所需函数。底层 Codex/Claude 协议仍在 `src/base/`，集成插件仍在 `src/integrations/`，媒体工具和旧路径兼容入口仍在 `src/media/`。
 - **部署、配置与横切策略**：`src/setup/` 负责安装、配置、服务和账号绑定；`src/wechat/` 保留账号档案与组合根；`src/remote/` 负责 SSH 传输，远程任务协调在 `src/core/remote-tasks/`。权限、账号隔离、审计、幂等和运行控制贯穿各层，沿用现有状态与授权检查。`src/tools/` 放开发、验收和 SDK 补丁工具，`tests/` 按职责组织测试。
