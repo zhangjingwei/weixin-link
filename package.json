@@ -7,7 +7,6 @@
     "test": "node --test \"tests/**/*.test.mjs\"",
     "test:media-live": "node src/tools/media-live-check.mjs",
     "check:codex-input": "node src/tools/verify-media-contract.mjs",
-    "postinstall": "node src/tools/sdk-upload-timeout.mjs && node src/tools/sdk-protocol-patch.mjs",
     "setup": "node src/setup/setup.mjs",
     "doctor": "node src/setup/setup.mjs doctor",
     "check:release": "node src/tools/release-check.mjs"
@@ -18,7 +17,7 @@
   "type": "commonjs",
   "dependencies": {
     "@napi-rs/canvas": "1.0.11",
-    "@wechatbot/wechatbot": "2.2.0",
+    "wechatbot-zerolink": "file:vendor/wechatbot-zerolink-2.2.0-zerolink.2.tgz",
     "pdfjs-dist": "6.4.299",
     "qrcode": "1.5.4",
     "sharp": "0.35.5",

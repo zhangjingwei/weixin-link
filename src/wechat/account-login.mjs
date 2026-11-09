@@ -2,7 +2,7 @@ import {ServiceManager} from '../setup/platform-service.mjs'
 import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {PairingState} from '../infrastructure/wechat/pairing-state.mjs'
 import {createSdkLogger} from '../infrastructure/diagnostics/diagnostic-log.mjs'
-import {WeChatBot} from '@wechatbot/wechatbot'
+import {WeChatBot} from 'wechatbot-zerolink'
 import QRCode from 'qrcode'
 import {readFile,writeFile,rename,unlink,rm} from 'node:fs/promises'
 import {join} from 'node:path'
@@ -14,7 +14,7 @@ const exec=promisify(execFile),p=await assertAccount(process.argv[2]);
 const pairingTimeout=setTimeout(()=>process.exit(1),600000);pairingTimeout.unref()
 const pairing=new PairingState(p.stateDir),state=status=>pairing.set(status)
 const logger=createSdkLogger(()=>{}),bot=new WeChatBot({storage:'memory',logger});let qrWrites=Promise.resolve()
-const get=bot.http.apiGet.bind(bot.http);bot.http.apiGet=async(base,path,headers)=>path.startsWith('/ilink/bot/get_qrcode_status?')?(await bot.http.request({method:'GET',url:new URL(path,base).toString(),headers,timeoutMs:65000})).data:get(base,path,headers)
+const get=bot.http.apiGet.bind(bot.http);bot.http.apiGet=async(base,path,headers,options)=>path.startsWith('/ilink/bot/get_qrcode_status?')?(await bot.http.request({method:'GET',url:new URL(path,base).toString(),headers,timeoutMs:65000,signal:options?.signal})).data:get(base,path,headers,options)
 try{
  await state('requesting_qr')
  const credentials=await bot.login({force:true,callbacks:{

@@ -1,9 +1,8 @@
 import {ffmpegBinary} from '../media/media-binary.mjs'
-import {readFileSync} from 'node:fs'
 import {createRequire} from 'node:module'
 import {dirname} from 'node:path'
 import {pathToFileURL} from 'node:url'
-const sdkRoot=dirname(createRequire(import.meta.url).resolve('@wechatbot/wechatbot'))
+const sdkRoot=dirname(createRequire(import.meta.url).resolve('wechatbot-zerolink'))
 const {buildAuthHeaders}=await import(pathToFileURL(join(sdkRoot,'protocol/headers.js')).href)
 import {createHash,randomUUID} from 'node:crypto'
 import {encode,isSilk,getDuration} from 'silk-wasm'
@@ -36,7 +35,6 @@ export async function encodeVoice(data){
 }
 export function installWeixinProtocol(bot,{db,prepareBatch,log=()=>{}}){
  if(typeof prepareBatch!=='function')throw Error('WEIXIN_CHECKPOINT_REQUIRED')
- for(const [file,marker] of [['transport/http.js','WEIXIN_LOSSLESS_IDS_V1'],['messaging/poller.js','WEIXIN_CURSOR_ORDER_V2'],['storage/file.js','WEIXIN_ATOMIC_STORAGE_V1'],['core/client.js','WEIXIN_MEDIA_SEND_RESULT_V1']])if(!readFileSync(join(sdkRoot,file),'utf8').includes(marker))throw Error('WEIXIN_SDK_PATCH_REQUIRED')
  db.exec(`CREATE TABLE IF NOT EXISTS weixin_sent(client_id TEXT PRIMARY KEY,peer TEXT NOT NULL,message_id TEXT,state TEXT NOT NULL,text TEXT,created INTEGER NOT NULL);CREATE INDEX IF NOT EXISTS weixin_sent_lookup ON weixin_sent(peer,message_id);`)
  const sensitiveMessages=new WeakSet()
  const apiSend=bot.api.sendMessage.bind(bot.api)

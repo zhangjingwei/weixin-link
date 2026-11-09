@@ -6,7 +6,7 @@
 
 - 本项目将微信私聊接入本地或远程 Codex 会话，负责收发消息、持久化、恢复、配置和交付；模型执行由底座处理。
 - 运行时为 Node.js 24+，源码使用 `.mjs` ES 模块；`package.json` 的 `type` 仍为 `commonjs`，不要据此把现有模块改成 CommonJS。
-- `@wechatbot/wechatbot` 固定版本，并由 `postinstall` 中的 `src/tools/sdk-*.mjs` 应用已审查补丁。不要直接修改 `node_modules` 后把它当作源码；SDK 行为变更应检查补丁契约及对应测试。
+- 微信 SDK 使用 `vendor/` 中固定版本的 `wechatbot-zerolink` 包；源码位于独立仓库，版本、来源提交和校验值见 `vendor/README.md`。不要直接修改 `node_modules` 后把它当作源码；SDK 行为变更应在独立仓库实现，并同步本仓库的协议测试与依赖包。
 - 开发和测试使用隔离目录与模拟数据，不读写生产账号状态，不触发真实扫码、消息发送或远程任务，除非本次任务明确授权。
 
 ## 架构与模块边界

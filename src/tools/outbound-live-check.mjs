@@ -1,5 +1,5 @@
 // Explicitly invoked live send to the sole authorized owner; never starts another poller.
-import {WeChatBot} from '@wechatbot/wechatbot'
+import {WeChatBot} from 'wechatbot-zerolink'
 import {readFile,mkdir,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {execFileSync} from 'node:child_process'

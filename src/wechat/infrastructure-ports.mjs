@@ -1,4 +1,4 @@
-import {WeChatBot} from '@wechatbot/wechatbot'
+import {WeChatBot} from 'wechatbot-zerolink'
 import {defineInfrastructurePorts} from '../application/ports/infrastructure-ports.mjs'
 import {installWeixinProtocol, quoteInput} from '../infrastructure/wechat/weixin-protocol.mjs'
 import {createWeChatOutbound} from '../infrastructure/wechat/wechat-outbound.mjs'
