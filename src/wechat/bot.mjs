@@ -14,9 +14,7 @@ import {USER_GUIDE} from './user-guide.mjs'
 import {SetupController,setupCommand} from '../setup/setup-controller.mjs'
 import {installConfig} from '../setup/install-config.mjs'
 import {createToolNotifier} from './tool-status.mjs'
-import {installWeixinProtocol} from './weixin-protocol.mjs'
-import {loadAgentAdapter} from '../base/agent-adapter.mjs'
-import {selectedAgentKind} from '../base/agent-selection.mjs'
+import {createInfrastructurePorts} from '../infrastructure/ports.mjs'
 import {AgentSwitcher} from '../setup/agent-switch.mjs'
 import {ChatUpgrader} from '../setup/chat-upgrade.mjs'
 import {ClaudeConversations} from '../base/claude/claude-conversations.mjs'
@@ -25,26 +23,22 @@ import {TextConversations} from '../core/text-conversations.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../core/intake/ingress-trace.mjs'
 import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from './accounts.mjs'
-import {DurableJobs} from '../core/intake/durable-jobs.mjs'
 import {DurableIntake} from '../core/durable-intake.mjs'
-import {OutputTransport} from '../media/outbound-media.mjs'
-import {composeMediaInput} from '../media/media-preprocess.mjs'
 import {RuntimeControl} from '../core/runtime/runtime-control.mjs'
 import {nonBlockingHandler} from './message-handler.mjs'
 import {MessageDispatch} from './message-dispatch.mjs'
 import {createDiagnosticLog,errorFields,createSdkLogger} from '../core/diagnostics/diagnostic-log.mjs'
-import { WeChatBot } from '@wechatbot/wechatbot'
 import QRCode from 'qrcode'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { SessionManager } from '../base/codex/codex-session.mjs'
-import { hasMedia, prepareMedia } from '../media/media-input.mjs'
 
 const account=accountPaths();await assertAccount(account.id)
 const stateDir = account.stateDir
 const installation=installConfig()
 const cwd = installation.workspace
-const agent=await loadAgentAdapter(account,cwd,{...installation,agentBackend:await selectedAgentKind(account,installation)})
+const infrastructure=createInfrastructurePorts()
+const agent=await infrastructure.agent.load(account,cwd,{...installation,agentBackend:await infrastructure.agent.selectedKind(account,installation)})
 const backend=agent.backend
 const runtimeStateDir=backend.stateDir
 await mkdir(stateDir, { recursive: true, mode: 0o700 })
@@ -74,7 +68,7 @@ const setupController=await (agent.kind==='claude'?new ClaudeSetupController({bi
 const classifyMessage=createCommandClassifier()
 const conversations=agent.catalog==='local'?new ClaudeConversations(manager,owners):new TextConversations(manager,owners)
 await manager.save()
-const bot = new WeChatBot({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
+const bot = infrastructure.wechat.createClient({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
 const notifyStart=bot.api.notifyStart.bind(bot.api)
 bot.api.notifyStart=async(...args)=>{try{const result=await notifyStart(...args);log('wechat.notify_start',{status:result?.ret===0?'accepted':'unknown'});return result}catch(error){log('wechat.notify_start_failed',errorFields(error));throw error}}
 const loginValidity=trackLoginValidity(bot)
@@ -119,11 +113,11 @@ const runtime=new RuntimeControl({
 })
 const mediaDependencies={
  log,
- prepare:async(message,token)=>{const start=Date.now(),messageId=message.raw?.message_id??message.raw?.client_id,trace_id=message._traceId;log('attachments.download_started',{trace_id,messageId});try{const r=await runtime.track('media',()=>prepareMedia(message,stateDir,undefined,token?.signal));log('attachments.download_completed',{trace_id,messageId,duration_ms:Date.now()-start,count:r.attachments.length,bytes:r.attachments.reduce((n,a)=>n+(a.bytes??0),0),status:r.errors.length?'partial':'ok'});return r}catch(e){log('attachments.download_failed',{trace_id,messageId,duration_ms:Date.now()-start,...errorFields(e)});throw e}},
- compose:input=>runtime.track('media',()=>composeMediaInput(input)),
+ prepare:async(message,token)=>{const start=Date.now(),messageId=message.raw?.message_id??message.raw?.client_id,trace_id=message._traceId;log('attachments.download_started',{trace_id,messageId});try{const r=await runtime.track('media',()=>infrastructure.media.prepare(message,stateDir,undefined,token?.signal));log('attachments.download_completed',{trace_id,messageId,duration_ms:Date.now()-start,count:r.attachments.length,bytes:r.attachments.reduce((n,a)=>n+(a.bytes??0),0),status:r.errors.length?'partial':'ok'});return r}catch(e){log('attachments.download_failed',{trace_id,messageId,duration_ms:Date.now()-start,...errorFields(e)});throw e}},
+ compose:input=>runtime.track('media',()=>infrastructure.media.compose(input)),
  submit:(owner,input,token,ingressId)=>{if(token.current())durable.submit(owner,input,ingressId,[ingressId].filter(Boolean))},
 }
-const outgoing=new OutputTransport({store:manager.outputStore,log,send:async(userId,content)=>runtime.track('delivery',()=>content?.voice?bot.sendVoice(conversations.recipient(userId),content.voice):bot.send(conversations.recipient(userId),content))})
+const outgoing=infrastructure.wechat.createOutbound({bot,conversations,runtime,store:manager.outputStore,log})
 const view=createWeChatPresenter({bot,conversations,outgoing,runtime})
 const updates=createUpdateController({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,
  ready:()=>runtime.ready()&&runtime.status().idle&&!runtime.draining&&!runtime.sealed&&!stopping,view,log})
@@ -132,7 +126,7 @@ try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime
  track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),agent,backend,view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 await runtime.listen(account.socket)
-const jobs=new DurableJobs(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs
+const jobs=infrastructure.storage.inbox(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs
 let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(stateDir,'welcome-pending.json'),'utf8')).pending===true}catch{}
 const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,
  send:(owner,text)=>view.announcement(owner,text),log})
@@ -140,7 +134,7 @@ const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace
 const inbound=createWeChatController({bot,view,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
  traceWire:wire=>ingressTrace.traceId(wire),traceMessage:message=>ingressTrace.callback(message),quote:message=>weixin.quote(message),dispatch:message=>intakeHandler(message),log})
-weixin=installWeixinProtocol(bot,{db:jobs.db,log,prepareBatch:inbound.prepareBatch})
+weixin=infrastructure.wechat.installProtocol(bot,{db:jobs.db,log,prepareBatch:inbound.prepareBatch})
 ingressTrace=traceIngress(bot,log)
 manager.onToolStatus=process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1'?createToolNotifier({send:(peer,event)=>bot.sendToolStatus(peer,event),serialize:(peer,fn)=>conversations.serialize(peer,fn),track:fn=>runtime.track('delivery',fn),recipient:key=>conversations.recipient(key),log}):undefined
 
@@ -148,7 +142,7 @@ const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,mediaDependencies,durable,classifyMessage,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
+const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,mediaDependencies,durable,classifyMessage,infrastructure,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
 intakeHandler=nonBlockingHandler(async message => {
   try {
     message=voiceCommandInput(message)

@@ -1,5 +1,5 @@
 import {voiceCommandInput} from '../../wechat/voice-command-input.mjs'
-import {hasMedia} from '../../media/media-input.mjs'
+import {hasMedia} from '../../infrastructure/media/media-input.mjs'
 import {errorFields} from '../../core/diagnostics/diagnostic-log.mjs'
 
 /** WeChat controller: converts SDK callbacks into captured application messages.

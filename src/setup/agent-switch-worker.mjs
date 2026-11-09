@@ -7,7 +7,7 @@ import {accountPaths,assertAccount} from '../wechat/accounts.mjs'
 import {installConfig} from './install-config.mjs'
 import {standardDeployment} from './upgrade.mjs'
 import {readAgentSwitch,saveAgentSwitch} from './agent-switch.mjs'
-import {writeAgentKind} from '../base/agent-selection.mjs'
+import {writeAgentKind} from '../infrastructure/agents/agent-selection.mjs'
 
 export async function performAgentSwitch({account,requestId,root,home,read=readAgentSwitch,save=saveAgentSwitch,write=writeAgentKind,deployment=standardDeployment,wait=delay,attempts=600}={}){
  const request=await read(account)

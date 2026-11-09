@@ -1,6 +1,6 @@
 import {controlEndpoint} from '../core/runtime/control-endpoint.mjs'
 import {homedir as platformHome} from 'node:os'
-import {RemoteStore} from '../core/storage/registry-lock.mjs'
+import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 import {join} from 'node:path'
 import {mkdir,readFile,writeFile,readdir,lstat,rename} from 'node:fs/promises'
 export function accountPaths(id=process.env.WECHAT_ACCOUNT??'default',home=(process.env.HOME||platformHome())){

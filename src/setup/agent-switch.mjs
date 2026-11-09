@@ -8,8 +8,8 @@ import {constants} from 'node:fs'
 import {readPrivateFile,atomicConfigWrite} from './config-files.mjs'
 import {xml,userHome} from './platform-service.mjs'
 import {standardDeployment} from './upgrade.mjs'
-import {agentKinds} from '../base/agent-selection.mjs'
-import {RemoteStore} from '../core/storage/registry-lock.mjs'
+import {agentKinds} from '../infrastructure/agents/agent-selection.mjs'
+import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 import {readChatUpgrade} from './chat-upgrade.mjs'
 
 const exec=promisify(execFile)

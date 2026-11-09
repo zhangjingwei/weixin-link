@@ -1,25 +1,25 @@
 import {createMessageApplication} from '../core/intake/message-application.mjs'
 import {createCommandClassifier} from './command-classifier.mjs'
 import {voiceCommandInput} from './voice-command-input.mjs'
-import {hasMedia} from '../media/media-input.mjs'
 import {singleMedia} from '../media/single-media.mjs'
-import {quoteInput} from './weixin-protocol.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
-import {createAgentReadiness} from '../base/agent-readiness.mjs'
 import {createManagementController} from '../interfaces/controllers/management-controller.mjs'
-import {OutputStore} from '../media/outbound-media.mjs'
+import {createInfrastructurePorts} from '../infrastructure/ports.mjs'
+import {messagePorts} from '../application/ports/message-ports.mjs'
 
 /** Bind the WeChat/media adapters to the transport-neutral message use case. */
 export function createMessageProcessor(deps) {
+  const infrastructure = deps.infrastructure ?? createInfrastructurePorts()
+  const ports = messagePorts({infrastructure, delivery: deps.view, stateDir: deps.stateDir, cwd: process.cwd()})
   return createMessageApplication({
     ...deps,
     classifyMessage: deps.classifyMessage ?? createCommandClassifier(),
     management: deps.management ?? createManagementController(deps),
     normalizeVoice: voiceCommandInput,
-    hasMedia,
+    hasMedia: ports.media.has,
     singleMedia,
-    quoteInput,
-    agentReadiness: deps.agentReadiness ?? createAgentReadiness({backend: deps.backend, owners: deps.owners, codexAvailability}),
-    diagnosticPackage: (userId, value) => new OutputStore({stateDir: deps.stateDir, cwd: process.cwd()}).package(userId, value),
+    quoteInput: ports.references.quoteInput,
+    agentReadiness: deps.agentReadiness ?? ports.agent.checkReady({backend: deps.backend, owners: deps.owners, codexAvailability}),
+    diagnosticPackage: ports.media.package,
   })
 }

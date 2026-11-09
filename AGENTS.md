@@ -17,12 +17,13 @@
 
 消息主链路是：`src/wechat/bot.mjs` 组装依赖 → 微信协议和入站处理 → `src/core/` 持久化与协调；附件经 `src/media/` 预处理后，由 `src/base/codex/` 提交给 Codex；回复再经 `src/core/` 的投递状态管理和微信出站模块交付，媒体回复另经 `src/media/` 处理。
 
-- `src/wechat/`：微信 SDK 接入、登录、账号档案、协议适配、消息解析与分发。`bot.mjs` 是组合入口；新业务逻辑优先放入有明确职责的模块，不继续堆入入口文件。
+- `src/wechat/`：微信登录、账号档案与组合入口；微信入口 Controller 和 Presenter 位于 `src/interfaces/`，协议实现位于 `src/infrastructure/wechat/`。`bot.mjs` 只装配依赖；新业务逻辑优先放入有明确职责的模块。
 - `src/core/`：与传输无关的会话、任务、收件、投递、取消、运行控制、存储、诊断和策略。微信特定字段只在边界转换，核心逻辑不直接调用微信 SDK。
-- `src/base/codex/`：Codex 官方协议、连接、会话和底座适配。其他底座在 `src/base/` 独立目录实现，不复制一套核心任务引擎。
+- `src/base/codex/`：Codex 官方协议、连接和会话。其他底座在 `src/base/` 独立目录实现；底座选择与就绪检查入口位于 `src/infrastructure/agents/`，不复制一套核心任务引擎。
 - `src/remote/`：SSH 传输与重连；协议仍归 `src/base/codex/`，远程任务协调归 `src/core/remote-tasks/`，部署归 `src/setup/`。
-- `src/media/`：附件预处理和出站媒体。保留原始文件与处理状态，不把未解析的材料描述成已理解。
-- `src/setup/`：安装、配置、服务和账号绑定；`src/integrations/`：按账号显式启用的可选集成。配置发现、网络调用和运行时授权各守其边界。
+- `src/infrastructure/media/`：附件下载、预处理和出站媒体入口；`src/media/` 保留脚本与旧路径兼容转发。保留原始文件与处理状态，不把未解析的材料描述成已理解。
+- `src/setup/`：安装、配置、服务和账号绑定；`src/integrations/`：按账号显式启用的可选集成插件，运行时授权入口位于 `src/infrastructure/integrations/`。配置发现、网络调用和运行时授权各守其边界。
+- `src/application/ports/` 定义外部接口，`src/infrastructure/` 实现并装配微信、智能体、媒体、集成和锁存储；不增加第二套状态来源。
 - `src/tools/`：开发、验收与 SDK 补丁工具；`tests/` 按源码领域组织测试。
 
 新增功能先选定所属层，通过清晰的接口传递依赖。避免跨层直接读取内部数据库、私有配置或调用另一个模块的全局单例。

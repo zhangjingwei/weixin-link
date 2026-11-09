@@ -1,7 +1,7 @@
 import {readFile,writeFile,rename} from 'node:fs/promises'
 import {join} from 'node:path'
 import {randomUUID} from 'node:crypto'
-import {RemoteStore} from '../core/storage/registry-lock.mjs'
+import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 export class BindingPermit{
  constructor(dir){this.dir=dir;this.path=join(dir,'setup-bind-permit.json')}
  async read(){try{return JSON.parse(await readFile(this.path,'utf8'))}catch(e){if(e.code==='ENOENT')return null;throw e}}

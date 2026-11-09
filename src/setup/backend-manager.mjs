@@ -5,7 +5,7 @@ import {bindingIdentity,resolveBindingAccount} from '../base/codex/backend-ident
 import {accountPaths,assertAccount,listAccounts} from '../wechat/accounts.mjs'
 import {loadBackend} from '../base/codex/codex-backend.mjs'
 import {controlRequest} from '../core/runtime/runtime-control.mjs'
-import {RemoteStore} from '../core/storage/registry-lock.mjs'
+import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 import {readFile,writeFile,rename,unlink,access} from 'node:fs/promises'
 import {join} from 'node:path'
 import {execFile} from 'node:child_process'

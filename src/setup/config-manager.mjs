@@ -106,7 +106,7 @@ export async function configure(kind,input,{home=currentHome(),workspace,env=pro
  try{
   const write=()=>atomicConfigWrite(path,JSON.stringify(config,null,2)+'\n',{expected,backup:!restoring})
   let result
-  if(kind==='remote-hosts'){const {RemoteStore}=await import('../core/storage/registry-lock.mjs');result=await new RemoteStore(dirname(path)).locked('host-config',async()=>{const tasks=await checkRemoteTransition(previous,config,options);if(tasks.some(t=>!options.remoteTasks.some(old=>old.thread_id===t.thread_id&&old.turn_id===t.turn_id)))throw new ConfigError('CONFIG_REMOTE_STATE_CHANGED');return write()})}
+  if(kind==='remote-hosts'){const {RemoteStore}=await import('../infrastructure/storage/registry-lock.mjs');result=await new RemoteStore(dirname(path)).locked('host-config',async()=>{const tasks=await checkRemoteTransition(previous,config,options);if(tasks.some(t=>!options.remoteTasks.some(old=>old.thread_id===t.thread_id&&old.turn_id===t.turn_id)))throw new ConfigError('CONFIG_REMOTE_STATE_CHANGED');return write()})}
   else result=await write()
   committed=true
   let guidance

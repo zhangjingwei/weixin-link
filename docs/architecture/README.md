@@ -2,7 +2,7 @@
 
 ![目标架构](message-flow-target.svg)
 
-本项目保持每个微信账号一个本地服务实例的模块化单体。`src/interfaces/` 已按图中的四个 Controller 与微信 Presenter 组织；`src/application/`、`src/domain/`、`src/infrastructure/` 先记录现有实现映射，代码仍在原模块，后续按不变量分阶段迁移。DDD 在这里用于划清账号、会话、消息、任务和投递的职责，不引入第二套状态仓库或空壳聚合。
+本项目保持每个微信账号一个本地服务实例的模块化单体。`src/interfaces/` 已按图中的四个 Controller 与微信 Presenter 组织；`src/infrastructure/` 已迁入外部边界入口，`src/application/ports/` 定义供后续用例注入的接口。应用与领域规则主要仍在 `src/core/`，后续按不变量分阶段迁移。DDD 在这里用于划清账号、会话、消息、任务和投递的职责，不引入第二套状态仓库或空壳聚合。
 
 ## 当前落地边界
 
@@ -15,8 +15,9 @@
 | 管理 Controller | `src/interfaces/controllers/management-controller.mjs` | 接入微信安装、切换、升级命令与配置 CLI 参数；执行委托原管理和配置模块 |
 | 命令意图 | `src/core/intake/message-intent.mjs` + `src/wechat/command-classifier.mjs` | 纯意图决策与微信命令解析分开；重放时按同一规则重新判定，不另存意图状态 |
 | 消息应用处理 | `src/core/intake/message-application.mjs`、`src/core/durable-intake.mjs` | 控制命令立即处理；普通任务经持久队列逐会话执行、恢复和取消；`src/wechat/message-processor.mjs` 只绑定微信、媒体等适配 |
-| 会话与底座 | `src/base/codex/codex-session.mjs`、`src/base/agent-adapter.mjs`、`src/base/agent-readiness.mjs` | 共享会话管理；账号启动时选择底座，新会话的底座就绪检查不进入消息应用处理 |
-| 微信 View / Presenter | `src/interfaces/views/wechat-presenter.mjs`、`src/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
+| 会话与底座 | `src/base/codex/codex-session.mjs`、`src/infrastructure/agents/` | 共享会话管理；账号启动时选择底座，新会话的底座就绪检查不进入消息应用处理 |
+| 微信 View / Presenter | `src/interfaces/views/wechat-presenter.mjs`、`src/infrastructure/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
+| 基础设施端口 | `src/application/ports/infrastructure-ports.mjs`、`src/infrastructure/ports.mjs` | 五组函数接口由组合根注入；协议、底座、媒体、集成及锁存储不复制状态 |
 
 `message-application.mjs` 负责意图分流、权限、回执和任务提交；安装、切换与升级的具体执行委托给管理模块。后续扩展应继续按职责拆分，不在此文件新增供应商协议分支。图中“显式配置的上下文准备”是预留用例，当前集成不会自动预取外部信息。
 

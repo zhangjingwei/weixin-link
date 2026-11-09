@@ -1,5 +1,5 @@
 import {messageIntent} from '../core/intake/message-intent.mjs'
-import {hasMedia} from '../media/media-input.mjs'
+import {hasMedia} from '../infrastructure/media/media-input.mjs'
 import {diagnosticCommand} from '../core/diagnostics/diagnostic-commands.mjs'
 import {agentSwitchCommand} from '../setup/agent-switch.mjs'
 import {chatUpgradeCommand} from '../setup/chat-upgrade.mjs'

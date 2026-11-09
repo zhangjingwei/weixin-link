@@ -8,7 +8,7 @@ import {xml,userHome} from './platform-service.mjs'
 import {readPrivateFile,atomicConfigWrite} from './config-files.mjs'
 import {standardDeployment} from './upgrade.mjs'
 import {githubLatestRelease,releaseTag,newerRelease,installedRelease} from '../core/updates/releases.mjs'
-import {RemoteStore} from '../core/storage/registry-lock.mjs'
+import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 
 const exec=promisify(execFile)
 const root=fileURLToPath(new URL('../../',import.meta.url))

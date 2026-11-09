@@ -6,7 +6,7 @@ import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {assertAccount} from '../wechat/accounts.mjs'
 import {bindingIdentity} from '../base/codex/backend-identity.mjs'
-import {RemoteStore} from '../core/storage/registry-lock.mjs'
+import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 import {CODEX_VERSION} from './setup-core.mjs'
 import {deviceLogin} from './setup-login.mjs'
 const exec=promisify(execFile)
