@@ -12,6 +12,7 @@ import {OutputStore, OutputTransport} from '../infrastructure/media/outbound-med
 import {integrationGuidance, integrationStatus, checkIntegration, invokeIntegration} from '../integrations/runtime.mjs'
 import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 import {DurableJobs} from '../infrastructure/storage/durable-jobs.mjs'
+import {openAccountInbox} from '../infrastructure/storage/account-inbox.mjs'
 
 /** Compose existing external implementations without creating another state
  * store. Pass the returned ports into application use cases as needed.
@@ -23,6 +24,6 @@ export function createInfrastructurePorts() {
     media: {has: hasMedia, prepare: prepareMedia, compose: composeMediaInput,
       outputStore: options => new OutputStore(options), outputTransport: options => new OutputTransport(options)},
     integrations: {guidance: integrationGuidance, status: integrationStatus, check: checkIntegration, invoke: invokeIntegration},
-    storage: {registryStore: (root, options) => new RemoteStore(root, options), inbox: path => new DurableJobs(path)},
+    storage: {registryStore: (root, options) => new RemoteStore(root, options), inbox: path => new DurableJobs(path), accountInbox: openAccountInbox},
   })
 }

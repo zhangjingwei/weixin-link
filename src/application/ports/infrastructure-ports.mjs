@@ -7,7 +7,7 @@ const METHODS = {
   agent: ['load', 'readiness', 'selectedKind', 'writeKind'],
   media: ['has', 'prepare', 'compose', 'outputStore', 'outputTransport'],
   integrations: ['guidance', 'status', 'check', 'invoke'],
-  storage: ['registryStore', 'inbox'],
+  storage: ['registryStore', 'inbox', 'accountInbox'],
 }
 
 export function defineInfrastructurePorts(ports) {

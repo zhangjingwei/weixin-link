@@ -12,6 +12,7 @@ import {join} from 'node:path'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {DatabaseSync} from 'node:sqlite'
+import {legacyInboxMigrated,unresolvedAccountInbox} from '../infrastructure/storage/account-inbox.mjs'
 const exec=promisify(execFile),[action,id,target]=process.argv.slice(2),hostCwd=installConfig().workspace
 async function serviceActive(p){try{return (await exec('systemctl',['--user','is-active',p.service])).stdout.trim()==='active'}catch{return false}}
 async function ensureQueueEmpty(dir){const path=join(dir,'inbox.sqlite');try{await access(path)}catch(e){if(e.code==='ENOENT')return;throw e}const db=new DatabaseSync(path,{readOnly:true});try{const count=db.prepare("SELECT count(*) AS n FROM jobs WHERE state NOT IN ('done','cancelled')").get().n;const raw=db.prepare("SELECT count(*) AS n FROM ingress WHERE state='pending'").get().n;if(count||raw)throw Error('BACKEND_QUEUE_OR_UNCERTAINTY_REQUIRES_RECONCILIATION')}finally{db.close()}}
@@ -25,10 +26,11 @@ async function run(){
   for(const other of await listAccounts()){if(other.id===p.id)continue;const binding=await loadBackend(other,hostCwd,undefined,{listAccounts});if(next.kind==='podman'&&binding.id===next.id)throw Error('CONTAINER_ALREADY_BOUND_TO_OTHER_ACCOUNT')}
   if(next.kind==='podman')await next.preflight(JSON.parse(await readFile(join(p.stateDir,'codex-owners.json'),'utf8')))
   if(previous.id===next.id)return {accountId:await bindingIdentity(p),backend:next.id,status:'already_bound'}
-  await ensureQueueEmpty(previous.stateDir);await ensureQueueEmpty(next.stateDir)
+  if(previous.stateDir!==p.stateDir&&!await legacyInboxMigrated(p.stateDir,previous.id))await ensureQueueEmpty(previous.stateDir)
+  if(await unresolvedAccountInbox(p.stateDir,`codex:${previous.id}`))throw Error('BACKEND_QUEUE_OR_UNCERTAINTY_REQUIRES_RECONCILIATION')
   const active=await serviceActive(p)
   if(active){const status=await controlRequest(p.socket,'GET','/status');if(!status.ready||!status.idle)throw Error('ACCOUNT_BUSY_BINDING_NOT_CHANGED');await exec('node',[join(repositoryDirectory,'src/tools/activate-diagnostics.mjs'),'--stop'],{env:{...process.env,WECHAT_ACCOUNT:p.id},timeout:650000})}
-  if(active){try{await ensureQueueEmpty(previous.stateDir);await ensureQueueEmpty(next.stateDir)}catch(error){await exec('systemctl',['--user','start',p.service]);throw error}}
+  if(active){try{if(previous.stateDir!==p.stateDir&&!await legacyInboxMigrated(p.stateDir,previous.id))await ensureQueueEmpty(previous.stateDir);if(await unresolvedAccountInbox(p.stateDir,`codex:${previous.id}`))throw Error('BACKEND_QUEUE_OR_UNCERTAINTY_REQUIRES_RECONCILIATION')}catch(error){await exec('systemctl',['--user','start',p.service]);throw error}}
   const file=join(p.stateDir,'codex-backend.json');let old;try{old=await readFile(file)}catch(e){if(e.code!=='ENOENT')throw e}
   try{await writeFile(file+'.tmp',JSON.stringify({version:1,id:next.id,wechatAccountId:await bindingIdentity(p),updatedAt:new Date().toISOString()})+'\n',{mode:0o600});await rename(file+'.tmp',file)
    if(active){await exec('systemctl',['--user','start',p.service]);let ready=false;for(let n=0;n<40;n++){try{const status=await controlRequest(p.socket,'GET','/status');if(status.ready&&status.features?.codex_backend_binding&&status.features?.container_backend===(next.kind==='podman')&&status.backend?.id===next.id){ready=true;break}}catch{}await new Promise(r=>setTimeout(r,500))}if(!ready)throw Error('BOUND_ACCOUNT_STARTUP_NOT_VERIFIED')}

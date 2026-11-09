@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os'
 import {agentSwitchCommand,AgentSwitcher,readAgentSwitch,scheduleAgentSwitch} from '../../src/setup/agent-switch.mjs'
 import {performAgentSwitch} from '../../src/setup/agent-switch-worker.mjs'
 import {selectedAgentKind} from '../../src/infrastructure/agents/agent-selection.mjs'
+import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
 
 test('agent command matches only explicit switches',()=>{
  assert.deepEqual(agentSwitchCommand('重启'),{action:'restart',target:null})
@@ -82,6 +83,17 @@ test('worker drains, switches only this account and verifies new backend',async(
  assert.deepEqual(result,{status:'complete',agentKind:'claude'})
  assert.equal(f.kind,'claude');assert.equal(f.request.status,'complete')
  assert.deepEqual(f.events,['drain','seal','save:committing','stop','write:claude','start','save:complete'])
+})
+test('worker refuses to leave a backend with unresolved account tasks',async t=>{
+ const stateDir=await mkdtemp(join(tmpdir(),'agent-switch-queue-'));t.after(()=>rm(stateDir,{recursive:true,force:true}))
+ const f=workerFixture();f.options.account.stateDir=stateDir
+ const jobs=new DurableJobs(join(stateDir,'inbox.sqlite'));const id=jobs.add('owner',{text:'pending'},'pending');jobs.close()
+ await assert.rejects(performAgentSwitch(f.options),/AGENT_SWITCH_QUEUE_UNRESOLVED/)
+ assert.deepEqual(f.events,['drain','seal','resume','save:failed'])
+ const resumed=new DurableJobs(join(stateDir,'inbox.sqlite'));resumed.mark(id,'done');resumed.close()
+ f.events.length=0;f.options.read=async()=>({...f.request,status:'waiting_idle'})
+ await performAgentSwitch(f.options)
+ assert(f.events.includes('stop'))
 })
 test('worker rolls back selection when new backend fails health check',async()=>{
  const f=workerFixture()

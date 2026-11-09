@@ -8,12 +8,13 @@ import {installConfig} from './install-config.mjs'
 import {standardDeployment} from './upgrade.mjs'
 import {readAgentSwitch,saveAgentSwitch} from './agent-switch.mjs'
 import {writeAgentKind} from '../infrastructure/agents/agent-selection.mjs'
+import {unresolvedAccountInbox} from '../infrastructure/storage/account-inbox.mjs'
 
-export async function performAgentSwitch({account,requestId,root,home,read=readAgentSwitch,save=saveAgentSwitch,write=writeAgentKind,deployment=standardDeployment,wait=delay,attempts=600}={}){
+export async function performAgentSwitch({account,requestId,root,home,read=readAgentSwitch,save=saveAgentSwitch,write=writeAgentKind,deployment=standardDeployment,wait=delay,checkQueue=unresolvedAccountInbox,attempts=600}={}){
  const request=await read(account)
  if(request?.id!==requestId||request.status!=='waiting_idle')throw Error('AGENT_SWITCH_REQUEST_CHANGED')
  const lease=randomUUID()
- let adapter,service,sealed=false,stopped=false,changed=false,previousInstance
+ let adapter,service,sealed=false,stopped=false,changed=false,previousInstance,currentBackendKey
  try{
   adapter=await deployment({target:root,home})
   service=adapter.services.find(item=>item.id===account.id)
@@ -25,9 +26,11 @@ export async function performAgentSwitch({account,requestId,root,home,read=readA
    const drained=await adapter.control(service,'drain',lease)
    if(!drained.idle){await adapter.control(service,'resume',lease);await wait(1000);continue}
    await adapter.control(service,'seal',lease);sealed=true;previousInstance=current.instance
+   currentBackendKey=`${request.previous}:${current.backend?.id??(request.previous==='claude'?'claude-host':'host')}`
    break
   }
   if(!sealed)throw Error('AGENT_SWITCH_REMAINED_BUSY')
+  if(request.target!==request.previous&&await checkQueue(account.stateDir,currentBackendKey))throw Error('AGENT_SWITCH_QUEUE_UNRESOLVED')
   await save(account,{...request,status:'committing'})
   stopped=true;await adapter.stop(service)
   if(request.target!==request.previous){changed=true;await write(account,request.target)}

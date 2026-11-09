@@ -11,7 +11,7 @@ import {createUpdateController} from '../interfaces/controllers/update-controlle
 import {setupModelTest} from '../setup/setup-model-test.mjs'
 import {codexAvailability} from '../setup/setup-core.mjs'
 import {SetupReceipts} from '../setup/setup-receipts.mjs'
-import {USER_GUIDE} from './user-guide.mjs'
+import {USER_GUIDE} from '../setup/user-guide.mjs'
 import {SetupController,setupCommand} from '../setup/setup-controller.mjs'
 import {installConfig} from '../setup/install-config.mjs'
 import {ServiceManager} from '../setup/platform-service.mjs'
@@ -25,7 +25,7 @@ import {createCodexConversationBackend} from '../infrastructure/agents/codex-con
 import {createLocalConversationBackend} from '../infrastructure/agents/local-conversation-backend.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
-import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from './accounts.mjs'
+import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from '../infrastructure/accounts/account-store.mjs'
 import {DurableIntake} from '../application/tasks/durable-intake.mjs'
 import {createRemoteProgressDelivery} from '../application/remote-tasks/remote-progress-delivery.mjs'
 import {RuntimeControl} from '../infrastructure/runtime/runtime-control.mjs'
@@ -131,7 +131,7 @@ try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 await runtime.listen(account.socket)
 // 先打开持久收件库并接好入站处理链；登录成功后才恢复未完成工作。
-const jobs=infrastructure.storage.inbox(join(runtimeStateDir,'inbox.sqlite'));manager.submissions=jobs
+const jobs=await infrastructure.storage.accountInbox(stateDir,{backendKey:`${agent.kind}:${backend.id}`});manager.submissions=jobs
 let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(stateDir,'welcome-pending.json'),'utf8')).pending===true}catch{}
 const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,
  send:(owner,text)=>view.announcement(owner,text),log})

@@ -16,13 +16,13 @@
 | 更新检查 Controller | `src/interfaces/controllers/update-controller.mjs` | 接入定时检查；版本比较、提示去重及未知投递状态由应用层 `UpdateNotifier` 持有 |
 | 管理 Controller | `src/interfaces/controllers/management-controller.mjs` | 接入微信安装、切换、升级命令与配置 CLI 参数；执行委托原管理和配置模块 |
 | 命令意图 | `src/application/intake/message-intent.mjs`、`src/wechat/command-classifier.mjs`、`src/interfaces/wechat/*-command.mjs` | 接口层解析微信文本格式，应用层按优先级选择意图，领域层判断解析后的动作；重放时按同一规则重新判定，不另存意图状态 |
-| 消息应用处理 | `src/application/intake/receive-message.mjs`、`message-application.mjs`、`src/application/tasks/durable-intake.mjs` | 游标前保存后入队；控制命令立即处理；普通任务经持久队列逐会话执行、恢复和取消 |
+| 消息应用处理 | `src/application/intake/receive-message.mjs`、`message-application.mjs`、`src/application/tasks/durable-intake.mjs` | 游标前保存后入队；控制命令立即处理；普通任务经账号级持久队列逐会话执行、恢复和取消；队列记录保留所属底座，切换时不交给另一底座执行 |
 | 会话与远程任务协调 | `src/application/conversations/`、`tasks/local-recovery.mjs`、`tasks/remote-recovery.mjs`、`remote-tasks/` | 沿用原会话状态、任务账本和锁；未知提交先对账，停止只作用于本会话任务 |
 | 附件消息 | `src/interfaces/wechat/voice-text.mjs`、`src/application/intake/single-media.mjs`、`src/infrastructure/media/` | 接口层提取微信转写和消息 ID；应用层提交单条附件任务；基础设施层下载、解析和交付文件 |
 | 领域规则 | `src/domain/conversations/`、`messages/`、`tasks/`、`delivery/`、`schedules/`、`updates/` | 以归一化的会话归属、外部消息 ID、已确认拒绝证据判断状态；不读取微信原始字段或 API 错误码，不直接执行 I/O |
 | 会话与底座 | `src/application/conversations/session-manager.mjs`、`src/wechat/session-manager.mjs`、`src/infrastructure/agents/session-protocol.mjs` | 应用层管理会话归属、排队、状态与投递；基础设施适配器封装底座建连、输入、恢复和能力；组合根按账号注入所选适配器 |
 | 微信 View / Presenter | `src/interfaces/views/wechat-presenter.mjs`、`src/infrastructure/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
-| 基础设施端口 | `src/application/ports/infrastructure-ports.mjs`、`src/wechat/infrastructure-ports.mjs`、`src/infrastructure/storage/`、`src/infrastructure/updates/` | 组合根注入协议、底座、媒体等能力；计划与更新用例通过存储及版本查询适配器执行外部操作，不复制状态 |
+| 基础设施端口 | `src/application/ports/infrastructure-ports.mjs`、`src/wechat/infrastructure-ports.mjs`、`src/infrastructure/storage/`、`src/infrastructure/updates/` | 组合根注入协议、底座、媒体等能力；账号目录统一保存收件、任务及微信发送账本，底座目录保存各自会话状态；计划与更新用例通过存储及版本查询适配器执行外部操作，不复制状态 |
 
 `message-application.mjs` 负责意图分流、权限、回执和任务提交；安装、切换与升级的具体执行委托给管理模块。调用方直接导入所属模块。后续扩展应继续按职责拆分，不在此文件新增供应商协议分支。图中“显式配置的上下文准备”是预留用例，当前集成不会自动预取外部信息。
 
