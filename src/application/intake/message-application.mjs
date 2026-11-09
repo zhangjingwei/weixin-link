@@ -77,6 +77,12 @@ return async function handleMessage(message) {
   }
   if(!control&&media){await singleMedia(message,token,mediaDependencies);return}
   // Controls must not wait behind a slow turn/start or an earlier message send.
+  if(control&&['plan','review'].includes(control.action)){
+    if(!manager.supportsNativeCommands){await reply(`当前 ${manager.agentName} 底座未接入这项原生命令；没有执行。`);jobs.acknowledge([message._ingressId].filter(Boolean));return}
+    if(!token.current())return
+    durable.submit(message.userId,{text:control.action==='plan'?control.text:'请审查当前工作区变更。',nativeCommand:control,traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
+    return
+  }
   if(control){await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token);return}
   try {
     const current=()=>token.current()

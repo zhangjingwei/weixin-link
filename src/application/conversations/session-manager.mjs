@@ -17,6 +17,7 @@ export class SessionManager {
     this.log = log
     if(!sessionProtocol)throw Error('SESSION_PROTOCOL_REQUIRED')
     this.protocol=sessionProtocol
+    this.supportsNativeCommands=sessionProtocol.supportsNativeCommands
     this.agentName=sessionProtocol.name
     this.backend=backend
     this.instructions=this.ports.assistantInstructions+(backend?.instructions?'\n'+backend.instructions:'')
@@ -259,9 +260,17 @@ export class SessionManager {
       await reply('已恢复对话 '+id+'，下一条消息将在该对话中继续。')
     }finally{session.selecting=false}
   }
-  async send(session, text, token = this.lifecycle.capture(session.userId)) {
+  async send(session, text, token = this.lifecycle.capture(session.userId), native = null) {
+    native??=typeof text==='object'?text.nativeCommand:null
     if(!token.current())return
     if (session.exited || session.rpc.closed) return
+    while(session.compacting&&token.current()&&!session.rpc.closed){
+      const thread=await this.protocol.read(session.rpc,session.threadId)
+      if(thread?.status?.type!=='active'){session.compacting=false;break}
+      await new Promise(resolve=>setTimeout(resolve,500))
+    }
+    if(!token.current())throw Error('等待上下文压缩期间任务已取消。')
+    if(session.rpc.closed)throw Error('等待上下文压缩期间连接已关闭。')
     if(session.selecting)throw new Error('正在切换对话，请稍后再发送。')
     if (session.exiting) throw new Error('正在停止并退出，请等待结束。')
     if (session.busy || session.finishing) {
@@ -307,7 +316,10 @@ export class SessionManager {
       this.diagnostic(session,'materials.context',{count:materials.length,queue_depth:pendingMaterials,reason:session.attachmentContinuation?'continuation':materials.length?'current':'unbound'})
       const runtimeInput=this.backend?.prepareInput?await this.backend.prepareInput(text,{signal:token.signal}):text
       const turnParams={threadId:session.threadId,input:[...this.protocol.input(runtimeInput),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
-      result=await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId})
+      result=native?.action==='review'
+        ?await this.protocol.startReview(session.rpc,session.threadId,native.target)
+        :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,plan:native?.action==='plan',model:session.model,fastMode:this.state.users[session.userId]?.fastMode})
+      if(!result?.turn?.id)throw Error('底座未确认任务标识，结果待核对。')
       if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment
     } catch(error) {
@@ -366,6 +378,7 @@ export class SessionManager {
   }
   async event(session, message) {
     const p = message.params ?? {}
+    if(message.method==='thread/compacted'&&p.threadId===session.threadId)session.compacting=false
     if(message.method==='thread/name/updated'){await this.onConversationTitle?.(p.threadId,p.threadName??p.name);return}
     if(message.method==='thread/archived'||message.method==='thread/unarchived'){await this.onConversationArchive?.(p.threadId,message.method==='thread/archived');return}
     if(message.method==='thread/deleted'){await this.onConversationDelete?.(p.threadId);return}
@@ -599,7 +612,61 @@ export class SessionManager {
         const session=await this.connect(userId,reply)
         await reply(await this.protocol.models(session.rpc,session.model));return
       }
-      if (command?.action === 'help') {await reply('微信控制命令（直接发送中文）：\n任务：状态、进度、补充 内容、停止、结果、恢复、退出。\n项目：日常、列表、新建 项目名、切换编号、命名 名称、历史、搜索 关键词、归档编号、还原编号、删除编号。删除会永久移除。\nCodex：模型、记忆、开启记忆、关闭记忆；Codex会话列表、恢复Codex会话 编号、重置Codex会话。\n维护：安装状态、安装向导、切换智能体、重启、升级、诊断、服务状态。\n收到交互请求时按提示回复“批准 编号”“拒绝 编号”或“回答 编号 答案”。\n代码审查、长任务、远程主机和设备配置直接描述需求。发送“使用说明”查看完整说明。');return}
+      if(['goal','plan','review','compact','fork','agentStatus','fast'].includes(command?.action)){
+        if(!this.protocol.supportsNativeCommands){await reply(`当前 ${this.agentName} 底座未接入这项原生命令；没有执行。`);return}
+        const session=await this.connect(userId,reply)
+        if(!token.current())return
+        if(command.action==='goal'){
+          if(command.op==='invalidBudget'){await reply('长任务预算必须是正整数，最多 9 位。');return}
+          const goal=await this.protocol.goal(session.rpc,session.threadId,command)
+          await reply(goal?`长任务：${goal.objective??'未提供目标'}\n状态：${goal.status??'未知'}。`:'当前没有长任务。');return
+        }
+        if(command.action==='agentStatus'){
+          const thread=await this.protocol.read(session.rpc,session.threadId)
+          const goal=await this.protocol.goal(session.rpc,session.threadId,{op:'get'})
+          await reply(`Codex 会话：${thread.id}\n状态：${thread.status?.type??'未知'}\n长任务：${goal?.status??'无'}\n快速模式：${this.state.users[userId]?.fastMode?'开启':'关闭'}。`);return
+        }
+        if(command.action==='fast'){
+          if(session.busy||session.finishing||session.queue.length)throw Error('请等待当前任务及排队消息结束后再切换快速模式。')
+          const saved=this.state.users[userId],before=saved.fastMode
+          saved.fastMode=command.enabled
+          try{await this.save()}catch(error){saved.fastMode=before;throw error}
+          await reply(`快速模式已${command.enabled?'开启':'关闭'}；下一轮 Codex 任务生效。`);return
+        }
+        if(session.busy||session.finishing||session.connecting||session.selecting||session.queue.length||(this.submissions?.pending?.()??[]).some(j=>j.owner===userId)||this.submissions?.uncertainCount?.(userId))throw Error('当前仍有执行、排队或未确认任务，请先核对后再操作。')
+        if(session.compacting){
+          const thread=await this.protocol.read(session.rpc,session.threadId)
+          if(thread?.status?.type==='active')throw Error('Codex 正在压缩上下文，请完成后再操作。')
+          session.compacting=false
+        }
+        if(command.action==='compact'){
+          await this.protocol.compact(session.rpc,session.threadId)
+          session.compacting=true
+          await reply('Codex 已接受上下文压缩请求；完成后可继续提交任务。');return
+        }
+        if(command.action==='fork'){
+          session.selecting=true
+          try{
+            const sourceId=session.threadId,result=await this.protocol.fork(session.rpc,sourceId),id=result?.thread?.id
+            if(!id||id===sourceId||result.thread.cwd&&result.thread.cwd!==this.workspaceFor(userId))throw Error('底座未确认同目录的新会话，未切换。')
+            const saved=this.state.users[userId]
+            const withFork={...saved,previous:[...(saved.previous??[]),id].slice(-20)}
+            this.state.users[userId]=withFork
+            try{await this.save()}catch(error){this.state.users[userId]=saved;throw Error(`已创建会话 ${id}，但保存归属失败；请在主机核对后恢复。`,{cause:error})}
+            if(!command.switchTo){await reply(`已创建旁支会话 ${id}。当前会话不变；发送“恢复Codex会话 ${id}”可切换。`);return}
+            const resumed=await this.protocol.resume(session.rpc,{threadId:id,cwd:this.workspaceFor(userId),instructions:await this.sessionInstructions(userId),provider:this.providerOptions()})
+            if(!token.current())return
+            const next={...withFork,threadId:id,previous:[...(saved.previous??[]),sourceId].slice(-20),hasMessages:true}
+            this.state.users[userId]=next;session.threadId=id
+            try{await this.save()}catch(error){this.state.users[userId]=withFork;session.threadId=sourceId;throw error}
+            this.lifecycle.cancel(userId);this.clearQuestions(session);session.items.clear();session.finals=[];session.turnId=null;session.model=resumed.model;session.modelProvider=resumed.modelProvider??session.modelProvider
+            await reply(`已分叉并切换到 Codex 会话 ${id}。`);return
+          }finally{session.selecting=false}
+        }
+        await this.send(session,command.action==='plan'?command.text:'请审查当前工作区变更。',token,command)
+        return
+      }
+      if (command?.action === 'help') {await reply('微信控制命令（直接发送中文）：\n任务：状态、进度、补充 内容、停止、结果、恢复、退出。\nCodex 原生命令：长任务 目标、长任务状态、暂停长任务、继续长任务、完成长任务、清除长任务；计划 需求、代码审查、代码审查 对比 分支、代码审查 提交 SHA、压缩上下文、分叉会话、旁支会话、Codex状态、开启快速模式、关闭快速模式。\n项目：日常、列表、新建 项目名、切换编号、命名 名称、历史、搜索 关键词、归档编号、还原编号、删除编号。删除会永久移除。\n其他：模型、记忆、开启记忆、关闭记忆；Codex会话列表、恢复Codex会话 编号、重置Codex会话；安装状态、安装向导、切换智能体、重启、升级、诊断、服务状态。远程主机和设备配置直接描述需求。\n收到交互请求时按提示回复“批准 编号”“拒绝 编号”或“回答 编号 答案”。Claude 底座会明确提示不支持的原生命令。发送“使用说明”查看完整说明。');return}
       const runtime = this.sessions.get(userId)
       if(command?.action==='progress'){
         const queued=(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)

@@ -28,7 +28,7 @@ export function createSessionProtocol({kind='codex',rpcFactory,providerEnv=proce
   return result
  }
  return {
-  name:codex?'Codex':'Claude',kind,supportsMemory:codex,supportsModels:codex,providerOptions,
+  name:codex?'Codex':'Claude',kind,supportsMemory:codex,supportsModels:codex,supportsNativeCommands:codex,providerOptions,
   createRpc:options=>factory({...options,...codex?{binary:options.binary??codexBinary?.()}:{}}),
   input:codexInput,
   eventCode:providerEventCode,
@@ -63,7 +63,16 @@ export function createSessionProtocol({kind='codex',rpcFactory,providerEnv=proce
    return null
   },
   supportsRemoteTaskRecovery:codex,
-  startTurn:(rpc,{threadId,input,deliveryId})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{}}),
+  startTurn:(rpc,{threadId,input,deliveryId,plan=false,model,fastMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},...plan&&codex?{collaborationMode:{mode:'plan',settings:{model}}}:{},...typeof fastMode==='boolean'&&codex?{serviceTier:fastMode?'fast':'auto'}:{}}),
+  startReview:(rpc,threadId,target)=>rpc.request('review/start',{threadId,target}),
+  goal:async(rpc,threadId,command)=>{
+   if(command.op==='get')return (await rpc.request('thread/goal/get',{threadId})).goal
+   if(command.op==='clear')return (await rpc.request('thread/goal/clear',{threadId,origin:'user'})).goal
+   const fields=command.op==='create'?{objective:command.objective,status:'active',...command.tokenBudget?{tokenBudget:command.tokenBudget}:{}}:{status:{pause:'paused',resume:'active',complete:'complete'}[command.op]}
+   return (await rpc.request('thread/goal/set',{threadId,origin:'user',...fields})).goal
+  },
+  compact:(rpc,threadId)=>rpc.request('thread/compact/start',{threadId}),
+  fork:(rpc,threadId)=>rpc.request('thread/fork',{threadId,excludeTurns:true}),
   interrupt:(rpc,threadId,turnId)=>rpc.request('turn/interrupt',{threadId,turnId}),
   steer:(rpc,threadId,turnId,text)=>rpc.request('turn/steer',{threadId,expectedTurnId:turnId,input:[{type:'text',text}]}),
   async memory(rpc,threadId,command){
