@@ -44,6 +44,11 @@ test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
   try{
     await f.manager.handle('owner','长任务 修复队列',f.reply)
     assert.deepEqual(f.calls.find(c=>c.method==='thread/goal/set').params,{threadId:'original',origin:'user',objective:'修复队列',status:'active'})
+    assert.match(f.output.at(-1),/状态：已启用。/)
+    assert.match(f.output.at(-1),/直接发送具体任务才会执行/)
+    assert.equal(f.calls.some(c=>c.method==='turn/start'),false)
+    await f.manager.handle('owner','长任务状态',f.reply)
+    assert.match(f.output.at(-1),/状态：已启用。/)
     await f.manager.handle('owner','开启快速模式',f.reply)
     await f.manager.handle('owner','计划 修复测试',f.reply)
     const turn=f.calls.find(c=>c.method==='turn/start')
@@ -60,6 +65,20 @@ test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
     f.manager.sessions.get('owner').busy=false;f.manager.sessions.get('owner').state='idle'
     await f.manager.handle('owner','计划 再检查一次',f.reply)
     assert.equal(f.calls.findLast(c=>c.method==='turn/start').params.serviceTier,'auto')
+  }finally{await f.close()}
+})
+test('review keeps its accepted turn when another turn starts on the same thread',async()=>{
+  const f=await fixture()
+  try{
+    await f.manager.handle('owner','代码审查',f.reply)
+    const session=f.manager.sessions.get('owner')
+    session.reply=async text=>{f.output.push(text);return {status:'accepted'}}
+    assert.equal(session.turnId,'turn-1')
+    await f.manager.event(session,{method:'turn/started',params:{threadId:'original',turn:{id:'nested-review-turn'}}})
+    assert.equal(session.turnId,'turn-1')
+    await f.manager.event(session,{method:'item/completed',params:{threadId:'original',turnId:'turn-1',item:{id:'review-progress',type:'agentMessage',phase:'commentary',text:'审查正在检查改动。'}}})
+    assert.equal(session.lastProgress?.text,'审查正在检查改动。')
+    assert(f.output.some(text=>text.includes('审查正在检查改动。')))
   }finally{await f.close()}
 })
 

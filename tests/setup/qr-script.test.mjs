@@ -16,11 +16,15 @@ async function fixture(t,{ready=false,running=false,account='default',legacy=fal
  await writeFile(join(root,legacyManager?'src/wechat/account-manager.mjs':'src/setup/account-manager.mjs'),`
  import {writeFileSync} from 'node:fs';import {fileURLToPath} from 'node:url';
  if(process.argv[2]==='list')console.log(JSON.stringify({accounts:[{account:${JSON.stringify(account)},ready:${ready},service_active:${running}}]}));
+ else if(process.argv[2]==='capabilities')console.log(JSON.stringify({ok:true,auto_pin_wait:${!(legacy||legacyManager)}}));
  else if(process.argv[2]==='stop'){if(${stopFails}){console.log(JSON.stringify({ok:false,error:${stopNumeric?'1':"'STOP_FAILED'"}}));process.exit(1)}writeFileSync(new URL('../../stopped',import.meta.url),'stopped');console.log(JSON.stringify({ok:true,status:'stopped'}))}
  else if(process.argv[2]==='refresh-qr'){
   writeFileSync(new URL('../../refreshed',import.meta.url),process.argv[3]);
   const path=fileURLToPath(new URL('../../login.png',import.meta.url));writeFileSync(path,'fixture');
   console.log(JSON.stringify({ok:true,status:'scan_to_login',path}));
+ }else if(process.argv[2]==='verify-wait'){
+  writeFileSync(new URL('../../pin-waited',import.meta.url),process.argv[3]);
+  console.log('✓ 微信登录完成。');
  }else process.exit(2);
  `)
  return {home,root,env:{...process.env,HOME:home,WEIXIN_LINK_DIR:'',ZERO_LINK_DIR:'',WEIXIN_LINK_ACCOUNT:'',WEIXIN_LINK_RELOGIN:'',WEIXIN_LINK_QR_STYLE:'',SSH_CONNECTION:'fixture'}}
@@ -29,6 +33,8 @@ test('QR script refreshes a legacy JSON-only installation without leaking JSON',
  const f=await fixture(t,{legacy:true})
  const r=await exec('sh',[script],{env:f.env})
  assert(r.stdout.includes('登录二维码已刷新'));assert(r.stdout.includes('login.png'))
+ assert(r.stdout.includes('尚不支持自动输入 PIN'))
+ assert(!(await readdir(f.root)).includes('pin-waited'))
  assert(!r.stdout.includes('"ok"'));assert.equal(await readFile(join(f.root,'refreshed'),'utf8'),'default')
 })
 test('QR script can refresh an older installation with the original manager path',{skip:process.platform==='win32'},async t=>{
@@ -51,6 +57,8 @@ test('custom source paths and named accounts work outside the source directory',
  const f=await fixture(t,{account:'bot2'})
  const r=await exec('sh',[script,'bot2'],{cwd:tmpdir(),env:{...f.env,WEIXIN_LINK_DIR:f.root}})
  assert(r.stdout.includes('二维码已刷新'));assert.equal(await readFile(join(f.root,'refreshed'),'utf8'),'bot2')
+ assert(r.stdout.includes('本终端会自动提示输入'))
+ assert.equal(await readFile(join(f.root,'pin-waited'),'utf8'),'bot2')
 })
 test('an invalid account is refused before executing account operations',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t)

@@ -11,6 +11,22 @@ test('protocol installation requires the durable checkpoint callback',()=>{
  const client=bot(),db=new DatabaseSync(':memory:')
  try{assert.throws(()=>installProtocol(client,{db}),/WEIXIN_CHECKPOINT_REQUIRED/);assert.equal(client.poller.beforeCheckpoint,undefined)}finally{db.close()}
 })
+test('SDK PIN option reaches the QR request without requiring a PIN when the server confirms directly',async()=>{
+ const b=bot();let request
+ b.http.apiPost=async(base,path,body)=>{request={path,body};return {qrcode:'fixture',qrcode_img_content:'https://example.invalid/qr'}}
+ b.api.pollQrStatus=async()=>({status:'confirmed',bot_token:'token',ilink_bot_id:'bot',ilink_user_id:'owner'})
+ const credentials=await b.login({force:true,verifyPin:true,callbacks:{onQrUrl:()=>{}}})
+ assert(request.path.includes('/get_bot_qrcode'))
+ assert.equal(JSON.parse(Buffer.from(request.body.bot_spam_business_data,'base64')).verify_pin,1)
+ assert.equal(credentials.accountId,'bot')
+})
+test('SDK PIN challenge requests the code through the callback',async()=>{
+ const b=bot();let submitted,asked=0
+ b.api.getQrCode=async()=>({qrcode:'fixture',qrcode_img_content:'https://example.invalid/qr'})
+ b.api.pollQrStatus=async(base,qr,code)=>{submitted=code;return code?{status:'confirmed',bot_token:'token',ilink_bot_id:'bot',ilink_user_id:'owner'}:{status:'need_verifycode'}}
+ await b.login({force:true,verifyPin:true,callbacks:{onQrUrl:()=>{},onVerifyCode:async()=>{asked++;return '123456'}}})
+ assert.equal(asked,1);assert.equal(submitted,'123456')
+})
 test('SDK parses uint64 message and quote IDs losslessly without touching message text',async()=>{const b=bot(),prior=globalThis.fetch;globalThis.fetch=async()=>new Response('{"message_id":18446744073709551615,"nested":{"svr_id":9007199254740993,"msg_id":123},"text":"message_id:9007199254740993"}');try{const r=await b.http.executeRequest({url:'https://example.invalid',method:'GET',headers:{},timeoutMs:1000});assert.equal(r.data.message_id,'18446744073709551615');assert.equal(r.data.nested.svr_id,'9007199254740993');assert.equal(r.data.nested.msg_id,'123');assert.equal(r.data.text,'message_id:9007199254740993')}finally{globalThis.fetch=prior}})
 test('uncertain message sends never auto-retry at SDK transport level',async()=>{const b=bot();let n=0;b.http.executeRequest=async()=>{n++;throw Object.assign(Error('timeout'),{name:'TimeoutError'})};await assert.rejects(b.http.request({url:'https://example.invalid/ilink/bot/sendmessage'}));assert.equal(n,1)})
 test('checkpoint waits for durable message receipt before persisting cursor',async()=>{const b=bot(),events=[];b.api.getUpdates=async()=>({get_updates_buf:'new',msgs:[{message_type:2}]});b.poller.beforeCheckpoint=async()=>events.push('durable');b.storage.set=async(k,v)=>{assert.equal(k,'cursor');events.push('cursor')};b.poller.on('messages',()=>{events.push('dispatch');b.poller.stop()});await b.poller.start('https://example.invalid','fake');assert.deepEqual(events,['durable','cursor','dispatch'])})

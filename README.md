@@ -64,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 
 Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验工具。安装器验证官方校验和，不覆盖系统 Node.js。Windows ARM64 暂不支持，安装器不修改持久执行策略。
 
-已发布正式版 [v1.2.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.2.0)，尚无长期版本兼容承诺。更多要求与维护步骤见 [配置说明](CONFIGURATION.md)。
+已发布正式版 [v1.3.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.0)，尚无长期版本兼容承诺。更多要求与维护步骤见 [配置说明](CONFIGURATION.md)。
 
 </details>
 
@@ -133,6 +133,7 @@ Linux / macOS：
 ```
 
 二维码有断缝时，加 `WEIXIN_LINK_QR_STYLE=full`；解绑后重新登录，加 `WEIXIN_LINK_RELOGIN=1`。参数放在命令前，详见 [二维码维护](CONFIGURATION.md#二维码维护)。
+扫码后命令会继续等待登录结果；如果微信要求 PIN，同一个终端会自动提示输入，无需再运行验证命令。请等提示出现后再输入手机显示的数字。
 
 ## 更多能力与文档
 

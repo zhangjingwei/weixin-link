@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import {remoteScopeId} from '../remote-tasks/scope-id.mjs'
 
+const goalStatusText=status=>({active:'已启用',paused:'已暂停',complete:'已完成'})[status]??'未知'
 
 export class SessionManager {
   constructor({ stateDir, cwd, owners, backend = null, sessionProtocol, remoteControl, sessionPorts, completionMarkers = false, scheduleGuidance = '', log = () => {} }) {
@@ -447,7 +448,11 @@ export class SessionManager {
       if(code)this.diagnostic(session,'provider.event_error',{provider:session.provider,stage:session.turnStarted?'turn':'turn_start',reason:code,rpc_code:code})
       return
     }
-    if (message.method === 'turn/started' && session.busy) { session.turnReady = true; session.turnStarted = true; session.turnId = p.turn.id; this.diagnostic(session,'turn.started',{provider:session.provider,model:session.model,model_provider:session.modelProvider}) }
+    if (message.method === 'turn/started' && session.busy) {
+      if(session.turnReady&&session.turnId&&p.turn?.id!==session.turnId){this.diagnostic(session,'event.ignored',{reason:'other_turn',method:message.method});return}
+      session.turnReady = true; session.turnStarted = true; session.turnId = p.turn.id
+      this.diagnostic(session,'turn.started',{provider:session.provider,model:session.model,model_provider:session.modelProvider})
+    }
     // Ignore delayed item notifications from a completed or superseded turn.
     if (['item/started', 'item/completed','item/agentMessage/delta'].includes(message.method)) {
       if (!session.busy || !session.turnReady || (session.finalReceived&&p.item?.type!=='imageGeneration')) { this.diagnostic(session,'event.ignored',{reason:'inactive_or_final',method:message.method}); return }
@@ -639,13 +644,14 @@ export class SessionManager {
         if(command.action==='goal'){
           if(command.op==='invalidBudget'){await reply('长任务预算必须是正整数，最多 9 位。');return}
           const goal=await this.protocol.goal(session.rpc,session.threadId,command)
-          await reply(goal?`长任务：${goal.objective??'未提供目标'}\n状态：${goal.status??'未知'}。`:'当前没有长任务。');return
+          const next=(command.op==='create'||command.op==='resume')?'\n目标已保存；直接发送具体任务才会执行。':''
+          await reply(goal?`长任务：${goal.objective??'未提供目标'}\n状态：${goalStatusText(goal.status)}。${next}`:'当前没有长任务。');return
         }
         if(command.action==='agentStatus'){
           const thread=await this.protocol.read(session.rpc,session.threadId)
           if(session.compacting&&!session.compactionStarting&&thread.status?.type!=='active')await this.clearCompaction(session)
           const goal=await this.protocol.goal(session.rpc,session.threadId,{op:'get'})
-          await reply(`Codex 会话：${thread.id}\n状态：${thread.status?.type??'未知'}\n长任务：${goal?.status??'无'}\n上下文压缩：${session.compacting?'进行中或待核对':'无待确认'}\n快速模式：${this.state.users[userId]?.fastMode?'开启':'关闭'}。`);return
+          await reply(`Codex 会话：${thread.id}\n状态：${thread.status?.type??'未知'}\n长任务：${goal?goalStatusText(goal.status):'无'}\n上下文压缩：${session.compacting?'进行中或待核对':'无待确认'}\n快速模式：${this.state.users[userId]?.fastMode?'开启':'关闭'}。`);return
         }
         if(command.action==='fast'){
           if(session.busy||session.finishing||session.queue.length)throw Error('请等待当前任务及排队消息结束后再切换快速模式。')

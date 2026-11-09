@@ -112,7 +112,7 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
  }
  const id=randomUUID(),stage=join(dirname(target),'.weixin-upgrade-'+id),backup=target+'.backup-'+id
  const recovery=join(home,'.local/share/weixin-link/upgrades',id),snapshot=join(recovery,'state')
- const lease=randomUUID(),active=adapter.services.filter(s=>s.active),drained=[],stopped=[]
+ const lease=randomUUID(),active=adapter.services.filter(s=>s.active),drained=[],stopped=[],initialStatus=new Map()
  let swapped=false,oldMoved=false,saved=false,finished=false,phase='preparing',failureCode
  const journal=async status=>writeFile(join(recovery,'upgrade.json'),JSON.stringify({status,phase,error:failureCode,trace_id:/^[0-9a-f-]{36}$/i.test(process.env.WEIXIN_LINK_UPGRADE_TRACE_ID??'')?process.env.WEIXIN_LINK_UPGRADE_TRACE_ID:undefined,target,backup,stage,snapshot,accounts:active.map(s=>s.id)},null,2)+'\n',{mode:0o600})
  const stateEntries=async()=> (await readdir(state)).filter(name=>name!=='tools')
@@ -120,9 +120,23 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
   const rel=relative(from,path);if(rel.split(sep)[0]==='tools')return false
   const info=await lstat(path);return !info.isSocket()
  }})
- async function healthy(account){
-  for(let n=0;n<healthAttempts;n++){
-   try{const result=await adapter.status(account);if(result.ready&&!result.draining)return}catch{}
+ async function healthy(account,{restoring=false}={}){
+  const initial=initialStatus.get(account.id)
+  let stableInstance,stableSamples=0
+  // A QR status request can long-poll for up to 65 seconds before confirming login is waiting.
+  const attempts=!initial?.ready&&!restoring?Math.max(healthAttempts,90):healthAttempts
+  for(let n=0;n<attempts;n++){
+   try{
+    const result=await adapter.status(account)
+    const changed=!initial?.instance||result.instance!==initial.instance
+    if(!result.draining&&changed&&result.ready)return
+    const waiting=restoring?(!result.startup||result.startup==='awaiting_login'):result.startup==='awaiting_login'
+    if(!initial?.ready&&!result.draining&&changed&&result.instance&&waiting){
+     stableSamples=result.instance===stableInstance?stableSamples+1:1
+     stableInstance=result.instance
+     if(stableSamples>=5)return
+    }else{stableInstance=undefined;stableSamples=0}
+   }catch{stableInstance=undefined;stableSamples=0}
    await wait(1000)
   }
   throw Error('UPGRADE_HEALTH_CHECK_FAILED')
@@ -147,7 +161,7 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
   log('等待当前任务结束并备份运行数据…')
   for(const account of active){
    const current=await adapter.status(account)
-   if(!current.ready)throw Error('UPGRADE_RUNTIME_NOT_READY')
+   initialStatus.set(account.id,current)
    drained.push(account)
    const result=await adapter.control(account,'drain',lease)
    if(!result.idle)throw Error('UPGRADE_BUSY')
@@ -156,11 +170,15 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
   phase='backup'
   for(const account of adapter.services){stopped.push(account);await adapter.stop(account)}
   await copyState(state,snapshot);saved=true;await journal('backed_up')
+  log('运行数据已备份，正在切换新版代码…')
   phase='switch'
   await rename(target,backup);oldMoved=true
   await rename(stage,target);swapped=true;await journal('switched')
   phase='health'
-  for(const account of active){await adapter.start(account);await healthy(account)}
+  for(const [index,account] of active.entries()){
+   log(`正在确认后台服务启动（${index+1}/${active.length}）…`)
+   await adapter.start(account);await healthy(account)
+  }
   await journal('complete');finished=true
   log('升级完成。旧版本与运行数据备份：'+recovery+'；旧源码：'+backup)
   return {status:'complete',backup,recovery}
@@ -174,14 +192,14 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
     if(swapped)await rename(target,join(dirname(target),'.weixin-failed-'+id))
     await rename(backup,target);oldMoved=false
     if(saved){for(const name of await stateEntries())await rm(join(state,name),{recursive:true,force:true});await copyState(snapshot,state)}
-    for(const account of active){await adapter.start(account);await healthy(account)}
+    for(const account of active){await adapter.start(account);await healthy(account,{restoring:true})}
     await journal('rolled_back');finished=true
    }catch{await journal('rollback_failed');throw Object.assign(Error('UPGRADE_ROLLBACK_FAILED'),{recovery})}
   }else{
    try{
     for(const account of stopped.filter(s=>s.active))await adapter.start(account)
     for(const account of drained)try{await adapter.control(account,'resume',lease)}catch{}
-    for(const account of stopped.filter(s=>s.active))await healthy(account)
+    for(const account of stopped.filter(s=>s.active))await healthy(account,{restoring:true})
     await journal('unchanged');finished=true
    }catch{await journal('recovery_failed');throw Object.assign(Error('UPGRADE_ROLLBACK_FAILED'),{recovery})}
   }

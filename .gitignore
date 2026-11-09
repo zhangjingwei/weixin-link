@@ -3,6 +3,7 @@
 !/.gitignore
 !/README.md
 !/README.en.md
+!/CHANGELOG.md
 !/AGENTS.md
 !/package.json
 !/package-lock.json

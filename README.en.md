@@ -66,7 +66,7 @@ Scan and confirm the pairing QR code in WeChat, then send **安装向导** (setu
 
 Linux/macOS require curl and tar, plus a SHA-256 verification tool when installing private Node.js. The installer verifies official checksums and does not replace system Node.js. Windows ARM64 is not supported, and the installer does not change persistent execution policies.
 
-[v1.2.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.2.0) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details. Supporting guides are currently in Chinese.
+[v1.3.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.0) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details. Supporting guides are currently in Chinese.
 
 </details>
 

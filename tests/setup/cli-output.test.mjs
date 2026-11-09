@@ -37,6 +37,10 @@ test('human errors retain exit failure and a diagnostic code without raw JSON', 
 test('pairing prompts distinguish an existing login and explain the next step',()=>{
  assert(setupMessage('pair',{status:'already_pairing'}).includes('已在进行'))
  assert(setupMessage('qr').includes('安装状态'))
+ assert(setupMessage('qr').includes('account-manager.mjs verify'))
+ assert(setupError(Error('VERIFICATION_NOT_REQUESTED')).includes('尚未要求输入 PIN'))
+ assert(setupError(Error('ACCOUNT_NOT_FOUND')).includes('核对账号名'))
+ assert(setupMessage('verify-wait',{pin_submitted:true}).includes('PIN 已提交'))
  assert(setupError(Error('QR_NOT_READY_OR_EXPIRED')).includes('刷新二维码'))
  assert(!setupError(Error('sensitive raw process output')).includes('sensitive'))
 })

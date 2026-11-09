@@ -85,10 +85,13 @@ const typingTimer=setInterval(()=>typingStatus.sync(new Set([...typingOwners(man
 const apiGet = bot.http.apiGet.bind(bot.http)
 bot.http.apiGet = async (baseUrl, path, headers) => {
   if (!path.startsWith('/ilink/bot/get_qrcode_status?')) return apiGet(baseUrl, path, headers)
-  return (await bot.http.request({ method: 'GET', url: new URL(path, baseUrl).toString(), headers, timeoutMs: 65_000 })).data
+  const data=(await bot.http.request({ method: 'GET', url: new URL(path, baseUrl).toString(), headers, timeoutMs: 65_000 })).data
+  if(typeof data?.status==='string'&&!['expired','confirmed'].includes(data.status)){loginPollReady=true;markAwaitingLogin()}
+  return data
 }
 
-let stopping=false,loggedIn=false
+let stopping=false,loggedIn=false,startupPhase='initializing',loginQrReady=false,loginPollReady=false
+const markAwaitingLogin=()=>{if(loginQrReady&&loginPollReady&&!loggedIn)startupPhase='awaiting_login'}
 const pending = new MessageDispatch()
 const maintenancePending=new Map()
 let intakeHandler,durable
@@ -111,6 +114,7 @@ const runtime=new RuntimeControl({
  onRemoteText:deliverRemoteProgress,
  onSchedule:request=>{if(!schedules)throw Error('SCHEDULE_STATE_UNAVAILABLE');return schedules.onRequest(request)},
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
+  startup:()=>startupPhase,
  snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+(durable?.users.size??0),saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
  onSeal:()=>bot.stop(),onResume:()=>{void (async()=>{if(bot.runPromise)await bot.runPromise.catch(()=>{});if(!stopping){await bot.start();replayMaintenance()}})().catch(e=>log('service.resume_failed',errorFields(e)))},
  onDrainRelease:replayMaintenance,
@@ -171,11 +175,12 @@ async function shutdown(signal){if(stopping)return;stopping=true;updates.close()
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})
 
 // 登录并核查账号身份后恢复积压消息，最后才启动微信轮询。
+startupPhase='login_in_progress'
 await bot.login({ callbacks: {
-  onQrUrl: url => { QRCode.toFile(join(stateDir, 'login.png'), url, { width: 480, margin: 2 }).then(() => log('wechat.qr_ready')).catch(error => log('wechat.qr_failed',errorFields(error))) },
+  onQrUrl: url => { startupPhase='login_in_progress';loginQrReady=false;loginPollReady=false;QRCode.toFile(join(stateDir, 'login.png'), url, { width: 480, margin: 2 }).then(() => {loginQrReady=true;markAwaitingLogin();log('wechat.qr_ready')}).catch(error => log('wechat.qr_failed',errorFields(error))) },
   onScanned: () => log('wechat.qr_scanned'),
 } })
 const loginCheck=await assertUniqueLogin(account.id,bot.getCredentials());for(const issue of loginCheck.issues)log('account.other_profile_unreadable',{code:issue.code});await rememberIdentity(account,bot.getCredentials())
-loggedIn=true;schedules?.start();updates.start();for(const message of jobs.rawPending())intakeHandler(message);durable.resume();log('wechat.login_completed');console.log('LOGIN_OK CODEX_DEFAULT')
+loggedIn=true;startupPhase='login_complete';schedules?.start();updates.start();for(const message of jobs.rawPending())intakeHandler(message);durable.resume();log('wechat.login_completed');console.log('LOGIN_OK CODEX_DEFAULT')
 bot.on('poll:start',()=>{const timer=setTimeout(()=>{if(!stopping)void lifecycleNotice.start()},100);timer.unref()})
 await bot.start()

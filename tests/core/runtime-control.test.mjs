@@ -37,11 +37,12 @@ test('released or expired drain resumes deferred intake once',async()=>{
  await new Promise(resolve=>queueMicrotask(resolve))
  assert.equal(replays,2);assert.equal(runtime.draining,false)
 })
-test('private Unix endpoint exposes current instance and readiness without consulting log files',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'wx-control-')),path=join(dir,'runtime.sock');let ready=false
- const runtime=new RuntimeControl({ready:()=>ready})
+test('private Unix endpoint exposes current instance and startup phase without consulting log files',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'wx-control-')),path=join(dir,'runtime.sock');let ready=false,startup='initializing'
+ const runtime=new RuntimeControl({ready:()=>ready,startup:()=>startup})
  try{await runtime.listen(path);assert.equal((await stat(path)).mode&0o777,0o600)
- const get=()=>controlRequest(path,'GET','/status');assert.equal((await get()).ready,false);ready=true
+ const get=()=>controlRequest(path,'GET','/status');assert.equal((await get()).startup,'initializing');startup='awaiting_login'
+ assert.equal((await get()).ready,false);assert.equal((await get()).startup,'awaiting_login');ready=true
  const state=await get();assert.equal(state.ready,true);assert.equal(state.pid,process.pid);assert.equal(state.instance,runtime.instance)
  await controlRequest(path,'POST','/drain',{lease:'private-lease'});assert.equal((await get()).draining,true)
  await assert.rejects(controlRequest(path,'POST','/seal',{lease:'other-lease'}));await controlRequest(path,'POST','/resume',{lease:'private-lease'})

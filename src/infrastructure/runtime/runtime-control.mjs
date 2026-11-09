@@ -27,9 +27,9 @@ async function removeStaleSocket(path){
 
 /** Private, live control plane. Logs never participate in restart decisions. */
 export class RuntimeControl {
- constructor({snapshot,ready=()=>false,onSeal,onResume,onDrainRelease=()=>{},onRemoteText=async()=>{throw Error("Unavailable")},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
+ constructor({snapshot,ready=()=>false,startup=()=>undefined,onSeal,onResume,onDrainRelease=()=>{},onRemoteText=async()=>{throw Error("Unavailable")},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
   this.canSeal=typeof snapshot==='function'&&typeof onSeal==='function'&&typeof onResume==='function'
-  Object.assign(this,{snapshot:snapshot??(()=>({})),ready,onSeal:onSeal??(()=>{}),onResume:onResume??(()=>{}),onDrainRelease,onRemoteText,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
+  Object.assign(this,{snapshot:snapshot??(()=>({})),ready,startup,onSeal:onSeal??(()=>{}),onResume:onResume??(()=>{}),onDrainRelease,onRemoteText,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
  }
  get draining(){
   if(this.lease&&!this.sealed&&this.lease.expires<=this.now()){this.lease=null;queueMicrotask(()=>{if(!this.lease)this.onDrainRelease()})}
@@ -40,7 +40,8 @@ export class RuntimeControl {
  status(){
   const draining=this.draining,counts={...this.counts,...this.snapshot()}
   const idle=Object.values(counts).every(n=>Number.isFinite(n)&&n===0)
-  return {pid:process.pid,instance:this.instance,ready:!!this.ready(),features:this.features,backend:this.backend,draining,sealed:this.sealed,idle,counts}
+  const startup=this.startup()
+  return {pid:process.pid,instance:this.instance,ready:!!this.ready(),...(startup?{startup}:{}),features:this.features,backend:this.backend,draining,sealed:this.sealed,idle,counts}
  }
  command(action,lease){
   if(typeof lease!=='string'||!/^[a-zA-Z0-9-]{8,80}$/.test(lease))throw Object.assign(Error('Invalid lease'),{statusCode:400})

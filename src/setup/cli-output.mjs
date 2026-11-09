@@ -6,7 +6,8 @@ export function setupMessage(action, result = {}) {
   case 'pair': return result.status === 'already_pairing' ?
    '✓ 登录已在进行，正在获取二维码…' : '✓ 已发起微信登录，正在获取二维码…'
   case 'refresh-qr': return '✓ 登录二维码已刷新。'
-  case 'qr': return '扫码并在手机上确认后，请在微信发送「安装状态」继续配置。'
+  case 'qr': return '扫码后如手机要求 PIN，请运行 node src/setup/account-manager.mjs verify [账号]，等终端出现输入提示后再输入手机显示的数字。完成后在微信发送「安装状态」继续配置。'
+  case 'verify-wait': return result.pin_submitted?'✓ PIN 已提交，微信登录完成。':'✓ 微信登录完成，无需输入 PIN。'
   default: return JSON.stringify(result)
  }
 }
@@ -18,6 +19,11 @@ export function setupError(error) {
   QR_TOO_OLD_REFRESH_REQUIRED:'二维码已过期，请重新运行安装命令刷新二维码。',
   QR_REFRESH_REQUIRED:'当前二维码不可用，请重新运行安装命令刷新二维码。',
   QR_NOT_READY_RETRY:'二维码尚未准备好，请稍后重试。',
+  VERIFICATION_NOT_REQUESTED:'微信尚未要求输入 PIN，或本次登录已经结束。请在手机确认当前登录状态。',
+  ACCOUNT_NOT_FOUND:'未找到该账号档案，请核对账号名。',
+  PIN_TERMINAL_REQUIRED:'微信要求输入 PIN，请在交互式终端重新运行二维码命令。',
+  VERIFICATION_WAIT_TIMEOUT:'等待微信登录超时，请重新获取二维码。',
+  PAIRING_STOPPED:'微信登录进程已停止，请重新获取二维码。',
   ACCOUNT_ONLINE_NO_REFRESH_NEEDED:'微信账号已在线，无需重新扫码。请在微信发送「安装状态」。',
   STOP_ACCOUNT_BEFORE_RELOGIN:'微信账号已在线，请在微信发送「安装状态」继续。',
   INSTALLATION_ALREADY_CONFIGURED:'已有安装配置，请使用原工作目录继续安装。',

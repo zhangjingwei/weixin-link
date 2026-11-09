@@ -30,9 +30,9 @@ if test -z "$qr_node" || ! "$qr_node" -e 'process.exit(Number(process.versions.n
 fi
 PATH="$(dirname "$qr_node"):$PATH"; export PATH
 "$qr_node" - "$qr_root" "$qr_account" "$qr_relogin" "$qr_manager_path" <<'NODE'
-const {execFileSync} = require('node:child_process')
+const {execFileSync,spawnSync} = require('node:child_process')
 const {resolve} = require('node:path')
-const {existsSync,readFileSync} = require('node:fs')
+const {existsSync,readFileSync,openSync,closeSync} = require('node:fs')
 const root = resolve(process.argv[2]), account = process.argv[3], relogin = process.argv[4] === '1'
 const manager = resolve(root, process.argv[5])
 // Expand the existing SDK half-block rendering, so old installations need no upgrade.
@@ -74,6 +74,11 @@ try {
   const listing = JSON.parse(execFileSync(process.execPath,[manager,'list'],{encoding:'utf8',timeout:30000,stdio:['ignore','pipe','pipe']}))
   const current = listing.accounts?.find(row=>row.account===account)
   if (!current) throw Error('ACCOUNT_NOT_FOUND')
+  let autoPin=false
+  try {
+    const capabilities=JSON.parse(execFileSync(process.execPath,[manager,'capabilities'],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','pipe']}))
+    autoPin=capabilities.ok===true&&capabilities.auto_pin_wait===true
+  } catch {}
   if (!relogin && current.ready) {
     console.log('本地服务报告就绪，但这不能确认微信绑定仍有效。')
     console.log('如果已解绑或需要重新授权，请使用 qr.sh --relogin（远程命令可设置 WEIXIN_LINK_RELOGIN=1）。')
@@ -152,7 +157,22 @@ try {
   }
   if(!opened&&!displayed) console.log('未能在终端显示二维码，请打开 PNG 图片扫码。')
   console.log((displayed?'备用 PNG（终端显示有断缝或扫码失败时使用）：':'二维码 PNG：')+'\n'+result.path)
-  console.log('扫码并在手机上确认后，请在微信发送「安装状态」继续配置。')
+  if(autoPin){
+    console.log('请扫码并在手机上确认；如微信要求 PIN，本终端会自动提示输入。')
+    let tty
+    try { tty=openSync('/dev/tty','r+') } catch {}
+    let verification
+    try {
+      verification=spawnSync(process.execPath,[manager,'verify-wait',account,'--human'],
+        {stdio:[tty===undefined?'ignore':tty,'inherit','inherit'],timeout:330000})
+    } finally { if(tty!==undefined)closeSync(tty) }
+    if(verification.error?.code==='ETIMEDOUT')throw Error('VERIFICATION_WAIT_TIMEOUT')
+    if(verification.error||verification.status!==0)throw Error('VERIFICATION_FLOW_FAILED')
+    console.log('完成后请在微信发送「安装状态」继续配置。')
+  }else{
+    console.log('当前安装版本尚不支持自动输入 PIN；请先从本地源码升级。')
+    console.log('本次扫码如要求 PIN，可运行：node '+manager+' verify '+account+'。看到提示后再输入。')
+  }
 } catch (error) {
   let code = error.message
   try { code = JSON.parse(String(error.stdout)).error || code } catch {}
@@ -166,6 +186,8 @@ try {
     ACCOUNT_ONLINE_NO_REFRESH_NEEDED:'账号服务仍在运行，无法刷新二维码。需要重新授权时请使用 --relogin。',
     INSTALLATION_NOT_FOUND:'未找到有效安装，请通过 WEIXIN_LINK_DIR 指定源码目录。',
     INVALID_ACCOUNT_ID:'账号名无效，请使用小写字母开头的字母、数字或连字符。',
+    VERIFICATION_WAIT_TIMEOUT:'等待微信登录超时，请重新获取二维码。',
+    VERIFICATION_FLOW_FAILED:'微信登录未完成，请查看上方提示后重试。',
   }
   console.error(messages[code] || '无法刷新二维码，请稍后重试。')
   console.error('错误代码：' + code)

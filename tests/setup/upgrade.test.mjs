@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {cp,mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink} from 'node:fs/promises'
+import {cp,mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink,unlink} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {fileURLToPath} from 'node:url'
@@ -57,6 +57,57 @@ test('upgrade stages first, retains old code and private state, and restarts onl
  assert.equal(await readFile(join(f.state,'credentials.json'),'utf8'),'original-credentials')
  assert.deepEqual(f.calls,['prepare','drain','seal','stop','stop','start'])
  assert(!(await readdir(join(result.recovery,'state'))).includes('tools'))
+})
+test('running account without a WeChat login upgrades and remains unlogged',async t=>{
+ const f=await fixture(t)
+ await unlink(join(f.state,'credentials.json'))
+ f.adapter.status=async()=>({ready:false,draining:false,startup:'awaiting_login',instance:await readFile(join(f.target,'version'),'utf8')})
+ const result=await upgradeInstallation({...f.options,healthAttempts:5})
+ assert.equal(result.status,'complete')
+ assert.equal(await readFile(join(f.target,'version'),'utf8'),'new')
+ await assert.rejects(readFile(join(f.state,'credentials.json'),'utf8'),{code:'ENOENT'})
+ assert.deepEqual(f.calls,['prepare','drain','seal','stop','start'])
+})
+test('unlogged upgrade waits for a delayed QR status response before accepting startup',async t=>{
+ const f=await fixture(t)
+ let checks=0
+ f.adapter.status=async()=>{
+  const version=await readFile(join(f.target,'version'),'utf8')
+  if(version==='new')checks++
+  return {ready:false,instance:version,startup:version==='new'&&checks<40?'login_in_progress':'awaiting_login'}
+ }
+ const result=await upgradeInstallation({...f.options,healthAttempts:30})
+ assert.equal(result.status,'complete')
+ assert(checks>=44)
+})
+test('unlogged account still rolls back when the new control endpoint is unavailable',async t=>{
+ const f=await fixture(t)
+ let generation=0
+ f.adapter.start=async()=>{generation++;f.calls.push('start')}
+ f.adapter.status=async()=>{
+  if((await readFile(join(f.target,'version'),'utf8'))==='new')throw Error('CONTROL_UNAVAILABLE')
+  return {ready:false,draining:false,instance:`old-${generation}`}
+ }
+ await assert.rejects(upgradeInstallation({...f.options,healthAttempts:5}),/UPGRADE_HEALTH_CHECK_FAILED/)
+ assert.equal(await readFile(join(f.target,'version'),'utf8'),'old')
+ assert.deepEqual(f.calls,['prepare','drain','seal','stop','start','stop','start'])
+})
+test('unlogged upgrade rolls back when startup only responds briefly',async t=>{
+ const f=await fixture(t)
+ let generation=0,newChecks=0
+ f.adapter.start=async()=>{generation++;f.calls.push('start')}
+ f.adapter.status=async()=>{
+  if((await readFile(join(f.target,'version'),'utf8'))==='new'){
+   newChecks++
+   if(newChecks===1)return {ready:false,startup:'initializing',instance:'new'}
+   if(newChecks===2)return {ready:false,startup:'awaiting_login',instance:'new'}
+   throw Error('STARTUP_FAILED')
+  }
+  return {ready:false,instance:`old-${generation}`}
+ }
+ await assert.rejects(upgradeInstallation({...f.options,healthAttempts:6}),/UPGRADE_HEALTH_CHECK_FAILED/)
+ assert.equal(await readFile(join(f.target,'version'),'utf8'),'old')
+ assert.deepEqual(f.calls,['prepare','drain','seal','stop','start','stop','start'])
 })
 test('repeating the same upgrade skips backup, prepare and service restart',async t=>{
  const f=await fixture(t)
