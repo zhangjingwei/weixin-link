@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 const exec=promisify(execFile),script=fileURLToPath(new URL('../../qr.sh',import.meta.url))
-async function fixture(t,{ready=false,running=false,account='default',legacy=false,legacyManager=false,stopFails=false}={}){
+async function fixture(t,{ready=false,running=false,account='default',legacy=false,legacyManager=false,stopFails=false,stopNumeric=false}={}){
  const home=await mkdtemp(join(tmpdir(),'weixin-qr-script-'));t.after(()=>rm(home,{recursive:true,force:true}))
  const root=join(home,legacy?'.local/share/zero-link/source':'.local/share/weixin-link/source')
  await mkdir(join(root,legacyManager?'src/wechat':'src/setup'),{recursive:true})
@@ -16,7 +16,7 @@ async function fixture(t,{ready=false,running=false,account='default',legacy=fal
  await writeFile(join(root,legacyManager?'src/wechat/account-manager.mjs':'src/setup/account-manager.mjs'),`
  import {writeFileSync} from 'node:fs';import {fileURLToPath} from 'node:url';
  if(process.argv[2]==='list')console.log(JSON.stringify({accounts:[{account:${JSON.stringify(account)},ready:${ready},service_active:${running}}]}));
- else if(process.argv[2]==='stop'){if(${stopFails}){console.log(JSON.stringify({ok:false,error:'STOP_FAILED'}));process.exit(1)}writeFileSync(new URL('../../stopped',import.meta.url),'stopped');console.log(JSON.stringify({ok:true,status:'stopped'}))}
+ else if(process.argv[2]==='stop'){if(${stopFails}){console.log(JSON.stringify({ok:false,error:${stopNumeric?'1':"'STOP_FAILED'"}}));process.exit(1)}writeFileSync(new URL('../../stopped',import.meta.url),'stopped');console.log(JSON.stringify({ok:true,status:'stopped'}))}
  else if(process.argv[2]==='refresh-qr'){
   writeFileSync(new URL('../../refreshed',import.meta.url),process.argv[3]);
   const path=fileURLToPath(new URL('../../login.png',import.meta.url));writeFileSync(path,'fixture');
@@ -73,6 +73,11 @@ test('relogin environment flag works when the service is already not ready',{ski
 test('failed safe stop prevents a new pairing attempt',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t,{ready:true,running:true,stopFails:true})
  await assert.rejects(exec('sh',[script,'--relogin'],{env:f.env}),e=>e.stderr.includes('STOP_FAILED'))
+ assert(!(await readdir(f.root)).includes('refreshed'))
+})
+test('numeric child exit becomes an unconfirmed stop instead of an error code',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t,{running:true,stopFails:true,stopNumeric:true})
+ await assert.rejects(exec('sh',[script,'--relogin'],{env:f.env}),e=>e.stderr.includes('ACCOUNT_STOP_UNCONFIRMED'))
  assert(!(await readdir(f.root)).includes('refreshed'))
 })
 async function terminalFixture(t,{expired=false,mismatch=false,columns=80}={}){

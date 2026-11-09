@@ -1,4 +1,4 @@
-import {ServiceManager} from '../setup/platform-service.mjs'
+import {ServiceManager,confirmServiceStopped} from '../setup/platform-service.mjs'
 import {accountPaths} from '../infrastructure/accounts/account-store.mjs'
 // External controller: live drain/seal handshake over a private Unix socket, never logs.
 import {execFile} from 'node:child_process'
@@ -35,7 +35,7 @@ try{
  }
  if(await mainPid()!==pid)throw Object.assign(Error('Process changed'),{code:'PID_CHANGED'})
  await services[process.argv.includes('--stop')?'stop':'restart'](accountPaths().service);restarted=true
- if(process.argv.includes('--stop')){const stopped=await mainPid()===0;result={checked_at:new Date().toISOString(),status:stopped?'verified':'not_verified',service_active:false,mode:'stopped'}}else{
+ if(process.argv.includes('--stop')){const stopped=await confirmServiceStopped(()=>services.status(accountPaths().service),pid);result={checked_at:new Date().toISOString(),status:stopped?'verified':'not_verified',...(stopped?{service_active:false}:{}),mode:'stopped'}}else{
  let verified=false,newPid,features
  for(let i=0;i<30;i++){
   try{

@@ -10,6 +10,17 @@ const exec=promisify(execFile)
 export const userHome=()=>process.env.HOME||homedir()
 export const supportedPlatform=(platform=process.platform,arch=process.arch)=>(['linux','darwin'].includes(platform)&&['arm64','x64'].includes(arch)||platform==='win32'&&arch==='x64')
 export const xml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;')
+export async function confirmServiceStopped(status,pid,{attempts=100,wait=delay,probe=process.kill}={}){
+ for(let n=0;n<attempts;n++){
+  const service=await status()
+  if(!service.active){
+   if(!pid)return true
+   try{probe(pid,0)}catch(error){if(error.code==='ESRCH')return true;throw error}
+  }
+  await wait(100)
+ }
+ return false
+}
 export function serviceName(unit){if(!/^(wechat-ping-bot(?:@[a-z][a-z0-9-]{0,31})?|wechat-pair-[a-z][a-z0-9-]{0,31})\.service$/.test(unit))throw Error('INVALID_SERVICE_NAME');return 'com.wechat-assistant.'+unit.slice(0,-8).replace('@','.')}
 export function launchAgent({unit,root,node=process.execPath,home=userHome(),account='default',pair=false,path=process.env.PATH??'/usr/bin:/bin'}){
  const label=serviceName(unit),args=[node,join(root,pair?'src/wechat/account-login.mjs':'src/wechat/bot.mjs'),...(pair?[account]:[])]

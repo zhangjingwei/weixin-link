@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,readFile,writeFile,rm,mkdir} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
-import {ServiceManager,launchAgent,serviceName,supportedPlatform} from '../../src/setup/platform-service.mjs'
+import {ServiceManager,launchAgent,serviceName,supportedPlatform,confirmServiceStopped} from '../../src/setup/platform-service.mjs'
 import {controlEndpoint,isPipe} from '../../src/infrastructure/runtime/control-endpoint.mjs'
 import {installServices,doctor} from '../../src/setup/setup-core.mjs'
 const fixture=async t=>{const home=await mkdtemp(join(tmpdir(),'wechat-platform-'));t.after(()=>rm(home,{recursive:true,force:true}));return home}
@@ -29,6 +29,15 @@ test('Mac pairing gives a named error after bounded missing-service retries',asy
  const run=async(bin,args)=>{if(args[0]==='kickstart'){kicks++;throw Object.assign(Error('missing'),{code:113})}return {stdout:''}}
  await assert.rejects(new ServiceManager({platform:'darwin',home,uid:501,run}).pair('default'),/MACOS_SERVICE_NOT_FOUND/)
  assert.equal(kicks,3)
+})
+test('service stop waits for both launch state and the old process to exit',async()=>{
+ let checks=0,probes=0
+ const stopped=await confirmServiceStopped(async()=>({active:++checks<3}),42,{attempts:5,wait:async()=>{},probe:()=>{if(++probes===2)throw Object.assign(Error('gone'),{code:'ESRCH'})}})
+ assert.equal(stopped,true)
+ assert.equal(checks,4)
+ assert.equal(probes,2)
+ const unconfirmed=await confirmServiceStopped(async()=>({active:false}),42,{attempts:2,wait:async()=>{},probe:()=>{}})
+ assert.equal(unconfirmed,false)
 })
 test('Linux installation reports an unmanaged unit without changing either service',async t=>{
  const home=await fixture(t),dir=join(home,'.config/systemd/user')

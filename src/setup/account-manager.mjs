@@ -1,7 +1,7 @@
 import {setupMessage,setupError} from './cli-output.mjs'
 import {fileURLToPath as repositoryFilePath} from 'node:url'
 const repositoryDirectory=repositoryFilePath(new URL('../../',import.meta.url))
-import {ServiceManager} from './platform-service.mjs'
+import {ServiceManager,confirmServiceStopped} from './platform-service.mjs'
 import {installConfig} from './install-config.mjs'
 import {pairingStatus,PairingState,exportQr} from '../infrastructure/wechat/pairing-state.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
@@ -22,7 +22,9 @@ async function run(){
  if(action==='refresh-qr'||action==='refresh'){
   if(await active(p.service))throw Error('ACCOUNT_ONLINE_NO_REFRESH_NEEDED')
   await new PairingState(p.stateDir).set('qr_expired')
-  await services.stop('wechat-pair-'+p.id+'.service').catch(()=>{})
+  const pairService='wechat-pair-'+p.id+'.service',previous=await services.status(pairService)
+  await services.stop(pairService)
+  if(previous.active&&!await confirmServiceStopped(()=>services.status(pairService),previous.pid))throw Error('PAIRING_STOP_UNCONFIRMED')
   await services.pair(p.id)
   for(let n=0;n<80;n++){const status=await pairingStatus(p.stateDir,{running:await active('wechat-pair-'+p.id+'.service')});if(status.status==='waiting_scan')return exportQr(p,join(installConfig().workspace,'outputs'));await delay(250)}
   throw Error('QR_NOT_READY_RETRY')

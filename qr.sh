@@ -82,7 +82,14 @@ try {
   if (current.service_active && !relogin) throw Error('ACCOUNT_RUNNING_NOT_READY')
   if (relogin && current.service_active) {
     console.log('已选择重新登录，正在等待当前任务结束并安全停止账号服务…')
-    const stopped=JSON.parse(execFileSync(process.execPath,[manager,'stop',account],{encoding:'utf8',timeout:650000,stdio:['ignore','pipe','pipe']}))
+    let stopped
+    try { stopped=JSON.parse(execFileSync(process.execPath,[manager,'stop',account],{encoding:'utf8',timeout:650000,stdio:['ignore','pipe','pipe']})) }
+    catch (error) {
+      let code
+      try { code=JSON.parse(String(error.stdout)).error } catch {}
+      if (typeof code==='string' && /^[A-Z][A-Z0-9_]*$/.test(code)) throw Error(code)
+      throw Error('ACCOUNT_STOP_UNCONFIRMED')
+    }
     if (!stopped.ok || stopped.status !== 'stopped') throw Error('ACCOUNT_STOP_UNCONFIRMED')
   }
   console.log('正在刷新微信登录二维码…')
