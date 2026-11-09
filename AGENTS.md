@@ -11,22 +11,15 @@
 
 ## 架构与模块边界
 
-本项目采用**模块化单体**：每个微信账号运行一个本地服务实例，主要能力在同一代码库内按职责拆分；微信、Codex 和可选集成是外部系统边界。模块之间通过明确接口协作，不为每项功能拆独立服务或复制状态。
+目标采用**模块化单体 + 领域边界 + MVC 接口组织**：每个微信账号运行一个本地服务实例，`src/wechat/bot.mjs` 是组合根，负责按账号装配依赖。微信、智能体和可选集成是外部系统。按职责划分模块，不为每项能力拆服务，不复制状态来源。
 
-当前代码**不是严格 DDD 分层实现**。可以借鉴领域边界和统一术语来组织账号、会话、任务、收件与投递等逻辑，但不要假定已有统一的聚合、仓储或领域事件框架，也不要为了贴合模式而引入空壳抽象。若未来改用正式 DDD 分层，应基于明确的复杂度和迁移计划单独设计。
+- **接口层 `src/interfaces/`**：四个 Controller 分别接收微信消息、计划到期与计划请求、版本检查触发、安装/配置/切换等管理动作；`views/wechat-presenter.mjs` 负责状态、进度、结果和通知的微信呈现。Controller 将请求交给应用用例，微信 SDK 对象和发送细节不进入应用层。当前收件与计划 Controller 仍直接调用部分核心持久化和队列能力，后续迁移须保留游标前保存与任务归属规则。
+- **应用层 `src/application/`**：接收消息、命令/意图路由、任务执行、通知/投递是目标用例边界；`ports/` 定义向外部能力请求的窄接口。现有用例主要仍在 `src/core/intake/`、`src/core/durable-intake.mjs`、`src/core/schedules/` 和 `src/core/updates/`；迁移时通过注入端口协作，不在用例中直接操作 SDK 或读取私有配置。
+- **领域层 `src/domain/`**：按账号/会话、消息/命令、任务/执行、投递/通知组织规则，保护授权归属、消息身份、状态转换、取消代际和未知投递结果等不变量。现有规则主要仍在 `src/core/conversations/`、`src/core/intake/`、`src/core/tasks/`、`src/core/delivery/`。当前未建立统一聚合、仓储或领域事件框架；不要为贴合图示增加空壳抽象或第二套状态。
+- **基础设施与外部适配 `src/infrastructure/`**：`wechat/` 接微信协议与出站，`agents/` 选择 Codex/Claude 底座，`media/` 处理附件和出站文件，`integrations/` 负责按账号启用并在调用时复核授权，`storage/` 提供持久化和跨进程锁。`ports.mjs` 装配实现；`src/application/ports/message-ports.mjs` 仅向消息用例暴露所需函数。底层 Codex/Claude 协议仍在 `src/base/`，集成插件仍在 `src/integrations/`，媒体工具和旧路径兼容入口仍在 `src/media/`。
+- **部署、配置与横切策略**：`src/setup/` 负责安装、配置、服务和账号绑定；`src/wechat/` 保留账号档案与组合根；`src/remote/` 负责 SSH 传输，远程任务协调在 `src/core/remote-tasks/`。权限、账号隔离、审计、幂等和运行控制贯穿各层，沿用现有状态与授权检查。`src/tools/` 放开发、验收和 SDK 补丁工具，`tests/` 按职责组织测试。
 
-消息主链路是：`src/wechat/bot.mjs` 组装依赖 → 微信协议和入站处理 → `src/core/` 持久化与协调；附件经 `src/media/` 预处理后，由 `src/base/codex/` 提交给 Codex；回复再经 `src/core/` 的投递状态管理和微信出站模块交付，媒体回复另经 `src/media/` 处理。
-
-- `src/wechat/`：微信登录、账号档案与组合入口；微信入口 Controller 和 Presenter 位于 `src/interfaces/`，协议实现位于 `src/infrastructure/wechat/`。`bot.mjs` 只装配依赖；新业务逻辑优先放入有明确职责的模块。
-- `src/core/`：与传输无关的会话、任务、收件、投递、取消、运行控制、存储、诊断和策略。微信特定字段只在边界转换，核心逻辑不直接调用微信 SDK。
-- `src/base/codex/`：Codex 官方协议、连接和会话。其他底座在 `src/base/` 独立目录实现；底座选择与就绪检查入口位于 `src/infrastructure/agents/`，不复制一套核心任务引擎。
-- `src/remote/`：SSH 传输与重连；协议仍归 `src/base/codex/`，远程任务协调归 `src/core/remote-tasks/`，部署归 `src/setup/`。
-- `src/infrastructure/media/`：附件下载、预处理和出站媒体入口；`src/media/` 保留脚本与旧路径兼容转发。保留原始文件与处理状态，不把未解析的材料描述成已理解。
-- `src/setup/`：安装、配置、服务和账号绑定；`src/integrations/`：按账号显式启用的可选集成插件，运行时授权入口位于 `src/infrastructure/integrations/`。配置发现、网络调用和运行时授权各守其边界。
-- `src/application/ports/` 定义外部接口，`src/infrastructure/` 实现并装配微信、智能体、媒体、集成和锁存储；不增加第二套状态来源。
-- `src/tools/`：开发、验收与 SDK 补丁工具；`tests/` 按源码领域组织测试。
-
-新增功能先选定所属层，通过清晰的接口传递依赖。避免跨层直接读取内部数据库、私有配置或调用另一个模块的全局单例。
+主链路为：微信入口 Controller → 接收与意图用例 → 会话/任务规则 → 已选智能体适配 → 投递用例 → 微信 Presenter → 微信出站。计划触发进入任务或通知用例；更新检查只产生升级提示，不自行升级。新增功能先确定所属层和端口，保持账号、收件、任务及投递状态的单一来源。详见 `docs/architecture/README.md` 的目标图和当前落地说明。
 
 ## 可靠性与安全不变量
 
