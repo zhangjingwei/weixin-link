@@ -8,6 +8,7 @@ import {singleMedia} from '../../src/application/intake/single-media.mjs'
 import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
 import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 import {SessionManager} from '../../src/wechat/session-manager.mjs'
+import {createSessionProtocol} from '../../src/infrastructure/agents/session-protocol.mjs'
 test('slow attachment retains order; another user and cancellation remain independent',async()=>{
  const dispatch=new MessageDispatch(),order=[],token={current:()=>true};let release
  const gate=new Promise(r=>release=r)
@@ -30,8 +31,22 @@ test('restart recovers original logical task and waiting state without completio
  const id=jobs.add('u',{text:'附件'},'delivery'),task={id:'original',title:'总结'}
  jobs.context(id,{task,request:'总结文件',flowNonce:'nonce'});jobs.bind(id,'thread');jobs.submitted(id,'turn');jobs.close();jobs=new DurableJobs(join(dir,'queue.sqlite'))
  const state={users:{u:{}}},out=[],session={threadId:'thread',rpc:{async request(){return {data:[{id:'turn',status:'completed',items:[{type:'agentMessage',text:'等待附件。<wechat-task:nonce>waiting_attachment</wechat-task:nonce>'}]}]}}}}
- const intake=new DurableIntake({jobs,manager:{state,connect:async()=>session,save:async()=>{}},reply:async()=>{}})
+ const intake=new DurableIntake({jobs,manager:{state,protocol:createSessionProtocol({kind:'codex'}),connect:async()=>session,save:async()=>{}},reply:async()=>{}})
  await intake.recover(jobs.get(id),async t=>out.push(t),{current:()=>true})
  assert.equal(state.users.u.lastTask.id,'original');assert.equal(state.users.u.waitingAttachment.request,'总结文件');assert.equal(out.length,0);assert.equal(jobs.get(id).state,'done')
+ }finally{jobs.close();await rm(dir,{recursive:true,force:true})}
+})
+
+test('Claude recovery keeps an unverified turn uncertain without querying Codex history',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'claude-recovery-'));const jobs=new DurableJobs(join(dir,'queue.sqlite'),{backendKey:'claude:claude-host'})
+ try{
+  const id=jobs.add('u',{text:'request'},'delivery');jobs.bind(id,'thread');jobs.submitted(id,'turn')
+  const requests=[],state={users:{u:{}}},protocol=createSessionProtocol({kind:'claude'})
+  const manager={owners:new Set(['u']),state,protocol,lifecycle:{capture:()=>({current:()=>true})},connect:async()=>({threadId:'thread',rpc:{request:async method=>{requests.push(method);throw Error('unexpected protocol request')}}}),save:async()=>{}}
+  const intake=new DurableIntake({jobs,manager,reply:async()=>{}})
+  await intake.pump('u')
+  assert.equal(jobs.get(id).state,'uncertain')
+  assert.equal(state.users.u.recovery.execution,'unknown')
+  assert.deepEqual(requests,[])
  }finally{jobs.close();await rm(dir,{recursive:true,force:true})}
 })

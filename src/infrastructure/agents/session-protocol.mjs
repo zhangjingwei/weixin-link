@@ -50,6 +50,19 @@ export function createSessionProtocol({kind='codex',rpcFactory,providerEnv=proce
   },
   resume,
   read:async(rpc,threadId)=>(await rpc.request('thread/read',{threadId,includeTurns:false})).thread,
+  async recoverTurn(rpc,{threadId,turnId,deliveryId}){
+   if(!codex)throw Error('AGENT_RECOVERY_UNAVAILABLE')
+   let cursor
+   for(let page=0;page<40;page++){
+    const result=await rpc.request('thread/turns/list',{threadId,limit:25,sortDirection:'desc',itemsView:'full',...(cursor?{cursor}:{})})
+    const turn=result.data.find(item=>turnId?item.id===turnId:(item.items??[]).some(message=>message.type==='userMessage'&&message.clientId===deliveryId))
+    if(turn)return turn
+    if(!result.nextCursor)break
+    cursor=result.nextCursor
+   }
+   return null
+  },
+  supportsRemoteTaskRecovery:codex,
   startTurn:(rpc,{threadId,input,deliveryId})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{}}),
   interrupt:(rpc,threadId,turnId)=>rpc.request('turn/interrupt',{threadId,turnId}),
   steer:(rpc,threadId,turnId,text)=>rpc.request('turn/steer',{threadId,expectedTurnId:turnId,input:[{type:'text',text}]}),

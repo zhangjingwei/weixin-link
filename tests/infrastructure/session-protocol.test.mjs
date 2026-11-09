@@ -23,3 +23,14 @@ test('Codex session protocol rejects unconfirmed permissions before enabling mem
  await assert.rejects(protocol.resume(rpc,{threadId:'saved',cwd:'/workspace',instructions:'rules',provider:protocol.providerOptions()}),/权限/)
  assert.deepEqual(calls,['thread/resume'])
 })
+
+test('recovery lookup stays behind the selected agent protocol',async()=>{
+ const calls=[],protocol=createSessionProtocol({kind:'codex'}),turn={id:'saved-turn',status:'completed',items:[]}
+ const rpc={async request(method,params){calls.push([method,params.cursor]);return params.cursor?{data:[turn]}:{data:[],nextCursor:'next'}}}
+ assert.equal(await protocol.recoverTurn(rpc,{threadId:'thread',turnId:'saved-turn',deliveryId:'delivery'}),turn)
+ assert.deepEqual(calls,[['thread/turns/list',undefined],['thread/turns/list','next']])
+ const claude=createSessionProtocol({kind:'claude'})
+ assert.equal(claude.supportsRemoteTaskRecovery,false)
+ await assert.rejects(claude.recoverTurn(rpc,{threadId:'thread',turnId:'saved-turn'}),/AGENT_RECOVERY_UNAVAILABLE/)
+ assert.equal(calls.length,2)
+})
