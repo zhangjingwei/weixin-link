@@ -1,10 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,rm} from 'node:fs/promises'
+import {mkdtemp,rm,writeFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
+import {createHash} from 'node:crypto'
 import {controlCommand,SessionManager} from '../../src/wechat/session-manager.mjs'
 import {createReceiveMessage} from '../../src/application/intake/receive-message.mjs'
+import {createMessageApplication} from '../../src/application/intake/message-application.mjs'
+import {quoteInput} from '../../src/infrastructure/wechat/weixin-protocol.mjs'
 
 test('native Chinese controls are explicit and slash aliases remain ordinary text',()=>{
   assert.deepEqual(controlCommand('长任务 修复收件队列'),{action:'goal',op:'create',objective:'修复收件队列'})
@@ -31,7 +34,7 @@ async function fixture(kind='codex'){
   }})
   const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],agentKind:kind,rpcFactory}).init()
   const reply=async text=>{output.push(text)}
-  return {manager,calls,output,reply,async close(){manager.close();await rm(dir,{recursive:true,force:true})}}
+  return {dir,manager,calls,output,reply,async close(){manager.close();await rm(dir,{recursive:true,force:true})}}
 }
 
 test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
@@ -112,4 +115,40 @@ test('cancelling a task while compaction is active does not submit a turn',async
     await assert.rejects(pending,/已取消/)
     assert.equal(f.calls.filter(c=>c.method==='turn/start').length,0)
   }finally{await f.close()}
+})
+
+test('fork cannot switch away from an unconfirmed remote task',async()=>{
+  const f=await fixture()
+  try{
+    await f.manager.connect('owner',f.reply)
+    const scope=createHash('sha256').update('original').digest('hex').slice(0,24)
+    await writeFile(join(f.dir,'work','remote-sessions.json'),JSON.stringify({task:{kind:'official-remote-task',scope,stop_confirmed:false}}))
+    await f.manager.handle('owner','分叉会话',f.reply)
+    assert.equal(f.calls.filter(c=>c.method==='thread/fork').length,0)
+    assert.equal(f.manager.state.users.owner.threadId,'original')
+    assert.match(f.output.at(-1),/远程任务/)
+  }finally{await f.close()}
+})
+
+test('fast mode remains explicit after restoring an owned Codex session',async()=>{
+  const f=await fixture()
+  try{
+    await f.manager.handle('owner','开启快速模式',f.reply)
+    f.manager.state.users.owner.previous=['older']
+    await f.manager.handle('owner','恢复Codex会话 older',f.reply)
+    assert.equal(f.manager.state.users.owner.fastMode,true)
+    await f.manager.handle('owner','计划 检查',f.reply)
+    assert.equal(f.calls.findLast(c=>c.method==='turn/start').params.serviceTier,'fast')
+  }finally{await f.close()}
+})
+
+test('quoted WeChat plan keeps the referenced message in the durable task',async()=>{
+  const submissions=[]
+  const manager={owners:new Set(['owner']),sessions:new Map(),state:{users:{owner:{}}},supportsNativeCommands:true,agentName:'Codex',lifecycle:{capture:()=>({current:()=>true})},acceptMessage:async()=>true}
+  const handle=createMessageApplication({view:{context(){},deliver:async()=>{}},manager,jobs:{rawCurrent:()=>true,acknowledge(){},claimReceipt:()=>false},conversations:{recipient:()=> 'owner',control:async()=>false},runtime:{sealed:false,draining:false},log(){},durable:{submit:(...args)=>submissions.push(args)},classifyMessage:message=>({kind:'session',value:controlCommand(message.text)}),hasMedia:()=>false,normalizeVoice:message=>message,quoteInput,systemNotice:value=>value})
+  const references=[{messageId:'42',text:'原始需求'}]
+  await handle({userId:'owner',text:'计划 修复这个问题',references,raw:{message_id:'43'},_ingressId:'ingress-43'})
+  assert.equal(submissions.length,1)
+  assert.equal(submissions[0][1].text,'修复这个问题')
+  assert.deepEqual(submissions[0][1].references,references)
 })

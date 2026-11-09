@@ -216,6 +216,11 @@ export class SessionManager {
     const saved=this.state.users[userId]??{}
     return [...new Set([saved.threadId,...(saved.previous??[]).slice().reverse()].filter(id=>typeof id==='string'&&id))]
   }
+  async assertNoOutstandingRemoteTasks(threadId) {
+    const scope=createHash('sha256').update(threadId).digest('hex').slice(0,24)
+    let remote={};try{remote=JSON.parse(await readFile(join(this.cwd,'remote-sessions.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}
+    if(Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed))throw Error('当前对话仍有未确认停止的远程任务，请先用 “停止” 核实，再切换。')
+  }
   async listConversations(userId,reply) {
     const ids=this.conversationIds(userId)
     if(!ids.length){await reply('暂无本账号下属于你的历史对话。');return}
@@ -241,9 +246,7 @@ export class SessionManager {
     if(id===session.threadId){await reply('当前已在该对话中，直接发消息即可。');return}
     session.selecting=true
     try{
-      const scope=createHash('sha256').update(session.threadId).digest('hex').slice(0,24)
-      let remote={};try{remote=JSON.parse(await readFile(join(this.cwd,'remote-sessions.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}
-      if(Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed))throw Error('当前对话仍有未确认停止的远程任务，请先用 “停止” 核实，再切换。')
+      await this.assertNoOutstandingRemoteTasks(session.threadId)
       const meta=await this.protocol.read(session.rpc,id)
       if(meta?.id!==id||meta.cwd&&meta.cwd!==this.workspaceFor(userId))throw Error('历史对话目录不匹配，未切换。')
       if(meta.status?.type==='active')throw Error('目标对话正在执行任务，未切换。')
@@ -251,7 +254,7 @@ export class SessionManager {
       const result=await this.protocol.resume(session.rpc,{threadId:id,cwd:this.workspaceFor(session.userId),instructions:await this.sessionInstructions(session.userId),provider:selectedProvider})
       if(!token.current())return
       const previous=this.state.users[userId],oldId=session.threadId
-      const next={seen:previous.seen,workspace:previous.workspace,previous:ids.filter(v=>v!==id).reverse().slice(-20),threadId:id,hasMessages:true,conversationChoices:previous.conversationChoices}
+      const next={seen:previous.seen,workspace:previous.workspace,previous:ids.filter(v=>v!==id).reverse().slice(-20),threadId:id,hasMessages:true,conversationChoices:previous.conversationChoices,fastMode:previous.fastMode}
       this.state.users[userId]=next;session.threadId=id
       try{await this.save()}catch(e){if(this.state.users[userId]===next){this.state.users[userId]=previous;session.threadId=oldId}throw e}
       this.lifecycle.cancel(userId)
@@ -647,6 +650,7 @@ export class SessionManager {
         if(command.action==='fork'){
           session.selecting=true
           try{
+            if(command.switchTo)await this.assertNoOutstandingRemoteTasks(session.threadId)
             const sourceId=session.threadId,result=await this.protocol.fork(session.rpc,sourceId),id=result?.thread?.id
             if(!id||id===sourceId||result.thread.cwd&&result.thread.cwd!==this.workspaceFor(userId))throw Error('底座未确认同目录的新会话，未切换。')
             const saved=this.state.users[userId]
