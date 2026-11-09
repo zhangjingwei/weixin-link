@@ -1,19 +1,20 @@
 # 基础设施与外部适配
 
-`ports.mjs` 组装 `src/application/ports/infrastructure-ports.mjs` 定义的五组函数接口。组合根按账号创建端口集合；`src/application/ports/message-ports.mjs` 再为消息用例选出不含 SDK 客户端的窄接口。端口不保存新的业务状态。
+`src/wechat/infrastructure-ports.mjs` 在组合根组装 `src/application/ports/infrastructure-ports.mjs` 定义的五组函数接口。组合根按账号创建端口集合；`src/application/ports/message-ports.mjs` 再为消息用例选出不含 SDK 客户端的窄接口。端口不保存新的业务状态。
 
 | 目录 | 当前实现 | 状态归属 |
 | --- | --- | --- |
 | `wechat/` | 微信 SDK 协议补丁与游标、入站追踪、消息发送账本、统一出站发送、投递错误归类 | 原账号 SQLite 与 SDK 状态 |
+| `accounts/` | 账号注册表读取与原子写入 | 原账号注册表 |
+| `config/` | 配置格式、文件位置、安装配置读取与标准输入 | 原私有配置文件 |
 | `agents/` | Codex / Claude 底座选择、远程 RPC、共享提示元数据和新会话就绪检查 | 原底座和会话状态 |
 | `remote/` | SSH 传输、连接重试、主机配置快照、工作目录与路径边界 | 原账号工作目录的远程配置与任务账本 |
 | `media/` | 附件下载、预处理、出站文件与投递组件 | 原账号附件与投递记录 |
-| `integrations/` | 按账号启用的集成调用、检查和指引 | 原私有配置与启用状态 |
 | `storage/` | 跨进程注册表锁、原子更新、计划与版本通知状态文件、入站信封身份映射、SQLite 收件和任务队列 | 原注册表、状态文件与收件数据库 |
 | `updates/` | 已安装版本读取和 GitHub 最新正式版查询 | 不保存新的版本状态 |
 | `runtime/` | 账号私有控制端点、维护租约、服务忙闲状态和按用户隔离的取消信号 | 原账号控制 socket；取消信号仅在进程内 |
 | `diagnostics/` | 脱敏事件记录和有界轮转 | 原账号诊断日志 |
 
-媒体下载、文件解码工具、预处理和出站实现均位于 `media/`；测试和运行调用方直接引用所属模块。`src/base/codex/`、`src/base/claude/`、各集成插件和 SDK 辅助代码仍保持原位置。
+媒体下载、文件解码工具、预处理和出站实现均位于 `media/`；测试和运行调用方直接引用所属模块。集成运行时位于 `src/integrations/runtime.mjs`；底座协议位于 `src/base/`，会话编排与对话数据位于 `src/application/`。
 
 端口不把微信 SDK、凭据或远程配置传给应用用例；调用方传入本次账号和任务上下文。集成授权仍在每次调用时由原集成运行时复核；媒体下载范围、未知投递结果和锁文件行为均沿用原实现。

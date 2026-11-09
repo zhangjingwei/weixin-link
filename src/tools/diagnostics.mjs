@@ -1,4 +1,4 @@
-import {accountPaths} from '../wechat/accounts.mjs'
+import {accountPaths} from '../infrastructure/accounts/account-store.mjs'
 import {readFile} from 'node:fs/promises'
 import {join} from 'node:path'
 const dir=join(accountPaths().stateDir,process.argv.includes('--integration')?'integration-logs':'logs')

@@ -1,7 +1,7 @@
 import {homedir as platformHome} from 'node:os'
 import {BindingPermit} from './setup-binding-permit.mjs'
 import {InstallationWizard} from './setup-wizard.mjs'
-import {USER_GUIDE} from '../wechat/user-guide.mjs'
+import {USER_GUIDE} from './user-guide.mjs'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {createHash} from 'node:crypto'

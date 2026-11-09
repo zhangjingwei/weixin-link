@@ -4,6 +4,8 @@
 
 本项目保持每个微信账号一个本地服务实例的模块化单体。`src/interfaces/` 按四个 Controller、微信 Presenter 和结构化 CLI 组织；`src/infrastructure/` 提供外部边界；收件、会话、任务执行与恢复、远程任务、计划和通知用例位于 `src/application/`。会话、消息、任务、投递、计划和版本的不变量位于 `src/domain/`。DDD 用于划清职责，不引入第二套状态仓库或空壳聚合。
 
+静态模块依赖按 `domain → base → infrastructure → application → integrations → setup → interfaces → wechat` 的方向收敛，允许跳过中间层直接依赖更低层；`wechat/` 为账号服务组合根。`src/setup/service-entry.mjs` 是独立的 Windows 服务进程入口，启动 `wechat/bot.mjs`，不作为供其他模块复用的库。`tests/domain/layer-dependencies.test.mjs` 检查普通运行模块的跨层引用和循环。
+
 ## 当前落地边界
 
 | 职责 | 实现位置 | 规则 |
@@ -20,7 +22,7 @@
 | 领域规则 | `src/domain/conversations/`、`messages/`、`tasks/`、`delivery/`、`schedules/`、`updates/` | 以归一化的会话归属、外部消息 ID、已确认拒绝证据判断状态；不读取微信原始字段或 API 错误码，不直接执行 I/O |
 | 会话与底座 | `src/base/codex/codex-session.mjs`、`src/wechat/session-manager.mjs`、`src/infrastructure/agents/` | 共享会话管理器通过构造端口接收应用格式化与外部适配；组合根提供实际实现，账号启动时选择底座 |
 | 微信 View / Presenter | `src/interfaces/views/wechat-presenter.mjs`、`src/infrastructure/media/outbound-media.mjs` | 普通任务、控制回复、计划提醒和更新通知共用会话投递入口；映射收件人、格式化通知并串行发送；结果不明时保留状态 |
-| 基础设施端口 | `src/application/ports/infrastructure-ports.mjs`、`src/infrastructure/ports.mjs`、`src/infrastructure/storage/`、`src/infrastructure/updates/` | 组合根注入协议、底座、媒体等能力；计划与更新用例通过存储及版本查询适配器执行外部操作，不复制状态 |
+| 基础设施端口 | `src/application/ports/infrastructure-ports.mjs`、`src/wechat/infrastructure-ports.mjs`、`src/infrastructure/storage/`、`src/infrastructure/updates/` | 组合根注入协议、底座、媒体等能力；计划与更新用例通过存储及版本查询适配器执行外部操作，不复制状态 |
 
 `message-application.mjs` 负责意图分流、权限、回执和任务提交；安装、切换与升级的具体执行委托给管理模块。调用方直接导入所属模块。后续扩展应继续按职责拆分，不在此文件新增供应商协议分支。图中“显式配置的上下文准备”是预留用例，当前集成不会自动预取外部信息。
 

@@ -14,12 +14,13 @@ import {SetupReceipts} from '../setup/setup-receipts.mjs'
 import {USER_GUIDE} from './user-guide.mjs'
 import {SetupController,setupCommand} from '../setup/setup-controller.mjs'
 import {installConfig} from '../setup/install-config.mjs'
+import {ServiceManager} from '../setup/platform-service.mjs'
 import {createToolNotifier} from './tool-status.mjs'
-import {createInfrastructurePorts} from '../infrastructure/ports.mjs'
+import {createInfrastructurePorts} from './infrastructure-ports.mjs'
 import {AgentSwitcher} from '../setup/agent-switch.mjs'
 import {ChatUpgrader} from '../setup/chat-upgrade.mjs'
-import {ClaudeConversations} from '../base/claude/claude-conversations.mjs'
-import {ClaudeSetupController} from '../base/claude/claude-setup.mjs'
+import {ClaudeConversations} from '../application/conversations/claude-conversations.mjs'
+import {ClaudeSetupController} from '../setup/claude-setup.mjs'
 import {TextConversations} from '../application/conversations/text-conversations.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
@@ -134,6 +135,7 @@ const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.d
 const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace
 const inbound=createWeChatController({bot,view,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
+ normalizeVoice:voiceCommandInput,
  traceWire:wire=>ingressTrace.traceId(wire),traceMessage:message=>ingressTrace.callback(message),quote:message=>weixin.quote(message),dispatch:message=>intakeHandler(message),log})
 weixin=infrastructure.wechat.installProtocol(bot,{db:jobs.db,log,prepareBatch:inbound.prepareBatch})
 ingressTrace=traceIngress(bot,log)
@@ -143,7 +145,7 @@ const durable=new DurableIntake({jobs,manager,log,reply:(userId,value,options)=>
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{void setupController.cancelBinding(conversations.recipient(userId)).catch(()=>{});pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,mediaDependencies,durable,classifyMessage,infrastructure,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
+const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,mediaDependencies,durable,classifyMessage,infrastructure,diagnosticServices:new ServiceManager(),diagnosticService:account.service,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
 intakeHandler=nonBlockingHandler(async message => {
   try {
     message=voiceCommandInput(message)

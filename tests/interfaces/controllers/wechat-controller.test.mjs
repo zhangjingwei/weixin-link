@@ -14,6 +14,7 @@ function fixture() {
   const setupReceipts = {get: () => null, capture: () => null}
   const view = {directNotice: (message, text) => bot.reply({...message, userId: conversations.recipient(message.userId)}, text)}
   const controller = createWeChatController({bot, view, manager, jobs, conversations, runtime, setupController, setupReceipts,
+    normalizeVoice: message => message,
     classifyMessage: message => message.text === '停止' ? {kind: 'session', value: {action: 'stop'}} : null,
     traceWire: () => 'wire-trace', traceMessage: () => {events.push('trace'); return 'message-trace'}, quote: () => [],
     dispatch: message => dispatched.push(message), log: () => {}})
@@ -49,7 +50,7 @@ test('setup receipt is captured after the saved session and retains its frozen a
     conversations: {realOwners: new Set(['owner']), bind: value => value}, runtime: f.runtime,
     setupController: {command: () => 'setup-status'},
     setupReceipts: {get: () => null, capture: () => ({action: 'setup-status', id: 'receipt-1'})},
-    classifyMessage: () => ({kind: 'setup'}), traceWire: () => 'trace', traceMessage: () => 'trace', quote: () => [], dispatch: () => {},
+    classifyMessage: () => ({kind: 'setup'}), normalizeVoice: value => value, traceWire: () => 'trace', traceMessage: () => 'trace', quote: () => [], dispatch: () => {},
   })
   await controller.prepareBatch([{message}])
   assert.deepEqual(f.events, ['save', 'capture'])

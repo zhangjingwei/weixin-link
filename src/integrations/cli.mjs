@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import {resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
-import {readConfigStdin} from '../setup/config-manager.mjs'
-import {integrationStatus, setIntegrationEnabled, checkIntegration, invokeIntegration} from '../infrastructure/integrations/runtime.mjs'
+import {readConfigStdin} from '../infrastructure/config/config-input.mjs'
+import {integrationStatus, setIntegrationEnabled, checkIntegration, invokeIntegration} from './runtime.mjs'
 
 export async function runIntegrationCommand(action, args = [], input = process.stdin) {
   if (action === 'list' || action === 'status') {

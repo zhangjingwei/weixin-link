@@ -1,5 +1,5 @@
 import {ServiceManager} from '../setup/platform-service.mjs'
-import {accountPaths} from '../wechat/accounts.mjs'
+import {accountPaths} from '../infrastructure/accounts/account-store.mjs'
 // External controller: live drain/seal handshake over a private Unix socket, never logs.
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'

@@ -19,13 +19,13 @@ export function containerTarget(id,home=(process.env.HOME||platformHome())){
  const agent=id.at(-1),root=join(home,'work/wechat-assistant/.private/podman-pilot',agent)
  return {id,kind:'podman',container:'codex-pilot-'+agent,binary:'/opt/codex-release/bin/codex',socket:'/run/agent/app-server.sock',cwd:'/workspace',root,workspace:join(root,'workspace'),home:join(root,'home'),memoryMode:'native'}
 }
-export async function loadBackend(account,hostCwd,override){
+export async function loadBackend(account,hostCwd,override,{listAccounts}={}){
  let config=override;try{if(config===undefined)config=JSON.parse(await readFile(join(account.stateDir,'codex-backend.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}
  if(!config||config.id==='host')return {id:'host',kind:'host',cwd:hostCwd,stateDir:account.stateDir,memoryMode:'native',instructions:'长期记忆统一使用当前 Codex 原生记忆，不生成微信自定义记忆块。'}
  if(config.version!==1)throw Error('INVALID_CODEX_BACKEND_CONFIG')
  if(override===undefined){if(!config.wechatAccountId)throw Error('WECHAT_BINDING_IDENTITY_REQUIRED');if(config.wechatAccountId!==await bindingIdentity(account))throw Error('WECHAT_BINDING_IDENTITY_MISMATCH')}
- if(override===undefined){const {listAccounts}=await import('../../wechat/accounts.mjs');for(const other of await listAccounts()){if(other.id===account.id)continue;let binding;try{binding=JSON.parse(await readFile(join(other.stateDir,'codex-backend.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}if(binding?.id===config.id)throw Error('CONTAINER_ALREADY_BOUND_TO_OTHER_ACCOUNT')}}
- const target=containerTarget(config.id);if(target.wechatAccountId&&target.wechatAccountId!==await (await import('./backend-identity.mjs')).bindingIdentity(account))throw Error('WECHAT_BINDING_IDENTITY_MISMATCH');const backend={...target,stateDir:join(account.stateDir,'backends',target.id)}
+ if(override===undefined){if(typeof listAccounts!=='function')throw Error('ACCOUNT_REGISTRY_REQUIRED');for(const other of await listAccounts()){if(other.id===account.id)continue;let binding;try{binding=JSON.parse(await readFile(join(other.stateDir,'codex-backend.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}if(binding?.id===config.id)throw Error('CONTAINER_ALREADY_BOUND_TO_OTHER_ACCOUNT')}}
+ const target=containerTarget(config.id);if(target.wechatAccountId&&target.wechatAccountId!==await bindingIdentity(account))throw Error('WECHAT_BINDING_IDENTITY_MISMATCH');const backend={...target,stateDir:join(account.stateDir,'backends',target.id)}
  // Native memory is scoped to one explicitly bound owner and exclusive container.
  backend.instructions='运行环境：独立 Podman 容器，工作目录 /workspace。仅能操作本容器挂载的文件。附件已复制到 /workspace/inputs；交付产物请写入 /workspace/outputs 并给出该目录的绝对路径链接。宿主机脚本、SSH 密钥与远程适配器不在本容器内，不能假定可用。长期记忆使用当前 Codex 的原生记忆，不生成微信自定义记忆块。'
  backend.rpcFactory=options=>new PodmanRpc({...options,backend})

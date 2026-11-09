@@ -1,5 +1,5 @@
 import {isAbsolute} from 'node:path'
-import {installConfig} from '../../setup/install-config.mjs'
+import {installConfig} from '../config/install-config.mjs'
 
 export function resolveRemoteWorkspace({home,workspace,env=process.env}={}) {
  const root=workspace??env.WECHAT_REMOTE_WORKSPACE??installConfig(home).workspace

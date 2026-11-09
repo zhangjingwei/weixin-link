@@ -1,6 +1,6 @@
 import {access} from 'node:fs/promises'
 import {constants} from 'node:fs'
-import {setupCommand} from '../../setup/setup-controller.mjs'
+import {setupCommand} from './setup-controller.mjs'
 
 export class ClaudeSetupController{
  constructor({binary,env=process.env}){this.binary=binary;this.env=env}

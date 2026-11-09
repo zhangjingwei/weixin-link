@@ -7,7 +7,7 @@ export default {
   manifest,
   guidanceUrl: new URL('./guidance.md', import.meta.url),
   async configPath({home, workspace, env = process.env}) {
-    const {installConfig} = await import('../../setup/install-config.mjs')
+    const {installConfig} = await import('../../infrastructure/config/install-config.mjs')
     return env.WECHAT_REMOTE_HOSTS ?? join(workspace ?? env.WECHAT_REMOTE_WORKSPACE ?? installConfig(home).workspace, 'remote-hosts.json')
   },
   async health(config) {

@@ -2,7 +2,6 @@ import {handleDiagnostic} from '../diagnostics/diagnostic-commands.mjs'
 import {randomUUID} from 'node:crypto'
 import {receiptPolicy} from '../../domain/delivery/receipt-policy.mjs'
 import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
-import {systemNotice} from '../../interfaces/views/system-notice.mjs'
 import {recoverFailedFinal} from '../notifications/failed-final-recovery.mjs'
 
 const READINESS_NOTICE = {
@@ -12,7 +11,7 @@ const READINESS_NOTICE = {
   CLAUDE_CREDENTIALS_REQUIRED: '微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。',
 }
 
-export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,confirmedRejection,deferMaintenance}){
+export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,confirmedRejection,deferMaintenance,systemNotice,diagnosticServices,diagnosticService}){
 return async function handleMessage(message) {
   if(message._ingressId&&!jobs.rawCurrent(message._ingressId))return
   if(message._intakeToken&&!message._intakeToken.current())return
@@ -42,7 +41,7 @@ return async function handleMessage(message) {
   }
   const setupAction=intent?.kind==='setup'?intent.value:null
   if(setupAction){await management.setup(setupAction,message,deliver);return}
-  if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>deliver(diagnosticAction==='export'?await diagnosticPackage(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>deliver(diagnosticAction==='export'?await diagnosticPackage(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir,service:diagnosticService,services:diagnosticServices}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
   if(!initialControl&&!manager.sessions.has(message.userId)){
    const issue=await agentReadiness()
    if(issue){await deliver(READINESS_NOTICE[issue]??'微信已连通，但当前智能体未就绪。本条没有提交给模型；可发送“安装状态”核对配置。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}

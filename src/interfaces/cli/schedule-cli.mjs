@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
-import {accountPaths} from '../../wechat/accounts.mjs'
+import {accountPaths} from '../../infrastructure/accounts/account-store.mjs'
 import {controlRequest} from '../../infrastructure/runtime/runtime-control.mjs'
 
 export async function runScheduleCommand(input = process.stdin, {threadId = process.env.CODEX_THREAD_ID, account = process.env.WECHAT_ACCOUNT ?? 'default', home = process.env.HOME} = {}) {

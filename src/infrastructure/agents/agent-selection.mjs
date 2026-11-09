@@ -1,5 +1,5 @@
 import {join} from 'node:path'
-import {readPrivateFile,atomicConfigWrite} from '../../setup/config-files.mjs'
+import {readPrivateFile,atomicConfigWrite} from '../config/config-files.mjs'
 
 export const agentSelectionPath=account=>join(account.stateDir,'agent-selection.json')
 export const agentKinds=['codex','claude']

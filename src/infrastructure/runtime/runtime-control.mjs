@@ -1,6 +1,6 @@
 import {isPipe} from './control-endpoint.mjs'
 import {lstat,readFile,writeFile} from 'node:fs/promises'
-import {accountPaths,listAccounts} from '../../wechat/accounts.mjs'
+import {accountPaths,listAccounts} from '../accounts/account-store.mjs'
 import http from 'node:http'
 import net from 'node:net'
 import {randomUUID} from 'node:crypto'

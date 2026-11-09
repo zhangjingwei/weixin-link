@@ -1,7 +1,7 @@
 import {homedir as platformHome} from 'node:os'
 import {ffmpegBinary} from './media-binary.mjs'
 import {deliveryError,deliveryFailureState} from '../wechat/delivery-error.mjs'
-import {wechatParts} from '../../wechat/wechat-text.mjs'
+import {wechatParts} from '../wechat/text-format.mjs'
 import {mkdir,readFile,writeFile,realpath,stat,unlink,lstat} from 'node:fs/promises'
 import {resolve,join,basename,extname,relative,isAbsolute} from 'node:path'
 import {createHash,randomUUID} from 'node:crypto'

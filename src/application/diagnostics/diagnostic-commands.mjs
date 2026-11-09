@@ -1,8 +1,7 @@
 import {readFile,mkdir,writeFile} from 'node:fs/promises'
 import {join,resolve} from 'node:path'
 import {randomUUID,createHash} from 'node:crypto'
-import {accountPaths} from '../../wechat/accounts.mjs'
-import {ServiceManager} from '../../setup/platform-service.mjs'
+import {accountPaths} from '../../infrastructure/accounts/account-store.mjs'
 const commands={'诊断':'diagnose','运行诊断':'diagnose','服务状态':'service','查看最近错误':'errors','导出诊断报告':'export'}
 export const diagnosticCommand=text=>typeof text==='string'?commands[text.trim()]??null:null
 const knownCodes=new Set(['EPIPE','ECONNRESET','ECONNREFUSED','ETIMEDOUT','ENOENT','EACCES','ENOSPC','EIO','ABORT_ERR'])
@@ -27,10 +26,10 @@ export async function readDiagnostics(dir){
  }
  return {files,records,last_event_at:last,invalid_lines:invalid,dropped_records:dropped,counts,recent_failures:failures,unmatched_turns:[...active.values()].slice(-20),unmatched_turn_count:active.size}
 }
-export async function handleDiagnostic(action,reply,{stateDir=accountPaths().stateDir,service=accountPaths().service,services=new ServiceManager(),outputDir=resolve('outputs','diagnostics')}={}){
+export async function handleDiagnostic(action,reply,{stateDir=accountPaths().stateDir,service=accountPaths().service,services,outputDir=resolve('outputs','diagnostics')}={}){
  try{
   let status
-  if(action!=='errors')try{status=await services.status(service)}catch{status={unknown:true}}
+  if(action!=='errors')try{status=services?await services.status(service):{unknown:true}}catch{status={unknown:true}}
   const serviceText=()=>status?.unknown?'服务状态：未能查询。':`服务状态：${status.active?'运行中':'未运行或状态查询失败'}${status.pid?`，PID ${status.pid}`:''}。`
   if(action==='service'){await reply(serviceText());return}
   const data=await readDiagnostics(join(stateDir,'logs'))

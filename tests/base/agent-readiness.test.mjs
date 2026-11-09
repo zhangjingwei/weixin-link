@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createAgentReadiness} from '../../src/base/agent-readiness.mjs'
+import {createAgentReadiness} from '../../src/infrastructure/agents/agent-readiness.mjs'
 
 test('agent readiness checks the selected backend without exposing provider errors', async () => {
   const owners = ['owner']

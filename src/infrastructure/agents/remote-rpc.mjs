@@ -3,6 +3,7 @@ import {initializeCodex,isReadOnlyCodexMethod} from '../../base/codex/protocol-o
 import {RemoteTransport} from '../remote/ssh-transport.mjs'
 import {ReconnectingConnection,isTransientConnectionError} from '../remote/reconnecting-connection.mjs'
 import {configuredHost,validateHostConfig} from '../remote/host-config.mjs'
+import {errorFields} from '../diagnostics/diagnostic-log.mjs'
 // Codex session recovery and replay policy are coordination, never SSH transport behavior.
 export class RemoteRpc {
  constructor(host,{onEvent=()=>{},hostConfig,transportFactory,retryDelays=[250,1000,2500]}={}){
@@ -13,7 +14,7 @@ export class RemoteRpc {
   this.connection=new ReconnectingConnection({retryDelays,
    transportFactory:options=>transportFactory(host,{...options,onEvent:event=>this.onEvent(event)}),
    createSession:transport=>{
-    const client=new CodexProtocolClient({transport,errors:remoteRpcErrors,timeout:30000,onEvent:message=>{
+    const client=new CodexProtocolClient({transport,errors:remoteRpcErrors,timeout:30000,errorFields,onEvent:message=>{
      if(message.id!==undefined&&message.method){client.respondError(message.id,{code:-32601,message:'Use a native Codex client for this interaction'});return}
      return this.onEvent(message)
     }})

@@ -1,12 +1,13 @@
 import {SessionManager} from '../base/codex/codex-session.mjs'
 import {remoteScope} from '../application/remote-tasks/remote-stop.mjs'
 import {recoveryText} from '../application/tasks/recovery-state.mjs'
-import {integrationGuidance} from '../infrastructure/integrations/runtime.mjs'
+import {integrationGuidance} from '../integrations/runtime.mjs'
 import {materialInput} from '../infrastructure/agents/material-context.mjs'
 import {flowInput, stripTaskFlow} from '../infrastructure/agents/task-flow.mjs'
 import {ASSISTANT_INSTRUCTIONS} from '../infrastructure/agents/assistant-policy.mjs'
 import {OutputStore, outputLinks} from '../infrastructure/media/outbound-media.mjs'
 import {CancellationScopes} from '../infrastructure/runtime/cancellation-scopes.mjs'
+import {installConfig} from '../setup/install-config.mjs'
 import {errorFields} from '../infrastructure/diagnostics/diagnostic-log.mjs'
 import {deliveryError, deliveryFailureState} from '../infrastructure/wechat/delivery-error.mjs'
 import {systemNotice} from '../interfaces/views/system-notice.mjs'
@@ -19,6 +20,7 @@ export const sessionPorts = Object.freeze({
   integrationGuidance, materialInput, flowInput, stripTaskFlow, recoveryText,
   outputStore: options => new OutputStore(options), outputLinks,
   cancellationScopes: () => new CancellationScopes(),
+  codexBinary: () => installConfig().codexBinary,
   errorFields, deliveryError, deliveryFailureState, systemNotice, controlCommand,
 })
 

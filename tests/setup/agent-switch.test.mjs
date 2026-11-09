@@ -5,7 +5,7 @@ import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {agentSwitchCommand,AgentSwitcher,readAgentSwitch,scheduleAgentSwitch} from '../../src/setup/agent-switch.mjs'
 import {performAgentSwitch} from '../../src/setup/agent-switch-worker.mjs'
-import {selectedAgentKind} from '../../src/base/agent-selection.mjs'
+import {selectedAgentKind} from '../../src/infrastructure/agents/agent-selection.mjs'
 
 test('agent command matches only explicit switches',()=>{
  assert.deepEqual(agentSwitchCommand('重启'),{action:'restart',target:null})
@@ -32,7 +32,7 @@ test('account selection remains isolated and falls back to installation default'
  const first={stateDir:join(dir,'one')},second={stateDir:join(dir,'two')}
  const {mkdir}=await import('node:fs/promises');await mkdir(first.stateDir);await mkdir(second.stateDir)
  assert.equal(await selectedAgentKind(first,{agentBackend:'codex'}),'codex')
- const {writeAgentKind}=await import('../../src/base/agent-selection.mjs')
+ const {writeAgentKind}=await import('../../src/infrastructure/agents/agent-selection.mjs')
  await writeAgentKind(first,'claude')
  assert.equal(await selectedAgentKind(first,{agentBackend:'codex'}),'claude')
  assert.equal(await selectedAgentKind(second,{agentBackend:'codex'}),'codex')

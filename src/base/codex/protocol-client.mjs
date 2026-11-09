@@ -1,5 +1,4 @@
 // Shared Codex JSON-RPC protocol. Transports only send/receive messages.
-import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 export const localRpcErrors={
  disconnected:method=>Object.assign(Error('Codex 连接已断开。'),{connectionClosed:true,method}),
  timeout:method=>Object.assign(Error(`Codex ${method} 响应超时。`),{requestTimeout:true,method}),
@@ -11,9 +10,9 @@ export const remoteRpcErrors={
  response:(error,method)=>Object.assign(Error('REMOTE_RPC_ERROR'),{rpcCode:error.code,method}),
 }
 export class CodexProtocolClient {
- constructor({transport,onEvent=()=>{},onClose=()=>{},log=()=>{},errors=localRpcErrors,timeout=45000}){
+ constructor({transport,onEvent=()=>{},onClose=()=>{},log=()=>{},errors=localRpcErrors,timeout=45000,errorFields=()=>({error_type:'Error'})}){
   if(typeof transport?.send!=='function'||typeof transport?.close!=='function')throw Error('INVALID_CODEX_TRANSPORT')
-  Object.assign(this,{transport,onEvent,onClose,log,errors,timeout});this.nextId=0;this.pending=new Map();this.closed=false
+  Object.assign(this,{transport,onEvent,onClose,log,errors,timeout,errorFields});this.nextId=0;this.pending=new Map();this.closed=false
   transport.onMessage=message=>this.accept(message)
  }
  get child(){return this.transport.child}
@@ -25,7 +24,7 @@ export class CodexProtocolClient {
    this.pending.delete(message.id);clearTimeout(request.timer)
    this.log('rpc.response',{rpc_id:message.id,method:request.method,status:message.error?'error':'ok',code:message.error?.code,duration_ms:Date.now()-request.started})
    message.error?request.reject(this.errors.response(message.error,request.method)):request.resolve(message.result)
-  }else{try{Promise.resolve(this.onEvent(message)).catch(error=>this.log('rpc.event_failed',errorFields(error)))}catch(error){this.log('rpc.event_failed',errorFields(error))}}
+  }else{try{Promise.resolve(this.onEvent(message)).catch(error=>this.log('rpc.event_failed',this.errorFields(error)))}catch(error){this.log('rpc.event_failed',this.errorFields(error))}}
  }
  write(message){if(this.closed)throw this.errors.disconnected();this.transport.send(message)}
  request(method,params={},timeout=this.timeout){

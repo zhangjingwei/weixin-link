@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp, mkdir, writeFile, readFile, rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
+import {fileURLToPath} from 'node:url'
 import {Readable} from 'node:stream'
 import {configure, configPath} from '../../src/setup/config-manager.mjs'
 import {createHaClient} from '../../src/integrations/home-assistant/client.mjs'
@@ -40,6 +41,7 @@ test('legacy HA config remains compatible but does not implicitly authorize any 
   assert.equal((await integrationStatus(options))[0].valid, true)
   const guidance = await integrationGuidance(options)
   assert.match(guidance, /Home Assistant/)
+  assert.ok(guidance.includes(fileURLToPath(new URL('../../', import.meta.url))))
   assert.ok(!guidance.includes('fixture-token'))
   assert.ok(!guidance.includes('ha.example.test'))
   const bot2 = {...options, account: 'bot2'}

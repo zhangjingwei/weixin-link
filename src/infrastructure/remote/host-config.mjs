@@ -2,7 +2,7 @@ import {resolveRemoteWorkspace} from './workspace.mjs'
 import {readFileSync,lstatSync} from 'node:fs'
 import {homedir} from 'node:os'
 import {isAbsolute,join} from 'node:path'
-import {parseConfig,validateHostConfig,MAX_CONFIG_BYTES} from '../../setup/config-schema.mjs'
+import {parseConfig,validateHostConfig,MAX_CONFIG_BYTES} from '../config/config-schema.mjs'
 export const sshConfig=process.env.WECHAT_SSH_CONFIG??join(homedir(),'.ssh/wechat_hosts_config')
 export {validateHostConfig}
 export function loadRemoteHosts(path=process.env.WECHAT_REMOTE_HOSTS??join(resolveRemoteWorkspace(),'remote-hosts.json')){

@@ -1,5 +1,5 @@
-import {bindNewWorkspace,workspaceText} from '../../application/conversations/workspace.mjs'
-import {TextConversations} from '../../application/conversations/text-conversations.mjs'
+import {bindNewWorkspace,workspaceText} from './workspace.mjs'
+import {TextConversations} from './text-conversations.mjs'
 
 // Claude's CLI has no Codex-style catalog/archive/delete RPC. Keep navigation
 // account scoped, and never report a local operation as a remote deletion.

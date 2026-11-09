@@ -64,7 +64,7 @@ async function probeConfiguration(kind,config,{home=currentHome(),env=process.en
  }catch(error){if(error instanceof ConfigError)throw error;throw new ConfigError('CONFIG_CONNECTION_CHECK_FAILED',kind)}
 }
 export async function runtimeEndpoints(home=currentHome()){
- const {listAccounts}=await import('../wechat/accounts.mjs'),endpoints=[]
+ const {listAccounts}=await import('../infrastructure/accounts/account-store.mjs'),endpoints=[]
  for(const account of await listAccounts(home)){
   try{await access(process.platform==='win32'?join(account.stateDir,'control-token'):account.socket);endpoints.push(account.socket)}catch(error){if(error.code!=='ENOENT')throw new ConfigError('CONFIG_RUNTIME_UNAVAILABLE')}
  }
@@ -121,4 +121,4 @@ export async function restoreConfiguration(kind,options={}){
  const path=configPath(kind,options),previous=await readPrivateFile(path+'.previous');if(previous===null)throw new ConfigError('CONFIG_NO_PREVIOUS_VERSION')
  return configure(kind,parseConfig(kind,previous),{...options,restoring:true})
 }
-export async function readConfigStdin(input=process.stdin){let text='';for await(const chunk of input){text+=chunk;if(Buffer.byteLength(text)>1024*1024)throw new ConfigError('CONFIG_INPUT_TOO_LARGE')}let value;try{value=JSON.parse(text)}catch{throw new ConfigError('CONFIG_INVALID_JSON')};return value}
+export {readConfigStdin} from '../infrastructure/config/config-input.mjs'

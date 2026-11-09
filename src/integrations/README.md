@@ -1,6 +1,6 @@
 # 可选集成
 
-核心通过静态注册表提供发现、配置、启停、检查、调用和会话指引。当前注册 Home Assistant、SSH 远程 Codex 任务和 RSSHub。运行时入口位于 `src/infrastructure/integrations/runtime.mjs`，本目录保留插件与 CLI 兼容入口。备份仍沿用现有配置实现。
+核心通过静态注册表提供发现、配置、启停、检查、调用和会话指引。当前注册 Home Assistant、SSH 远程 Codex 任务和 RSSHub。运行时入口位于 `src/integrations/runtime.mjs`；配置格式与文件读写位于 `src/infrastructure/config/`。备份仍沿用现有配置实现。
 
 ## 使用和迁移
 

@@ -19,7 +19,7 @@ export {codexProviderOptions} from './provider-options.mjs'
 export class SessionManager {
   constructor({ stateDir, cwd, owners, backend = null, agentKind = 'codex', rpcFactory = options => new CodexRpc(options), remoteControl, sessionPorts, completionMarkers = false, providerEnv = process.env, scheduleGuidance = '', log = () => {} }) {
     if (typeof remoteControl !== 'function' || typeof sessionPorts?.assistantInstructions !== 'string' ||
-      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
+      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes','codexBinary'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
     this.ports=sessionPorts
     this.log = log
     this.agentKind=agentKind
@@ -34,7 +34,7 @@ export class SessionManager {
     this.submissions=null
     this.outputStore=this.ports.outputStore({stateDir,cwd:backend?.workspace??cwd,fileReader:backend?.fileReader,voiceMode:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1'?'native':'file'})
     this.owners = new Set(owners)
-    this.rpcFactory = rpcFactory
+    this.rpcFactory = options => rpcFactory({...options,errorFields:this.ports.errorFields,...(this.agentKind==='codex'?{binary:options.binary??this.ports.codexBinary()}:{})})
     this.providerEnv = providerEnv
     this.scheduleGuidance = scheduleGuidance
     this.state = { version: 1, users: {} }

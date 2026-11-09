@@ -1,8 +1,9 @@
 import {fileURLToPath as repositoryFilePath} from 'node:url'
 const repositoryDirectory=repositoryFilePath(new URL('../../',import.meta.url))
 import {installConfig} from './install-config.mjs'
-import {bindingIdentity,resolveBindingAccount} from '../base/codex/backend-identity.mjs'
-import {accountPaths,assertAccount,listAccounts} from '../wechat/accounts.mjs'
+import {bindingIdentity} from '../base/codex/backend-identity.mjs'
+import {resolveBindingAccount} from './binding-account.mjs'
+import {accountPaths,assertAccount,listAccounts} from '../infrastructure/accounts/account-store.mjs'
 import {loadBackend} from '../base/codex/codex-backend.mjs'
 import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
@@ -15,13 +16,13 @@ const exec=promisify(execFile),[action,id,target]=process.argv.slice(2),hostCwd=
 async function serviceActive(p){try{return (await exec('systemctl',['--user','is-active',p.service])).stdout.trim()==='active'}catch{return false}}
 async function ensureQueueEmpty(dir){const path=join(dir,'inbox.sqlite');try{await access(path)}catch(e){if(e.code==='ENOENT')return;throw e}const db=new DatabaseSync(path,{readOnly:true});try{const count=db.prepare("SELECT count(*) AS n FROM jobs WHERE state NOT IN ('done','cancelled')").get().n;const raw=db.prepare("SELECT count(*) AS n FROM ingress WHERE state='pending'").get().n;if(count||raw)throw Error('BACKEND_QUEUE_OR_UNCERTAINTY_REQUIRES_RECONCILIATION')}finally{db.close()}}
 async function run(){
- if(action==='list'){const out=[];for(const p of await listAccounts()){const b=await loadBackend(p,hostCwd);out.push({accountId:await bindingIdentity(p),backend:b.id,kind:b.kind,container:b.container??null,service_active:await serviceActive(p)})}return {accounts:out}}
+ if(action==='list'){const out=[];for(const p of await listAccounts()){const b=await loadBackend(p,hostCwd,undefined,{listAccounts});out.push({accountId:await bindingIdentity(p),backend:b.id,kind:b.kind,container:b.container??null,service_active:await serviceActive(p)})}return {accounts:out}}
  const p=await resolveBindingAccount(id)
- if(action==='inspect'){const b=await loadBackend(p,hostCwd,target?{version:1,id:target}:undefined);if(b.kind==='podman')await b.preflight(JSON.parse(await readFile(join(p.stateDir,'codex-owners.json'),'utf8')));return {accountId:await bindingIdentity(p),backend:b.id,kind:b.kind,container:b.container??null,preflight:'passed'}}
+ if(action==='inspect'){const b=await loadBackend(p,hostCwd,target?{version:1,id:target}:undefined,{listAccounts});if(b.kind==='podman')await b.preflight(JSON.parse(await readFile(join(p.stateDir,'codex-owners.json'),'utf8')));return {accountId:await bindingIdentity(p),backend:b.id,kind:b.kind,container:b.container??null,preflight:'passed'}}
  if(action!=='bind'||!target)throw Error('USAGE_LIST_OR_INSPECT_ACCOUNT_TARGET_OR_BIND_ACCOUNT_TARGET')
  return new RemoteStore(p.base).locked('codex-backend-binding',async()=>{
-  const next=await loadBackend(p,hostCwd,{version:1,id:target}),previous=await loadBackend(p,hostCwd)
-  for(const other of await listAccounts()){if(other.id===p.id)continue;const binding=await loadBackend(other,hostCwd);if(next.kind==='podman'&&binding.id===next.id)throw Error('CONTAINER_ALREADY_BOUND_TO_OTHER_ACCOUNT')}
+  const next=await loadBackend(p,hostCwd,{version:1,id:target}),previous=await loadBackend(p,hostCwd,undefined,{listAccounts})
+  for(const other of await listAccounts()){if(other.id===p.id)continue;const binding=await loadBackend(other,hostCwd,undefined,{listAccounts});if(next.kind==='podman'&&binding.id===next.id)throw Error('CONTAINER_ALREADY_BOUND_TO_OTHER_ACCOUNT')}
   if(next.kind==='podman')await next.preflight(JSON.parse(await readFile(join(p.stateDir,'codex-owners.json'),'utf8')))
   if(previous.id===next.id)return {accountId:await bindingIdentity(p),backend:next.id,status:'already_bound'}
   await ensureQueueEmpty(previous.stateDir);await ensureQueueEmpty(next.stateDir)
