@@ -3,8 +3,9 @@
 **/.private export-ignore
 .ssh export-ignore
 **/.ssh export-ignore
-accounts export-ignore
-**/accounts export-ignore
+accounts/** export-ignore
+**/accounts/** export-ignore
+src/infrastructure/accounts/account-store.mjs -export-ignore
 outputs export-ignore
 **/outputs export-ignore
 attachments export-ignore
