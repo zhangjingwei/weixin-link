@@ -1,6 +1,7 @@
 import {voiceCommandInput} from '../../wechat/voice-command-input.mjs'
 import {hasMedia} from '../../infrastructure/media/media-input.mjs'
 import {createReceiveMessage} from '../../application/intake/receive-message.mjs'
+import {requireExternalMessageId} from '../../infrastructure/storage/ingress-envelope.mjs'
 
 /** WeChat controller: converts SDK callbacks into captured application messages.
  * The protocol's beforeCheckpoint hook awaits prepareBatch, so failures must
@@ -14,10 +15,12 @@ export function createWeChatController({bot, view, manager, jobs, conversations,
 
   async function prepareBatch(wires) {
     if (runtime.sealed) throw Error('INGRESS_SEALED')
+    const parsedWires = wires.map(wire => ({wire, parsed: originalParse(wire)}))
+      .filter(({parsed}) => parsed && conversations.realOwners.has(parsed.userId))
+    // Validate the full batch before bind() can mutate conversation selection.
+    for (const {parsed} of parsedWires) requireExternalMessageId(parsed)
     const messages = []
-    for (const wire of wires) {
-      const parsed = originalParse(wire)
-      if (!parsed || !conversations.realOwners.has(parsed.userId)) continue
+    for (const {wire, parsed} of parsedWires) {
       const message = receive.prepare(parsed, {traceId: traceWire(wire), quote})
       stagedWires.set(wire, message)
       messages.push(message)

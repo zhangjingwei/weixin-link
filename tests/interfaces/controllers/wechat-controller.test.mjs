@@ -37,13 +37,13 @@ test('SDK batch capture saves before inbox insertion and reuses staged message',
 test('failed pre-checkpoint save does not capture or advance the batch', async () => {
   const f = fixture()
   f.manager.save = async () => {throw Error('disk unavailable')}
-  await assert.rejects(f.controller.prepareBatch([{message: {userId: 'owner', text: '普通任务'}}]), /disk unavailable/)
+  await assert.rejects(f.controller.prepareBatch([{message: {userId: 'owner', text: '普通任务', raw: {message_id: 'external-2'}}}]), /disk unavailable/)
   assert.equal(f.captured.length, 0)
 })
 
 test('setup receipt is captured after the saved session and retains its frozen action', async () => {
   const f = fixture()
-  const message = {userId: 'owner', text: '安装状态'}
+  const message = {userId: 'owner', text: '安装状态', raw: {message_id: 'external-3'}}
   const controller = createWeChatController({
     bot: f.bot, view: {directNotice: async () => {}}, manager: f.manager, jobs: f.jobs,
     conversations: {realOwners: new Set(['owner']), bind: value => value}, runtime: f.runtime,
@@ -64,6 +64,16 @@ test('controls bypass ordinary inbox capture and unauthorized messages are ignor
   assert.equal(f.dispatched.length, 1)
   assert.equal(f.dispatched[0].text, '停止')
   assert.equal(f.captured.length, 0)
+})
+
+test('missing message identity rejects a batch before cursor checkpoint, including controls', async () => {
+  const f = fixture()
+  await assert.rejects(f.controller.prepareBatch([
+    {message: {userId: 'owner', text: '普通任务', raw: {message_id: 'valid-1'}}},
+    {message: {userId: 'owner', text: '停止', raw: {}}},
+  ]), /WECHAT_MESSAGE_ID_REQUIRED/)
+  assert.deepEqual(f.events, [])
+  assert.equal(f.dispatched.length, 0)
 })
 
 test('failed ordinary capture reports failure and never dispatches', async () => {
