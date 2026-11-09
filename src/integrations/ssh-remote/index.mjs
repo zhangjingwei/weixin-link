@@ -30,7 +30,7 @@ export default {
       try { await access(join(dirname(configPath), 'remote-sessions.json')); throw Error('REMOTE_STATE_LOCATION_MISMATCH') }
       catch (error) { if (error.code !== 'ENOENT') throw error }
     }
-    // Use the same thread scope as the existing /stop cleanup and remote CLI.
+    // Use the same thread scope as the existing stop cleanup and remote CLI.
     return new RemoteController({root, account, scope, hosts: config.hosts, configPath}).run(request)
   },
 }

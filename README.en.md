@@ -99,16 +99,23 @@ Send ordinary requests directly. These fixed commands control the bridge:
 | `重启` | Restart this account's service when idle |
 | `升级` | Upgrade a standard installation to the latest stable release when idle |
 | `状态` | Check the current task and queue |
+| `进度` | Check the current stage and most recent progress without queueing a task |
 | `补充 Your instructions` | Add instructions to the active task |
 | `停止` | Cancel the current task and queued messages |
 | `结果` | Retrieve the latest result without rerunning the task |
 | `恢复` | Reconcile a submitted task whose result is uncertain |
 | `新建 Name` / `列表` | Create a conversation or list conversations |
+| `切换 Number` / `历史` / `搜索 Keywords` | Switch projects or inspect conversation history |
+| `归档 Number` / `还原 Number` / `删除 Number` | Archive, restore, or permanently delete a project |
+| `模型` / `记忆` / `开启记忆` / `关闭记忆` | Inspect models and control native memory |
+| `Codex会话列表` / `恢复Codex会话 Number` / `重置Codex会话` | Manage underlying Codex sessions |
+| `批准 Code` / `拒绝 Code` / `回答 Code Answer` | Reply to a pending interaction using its displayed code |
 | `安装状态` / `安装向导` | Check setup or continue installation and authentication |
 | `切换智能体` / `切换智能体 Codex` / `切换智能体 Claude` | Show the current agent or switch this account after it becomes idle |
-| `使用说明` | Read the full user guide |
+| `命令列表` / `使用说明` | Read the command summary or full user guide |
 
 Each message is processed independently. Text and attachments in the same message are submitted together. See the [user guide](USER-GUIDE.md) for conversation management, attachment limits and diagnostic commands.
+Describe long tasks and code reviews in ordinary language; they are submitted as Codex tasks, without dedicated slash commands.
 
 WeChat voice messages with a complete transcript also support system commands such as `列表`, `状态`, and `停止`.
 

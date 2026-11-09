@@ -22,7 +22,7 @@ export async function recover(context,job,reply,token){
     const record=context.manager.state.users[job.owner]
     if(waiting)record.waitingAttachment={task:session.localTask,request:session.requestText,threadId:session.threadId}
     else if(record.waitingAttachment?.task?.id===session.localTask.id)delete record.waitingAttachment
-    // Delivery may have been accepted before a crash: preserve /result, never blindly resend.
+    // Delivery may have been accepted before a crash: preserve the result, never blindly resend.
     if(context.manager.state.users[job.owner].lastTask?.id!==session.localTask.id)context.manager.state.users[job.owner].lastOutput=undefined;context.manager.state.users[job.owner].lastTask=session.localTask;context.manager.state.users[job.owner].recovery={task:session.localTask,execution:executionState(turn.status,waiting),delivery:'recovered'};context.manager.state.users[job.owner].lastReply=finalText;await context.manager.save();context.jobs.mark(job.id,'done');if(session.busy&&session.turnId===turn.id)transition(session,'idle');if(!session.busy&&!waiting)await reply(localCompletion('已恢复上一条消息的执行结果，可发 “结果” 查看。',session.localTask));return
    }
    const meta=await context.manager.protocol.read(session.rpc,job.thread_id)

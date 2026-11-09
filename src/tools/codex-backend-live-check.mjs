@@ -18,4 +18,4 @@ try{
  execFileSync('podman',['exec','codex-pilot-b','sh','-ec','test ! -e '+output+'; test ! -e /agent/codex/auth.json']);out.checks.push('Other container receives neither the attachment output nor login credentials');
  await session.rpc.request('thread/memoryMode/set',{threadId,mode:'disabled'});out.status='passed';await save();console.log(JSON.stringify(out));
 } catch(error){out.status='failed';out.error=error.message;await save();console.log(JSON.stringify(out));process.exitCode=1;
-} finally{if(manager){const session=manager.sessions.get('integration');if(session?.busy)await manager.handle('integration','/stop',async()=>{}).catch(()=>{});manager.close();await manager.saving}}
+} finally{if(manager){const session=manager.sessions.get('integration');if(session?.busy)await manager.handle('integration','停止',async()=>{}).catch(()=>{});manager.close();await manager.saving}}

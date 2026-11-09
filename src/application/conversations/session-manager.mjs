@@ -402,9 +402,9 @@ export class SessionManager {
       let text
       if (message.method === 'item/tool/requestUserInput') {
         text = p.questions.map((q, i) => `${i + 1}. ${q.question}${q.options?.length ? '\n' + q.options.map(o => `${o.label}：${o.description}`).join('\n') : ''}`).join('\n\n')
-        text += `\n\n/回答 ${code} 你的答案\n多个问题的答案用 | 分隔。`
+        text += `\n\n回答 ${code} 你的答案\n多个问题的答案用 | 分隔。`
       } else {
-        text = `${p.reason ?? `${this.agentName} 请求批准操作`}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n/批准 ${code}\n/拒绝 ${code}`
+        text = `${p.reason ?? `${this.agentName} 请求批准操作`}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n批准 ${code}\n拒绝 ${code}`
       }
       await this.notify(session, text)
       return
@@ -579,7 +579,7 @@ export class SessionManager {
         if (!question || question.session.userId !== userId) throw new Error('请求已过期、不存在或不属于当前账号。')
         const { session, message } = question
         const isQuestion = message.method === 'item/tool/requestUserInput'
-        if ((command.action === 'answer') !== isQuestion) throw new Error(isQuestion ? '请用 /回答 提供答案。' : '请用 /批准 或 /拒绝。')
+        if ((command.action === 'answer') !== isQuestion) throw new Error(isQuestion ? '请用“回答 编号 答案”提供答案。' : '请用“批准 编号”或“拒绝 编号”。')
         let result
         if (isQuestion) {
           const answers = command.text.split('|').map(s => s.trim())
@@ -599,7 +599,7 @@ export class SessionManager {
         const session=await this.connect(userId,reply)
         await reply(await this.protocol.models(session.rpc,session.model));return
       }
-      if (command?.action === 'help') {await reply('直接发送需求即可。发送“使用说明”查看完整说明，“安装向导”完成首次设置。\n常用：日常助手、状态、停止、结果、恢复、退出、模型、记忆、开启记忆、关闭记忆、列表、新建 名称、切换智能体。\n配置远程主机、家庭设备或备份：直接说明需求，由智能体通过配置命令检查和处理；需要模型可用。\n归档保留历史；删除是不可还原的永久删除。');return}
+      if (command?.action === 'help') {await reply('微信控制命令（直接发送中文）：\n任务：状态、进度、补充 内容、停止、结果、恢复、退出。\n项目：日常、列表、新建 项目名、切换编号、命名 名称、历史、搜索 关键词、归档编号、还原编号、删除编号。删除会永久移除。\nCodex：模型、记忆、开启记忆、关闭记忆；Codex会话列表、恢复Codex会话 编号、重置Codex会话。\n维护：安装状态、安装向导、切换智能体、重启、升级、诊断、服务状态。\n收到交互请求时按提示回复“批准 编号”“拒绝 编号”或“回答 编号 答案”。\n代码审查、长任务、远程主机和设备配置直接描述需求。发送“使用说明”查看完整说明。');return}
       const runtime = this.sessions.get(userId)
       if(command?.action==='progress'){
         const queued=(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)
