@@ -4,7 +4,8 @@ import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {Readable} from 'node:stream'
-import {ScheduleService} from '../../src/core/schedules/schedule-service.mjs'
+import {ScheduleService} from '../../src/application/schedules/schedule-service.mjs'
+import {createScheduleStateStore} from '../../src/infrastructure/storage/schedule-state.mjs'
 import {nextOccurrence} from '../../src/core/schedules/recurrence.mjs'
 import {scheduleCommand} from '../../src/interfaces/controllers/schedule-controller.mjs'
 import {runScheduleCommand} from '../../src/core/schedules/schedule-cli.mjs'
@@ -17,7 +18,7 @@ async function fixture(t, send = async () => ({status: 'accepted'})) {
   const stateDir = await mkdtemp(join(tmpdir(), 'reminders-'))
   t.after(() => rm(stateDir, {recursive: true, force: true}))
   let now = Date.parse('2026-11-06T12:00:00Z')
-  const service = await new ScheduleService({stateDir, owners: ['alice', 'bob'], send, now: () => now}).init()
+  const service = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice', 'bob'], send, now: () => now}).init()
   return {service, stateDir, advance: ms => {now += ms}, at: ms => new Date(now + ms).toISOString()}
 }
 
@@ -28,7 +29,7 @@ test('reminders persist, isolate owners and cancel only the owning user', async 
   assert.deepEqual(service.list('bob').items, [])
   await assert.rejects(service.cancel('bob', first.id), /SCHEDULE_NOT_FOUND/)
   assert.equal(service.list('alice').items[0].id, first.id)
-  const restarted = await new ScheduleService({stateDir, owners: ['alice', 'bob'], send: async () => ({status: 'accepted'}), now: () => Date.parse('2026-11-06T12:00:00Z')}).init()
+  const restarted = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice', 'bob'], send: async () => ({status: 'accepted'}), now: () => Date.parse('2026-11-06T12:00:00Z')}).init()
   assert.equal(restarted.list('alice').items[0].id, first.id)
   await restarted.cancel('alice', first.id)
   advance(60000)
@@ -50,7 +51,7 @@ test('due reminder is recorded before delivery and never repeated after accepted
   const raw = JSON.parse(await readFile(join(stateDir, 'schedules.json'), 'utf8'))
   raw.jobs[later.id].status = 'sending'
   await writeFile(join(stateDir, 'schedules.json'), JSON.stringify(raw))
-  const restarted = await new ScheduleService({stateDir, owners: ['alice', 'bob'], send: async () => {throw Error('must not resend')}, now: () => Date.parse(later.at) + 1000}).init()
+  const restarted = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice', 'bob'], send: async () => {throw Error('must not resend')}, now: () => Date.parse(later.at) + 1000}).init()
   assert.equal(restarted.list('alice').items.find(item => item.id === later.id).status, 'unknown')
   await restarted.tick()
   assert.equal(restarted.list('alice').items.find(item => item.id === accepted.id).status, 'accepted')
@@ -94,7 +95,7 @@ test('uncertain recurring delivery pauses future occurrences across restart', as
   advance(60000)
   await service.tick()
   assert.equal(service.list('alice').items[0].status, 'unknown')
-  const restarted = await new ScheduleService({stateDir, owners: ['alice', 'bob'], send: async () => {throw Error('must not resend')}, now: () => Date.parse(job.at) + 86_400_000}).init()
+  const restarted = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice', 'bob'], send: async () => {throw Error('must not resend')}, now: () => Date.parse(job.at) + 86_400_000}).init()
   await restarted.tick()
   assert.equal(restarted.list('alice').items[0].status, 'unknown')
   assert.equal(restarted.list('alice').items[0].at, job.at)
@@ -104,7 +105,7 @@ test('reminders for a removed owner remain stored but are not delivered', async 
   const {service, stateDir, at} = await fixture(t)
   await service.create('bob', {at: at(1000), text: 'private'})
   const calls = []
-  const restarted = await new ScheduleService({stateDir, owners: ['alice'], send: async owner => {calls.push(owner); return {status: 'accepted'}}, now: () => Date.parse('2026-11-06T12:00:02Z')}).init()
+  const restarted = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice'], send: async owner => {calls.push(owner); return {status: 'accepted'}}, now: () => Date.parse('2026-11-06T12:00:02Z')}).init()
   await restarted.tick()
   assert.deepEqual(calls, [])
   assert.deepEqual(restarted.list('alice').items, [])
@@ -164,7 +165,7 @@ test('scheduled Codex task enters the durable queue once with the original conve
   t.after(() => jobs.close())
   let now = Date.parse('2026-11-06T12:00:00Z')
   const submitTask = (owner, key, text, id, at) => ({status: 'accepted', submissionId: jobs.add(key, {text}, 'schedule:' + id + ':' + at)})
-  const service = await new ScheduleService({stateDir, owners: ['alice'], send: async () => {throw Error('wrong route')}, submitTask, now: () => now}).init()
+  const service = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice'], send: async () => {throw Error('wrong route')}, submitTask, now: () => now}).init()
   const scheduled = await service.create('alice', {kind: 'task', at: '2026-11-06T12:01:00Z', text: '汇总新闻'}, 'alice#conversation#one')
   now += 60000
   await service.tick(); await service.tick()
@@ -174,7 +175,7 @@ test('scheduled Codex task enters the durable queue once with the original conve
   assert.equal(service.list('alice').items[0].submissionId, jobs.pending()[0].id)
   assert.equal(service.list('alice').items[0].status, 'accepted')
   assert.equal(scheduled.kind, 'task')
-  const restarted = await new ScheduleService({stateDir, owners: ['alice'], send: async () => {throw Error('wrong route')}, submitTask: () => {throw Error('must not submit twice')}, now: () => now}).init()
+  const restarted = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice'], send: async () => {throw Error('wrong route')}, submitTask: () => {throw Error('must not submit twice')}, now: () => now}).init()
   await restarted.tick()
   assert.equal(jobs.pending().length, 1)
 })
@@ -185,7 +186,7 @@ test('unknown scheduled task submission is not replayed after restart', async t 
   const jobs = new DurableJobs(join(stateDir, 'inbox.sqlite'))
   t.after(() => jobs.close())
   let now = Date.parse('2026-11-06T12:00:00Z')
-  const service = await new ScheduleService({stateDir, owners: ['alice'], send: async () => {}, now: () => now, submitTask: (_owner, key, text, id, at) => {
+  const service = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice'], send: async () => {}, now: () => now, submitTask: (_owner, key, text, id, at) => {
     jobs.add(key, {text}, 'schedule:' + id + ':' + at)
     throw Error('result lost after enqueue')
   }}).init()
@@ -193,7 +194,7 @@ test('unknown scheduled task submission is not replayed after restart', async t 
   now += 60000
   await service.tick()
   assert.equal(service.list('alice').items[0].status, 'unknown')
-  const restarted = await new ScheduleService({stateDir, owners: ['alice'], send: async () => {}, submitTask: () => {throw Error('must not submit twice')}, now: () => now + 60000}).init()
+  const restarted = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice'], send: async () => {}, submitTask: () => {throw Error('must not submit twice')}, now: () => now + 60000}).init()
   await restarted.tick()
   assert.equal(jobs.pending().length, 1)
 })
@@ -202,7 +203,7 @@ test('repeating task advances after queue acceptance and unavailable target paus
   const stateDir = await mkdtemp(join(tmpdir(), 'scheduled-repeat-'))
   t.after(() => rm(stateDir, {recursive: true, force: true}))
   let now = Date.parse('2026-11-06T12:00:00Z'), allowed = true, calls = 0
-  const service = await new ScheduleService({stateDir, owners: ['alice'], send: async () => {throw Error('wrong route')}, now: () => now, submitTask: () => {
+  const service = await new ScheduleService({stateStore: createScheduleStateStore(stateDir), owners: ['alice'], send: async () => {throw Error('wrong route')}, now: () => now, submitTask: () => {
     calls++
     if (!allowed) throw Object.assign(Error('SCHEDULE_TASK_UNAVAILABLE'), {deliveryState: 'failed'})
     return {status: 'accepted', submissionId: 'queue-' + calls}

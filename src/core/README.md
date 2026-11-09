@@ -15,8 +15,8 @@ in `src/interfaces/controllers/`.
 - `delivery/`: transport error diagnostics, message formatting and compatibility entries for rules in `src/domain/delivery/`.
 - `diagnostics/`: redacted diagnostic logging and commands.
 - `runtime/`: account-scoped control endpoint and maintenance leases.
-- `schedules/`: compatibility entry for recurrence rules in `src/domain/schedules/` and for the account-scoped use case in `src/application/schedules/`.
-- `updates/`: compatibility entry for release rules in `src/domain/updates/`, the GitHub source in `src/infrastructure/updates/`, and the notifier in `src/application/notifications/`.
+- `schedules/`: schedule CLI and a compatibility entry for recurrence rules in `src/domain/schedules/`. The account-scoped use case lives in `src/application/schedules/`.
+- `updates/`: compatibility entry for release rules in `src/domain/updates/` and the GitHub source in `src/infrastructure/updates/`. The notifier lives in `src/application/notifications/`.
 - `policy/`: assistant policy source.
 - `storage/`: shared registry locking and atomic JSON persistence.
 - `remote-tasks/`: remote coordination facade, path policy, submission/reconciliation, stopping/terminal cleanup, artifact export, progress delivery and RPC adaptation.
