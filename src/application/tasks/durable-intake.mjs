@@ -19,7 +19,9 @@ export class DurableIntake {
      await this.manager.ask(owner,input,reply,24*60*60*1000,token)
      if(token.current())this.jobs.mark(job.id,'done')
     }else await this.recover(job,reply,token)
-   }catch(error){if(this.closed)return;if(token.current()){this.jobs.mark(job.id,'uncertain');const record=this.manager.state.users[owner]??={};if(record.recovery?.execution==='running'||!record.recovery)record.recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:'unknown',delivery:'unknown'};await this.manager.save();await reply('该消息的执行或发送结果尚未确认，已保留记录；不会自动重复提交。可用“状态”或“结果”查询。')}}
+   }catch(error){if(this.closed)return;if(token.current()){
+    if(['COMPACTION_WAIT_TIMEOUT','COMPACTION_CHECK_FAILED'].includes(error.code)){this.jobs.mark(job.id,'cancelled');await reply(error.message);continue}
+    this.jobs.mark(job.id,'uncertain');const record=this.manager.state.users[owner]??={};if(record.recovery?.execution==='running'||!record.recovery)record.recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:'unknown',delivery:'unknown'};await this.manager.save();await reply('该消息的执行或发送结果尚未确认，已保留记录；不会自动重复提交。可用“状态”或“结果”查询。')}}
   }
  }
  async recover(...args){return recover(this,...args)}

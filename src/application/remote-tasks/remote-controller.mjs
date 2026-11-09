@@ -6,13 +6,12 @@ import {createRemoteAgentAdapter} from '../../infrastructure/agents/remote-agent
 import {hostSnapshot} from '../../infrastructure/remote/host-config.mjs'
 import {RemoteStore} from '../../infrastructure/storage/registry-lock.mjs'
 import {isAbsolute,join,win32,posix} from 'node:path'
-import {createHash} from 'node:crypto'
-const hash=s=>createHash('sha256').update(s).digest('hex')
+import {remoteScopeId} from './scope-id.mjs'
 const hostPath=(hosts,host)=>hosts[host]?.platform==='win32'?win32:posix
 import {projectPath} from '../../infrastructure/remote/path-guard.mjs'
 export {projectPath,exportPath} from '../../infrastructure/remote/path-guard.mjs'
 export class RemoteController{
- constructor({root,scope=process.env.CODEX_THREAD_ID??'local-console',account=process.env.WECHAT_ACCOUNT??'default',hosts,configPath,rpcFactory}={}){if(typeof root!=='string'||!isAbsolute(root))throw Error('INVALID_REMOTE_WORKSPACE');if(typeof account!=='string'||! /^[a-z][a-z0-9-]{0,31}$/.test(account))throw Error('INVALID_ACCOUNT_ID');this.root=root;this.account=account;this.legacyScope=hash(scope).slice(0,24);this.scope=account==='default'?this.legacyScope:hash(account+'\0'+scope).slice(0,24);this.store=new RemoteStore(root);this.configPath=configPath??process.env.WECHAT_REMOTE_HOSTS??join(root,'remote-hosts.json');this.hosts=hostSnapshot({path:this.configPath,hosts});this.rpcFactory=rpcFactory}
+ constructor({root,scope=process.env.CODEX_THREAD_ID??'local-console',account=process.env.WECHAT_ACCOUNT??'default',hosts,configPath,rpcFactory}={}){if(typeof root!=='string'||!isAbsolute(root))throw Error('INVALID_REMOTE_WORKSPACE');this.root=root;this.account=account;this.legacyScope=remoteScopeId(scope,'default');this.scope=remoteScopeId(scope,account);this.store=new RemoteStore(root);this.configPath=configPath??process.env.WECHAT_REMOTE_HOSTS??join(root,'remote-hosts.json');this.hosts=hostSnapshot({path:this.configPath,hosts});this.rpcFactory=rpcFactory}
  async assertAccountState(){if(this.account==='default')return;const state=await this.store.read();if(Object.values(state).some(task=>task?.kind==='official-remote-task'&&task.scope===this.legacyScope&&!task.account))throw Error('REMOTE_LEGACY_SCOPE_UNOWNED')}
  assertCurrentHosts(){if(JSON.stringify(this.hosts)!==JSON.stringify(hostSnapshot({path:this.configPath})))throw Error('REMOTE_HOST_CONFIG_CHANGED')}
  projectPath(host,value){return projectPath(host,value,this.hosts)}

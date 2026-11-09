@@ -1,6 +1,6 @@
-import {createHash} from 'node:crypto'
 import {access} from 'node:fs/promises'
 import {join} from 'node:path'
+import {remoteScopeId} from './scope-id.mjs'
 export async function remoteScope(cwd,threadId,action){
  if(!threadId)return {stop_confirmed:true,tasks:[]}
  // Avoid creating remote state for installations that never enabled remote execution.
@@ -13,7 +13,7 @@ export async function remoteScope(cwd,threadId,action){
  const config=remoteConfigStatus()
  if(!config.valid){
   if(action==='activate')return {stop_confirmed:true,tasks:[],remoteDisabled:true,error:config.error}
-  try{const {RemoteStore}=await import('../../infrastructure/storage/registry-lock.mjs'),state=await new RemoteStore(cwd).read(),scope=createHash('sha256').update(threadId).digest('hex').slice(0,24);const outstanding=Object.values(state).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed);return {stop_confirmed:!outstanding,tasks:[],remoteDisabled:true,error:config.error}}catch{return {stop_confirmed:false,tasks:[],remoteDisabled:true,error:'REMOTE_STATE_UNREADABLE'}}
+  try{const {RemoteStore}=await import('../../infrastructure/storage/registry-lock.mjs'),state=await new RemoteStore(cwd).read(),scope=remoteScopeId(threadId);const outstanding=Object.values(state).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed);return {stop_confirmed:!outstanding,tasks:[],remoteDisabled:true,error:config.error}}catch{return {stop_confirmed:false,tasks:[],remoteDisabled:true,error:'REMOTE_STATE_UNREADABLE'}}
  }
  const {RemoteController}=await import('./remote-controller.mjs')
  const controller=new RemoteController({root:cwd,scope:threadId})

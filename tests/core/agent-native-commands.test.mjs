@@ -8,6 +8,8 @@ import {controlCommand,SessionManager} from '../../src/wechat/session-manager.mj
 import {createReceiveMessage} from '../../src/application/intake/receive-message.mjs'
 import {createMessageApplication} from '../../src/application/intake/message-application.mjs'
 import {quoteInput} from '../../src/infrastructure/wechat/weixin-protocol.mjs'
+import {remoteScopeId} from '../../src/application/remote-tasks/scope-id.mjs'
+import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 
 test('native Chinese controls are explicit and slash aliases remain ordinary text',()=>{
   assert.deepEqual(controlCommand('长任务 修复收件队列'),{action:'goal',op:'create',objective:'修复收件队列'})
@@ -34,7 +36,7 @@ async function fixture(kind='codex'){
   }})
   const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],agentKind:kind,rpcFactory}).init()
   const reply=async text=>{output.push(text)}
-  return {dir,manager,calls,output,reply,async close(){manager.close();await rm(dir,{recursive:true,force:true})}}
+  return {dir,manager,rpcFactory,calls,output,reply,async close(){manager.close();await rm(dir,{recursive:true,force:true})}}
 }
 
 test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
@@ -102,6 +104,13 @@ test('plan and review ingress are captured before dispatch and retain their ingr
   assert.equal(dispatched[0]._ingressId,'ingress-2')
 })
 
+test('state-changing native controls are captured before cursor checkpoint',async()=>{
+  const captured=[]
+  const receiver=createReceiveMessage({manager:{save:async()=>{}},jobs:{capture:message=>captured.push(message.text)},classifyMessage:message=>{const value=controlCommand(message.text);return value?{kind:'session',value}:null}})
+  await receiver.captureBatch(['长任务 修复队列','暂停长任务','分叉会话','压缩上下文','开启快速模式','长任务状态','Codex状态'].map(text=>({text})))
+  assert.deepEqual(captured,['长任务 修复队列','暂停长任务','分叉会话','压缩上下文','开启快速模式'])
+})
+
 test('cancelling a task while compaction is active does not submit a turn',async()=>{
   const f=await fixture()
   try{
@@ -117,6 +126,22 @@ test('cancelling a task while compaction is active does not submit a turn',async
   }finally{await f.close()}
 })
 
+test('failed compaction status check leaves the queued task unsubmitted',async()=>{
+  const f=await fixture()
+  try{
+    const session=await f.manager.connect('owner',f.reply)
+    session.compacting=true
+    session.rpc.request=async method=>{if(method==='thread/read')throw Error('RPC unavailable');throw Error('Unexpected RPC')}
+    await assert.rejects(f.manager.send(session,'继续'),error=>error.code==='COMPACTION_CHECK_FAILED')
+    const job={id:'job',owner:'owner',input:{text:'继续'},state:'pending'},notices=[]
+    const jobs={pending:()=>job.state==='pending'?[job]:[],mark:(_id,state)=>{job.state=state}}
+    const manager={sessions:new Map(),state:{users:{owner:{}}},lifecycle:{capture:()=>({current:()=>true})},ask:async()=>{throw Object.assign(Error('压缩状态核对失败，本条任务未提交。'),{code:'COMPACTION_CHECK_FAILED'})}}
+    await new DurableIntake({jobs,manager,reply:async(_owner,text)=>notices.push(text)}).pump('owner')
+    assert.equal(job.state,'cancelled')
+    assert.match(notices[0],/未提交/)
+  }finally{await f.close()}
+})
+
 test('fork cannot switch away from an unconfirmed remote task',async()=>{
   const f=await fixture()
   try{
@@ -127,6 +152,49 @@ test('fork cannot switch away from an unconfirmed remote task',async()=>{
     assert.equal(f.calls.filter(c=>c.method==='thread/fork').length,0)
     assert.equal(f.manager.state.users.owner.threadId,'original')
     assert.match(f.output.at(-1),/远程任务/)
+  }finally{await f.close()}
+})
+
+test('fork checks the account-scoped remote task ledger',async()=>{
+  const previous=process.env.WECHAT_ACCOUNT
+  process.env.WECHAT_ACCOUNT='secondary'
+  const f=await fixture()
+  try{
+    await f.manager.connect('owner',f.reply)
+    const scope=remoteScopeId('original','secondary')
+    assert.notEqual(scope,remoteScopeId('original','default'))
+    await writeFile(join(f.dir,'work','remote-sessions.json'),JSON.stringify({task:{kind:'official-remote-task',scope,account:'secondary',stop_confirmed:false}}))
+    await f.manager.handle('owner','分叉会话',f.reply)
+    assert.equal(f.calls.filter(c=>c.method==='thread/fork').length,0)
+    await writeFile(join(f.dir,'work','remote-sessions.json'),JSON.stringify({legacy:{kind:'official-remote-task',scope:remoteScopeId('original','default'),stop_confirmed:true}}))
+    await f.manager.handle('owner','分叉会话',f.reply)
+    assert.equal(f.calls.filter(c=>c.method==='thread/fork').length,0)
+    assert.match(f.output.at(-1),/归属不明/)
+  }finally{await f.close();if(previous===undefined)delete process.env.WECHAT_ACCOUNT;else process.env.WECHAT_ACCOUNT=previous}
+})
+
+test('compaction intent survives restart and is cleared after the thread is idle',async()=>{
+  const f=await fixture()
+  let restarted
+  try{
+    await f.manager.handle('owner','压缩上下文',f.reply)
+    assert.equal(f.manager.state.users.owner.compaction.threadId,'original')
+    restarted=await new SessionManager({stateDir:f.dir,cwd:join(f.dir,'work'),owners:['owner'],rpcFactory:f.rpcFactory}).init()
+    const session=await restarted.connect('owner',f.reply)
+    assert.equal(session.compacting,true)
+    await restarted.send(session,'继续检查')
+    assert.equal(restarted.state.users.owner.compaction,undefined)
+    assert(f.calls.some(c=>c.method==='turn/start'))
+  }finally{restarted?.close();await f.close()}
+})
+
+test('stop does not claim an unconfirmed compaction was cancelled',async()=>{
+  const f=await fixture()
+  try{
+    await f.manager.handle('owner','压缩上下文',f.reply)
+    await f.manager.handle('owner','停止',f.reply)
+    assert(f.output.some(value=>value.includes('未确认取消压缩')))
+    assert.equal(f.manager.state.users.owner.compaction.threadId,'original')
   }finally{await f.close()}
 })
 
@@ -151,4 +219,13 @@ test('quoted WeChat plan keeps the referenced message in the durable task',async
   assert.equal(submissions.length,1)
   assert.equal(submissions[0][1].text,'修复这个问题')
   assert.deepEqual(submissions[0][1].references,references)
+})
+
+test('replayed native mutation reports unknown outcome without sending the RPC again',async()=>{
+  const notices=[],acknowledged=[]
+  const manager={owners:new Set(['owner']),sessions:new Map(),state:{users:{owner:{}}},lifecycle:{capture:()=>({current:()=>true})},handle:()=>{throw Error('mutation replayed')}}
+  const handle=createMessageApplication({view:{context(){},deliver:async(_owner,text)=>{notices.push(text);return {status:'accepted'}}},manager,jobs:{rawCurrent:()=>true,acknowledge:ids=>acknowledged.push(...ids)},conversations:{recipient:()=> 'owner'},runtime:{sealed:false,draining:false,track:(_kind,work)=>work()},log(){},classifyMessage:message=>({kind:'session',value:controlCommand(message.text)}),hasMedia:()=>false,normalizeVoice:message=>message})
+  await handle({userId:'owner',text:'分叉会话',raw:{message_id:'44'},_ingressId:'ingress-44',_recovered:true})
+  assert.match(notices[0],/未重复执行/)
+  assert.deepEqual(acknowledged,['ingress-44'])
 })

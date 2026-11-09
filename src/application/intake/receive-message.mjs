@@ -1,8 +1,8 @@
 import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
+import {nativeCommandKind} from './native-command-kind.mjs'
 
 /** Own receipt and fast-control decisions after the transport parses a wire. */
 export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, conversations, runtime, setupController, setupReceipts, normalizeVoice, classifyMessage, log = () => {}}) {
-  const startsAgentTask=message=>['plan','review'].includes(classifyMessage(message)?.value?.action)
   return {
     prepare(parsed, {traceId, quote}) {
       const previous = jobs.findCaptured(parsed)
@@ -19,7 +19,7 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
     },
     async captureBatch(messages) {
       // beforeCheckpoint awaits this whole operation; failure blocks the cursor.
-      const ordinary = messages.filter(message => !classifyMessage(message)||startsAgentTask(message))
+      const ordinary = messages.filter(message => {const intent=classifyMessage(message);return !intent||nativeCommandKind(intent)})
       const setup = messages.filter(message => message._setupAction)
       await manager.save()
       for (const message of ordinary) jobs.capture(message)
@@ -38,7 +38,8 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
       message = normalizeVoice(message)
       if (!message._conversationOwner) message = conversations.bind(message)
       if (!Object.hasOwn(message, '_setupAction')) message._setupAction = message._recovered ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
-      if (classifyMessage(message)&&!startsAgentTask(message)) { dispatch(message); return }
+      const intent=classifyMessage(message)
+      if (intent&&!nativeCommandKind(intent)) { dispatch(message); return }
       const token = manager.lifecycle.capture(message.userId)
       void (async () => {
         try {

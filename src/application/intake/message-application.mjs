@@ -3,6 +3,7 @@ import {randomUUID} from 'node:crypto'
 import {receiptPolicy} from '../../domain/delivery/receipt-policy.mjs'
 import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 import {recoverFailedFinal} from '../notifications/failed-final-recovery.mjs'
+import {nativeCommandKind} from './native-command-kind.mjs'
 
 const READINESS_NOTICE = {
   CONTAINER_NOT_READY: '微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。',
@@ -29,6 +30,7 @@ return async function handleMessage(message) {
   const agentAction=intent?.kind==='agent'?intent.value:null
   const upgradeAction=intent?.kind==='upgrade'?intent.value:null
   const initialControl=intent?.value
+  const nativeKind=nativeCommandKind(intent)
   if(runtime.sealed)return
   if(runtime.draining&&!(typeof initialControl==='string'&&/^wizardChoice:\d+:3$/.test(initialControl))&&!['stop','exit','status','result','help'].includes(initialControl?.action)){
     if(message._ingressId){
@@ -55,6 +57,10 @@ return async function handleMessage(message) {
   const token=message._intakeToken??manager.lifecycle.capture(message.userId)
   const messageId = message.raw?.message_id ?? message.raw?.client_id
   if (!message._recovered&&(media||initialControl)&&initialControl?.action!=='steer'&&!await manager.acceptMessage(message.userId,messageId)) return
+  if(message._recovered&&nativeKind==='mutation'){
+    await runtime.track('delivery',()=>deliver('上次原生命令的执行结果待核对，未重复执行。请查询对应状态后再决定是否重新发送。',{conversationControl:true}))
+    jobs.acknowledge([message._ingressId].filter(Boolean));return
+  }
   if(message._recovered&&(agentAction?.action==='restart'||upgradeAction)){
    await runtime.track('delivery',()=>deliver('上次维护指令的结果待核对，未重复执行。可发“服务状态”查看当前服务。',{conversationControl:true}))
    jobs.acknowledge([message._ingressId].filter(Boolean));return
@@ -84,7 +90,7 @@ return async function handleMessage(message) {
     durable.submit(message.userId,{...(typeof input==='string'?{text:input}:input),nativeCommand:control,traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
     return
   }
-  if(control){await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token);return}
+  if(control){await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token);if(nativeKind==='mutation')jobs.acknowledge([message._ingressId].filter(Boolean));return}
   try {
     const current=()=>token.current()
     if(!current()){log('message.cancelled',{trace_id,userId:message.userId,reason:'control_cancelled'});return}

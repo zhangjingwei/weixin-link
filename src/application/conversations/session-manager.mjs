@@ -6,7 +6,8 @@ import {localTaskLabel,localCompletion} from '../../domain/tasks/task-label.mjs'
 import {transition} from '../../domain/tasks/lifecycle.mjs'
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
-import { randomBytes, createHash } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
+import {remoteScopeId} from '../remote-tasks/scope-id.mjs'
 
 
 export class SessionManager {
@@ -180,6 +181,7 @@ export class SessionManager {
       session.model=result.model
       session.modelProvider=result.modelProvider??attempt.providerOptions.provider??null
       session.threadId=saved.threadId=result.thread.id
+      session.compacting=saved.compaction?.threadId===session.threadId
       this.diagnostic(session,'provider.connected',{provider,model:session.model,model_provider:session.modelProvider})
       return session
     } catch(error) {
@@ -216,9 +218,19 @@ export class SessionManager {
     const saved=this.state.users[userId]??{}
     return [...new Set([saved.threadId,...(saved.previous??[]).slice().reverse()].filter(id=>typeof id==='string'&&id))]
   }
+  async clearCompaction(session) {
+    session.compacting=false
+    const record=this.state.users[session.userId]
+    if(record?.compaction?.threadId!==session.threadId)return
+    delete record.compaction
+    try{await this.save()}catch(error){this.diagnostic(session,'compaction.save_failed',this.ports.errorFields(error))}
+  }
   async assertNoOutstandingRemoteTasks(threadId) {
-    const scope=createHash('sha256').update(threadId).digest('hex').slice(0,24)
+    const scope=remoteScopeId(threadId)
+    const account=process.env.WECHAT_ACCOUNT??'default'
+    const legacyScope=account==='default'?null:remoteScopeId(threadId,'default')
     let remote={};try{remote=JSON.parse(await readFile(join(this.cwd,'remote-sessions.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}
+    if(legacyScope&&Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===legacyScope&&!t.account))throw Error('旧版远程任务的账号归属不明，未切换对话。')
     if(Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed))throw Error('当前对话仍有未确认停止的远程任务，请先用 “停止” 核实，再切换。')
   }
   async listConversations(userId,reply) {
@@ -267,13 +279,18 @@ export class SessionManager {
     native??=typeof text==='object'?text.nativeCommand:null
     if(!token.current())return
     if (session.exited || session.rpc.closed) return
-    while(session.compacting&&token.current()&&!session.rpc.closed){
-      const thread=await this.protocol.read(session.rpc,session.threadId)
-      if(thread?.status?.type!=='active'){session.compacting=false;break}
+    const compactionDeadline=Date.now()+30_000
+    while((session.compacting||session.compactionStarting)&&token.current()&&!session.rpc.closed){
+      if(!session.compactionStarting){
+        let thread
+        try{thread=await this.protocol.read(session.rpc,session.threadId)}catch(error){throw Object.assign(Error('Codex 上下文压缩状态核对失败，本条任务未提交。'),{code:'COMPACTION_CHECK_FAILED',cause:error})}
+        if(thread?.status?.type!=='active'){await this.clearCompaction(session);break}
+      }
+      if(Date.now()>=compactionDeadline)throw Object.assign(Error('Codex 上下文压缩仍未完成，本条任务未提交；请稍后重试。'),{code:'COMPACTION_WAIT_TIMEOUT'})
       await new Promise(resolve=>setTimeout(resolve,500))
     }
     if(!token.current())throw Error('等待上下文压缩期间任务已取消。')
-    if(session.rpc.closed)throw Error('等待上下文压缩期间连接已关闭。')
+    if(session.rpc.closed)throw Object.assign(Error('等待上下文压缩期间连接已关闭，本条任务未提交。'),{code:'COMPACTION_CHECK_FAILED'})
     if(session.selecting)throw new Error('正在切换对话，请稍后再发送。')
     if (session.exiting) throw new Error('正在停止并退出，请等待结束。')
     if (session.busy || session.finishing) {
@@ -381,7 +398,7 @@ export class SessionManager {
   }
   async event(session, message) {
     const p = message.params ?? {}
-    if(message.method==='thread/compacted'&&p.threadId===session.threadId)session.compacting=false
+    if(message.method==='thread/compacted'&&p.threadId===session.threadId){await this.clearCompaction(session);return}
     if(message.method==='thread/name/updated'){await this.onConversationTitle?.(p.threadId,p.threadName??p.name);return}
     if(message.method==='thread/archived'||message.method==='thread/unarchived'){await this.onConversationArchive?.(p.threadId,message.method==='thread/archived');return}
     if(message.method==='thread/deleted'){await this.onConversationDelete?.(p.threadId);return}
@@ -626,8 +643,9 @@ export class SessionManager {
         }
         if(command.action==='agentStatus'){
           const thread=await this.protocol.read(session.rpc,session.threadId)
+          if(session.compacting&&!session.compactionStarting&&thread.status?.type!=='active')await this.clearCompaction(session)
           const goal=await this.protocol.goal(session.rpc,session.threadId,{op:'get'})
-          await reply(`Codex 会话：${thread.id}\n状态：${thread.status?.type??'未知'}\n长任务：${goal?.status??'无'}\n快速模式：${this.state.users[userId]?.fastMode?'开启':'关闭'}。`);return
+          await reply(`Codex 会话：${thread.id}\n状态：${thread.status?.type??'未知'}\n长任务：${goal?.status??'无'}\n上下文压缩：${session.compacting?'进行中或待核对':'无待确认'}\n快速模式：${this.state.users[userId]?.fastMode?'开启':'关闭'}。`);return
         }
         if(command.action==='fast'){
           if(session.busy||session.finishing||session.queue.length)throw Error('请等待当前任务及排队消息结束后再切换快速模式。')
@@ -637,14 +655,19 @@ export class SessionManager {
           await reply(`快速模式已${command.enabled?'开启':'关闭'}；下一轮 Codex 任务生效。`);return
         }
         if(session.busy||session.finishing||session.connecting||session.selecting||session.queue.length||(this.submissions?.pending?.()??[]).some(j=>j.owner===userId)||this.submissions?.uncertainCount?.(userId))throw Error('当前仍有执行、排队或未确认任务，请先核对后再操作。')
+        if(session.compactionStarting)throw Error('Codex 正在启动上下文压缩，请稍后再操作。')
         if(session.compacting){
           const thread=await this.protocol.read(session.rpc,session.threadId)
           if(thread?.status?.type==='active')throw Error('Codex 正在压缩上下文，请完成后再操作。')
-          session.compacting=false
+          await this.clearCompaction(session)
         }
         if(command.action==='compact'){
-          await this.protocol.compact(session.rpc,session.threadId)
+          const saved=this.state.users[userId],before=saved.compaction
+          session.compactionStarting=true
+          saved.compaction={threadId:session.threadId,requestedAt:new Date().toISOString()}
+          try{await this.save()}catch(error){saved.compaction=before;session.compactionStarting=false;throw error}
           session.compacting=true
+          try{await this.protocol.compact(session.rpc,session.threadId)}finally{session.compactionStarting=false}
           await reply('Codex 已接受上下文压缩请求；完成后可继续提交任务。');return
         }
         if(command.action==='fork'){
@@ -700,6 +723,7 @@ export class SessionManager {
         this.lifecycle.cancel(userId)
         if(this.state.users[userId]?.waitingAttachment){delete this.state.users[userId].waitingAttachment;if(this.state.users[userId].recovery)this.state.users[userId].recovery.execution='interrupted';await this.save()}
         const scopeId=runtime?.threadId??this.state.users[userId]?.threadId
+        if(runtime?.compacting||this.state.users[userId]?.compaction?.threadId===scopeId)await reply('上下文压缩可能仍在进行；本次停止未确认取消压缩。新任务会先核对状态。')
         // Seal remote submission before local interruption, then stop owned daemon work.
         let remoteStop
         const stopRemote=async()=>{if(!remoteStop)remoteStop=this.remoteControl(this.cwd,scopeId,'stop');const result=await remoteStop;if(result.tasks?.length)await reply(result.stop_confirmed?'本对话委托的远程任务及对应命令已确认停止。':'远程任务尚未全部确认停止，请保留会话并重试 “停止”。');if(!result.stop_confirmed)throw Error('远程停止未确认');return result}
