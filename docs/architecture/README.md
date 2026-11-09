@@ -30,7 +30,7 @@
 - `src/application/notifications/`：版本提示和失败终答复恢复用例；通知状态与版本查询由 `src/infrastructure/` 适配，版本比较与重试资格位于 `src/domain/`。更新 Controller 只触发检查，不自动升级。
 - `src/setup/`：安装、账号启用和配置属于组合与管理边界，不是消息执行旁路。
 - `src/integrations/`：按账号启用，运行时重新核验；本机智能体按需调用。SSH 远程 Codex 是此类集成和 `src/application/remote-tasks/` 的协作，不是消息处理器里的另一个智能体底座。
-- `src/infrastructure/remote/`：提供 SSH 传输、连接重试、主机配置快照和路径边界；远程任务账本与协调仍由 `src/application/remote-tasks/` 使用原账号工作目录。`src/remote/` 只保留已公开的兼容入口。
+- `src/infrastructure/remote/`：提供 SSH 传输、连接重试、主机配置快照和路径边界；远程任务账本与协调仍由 `src/application/remote-tasks/` 使用原账号工作目录。
 - 权限、账号隔离、去重、取消代际、未知投递结果和运行控制跨越上述边界，继续使用现有状态来源。
 
 ## 消息顺序
