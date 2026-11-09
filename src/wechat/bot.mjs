@@ -3,6 +3,7 @@ import {trackLoginValidity} from './login-validity.mjs'
 import {LifecycleNotice} from './lifecycle-notice.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
 import {createCommandClassifier} from './command-classifier.mjs'
+import {conversationInput} from '../interfaces/wechat/conversation-command.mjs'
 import {createWeChatController} from '../interfaces/controllers/wechat-controller.mjs'
 import {createWeChatPresenter} from '../interfaces/views/wechat-presenter.mjs'
 import {createScheduleController} from '../interfaces/controllers/schedule-controller.mjs'
@@ -66,7 +67,7 @@ if (testing) {
 
 const setupController=await (agent.kind==='claude'?new ClaudeSetupController({binary:installation.claudeBinary}):new SetupController({stateDir,backend,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)})).init()
 const classifyMessage=createCommandClassifier()
-const conversations=agent.catalog==='local'?new ClaudeConversations(manager,owners):new TextConversations(manager,owners)
+const conversations=agent.catalog==='local'?new ClaudeConversations(manager,owners,conversationInput):new TextConversations(manager,owners,conversationInput)
 await manager.save()
 const bot = infrastructure.wechat.createClient({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
 const notifyStart=bot.api.notifyStart.bind(bot.api)

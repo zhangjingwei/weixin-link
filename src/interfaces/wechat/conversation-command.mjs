@@ -13,3 +13,9 @@ export function conversationCommand(text=''){
  if((m=s.match(/^(?:搜索|搜索历史)\s+(.{1,60})$/)))return {action:'search',q:m[1]};
  return null;
 }
+
+/** Parse transport text once, before conversation binding or intent routing. */
+export function conversationInput(text=''){
+ const questionCode=text?.trim().match(/^\/?(?:批准|拒绝|回答)\s+([a-f\d]{6})\b/i)?.[1]
+ return {command:conversationCommand(text),questionCode}
+}

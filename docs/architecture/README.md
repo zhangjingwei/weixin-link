@@ -13,7 +13,7 @@
 | 计划触发 Controller | `src/interfaces/controllers/schedule-controller.mjs` | 接入计划 API 与到期检查；请求授权和任务归属由应用层处理，提醒走 Presenter，任务走共享持久队列 |
 | 更新检查 Controller | `src/interfaces/controllers/update-controller.mjs` | 接入定时检查；版本比较、提示去重及未知投递状态由应用层 `UpdateNotifier` 持有 |
 | 管理 Controller | `src/interfaces/controllers/management-controller.mjs` | 接入微信安装、切换、升级命令与配置 CLI 参数；执行委托原管理和配置模块 |
-| 命令意图 | `src/application/intake/message-intent.mjs` + `src/wechat/command-classifier.mjs` | 纯意图决策与微信命令解析分开；重放时按同一规则重新判定，不另存意图状态 |
+| 命令意图 | `src/application/intake/message-intent.mjs`、`src/wechat/command-classifier.mjs`、`src/interfaces/wechat/*-command.mjs` | 接口层解析微信文本格式，应用层按优先级选择意图，领域层判断解析后的动作；重放时按同一规则重新判定，不另存意图状态 |
 | 消息应用处理 | `src/application/intake/receive-message.mjs`、`message-application.mjs`、`src/application/tasks/durable-intake.mjs` | 游标前保存后入队；控制命令立即处理；普通任务经持久队列逐会话执行、恢复和取消 |
 | 会话与远程任务协调 | `src/application/conversations/`、`tasks/local-recovery.mjs`、`tasks/remote-recovery.mjs`、`remote-tasks/` | 沿用原会话状态、任务账本和锁；未知提交先对账，停止只作用于本会话任务 |
 | 附件消息 | `src/interfaces/wechat/voice-text.mjs`、`src/application/intake/single-media.mjs`、`src/infrastructure/media/` | 接口层提取微信转写和消息 ID；应用层提交单条附件任务；基础设施层下载、解析和交付文件 |

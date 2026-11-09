@@ -3,8 +3,8 @@ import {hasMedia} from '../infrastructure/media/media-input.mjs'
 import {diagnosticCommand} from '../application/diagnostics/diagnostic-commands.mjs'
 import {agentSwitchCommand} from '../setup/agent-switch.mjs'
 import {chatUpgradeCommand} from '../setup/chat-upgrade.mjs'
-import {conversationCommand} from '../application/conversations/text-conversations.mjs'
-import {controlCommand} from '../base/codex/control-command.mjs'
+import {conversationCommand} from '../interfaces/wechat/conversation-command.mjs'
+import {controlCommand} from '../interfaces/wechat/control-command.mjs'
 
 /** Transport-side parser registry; command precedence is defined once. */
 export function createCommandClassifier() {

@@ -1,3 +1,4 @@
+import {conversationInput} from '../../../src/interfaces/wechat/conversation-command.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,writeFile,chmod,readFile,rm} from 'node:fs/promises'
@@ -63,7 +64,7 @@ test('installation selects Claude only with an absolute CLI path',()=>{
 test('Claude navigation stays local and refuses permanent deletion',async t=>{
  const f=await fixture(t),manager=await new SessionManager({stateDir:join(f.dir,'state'),cwd:f.dir,owners:['owner'],agentKind:'claude',rpcFactory:options=>new ClaudeRpc({...options,binary:f.binary,env:f.env})}).init()
  t.after(()=>manager.close())
- const conversations=new ClaudeConversations(manager,['owner']),output=[]
+ const conversations=new ClaudeConversations(manager,['owner'],conversationInput),output=[]
  const message=conversations.bind({userId:'owner',text:'新建 项目'})
  assert.equal(await conversations.control(message,text=>output.push(text)),true)
  assert.equal(conversations.ensure('owner').entries.length,2)

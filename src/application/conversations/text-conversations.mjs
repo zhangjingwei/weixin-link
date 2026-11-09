@@ -4,18 +4,16 @@ import {label,serialize,flush,deliver,replay} from './delivery.mjs'
 import {rename,selectOfficial,archive,markDeleted,deleteConversation} from './operations.mjs'
 import {history} from './history.mjs'
 import {randomUUID} from 'node:crypto'
-import {conversationCommand} from '../../domain/conversations/commands.mjs'
-export {conversationCommand} from '../../domain/conversations/commands.mjs'
 export {historyText} from './history.mjs'
 export class TextConversations{
- constructor(manager,owners){this.manager=manager;this.realOwners=new Set(owners);manager.state.textConversations??={};this.root=manager.state.textConversations;this.pages=new Map();for(const owner of owners)this.ensure(owner);manager.onConversationTitle=(threadId,name)=>this.titleUpdated(threadId,name);this.installOfficialHooks()}
+ constructor(manager,owners,parseInput){if(typeof parseInput!=='function')throw Error('CONVERSATION_INPUT_PARSER_REQUIRED');this.parseInput=parseInput;this.manager=manager;this.realOwners=new Set(owners);manager.state.textConversations??={};this.root=manager.state.textConversations;this.pages=new Map();for(const owner of owners)this.ensure(owner);manager.onConversationTitle=(threadId,name)=>this.titleUpdated(threadId,name);this.installOfficialHooks()}
  installOfficialHooks(...args){return installOfficialHooks(this,...args)}
  ensure(owner){if(!this.realOwners.has(owner))throw Error('未授权用户');if(!this.root[owner]){const saved=this.manager.state.users[owner]??{};const entries=[{id:'1',key:owner,name:'原有对话'}];for(const tid of [...new Set(saved.previous??[])].filter(t=>t!==saved.threadId)){const key=owner+'#conversation#'+randomUUID();entries.push({id:String(entries.length+1),key,name:'历史对话 '+(entries.length+1)});this.manager.state.users[key]={threadId:tid,hasMessages:true};}this.root[owner]={active:'1',entries};}const r=this.root[owner];if(!Object.hasOwn(r,'dailyId'))r.dailyId=(r.entries.find(e=>e.key===owner&&!e.deleted)??r.entries.find(e=>e.id===r.active&&!e.deleted)??r.entries.find(e=>!e.deleted))?.id??null;for(const e of this.root[owner].entries)this.manager.owners.add(e.key);return this.root[owner]}
  entry(key){for(const [owner,r]of Object.entries(this.root)){const entry=r.entries.find(e=>e.key===key);if(entry)return {...entry,owner};}return null}
  recipient(key){return this.entry(key)?.owner??key}
  find(owner,id){const r=this.ensure(owner);return id?r.entries.find(e=>e.id.toLowerCase()===id.toLowerCase()||this.manager.state.users[e.key]?.threadId===id):r.entries.find(e=>e.id===r.active)}
  // Called synchronously at message arrival, before any asynchronous work or download.
- bind(message){const owner=message.userId,r=this.ensure(owner),command=(message.images?.length||message.files?.length||message.videos?.length||message.voices?.length)?null:conversationCommand(message.text);let error;const priorActive=r.active;
+ bind(message){const owner=message.userId,r=this.ensure(owner),parsed=this.parseInput(message.text),command=(message.images?.length||message.files?.length||message.videos?.length||message.voices?.length)?null:parsed.command;let error;const priorActive=r.active;
  const messageId=message.raw?.message_id??message.raw?.client_id;r.bindings??={};const prior=messageId===undefined?null:r.bindings[String(messageId)];if(prior)return {...message,userId:prior,_conversationOwner:owner,_conversationCommand:command?.action==='daily'?{...command,id:r.entries.find(e=>e.key===prior)?.id}:command};
  if(['new','switch','daily'].includes(command?.action))r.selectionVersion=(r.selectionVersion??0)+1;
  if(command?.action==='new'){const e={id:String(r.entries.length+1),key:owner+'#conversation#'+randomUUID(),name:'未命名项目 '+(r.entries.length+1),titleSource:'placeholder'};r.entries.push(e);r.active=e.id;this.manager.owners.add(e.key);}
@@ -28,7 +26,7 @@ export class TextConversations{
   else r.active=home.id;
  }
  if(command?.action==='switch'){const e=this.find(owner,command.id);if(e&&!e.archived)r.active=e.id;else error='会话不存在或已归档，请先发“列表”。';}
- let e=this.find(owner);const decision=message.text?.trim().match(/^\/?(?:批准|拒绝|回答)\s+([a-f\d]{6})\b/i);if(decision){const q=this.manager.questions.get(decision[1]);if(q&&this.recipient(q.session.userId)===owner)e=this.entry(q.session.userId);}
+ let e=this.find(owner);if(parsed.questionCode){const q=this.manager.questions.get(parsed.questionCode);if(q&&this.recipient(q.session.userId)===owner)e=this.entry(q.session.userId);}
  if(messageId!==undefined){r.bindings[String(messageId)]=e.key;const ids=Object.keys(r.bindings);if(ids.length>200)delete r.bindings[ids[0]];}
  return {...message,userId:e.key,_conversationOwner:owner,_conversationCommand:command,_conversationError:error,_conversationPriorActive:priorActive,_conversationSelectionVersion:r.selectionVersion};}
  label(...args){return label(this,...args)}

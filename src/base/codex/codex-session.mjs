@@ -12,16 +12,14 @@ import { join } from 'node:path'
 import { randomBytes, createHash } from 'node:crypto'
 
 import {CodexRpc} from './codex-rpc.mjs'
-import {controlCommand} from './control-command.mjs'
 import {codexProviderOptions,providerEventCode} from './provider-options.mjs'
 export {CodexRpc} from './codex-rpc.mjs'
-export {controlCommand} from './control-command.mjs'
 export {codexProviderOptions} from './provider-options.mjs'
 
 export class SessionManager {
   constructor({ stateDir, cwd, owners, backend = null, agentKind = 'codex', rpcFactory = options => new CodexRpc(options), remoteControl, sessionPorts, completionMarkers = false, providerEnv = process.env, scheduleGuidance = '', log = () => {} }) {
     if (typeof remoteControl !== 'function' || typeof sessionPorts?.assistantInstructions !== 'string' ||
-      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
+      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
     this.ports=sessionPorts
     this.log = log
     this.agentKind=agentKind
@@ -587,7 +585,7 @@ export class SessionManager {
   async handle(userId, text, reply, messageId, token = this.lifecycle.capture(userId)) {
     if (!this.owners.has(userId)) { await reply('当前微信账号未获授权。'); return }
     if (!await this.acceptMessage(userId,messageId)) return
-    const command = typeof text === 'string' ? controlCommand(text) : null
+    const command = typeof text === 'string' ? this.ports.controlCommand(text) : null
     if(!command&&!token.current())return
     this.log('message.handled',{userId,messageId,kind:command?.action??(typeof text==='string'?'text':'media')})
     try {

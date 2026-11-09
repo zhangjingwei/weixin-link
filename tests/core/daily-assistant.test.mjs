@@ -1,9 +1,10 @@
+import {conversationCommand,conversationInput} from '../../src/interfaces/wechat/conversation-command.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {TextConversations,conversationCommand} from '../../src/application/conversations/text-conversations.mjs'
+import {TextConversations} from '../../src/application/conversations/text-conversations.mjs'
 const fixture=()=>{
  const calls=[],manager={state:{users:{alice:{threadId:'original-thread'}}},owners:new Set(['alice','bob']),sessions:new Map(),questions:new Map(),save:async()=>{}}
- const router=new TextConversations(manager,['alice','bob'])
+ const router=new TextConversations(manager,['alice','bob'],conversationInput)
  router.refreshTitles=async()=>{}
  manager.connect=async key=>{const id=manager.state.users[key]?.threadId??'project-thread';return {threadId:id,rpc:{request:async(method,p)=>{calls.push([method,p]);assert.equal(method,'thread/read');return {thread:{id,name:'Existing conversation'}}}}}}
  return {manager,router,calls}
@@ -40,7 +41,7 @@ test('daily entry reuses original owned thread without creating threads or stopp
 })
 test('daily designation survives state reload and later changes to active project',()=>{
  const {manager,router}=fixture();const project=router.bind({userId:'alice',text:'新建 Work'})
- const restored=new TextConversations({...manager,state:structuredClone(manager.state),owners:new Set(['alice','bob'])},['alice','bob'])
+ const restored=new TextConversations({...manager,state:structuredClone(manager.state),owners:new Set(['alice','bob'])},['alice','bob'],conversationInput)
  assert.equal(restored.find('alice').key,project.userId)
  assert.equal(restored.bind({userId:'alice',text:'日常助手'}).userId,'alice')
  assert.equal(restored.bind({userId:'bob',text:'日常助手'}).userId,'bob')

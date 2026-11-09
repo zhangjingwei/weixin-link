@@ -9,6 +9,7 @@ import {OutputStore, outputLinks} from '../infrastructure/media/outbound-media.m
 import {errorFields} from '../infrastructure/diagnostics/diagnostic-log.mjs'
 import {deliveryError, deliveryFailureState} from '../infrastructure/wechat/delivery-error.mjs'
 import {systemNotice} from '../interfaces/views/system-notice.mjs'
+import {controlCommand} from '../interfaces/wechat/control-command.mjs'
 
 // The account composition boundary supplies the shared session engine with
 // use-case formatting and external adapters. The engine imports none of them.
@@ -16,7 +17,7 @@ export const sessionPorts = Object.freeze({
   assistantInstructions: ASSISTANT_INSTRUCTIONS,
   integrationGuidance, materialInput, flowInput, stripTaskFlow, recoveryText,
   outputStore: options => new OutputStore(options), outputLinks,
-  errorFields, deliveryError, deliveryFailureState, systemNotice,
+  errorFields, deliveryError, deliveryFailureState, systemNotice, controlCommand,
 })
 
 export class ConfiguredSessionManager extends SessionManager {
@@ -25,4 +26,5 @@ export class ConfiguredSessionManager extends SessionManager {
   }
 }
 export {ConfiguredSessionManager as SessionManager}
-export {controlCommand, codexProviderOptions} from '../base/codex/codex-session.mjs'
+export {controlCommand} from '../interfaces/wechat/control-command.mjs'
+export {codexProviderOptions} from '../base/codex/codex-session.mjs'

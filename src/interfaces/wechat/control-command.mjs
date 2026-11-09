@@ -1,4 +1,4 @@
-import {memoryCommand} from './native-memory.mjs'
+import {memoryCommand} from '../../base/codex/native-memory.mjs'
 
 export function controlCommand(text) {
   const steer=text.trim().match(/^补充(?:[\s：:]+([\s\S]*))?$/)

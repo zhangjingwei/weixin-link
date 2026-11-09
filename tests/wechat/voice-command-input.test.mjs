@@ -1,3 +1,4 @@
+import {conversationInput} from '../../src/interfaces/wechat/conversation-command.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {voiceCommandInput} from '../../src/wechat/voice-command-input.mjs'
@@ -6,7 +7,7 @@ const voice=text=>({userId:'owner',type:'voice',text:'[voice]',voices:[{text}],r
 test('transcribed voice binds a conversation command before queue classification',()=>{
  const original=voice('列表。'),normalized=voiceCommandInput(original)
  const manager={state:{users:{}},owners:new Set(['owner']),sessions:new Map(),questions:new Map()}
- const conversations=new TextConversations(manager,['owner'])
+ const conversations=new TextConversations(manager,['owner'],conversationInput)
  assert.equal(conversations.bind(normalized)._conversationCommand.action,'list')
  assert.equal(normalized.raw,original.raw);assert.equal(original.voices.length,1)
  assert.equal(voiceCommandInput(normalized),normalized)
