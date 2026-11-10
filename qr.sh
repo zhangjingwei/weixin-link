@@ -168,7 +168,7 @@ try {
     } finally { if(tty!==undefined)closeSync(tty) }
     if(verification.error?.code==='ETIMEDOUT')throw Error('VERIFICATION_WAIT_TIMEOUT')
     if(verification.error||verification.status!==0)throw Error('VERIFICATION_FLOW_FAILED')
-    console.log('完成后请在微信发送「安装状态」继续配置。')
+    console.log('登录完成后，助手会主动推送安装向导；若未收到，可发送「安装向导」。')
   }else{
     console.log('当前安装版本尚不支持自动输入 PIN；请先从本地源码升级。')
     console.log('本次扫码如要求 PIN，可运行：node '+manager+' verify '+account+'。看到提示后再输入。')

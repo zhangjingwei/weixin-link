@@ -4,11 +4,11 @@ import {join} from 'node:path'
 import {deliveryError} from '../infrastructure/wechat/delivery-error.mjs'
 
 const RELEASE=/^[0-9a-f]{7,40}$/
-export const WELCOME_MESSAGE='微信助手已连接。直接发送问题、图片或文件即可使用；发「日常」进入日常会话，发「状态」查看任务，发「使用说明」查看完整帮助。需要配置时发「安装向导」。'
+export const WELCOME_MESSAGE='微信助手已连接。下面是安装向导，请直接回复对应数字继续。'
 export const upgradeMessage=commit=>`微信助手已升级到 ${commit.slice(0,7)}，服务已连接。可直接发消息；发「状态」查看任务，发「诊断」检查服务，发「使用说明」查看帮助。`
 
 export class LifecycleNotice{
- constructor({stateDir,sourceDir,owners,welcomePending=false,send,log=()=>{}}){Object.assign(this,{stateDir,sourceDir,owners:[...new Set(owners)],welcomePending,send,log});this.locks=new Map();this.commit=null;this.started=false}
+ constructor({stateDir,sourceDir,owners,welcomePending=false,welcomeText=async()=>WELCOME_MESSAGE,send,log=()=>{}}){Object.assign(this,{stateDir,sourceDir,owners:[...new Set(owners)],welcomePending,welcomeText,send,log});this.locks=new Map();this.commit=null;this.started=false}
  path(owner){return join(this.stateDir,'lifecycle-notice-'+createHash('sha256').update(owner).digest('hex').slice(0,24)+'.json')}
  async legacyWelcomed(owner){try{return JSON.parse(await readFile(join(this.stateDir,'welcome-'+createHash('sha256').update(owner).digest('hex').slice(0,24)+'.json'),'utf8')).state==='accepted'}catch{return false}}
  async release(){try{const value=JSON.parse(await readFile(join(this.sourceDir,'.weixin-link-release.json'),'utf8'));return value.version===1&&value.repository==='zhangjingwei/weixin-link'&&value.ref==='main'&&RELEASE.test(value.commit)?value.commit:null}catch{return null}}
@@ -32,9 +32,10 @@ export class LifecycleNotice{
    await this.write(owner,value)
   }
   if(!['pending',...(inbound?['deferred']:[])].includes(value.status))return null
+  const message=value.kind==='welcome'?await this.welcomeText(owner):upgradeMessage(value.commit)
   await this.write(owner,{...value,status:'sending'})
   let status='unknown'
-  try{const result=await this.send(owner,value.kind==='welcome'?WELCOME_MESSAGE:upgradeMessage(value.commit));status=result?.status==='accepted'?'accepted':'unknown'}
+  try{const result=await this.send(owner,message);status=result?.status==='accepted'?'accepted':'unknown'}
   catch(error){status=deliveryError(error).api_code===-2?'deferred':'unknown'}
   await this.write(owner,{...value,status})
   this.log('lifecycle_notice.delivery',{userId:owner,kind:value.kind,status})

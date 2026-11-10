@@ -91,9 +91,9 @@ test('schema command is machine-readable and rejects inherited object property n
  for(const kind of ['constructor','toString'])assert.throws(()=>validateConfig(kind,{}),/CONFIG_UNKNOWN_KIND/)
  const text=execFileSync(process.execPath,[join(repo,'src/setup/setup.mjs'),'config-schema','ha'],{encoding:'utf8'});const schema=JSON.parse(text);assert.equal(schema.properties.version.const,1);assert.ok(schema.required.includes('token'))
 })
-test('invalid installation binary cannot replace the active installation file',async t=>{
+test('external Codex binary setting cannot replace the bundled runtime',async t=>{
  const options=await fixture(t);await mkdir(options.workspace);await configure('installation',{workspace:options.workspace},options);const path=configPath('installation',options),old=await readFile(path,'utf8')
- await assert.rejects(configure('installation',{workspace:options.workspace,codexBinary:process.execPath},{...options,verify:undefined}),/CONFIG_CONNECTION_CHECK_FAILED/)
+ await assert.rejects(configure('installation',{workspace:options.workspace,codexBinary:process.execPath},{...options,verify:undefined}),/CONFIG_UNKNOWN_FIELD/)
  assert.equal(await readFile(path,'utf8'),old)
 })
 test('remote host configuration reloads without a remote Codex transport',async t=>{

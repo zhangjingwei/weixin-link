@@ -23,12 +23,12 @@
 | 其他微信账号数据 | `~/.local/share/wechat-ping-bot/accounts/<id>/` |
 | HA 与备份私有配置 | `~/.config/wechat-assistant/` |
 
-Git 手动安装的源码位置是克隆目录。工作区和 Codex 路径由安装配置确定，不随下载目录自动变化。安装器保留已有工作区 AGENTS.md 的用户内容，仅更新明确标记的程序管理区块；更新后新会话才能读取新规则。
+Git 手动安装的源码位置是克隆目录。工作区由安装配置确定；Codex CLI 从当前项目依赖目录启动。安装器保留已有工作区 AGENTS.md 的用户内容，仅更新明确标记的程序管理区块；更新后新会话才能读取新规则。
 
 ## 微信操作
 
 - `安装向导`：按当前步骤选择运行环境、安装、登录及验证。
-- `安装状态`、`安装智能体`、`登录智能体`、`验收智能体`：独立安装维护入口。
+- `安装状态`、`安装智能体`、`登录智能体`、`验收智能体`：运行时检查、登录与验收入口。Codex CLI 随项目依赖安装，无需单独安装。
 - `运行诊断`、`服务状态`、`查看最近错误`、`导出诊断报告`：查询当前账号诊断和服务状态，不调用模型。
 - 远程主机、HA、备份与多账号：用自然语言说明需求，由智能体执行下方底层接口。
 
@@ -96,7 +96,21 @@ node src/setup/setup.mjs config-restore ha
 
 类型支持 `installation`、`ha`、`backup`、`remote-hosts`。schema 返回格式；check 校验输入；set 原子写入并保留上一版；status 返回配置状态；restore 重新校验并恢复上一版。`remote-hosts` 写入时只校验格式，不连接主机；启用集成或使用主机时检查连接。配置变更从下一次调用生效。其他配置类型保留各自的连接或运行条件检查。配置通过标准输入提供，不将令牌放入命令参数。
 
-`installation` 配置只接受工作目录和 Codex CLI 路径等安装字段。旧安装配置含已删除字段时，先停服务，再通过 `config-set installation` 写入同一 `workspace` 和所需的 `codexBinary`；配置入口会校验工作目录不变。旧底座会话和任务不迁移。微信发送“重启”可在当前账号空闲后安排服务重启。
+`installation` 配置只接受工作目录等安装字段。Codex CLI 随 `npm ci` 安装并从本项目依赖目录启动。旧安装配置含已删除字段时，先停服务，再通过 `config-set installation` 写入同一 `workspace`；配置入口会校验工作目录不变。旧底座会话和任务不迁移。微信发送“重启”可在当前账号空闲后安排服务重启。
+
+项目启动 Codex 时为每个微信账号档案设置独立的 `CODEX_HOME`：默认账号位于账号数据目录的 `codex-home/`，其他账号位于各自 `accounts/<档案 ID>/codex-home/`。档案 ID 与已绑定的微信账号对应，重启和重新登录后路径保持稳定。项目不会读取用户原有 `~/.codex` 的登录、配置或会话；升级到此版本后，每个账号需在自己的入口重新登录，原目录的 Codex 会话不会自动迁入。
+
+### Codex 模型接入
+
+首次微信推送的向导提供三种接入方式：订阅登录、DeepSeek、Qwen。当前 Codex 自定义提供商使用 **Responses API**；仅声称兼容 OpenAI Chat Completions 的接口不足以接入。向导里的第三方配置只在本机终端录入密钥，保存到对应账号的私有 `codex-provider.json`，服务重启后生效。切回订阅方式可运行 `node src/setup/setup.mjs provider-config subscription [账号档案]` 清除第三方配置。请勿把密钥发到微信。
+
+| 接入方式 | 本项目配置的模型 | 接口依据 |
+| --- | --- | --- |
+| 订阅登录 | 账号可用的 Codex 模型 | [OpenAI Codex 登录说明](https://learn.chatgpt.com/docs/auth) |
+| DeepSeek | `deepseek-flash`；官方另列 `deepseek-v4-pro` | [DeepSeek Codex 集成说明](https://api-docs.deepseek.com/quick_start/agent_integrations/codex/) |
+| 阿里云百炼按量付费 | `qwen3.7-max`，华北 2（北京）Workspace | [百炼 Codex 配置](https://help.aliyun.com/en/model-studio/codex) |
+
+百炼 Token Plan 的 `auto` 路由也使用 Responses，但本向导当前未接入；Coding Plan 文档使用旧版 Codex 的 Chat Completions 接口，不适用于本项目的 Codex 版本。Kimi 官方文档也列出 `kimi-k3` 的 Responses 接口；项目暂未内置该预设。以上属于接口与配置兼容性，最终推理和工具调用仍需用向导中的真实模型测试确认。参考：[Kimi Codex 集成说明](https://www.kimi.ai/resources/codex-api)、[OpenAI Codex 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)。
 
 安装工作区不能直接迁移。存在运行实例时，安装路径配置需先停服务。远程主机配置从下一次 SSH 操作起生效。
 
@@ -117,7 +131,7 @@ node src/setup/setup.mjs config-restore ha
 
 已有部署先核实源码、工作区和服务实际路径，再安排更新；保留账号数据、AGENTS.md、远程会话记录和 outputs，不直接覆盖运行目录。服务入口位于 src/，由安装器按真实路径生成。Windows 已有任务配置不一致时明确拒绝覆盖，需要单独核对迁移。
 
-远程验收脚本需要指定主机和专用测试项目，会执行真实任务；登录、发送消息、服务重启和容器切换按用户授权进行。检查通过与真实收发验收分别报告，见 [贡献指南](CONTRIBUTING.md)。
+远程验收脚本需要指定主机和专用测试项目，会执行真实任务；登录、发送消息和服务重启按用户授权进行。检查通过与真实收发验收分别报告，见 [贡献指南](CONTRIBUTING.md)。
 
 ## 私有数据与发布检查
 

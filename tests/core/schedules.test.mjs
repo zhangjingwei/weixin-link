@@ -224,5 +224,5 @@ test('schedule instructions are available to the local Codex backend', async t =
   const guidance = 'SCHEDULE_TOOL_MARKER'
   const make = backend => new SessionManager({stateDir, cwd: stateDir, owners: [], backend, scheduleGuidance: guidance})
   assert.match(await make({kind: 'host'}).sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
-  assert.doesNotMatch(await make({kind: 'podman'}).sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
+  assert.doesNotMatch(await make({kind: 'remote'}).sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
 })

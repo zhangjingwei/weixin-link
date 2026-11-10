@@ -33,7 +33,6 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
       }
     },
     onMessage(message) {
-      if (message._inboxBackend && message._inboxBackend !== jobs.backendKey) return
       if (!conversations.realOwners.has(message._conversationOwner ?? message.userId) || runtime.sealed) return
       message = normalizeVoice(message)
       if (!message._conversationOwner) message = conversations.bind(message)

@@ -8,7 +8,7 @@ const absolute={...text,format:'absolute-path'}
 const object=(properties,required)=>({type:'object',properties,required,additionalProperties:false})
 const host=object({platform:{enum:['posix','win32']},root:{...text,format:'remote-path'}},['platform','root'])
 export const CONFIG_SCHEMAS={
- installation:object({version:{const:1},workspace:absolute,codexBinary:absolute,createdAt:{...text,format:'date-time'}},['version','workspace']),
+ installation:object({version:{const:1},workspace:absolute,createdAt:{...text,format:'date-time'}},['version','workspace']),
  ha: haSchema,
  rsshub: rsshubSchema,
  backup:object({version:{const:1},host:{...text,pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},remoteDirectory:{...text,format:'backup-directory'}},['version','host','remoteDirectory']),

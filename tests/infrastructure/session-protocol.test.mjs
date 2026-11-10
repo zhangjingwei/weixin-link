@@ -16,3 +16,15 @@ test('recovery lookup stays behind the Codex protocol',async()=>{
  assert.equal(await protocol.recoverTurn(rpc,{threadId:'thread',turnId:'saved-turn',deliveryId:'delivery'}),turn)
  assert.deepEqual(calls,[['thread/turns/list',undefined],['thread/turns/list','next']])
 })
+test('private provider credentials reach the local Codex process without entering CLI arguments',()=>{
+ const key='test-only-private-key',providerEnv={WECHAT_CODEX_PROVIDER:'custom',WECHAT_CODEX_BASE_URL:'https://provider.example.com',WECHAT_CODEX_API_KEY_ENV:'PRIVATE_MODEL_KEY',WECHAT_CODEX_MODEL:'custom-model'}
+ let spawned
+ const protocol=createSessionProtocol({providerEnv,providerSecrets:{PRIVATE_MODEL_KEY:key},codexHome:'/private/account/codex-home',codexBinary:()=>'/bundled/codex',rpcFactory:options=>{spawned=options;return {}}})
+ const options=protocol.providerOptions()
+ assert.equal(options.credentialReady,true)
+ assert(!options.args.join(' ').includes(key))
+ protocol.createRpc({providerOptions:options})
+ assert.equal(spawned.providerSecrets.PRIVATE_MODEL_KEY,key)
+ assert.equal(spawned.codexHome,'/private/account/codex-home')
+ assert.equal(spawned.binary,'/bundled/codex')
+})

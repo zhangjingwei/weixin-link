@@ -1,8 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,rm} from 'node:fs/promises'
+import {mkdtemp,rm,writeFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
+import {createHash} from 'node:crypto'
+import {completeControlPrompt} from '../../src/interfaces/wechat/control-command.mjs'
 import {controlCommand,SessionManager} from '../../src/wechat/session-manager.mjs'
 import {createReceiveMessage} from '../../src/application/intake/receive-message.mjs'
 import {createMessageApplication} from '../../src/application/intake/message-application.mjs'
@@ -10,11 +12,11 @@ import {quoteInput} from '../../src/infrastructure/wechat/weixin-protocol.mjs'
 import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 
 test('native Chinese controls are explicit and slash aliases remain ordinary text',()=>{
-  assert.deepEqual(controlCommand('长任务 修复收件队列'),{action:'goal',op:'create',objective:'修复收件队列'})
-  assert.deepEqual(controlCommand('长任务 修复收件队列 | 预算 10000'),{action:'goal',op:'create',objective:'修复收件队列',tokenBudget:10000})
+  assert.deepEqual(controlCommand('长任务'),{action:'prompt',target:'goal'});assert.equal(controlCommand('长任务 修复收件队列'),null);assert.deepEqual(completeControlPrompt('goal','修复收件队列').command,{action:'goal',op:'create',objective:'修复收件队列'})
+  assert.deepEqual(completeControlPrompt('goal','修复收件队列 | 预算 10000').command,{action:'goal',op:'create',objective:'修复收件队列',tokenBudget:10000})
   assert.deepEqual(controlCommand('代码审查 对比 origin/main'),{action:'review',target:{type:'baseBranch',branch:'origin/main'}})
   assert.deepEqual(controlCommand('代码审查'),{action:'review',target:{type:'uncommittedChanges'}})
-  assert.deepEqual(controlCommand('计划 修复测试'),{action:'plan',text:'修复测试'})
+  assert.deepEqual(controlCommand('计划'),{action:'prompt',target:'plan'});assert.equal(controlCommand('计划 修复测试'),null)
   assert.equal(controlCommand('/review'),null)
   assert.equal(controlCommand('帮我代码审查'),null)
 })
@@ -37,10 +39,11 @@ async function fixture(){
   return {dir,manager,rpcFactory,calls,output,reply,async close(){manager.close();await rm(dir,{recursive:true,force:true})}}
 }
 
+const sendPrompt=(f,user,target,text)=>f.manager.handle(user,text,f.reply,undefined,undefined,completeControlPrompt(target,text).command)
 test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
   const f=await fixture()
   try{
-    await f.manager.handle('owner','长任务 修复队列',f.reply)
+    await sendPrompt(f,'owner','goal','修复队列')
     assert.deepEqual(f.calls.find(c=>c.method==='thread/goal/set').params,{threadId:'original',origin:'user',objective:'修复队列',status:'active'})
     assert.match(f.output.at(-1),/状态：已启用。/)
     assert.match(f.output.at(-1),/直接发送具体任务才会执行/)
@@ -48,7 +51,7 @@ test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
     await f.manager.handle('owner','长任务状态',f.reply)
     assert.match(f.output.at(-1),/状态：已启用。/)
     await f.manager.handle('owner','开启快速模式',f.reply)
-    await f.manager.handle('owner','计划 修复测试',f.reply)
+    await sendPrompt(f,'owner','plan','修复测试')
     const turn=f.calls.find(c=>c.method==='turn/start')
     assert.equal(turn.params.collaborationMode.mode,'plan')
     assert.equal(turn.params.serviceTier,'fast')
@@ -67,7 +70,7 @@ test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
     assert(f.manager.state.users.owner.previous.includes('original'))
     await f.manager.handle('owner','关闭快速模式',f.reply)
     f.manager.sessions.get('owner').busy=false;f.manager.sessions.get('owner').state='idle'
-    await f.manager.handle('owner','计划 再检查一次',f.reply)
+    await sendPrompt(f,'owner','plan','再检查一次')
     assert.equal(f.calls.findLast(c=>c.method==='turn/start').params.serviceTier,'auto')
   }finally{await f.close()}
 })
@@ -101,18 +104,18 @@ test('goal lifecycle, compaction and side branch stay within the owner session',
     assert.equal(f.manager.state.users.owner.threadId,'original')
     assert(f.manager.state.users.owner.previous.includes('forked'))
     const before=f.calls.length
-    await f.manager.handle('stranger','长任务 非法请求',f.reply)
+    await sendPrompt(f,'stranger','goal','非法请求')
     assert.equal(f.calls.length,before)
   }finally{await f.close()}
 })
 
 test('plan and review ingress are captured before dispatch and retain their ingress id',async()=>{
   const captured=[],dispatched=[]
-  const jobs={backendKey:'test',findCaptured:()=>null,capture:message=>{captured.push(message.text);return 'ingress-'+captured.length}}
-  const receiver=createReceiveMessage({manager:{save:async()=>{},lifecycle:{capture:()=>({current:()=>true})}},jobs,view:{},dispatch:message=>dispatched.push(message),hasMedia:()=>false,conversations:{bind:message=>message,realOwners:new Set(['owner'])},runtime:{sealed:false},setupController:{command:()=>null},setupReceipts:{get:()=>null},normalizeVoice:message=>message,classifyMessage:message=>{const value=controlCommand(message.text);return value?{kind:'session',value}:null}})
-  const message={userId:'owner',text:'计划 修复测试',raw:{message_id:'one'}}
+  const jobs={findCaptured:()=>null,capture:message=>{captured.push(message.text);return 'ingress-'+captured.length}}
+  const receiver=createReceiveMessage({manager:{save:async()=>{},lifecycle:{capture:()=>({current:()=>true})}},jobs,view:{},dispatch:message=>dispatched.push(message),hasMedia:()=>false,conversations:{bind:message=>message,realOwners:new Set(['owner'])},runtime:{sealed:false},setupController:{command:()=>null},setupReceipts:{get:()=>null},normalizeVoice:message=>message,classifyMessage:message=>{const value=message._sessionCommand??controlCommand(message.text);return value?{kind:'session',value}:null}})
+  const message={userId:'owner',text:'修复测试',_sessionCommand:{action:'plan',text:'修复测试'},raw:{message_id:'one'}}
   await receiver.captureBatch([message,{userId:'owner',text:'状态',raw:{message_id:'two'}}])
-  assert.deepEqual(captured,['计划 修复测试'])
+  assert.deepEqual(captured,['修复测试'])
   receiver.onMessage(message)
   await new Promise(resolve=>setTimeout(resolve,10))
   assert.equal(dispatched[0]._ingressId,'ingress-2')
@@ -120,9 +123,9 @@ test('plan and review ingress are captured before dispatch and retain their ingr
 
 test('state-changing native controls are captured before cursor checkpoint',async()=>{
   const captured=[]
-  const receiver=createReceiveMessage({manager:{save:async()=>{}},jobs:{capture:message=>captured.push(message.text)},classifyMessage:message=>{const value=controlCommand(message.text);return value?{kind:'session',value}:null}})
-  await receiver.captureBatch(['长任务 修复队列','暂停长任务','分叉会话','压缩上下文','开启快速模式','长任务状态','Codex状态'].map(text=>({text})))
-  assert.deepEqual(captured,['长任务 修复队列','暂停长任务','分叉会话','压缩上下文','开启快速模式'])
+  const receiver=createReceiveMessage({manager:{save:async()=>{}},jobs:{capture:message=>captured.push(message.text)},classifyMessage:message=>{const value=message._sessionCommand??controlCommand(message.text);return value?{kind:'session',value}:null}})
+  await receiver.captureBatch([{text:'修复队列',_sessionCommand:{action:'goal',op:'create',objective:'修复队列'}},...['暂停长任务','分叉会话','压缩上下文','开启快速模式','长任务状态','会话状态'].map(text=>({text}))])
+  assert.deepEqual(captured,['修复队列','暂停长任务','分叉会话','压缩上下文','开启快速模式'])
 })
 
 test('cancelling a task while compaction is active does not submit a turn',async()=>{
@@ -186,9 +189,9 @@ test('fast mode remains explicit after restoring an owned Codex session',async()
   try{
     await f.manager.handle('owner','开启快速模式',f.reply)
     f.manager.state.users.owner.previous=['older']
-    await f.manager.handle('owner','恢复Codex会话 older',f.reply)
+    await f.manager.handle('owner','恢复会话 older',f.reply)
     assert.equal(f.manager.state.users.owner.fastMode,true)
-    await f.manager.handle('owner','计划 检查',f.reply)
+    await sendPrompt(f,'owner','plan','检查')
     assert.equal(f.calls.findLast(c=>c.method==='turn/start').params.serviceTier,'fast')
   }finally{await f.close()}
 })
@@ -196,9 +199,9 @@ test('fast mode remains explicit after restoring an owned Codex session',async()
 test('quoted WeChat plan keeps the referenced message in the durable task',async()=>{
   const submissions=[]
   const manager={owners:new Set(['owner']),sessions:new Map(),state:{users:{owner:{}}},supportsNativeCommands:true,agentName:'Codex',lifecycle:{capture:()=>({current:()=>true})},acceptMessage:async()=>true}
-  const handle=createMessageApplication({view:{context(){},deliver:async()=>{}},manager,jobs:{rawCurrent:()=>true,acknowledge(){},claimReceipt:()=>false},conversations:{recipient:()=> 'owner',control:async()=>false},runtime:{sealed:false,draining:false},log(){},durable:{submit:(...args)=>submissions.push(args)},classifyMessage:message=>({kind:'session',value:controlCommand(message.text)}),hasMedia:()=>false,normalizeVoice:message=>message,quoteInput,systemNotice:value=>value})
+  const handle=createMessageApplication({view:{context(){},deliver:async()=>{}},manager,jobs:{rawCurrent:()=>true,acknowledge(){},claimReceipt:()=>false},conversations:{recipient:()=> 'owner',control:async()=>false},runtime:{sealed:false,draining:false},log(){},durable:{submit:(...args)=>submissions.push(args)},classifyMessage:message=>({kind:'session',value:message._sessionCommand??controlCommand(message.text)}),hasMedia:()=>false,normalizeVoice:message=>message,quoteInput,systemNotice:value=>value})
   const references=[{messageId:'42',text:'原始需求'}]
-  await handle({userId:'owner',text:'计划 修复这个问题',references,raw:{message_id:'43'},_ingressId:'ingress-43'})
+  await handle({userId:'owner',text:'修复这个问题',_sessionCommand:{action:'plan',text:'修复这个问题'},references,raw:{message_id:'43'},_ingressId:'ingress-43'})
   assert.equal(submissions.length,1)
   assert.equal(submissions[0][1].text,'修复这个问题')
   assert.deepEqual(submissions[0][1].references,references)
@@ -207,7 +210,7 @@ test('quoted WeChat plan keeps the referenced message in the durable task',async
 test('replayed native mutation reports unknown outcome without sending the RPC again',async()=>{
   const notices=[],acknowledged=[]
   const manager={owners:new Set(['owner']),sessions:new Map(),state:{users:{owner:{}}},lifecycle:{capture:()=>({current:()=>true})},handle:()=>{throw Error('mutation replayed')}}
-  const handle=createMessageApplication({view:{context(){},deliver:async(_owner,text)=>{notices.push(text);return {status:'accepted'}}},manager,jobs:{rawCurrent:()=>true,acknowledge:ids=>acknowledged.push(...ids)},conversations:{recipient:()=> 'owner'},runtime:{sealed:false,draining:false,track:(_kind,work)=>work()},log(){},classifyMessage:message=>({kind:'session',value:controlCommand(message.text)}),hasMedia:()=>false,normalizeVoice:message=>message})
+  const handle=createMessageApplication({view:{context(){},deliver:async(_owner,text)=>{notices.push(text);return {status:'accepted'}}},manager,jobs:{rawCurrent:()=>true,acknowledge:ids=>acknowledged.push(...ids)},conversations:{recipient:()=> 'owner'},runtime:{sealed:false,draining:false,track:(_kind,work)=>work()},log(){},classifyMessage:message=>({kind:'session',value:message._sessionCommand??controlCommand(message.text)}),hasMedia:()=>false,normalizeVoice:message=>message})
   await handle({userId:'owner',text:'分叉会话',raw:{message_id:'44'},_ingressId:'ingress-44',_recovered:true})
   assert.match(notices[0],/未重复执行/)
   assert.deepEqual(acknowledged,['ingress-44'])

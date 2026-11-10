@@ -1,4 +1,3 @@
-import {homedir as platformHome} from 'node:os'
 import {ffmpegBinary} from './media-binary.mjs'
 import {deliveryError,deliveryFailureState} from '../wechat/delivery-error.mjs'
 import {wechatParts} from '../wechat/text-format.mjs'
@@ -9,7 +8,7 @@ import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import sharp from 'sharp'
 const ffmpeg=ffmpegBinary
-const exec=promisify(execFile),MAX=50*1024*1024,generatedRoot=join(process.env.CODEX_HOME??join((process.env.HOME||platformHome()),'.codex'),'generated_images')
+const exec=promisify(execFile),MAX=50*1024*1024
 const extensions=new Set(['.png','.jpg','.jpeg','.webp','.gif','.mp4','.pdf','.html','.htm','.zip','.txt','.md','.csv','.json','.docx','.xlsx','.pptx','.wav','.mp3','.silk'])
 const inside=(root,path)=>{const rel=relative(root,path);return !/^\.\.[\\/]/.test(rel)&&rel!=='..'&&!isAbsolute(rel)}
 const digest=data=>createHash('sha256').update(data).digest('hex')
@@ -22,7 +21,7 @@ export function outputLinks(text){
  return paths
 }
 export class OutputStore {
- constructor({stateDir,cwd,roots=[resolve(cwd),resolve(cwd,'..'),generatedRoot],fileReader,voiceMode='file'}={}){Object.assign(this,{stateDir,cwd,roots,fileReader,voiceMode})}
+ constructor({stateDir,cwd,generatedRoot=join(stateDir,'codex-home','generated_images'),roots=[resolve(cwd),resolve(cwd,'..'),generatedRoot],fileReader,voiceMode='file'}={}){Object.assign(this,{stateDir,cwd,generatedRoot,roots,fileReader,voiceMode})}
  async package(userId,text,generated=[],signal){
   const candidates=[...generated,...outputLinks(text).map(path=>({path}))]
   if(!candidates.length)return text
@@ -41,7 +40,7 @@ export class OutputStore {
      const start=inside(root.declared,resolve(candidate.path))?root.declared:root.actual
      let checked=start
      for(const part of relative(start,resolve(candidate.path)).split(/[\\/]/).filter(Boolean)){checked=join(checked,part);if((await lstat(checked)).isSymbolicLink())throw Error('EXPORT_PATH_REFUSED')}
-     const actualGenerated=await realpath(generatedRoot).catch(()=>null)
+     const actualGenerated=await realpath(this.generatedRoot).catch(()=>null)
      if((path.split(/[\\/]/).some(part=>part.startsWith('.'))&&!(actualGenerated&&inside(actualGenerated,path)))||/^(?:credentials|secrets?|tokens?|private[-_]key)/i.test(basename(path)))throw Error('EXPORT_PATH_REFUSED')
      // Codex's image output directory is hidden by convention; explicitly allow only that root.
      const info=await stat(path);if(!info.isFile()||info.size>MAX||info.size<1)throw Error('FILE_SIZE_LIMIT')

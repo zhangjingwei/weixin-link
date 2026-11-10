@@ -19,7 +19,7 @@ export function createMessageProcessor(deps) {
     hasMedia: ports.media.has,
     singleMedia: (message, token, mediaDependencies) => singleMedia(message, token, mediaDependencies, mediaMessageContext),
     quoteInput: ports.references.quoteInput,
-    agentReadiness: deps.agentReadiness ?? ports.agent.checkReady({backend: deps.backend, owners: deps.owners, codexAvailability}),
+    agentReadiness: deps.agentReadiness ?? ports.agent.checkReady({backend: deps.backend, owners: deps.owners,codexAvailability:options=>codexAvailability({accountId:deps.accountId,...options})}),
     diagnosticPackage: ports.media.package,
     confirmedRejection: ports.delivery.confirmedRejection,
     systemNotice,

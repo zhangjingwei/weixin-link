@@ -61,7 +61,7 @@ test('second instance cannot replace a live control socket',async()=>{
  }finally{await second.close();await first.close();await rm(dir,{recursive:true,force:true})}
 })
 
-test('backend identity is observable without contaminating numeric idle counters',()=>{const r=new RuntimeControl({backend:{id:'pilot-a',kind:'podman'},ready:()=>true});assert.equal(r.status().backend.id,'pilot-a');assert.equal(r.status().idle,true);assert.deepEqual(r.status().counts,{})});
+test('backend identity is observable without contaminating numeric idle counters',()=>{const r=new RuntimeControl({backend:{id:'host',kind:'host'},ready:()=>true});assert.equal(r.status().backend.id,'host');assert.equal(r.status().idle,true);assert.deepEqual(r.status().counts,{})});
 
 test('retired scheduled delivery endpoints return not found',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'retired-delivery-')),runtime=new RuntimeControl({ready:()=>true}),socket=join(dir,'runtime.sock')

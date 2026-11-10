@@ -7,9 +7,9 @@ import {ChatUpgrader,chatUpgradeCommand,readChatUpgrade,scheduleChatUpgrade} fro
 import {performChatUpgrade,upgradeFailureCode} from '../../src/setup/chat-upgrade-worker.mjs'
 
 const oldCommit='a'.repeat(40),newCommit='b'.repeat(40)
-test('upgrade command matches only exact short or legacy text',()=>{
+test('upgrade command matches only the exact short command',()=>{
  assert.deepEqual(chatUpgradeCommand(' 升级 '),{action:'upgrade'})
- assert.deepEqual(chatUpgradeCommand('升级微信机器人'),{action:'upgrade'})
+ assert.equal(chatUpgradeCommand('升级微信机器人'),null)
  assert.equal(chatUpgradeCommand('帮我升级'),null)
 })
 test('upgrade request checks main release and schedules once without invoking installer',async t=>{

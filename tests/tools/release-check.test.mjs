@@ -10,6 +10,8 @@ test('release refuses nested credentials, SSH keys and account state',()=>{
  for(const path of ['.ssh/config','config-templates/ha.json','workspace/.private/hosts.json','accounts/bot2/account.json','x/credentials.json','x/id_ed25519','x/backup-public.pem','x/state.sqlite-wal','x/.env.production','x/remote-hosts.json','x/integrations.json'])assert.ok(checkReleaseFile(path,Buffer.from('{}')).length,path)
  for(const path of ['accounts.mjs','config-templates/ha.example.json','config-templates/ssh-config.example','config-templates/backup.example.json'])assert.deepEqual(checkReleaseFile(path,Buffer.from('{}')),[],path)
  assert.deepEqual(checkReleaseFile('src/infrastructure/accounts/account-store.mjs',Buffer.from('export const example = true')),[])
+  assert.deepEqual(checkReleaseFile('src/infrastructure/accounts/codex-home.mjs',Buffer.from('export const example = true')),[])
+  assert.deepEqual(checkReleaseFile('src/infrastructure/accounts/provider-profile.mjs',Buffer.from('export const example = true')),[])
  assert.ok(checkReleaseFile('src/infrastructure/accounts/credentials.json',Buffer.from('{}')).some(issue=>issue.code==='PRIVATE_PATH'))
 })
 test('force-added secrets are rejected without exposing their values',()=>{

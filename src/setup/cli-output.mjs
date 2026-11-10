@@ -6,7 +6,7 @@ export function setupMessage(action, result = {}) {
   case 'pair': return result.status === 'already_pairing' ?
    '✓ 登录已在进行，正在获取二维码…' : '✓ 已发起微信登录，正在获取二维码…'
   case 'refresh-qr': return '✓ 登录二维码已刷新。'
-  case 'qr': return '扫码后如手机要求 PIN，请运行 node src/setup/account-manager.mjs verify [账号]，等终端出现输入提示后再输入手机显示的数字。完成后在微信发送「安装状态」继续配置。'
+  case 'qr': return '扫码后如手机要求 PIN，请运行 node src/setup/account-manager.mjs verify [账号]，等终端出现输入提示后再输入手机显示的数字。登录完成后，助手会主动推送安装向导；若未收到，可发送「安装向导」。'
   case 'verify-wait': return result.pin_submitted?'✓ PIN 已提交，微信登录完成。':'✓ 微信登录完成，无需输入 PIN。'
   default: return JSON.stringify(result)
  }

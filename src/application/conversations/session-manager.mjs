@@ -11,7 +11,7 @@ import { randomBytes } from 'node:crypto'
 const goalStatusText=status=>({active:'已启用',paused:'已暂停',complete:'已完成'})[status]??'未知'
 
 export class SessionManager {
-  constructor({ stateDir, cwd, owners, backend = null, sessionProtocol, sessionPorts, completionMarkers = false, scheduleGuidance = '', log = () => {} }) {
+  constructor({ stateDir, cwd, owners, backend = null, codexHome, sessionProtocol, sessionPorts, completionMarkers = false, scheduleGuidance = '', log = () => {} }) {
     if (typeof sessionPorts?.assistantInstructions !== 'string' ||
       ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
     this.ports=sessionPorts
@@ -27,7 +27,7 @@ export class SessionManager {
     this.stateDir = stateDir
     this.cwd = cwd
     this.submissions=null
-    this.outputStore=this.ports.outputStore({stateDir,cwd:backend?.workspace??cwd,fileReader:backend?.fileReader,voiceMode:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1'?'native':'file'})
+    this.outputStore=this.ports.outputStore({stateDir,cwd:backend?.workspace??cwd,generatedRoot:codexHome?join(codexHome,'generated_images'):undefined,fileReader:backend?.fileReader,voiceMode:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1'?'native':'file'})
     this.owners = new Set(owners)
     this.rpcFactory = options => sessionProtocol.createRpc({...options,errorFields:this.ports.errorFields})
     this.scheduleGuidance = scheduleGuidance
@@ -101,7 +101,7 @@ export class SessionManager {
     }
   }
   workspaceFor(userId){return this.state.users[userId]?.workspace??this.cwd}
-  outputStoreFor(userId){return this.state.users[userId]?.workspace?this.ports.outputStore({stateDir:this.stateDir,cwd:this.workspaceFor(userId),voiceMode:this.outputStore.voiceMode}):this.outputStore}
+  outputStoreFor(userId){return this.state.users[userId]?.workspace?this.ports.outputStore({stateDir:this.stateDir,cwd:this.workspaceFor(userId),generatedRoot:this.outputStore.generatedRoot,voiceMode:this.outputStore.voiceMode}):this.outputStore}
   createCatalogRpc(){return this.rpcFactory({cwd:this.cwd,provider:'configured',providerOptions:this.providerOptions(),onEvent:()=>{},onClose:()=>{},log:this.log})}
   providerOptions() {
     return this.protocol.providerOptions()
@@ -163,7 +163,6 @@ export class SessionManager {
     try{attempt.rpc?.close()}catch{}
   }
   async sessionInstructions(userId) {
-    // Local integrations execute in this account's host environment, not a remote/container backend.
     const guidance=this.backend && this.backend.kind !== 'host' ? '' : await this.ports.integrationGuidance({stateDir:this.stateDir})
     const workspaceRules=await this.protocol.workspaceRules(this.workspaceFor(userId))
     return this.instructions+(this.backend?.kind === 'host' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules
@@ -234,13 +233,13 @@ export class SessionManager {
       lines.push(`${index+1}. ${id===session.threadId?'[当前] ':''}${title}（${id}）`)
     }
     this.state.users[userId].conversationChoices=ids;await this.save()
-    await reply('本账号下你的对话（树莓派·微信主助手）：\n'+lines.join('\n')+'\n发送“切换 编号” 继续；也可指定列表中的完整会话ID。')
+    await reply('你保存的会话：\n'+lines.join('\n')+'\n发送“恢复会话 编号”继续；也可使用列表中的完整会话 ID。')
   }
   async resumeConversation(userId,selection,reply,token) {
     if(!selection){await this.listConversations(userId,reply);return}
     const saved=this.state.users[userId]??{},ids=this.conversationIds(userId)
     const id=/^[0-9]+$/.test(selection)?saved.conversationChoices?.[Number(selection)-1]:selection
-    if(!id||!ids.includes(id))throw Error('只能选择本账号下属于你的对话，请先用“列表” 查看。')
+    if(!id||!ids.includes(id))throw Error('只能选择本账号下属于你的会话，请先发送“会话列表”查看。')
     const busy=()=>{const r=this.sessions.get(userId);return r&&(r.busy||r.finishing||r.connecting||r.selecting||r.exiting||r.queue?.length||r.state==='stopping')}
     if(busy()||(this.submissions?.pending?.()??[]).some(j=>j.owner===userId)||this.submissions?.uncertainCount?.(userId))throw Error('仍有执行、排队或未确认任务，请先处理完再切换对话。')
     const session=await this.connect(userId,reply)
@@ -557,7 +556,7 @@ export class SessionManager {
     return true
   }
   async steer(userId, text, reply, token) {
-    if(!text){await reply('用法：补充 内容，例如“补充 先别部署，先给我看效果”。');return}
+    if(!text){await reply('请先发送“补充”，再按提示输入内容。');return}
     const session=this.sessions.get(userId)
     if(!token.current()||!session||session.state!=='running'||session.exited||session.rpc.closed||session.finalReceived||!(session.workToken?.current()??false)){
       await reply('当前没有可接收补充的执行中任务；本条未提交，也未排队。');return
@@ -587,10 +586,10 @@ export class SessionManager {
     try{await this.save()}catch(error){notice+=' 接入层记录保存失败。';this.diagnostic(session,'state.save_failed',this.ports.errorFields(error))}
     await reply(notice)
   }
-  async handle(userId, text, reply, messageId, token = this.lifecycle.capture(userId)) {
+  async handle(userId, text, reply, messageId, token = this.lifecycle.capture(userId), parsedCommand) {
     if (!this.owners.has(userId)) { await reply('当前微信账号未获授权。'); return }
     if (!await this.acceptMessage(userId,messageId)) return
-    const command = typeof text === 'string' ? this.ports.controlCommand(text) : null
+    const command = parsedCommand??(typeof text === 'string' ? this.ports.controlCommand(text) : null)
     if(!command&&!token.current())return
     this.log('message.handled',{userId,messageId,kind:command?.action??(typeof text==='string'?'text':'media')})
     try {
@@ -639,7 +638,7 @@ export class SessionManager {
           const thread=await this.protocol.read(session.rpc,session.threadId)
           if(session.compacting&&!session.compactionStarting&&thread.status?.type!=='active')await this.clearCompaction(session)
           const goal=await this.protocol.goal(session.rpc,session.threadId,{op:'get'})
-          await reply(`Codex 会话：${thread.id}\n状态：${thread.status?.type??'未知'}\n长任务：${goal?goalStatusText(goal.status):'无'}\n上下文压缩：${session.compacting?'进行中或待核对':'无待确认'}\n快速模式：${this.state.users[userId]?.fastMode?'开启':'关闭'}。`);return
+          await reply(`会话：${thread.id}\n状态：${thread.status?.type??'未知'}\n长任务：${goal?goalStatusText(goal.status):'无'}\n上下文压缩：${session.compacting?'进行中或待核对':'无待确认'}\n快速模式：${this.state.users[userId]?.fastMode?'开启':'关闭'}。`);return
         }
         if(command.action==='fast'){
           if(session.busy||session.finishing||session.queue.length)throw Error('请等待当前任务及排队消息结束后再切换快速模式。')
@@ -673,20 +672,43 @@ export class SessionManager {
             const withFork={...saved,previous:[...(saved.previous??[]),id].slice(-20)}
             this.state.users[userId]=withFork
             try{await this.save()}catch(error){this.state.users[userId]=saved;throw Error(`已创建会话 ${id}，但保存归属失败；请在主机核对后恢复。`,{cause:error})}
-            if(!command.switchTo){await reply(`已创建旁支会话 ${id}。当前会话不变；发送“恢复Codex会话 ${id}”可切换。`);return}
+            if(!command.switchTo){await reply(`已创建旁支会话 ${id}。当前会话不变；发送“恢复会话 ${id}”可切换。`);return}
             const resumed=await this.protocol.resume(session.rpc,{threadId:id,cwd:this.workspaceFor(userId),instructions:await this.sessionInstructions(userId),provider:this.providerOptions()})
             if(!token.current())return
             const next={...withFork,threadId:id,previous:[...(saved.previous??[]),sourceId].slice(-20),hasMessages:true}
             this.state.users[userId]=next;session.threadId=id
             try{await this.save()}catch(error){this.state.users[userId]=withFork;session.threadId=sourceId;throw error}
             this.lifecycle.cancel(userId);this.clearQuestions(session);session.items.clear();session.finals=[];session.turnId=null;session.model=resumed.model;session.modelProvider=resumed.modelProvider??session.modelProvider
-            await reply(`已分叉并切换到 Codex 会话 ${id}。`);return
+            await reply(`已分叉并切换到会话 ${id}。`);return
           }finally{session.selecting=false}
         }
         await this.send(session,command.action==='plan'?command.text:'请审查当前工作区变更。',token,command)
         return
       }
-      if (command?.action === 'help') {await reply('微信控制命令（直接发送中文）：\n任务：状态、进度、补充 内容、停止、结果、恢复、退出。\nCodex 原生命令：长任务 目标、长任务状态、暂停长任务、继续长任务、完成长任务、清除长任务；计划 需求、代码审查、代码审查 对比 分支、代码审查 提交 SHA、压缩上下文、分叉会话、旁支会话、Codex状态、开启快速模式、关闭快速模式。\n项目：日常、列表、新建 项目名、切换编号、命名 名称、历史、搜索 关键词、归档编号、还原编号、删除编号。删除会永久移除。\n其他：模型、记忆、开启记忆、关闭记忆；Codex会话列表、恢复Codex会话 编号、重置Codex会话；安装状态、安装向导、重启、升级、诊断、服务状态。远程主机和设备配置直接描述需求。\n收到交互请求时按提示回复“批准 编号”“拒绝 编号”或“回答 编号 答案”。发送“使用说明”查看完整说明。');return}
+      if (command?.action === 'help') {
+        await reply([
+          '微信命令列表：',
+          '【当前任务】',
+          '状态', '进度', '补充', '停止', '结果', '恢复', '退出',
+          '【长任务与计划】',
+          '长任务', '长任务状态', '暂停长任务', '继续长任务', '完成长任务', '清除长任务', '计划',
+          '【代码审查】',
+          '代码审查', '代码审查 对比 分支名', '代码审查 提交 SHA',
+          '【会话】',
+          '会话状态', '会话列表', '恢复会话 编号', '重置会话', '压缩上下文', '分叉会话', '旁支会话',
+          '【项目】',
+          '日常', '列表', '新建', '切换编号', '命名', '历史', '搜索', '归档编号', '还原编号', '删除编号', '当前目录', '新建项目',
+          '【模型与记忆】',
+          '模型', '开启快速模式', '关闭快速模式', '记忆', '开启记忆', '关闭记忆',
+          '【服务】',
+          '安装状态', '安装向导', '退出向导', '重启', '升级', '诊断', '服务状态', '查看最近错误', '导出诊断报告', '安装帮助', '命令列表', '使用说明',
+          '【交互答复】',
+          '批准 编号', '拒绝 编号', '回答 编号 答案',
+          '远程主机和设备配置可以直接描述需求。',
+          '发送“使用说明”查看各命令用途。',
+        ].join('\n'))
+        return
+      }
       const runtime = this.sessions.get(userId)
       if(command?.action==='progress'){
         const queued=(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)
@@ -696,7 +718,7 @@ export class SessionManager {
         await reply(`${label}${queued?`；排队 ${queued} 条`:''}。${latest||(['running','connecting'].includes(state)?'\n尚无新的阶段信息。':'')}`)
         return
       }
-      if (command?.action === 'status') { try{const root=join((process.env.HOME||platformHome()),'.local/share/wechat-assistant-backups');let b;try{b=JSON.parse(await readFile(join(root,'last-failure.json'),'utf8'));await reply('备份：最近一次失败或因忙碌延后，请检查备份服务。')}catch{b=JSON.parse(await readFile(join(root,'latest.json'),'utf8'));await reply(b.status==='verified'?'备份：'+b.generation+'，NAS校验及隔离恢复通过。':'备份：最近一次未验证成功。')}}catch{} const recovery=this.ports.recoveryText(this.state.users[userId]?.recovery);if(recovery)await reply(recovery);await reply(`会话：${this.state.users[userId]?.threadId ?? '尚未创建'}\n状态：${({connecting:'正在连接',idle:'空闲',running:'处理中',stopping:'正在停止',delivering:'正在发送最终回复',closed:'已断开'})[runtime?.state] ?? (runtime?.connecting?'正在连接':runtime?.busy?'处理中':runtime?.finishing?'正在发送最终回复':'空闲')}，排队 ${(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)} 条，待答复 ${[...this.questions.values()].filter(q => q.session.userId === userId).length} 条。\n未确认任务：${this.submissions?.uncertainCount?.(userId)??0} 条，需核对后再决定是否重试。\n目录：${this.workspaceFor(userId)}\n底座：${this.agentName}\n运行环境：${this.backend?.kind==='podman'?'独立容器 '+this.backend.id:'宿主机'}。`); return }
+      if (command?.action === 'status') { try{const root=join((process.env.HOME||platformHome()),'.local/share/wechat-assistant-backups');let b;try{b=JSON.parse(await readFile(join(root,'last-failure.json'),'utf8'));await reply('备份：最近一次失败或因忙碌延后，请检查备份服务。')}catch{b=JSON.parse(await readFile(join(root,'latest.json'),'utf8'));await reply(b.status==='verified'?'备份：'+b.generation+'，NAS校验及隔离恢复通过。':'备份：最近一次未验证成功。')}}catch{} const recovery=this.ports.recoveryText(this.state.users[userId]?.recovery);if(recovery)await reply(recovery);await reply(`会话：${this.state.users[userId]?.threadId ?? '尚未创建'}\n状态：${({connecting:'正在连接',idle:'空闲',running:'处理中',stopping:'正在停止',delivering:'正在发送最终回复',closed:'已断开'})[runtime?.state] ?? (runtime?.connecting?'正在连接':runtime?.busy?'处理中':runtime?.finishing?'正在发送最终回复':'空闲')}，排队 ${(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)} 条，待答复 ${[...this.questions.values()].filter(q => q.session.userId === userId).length} 条。\n未确认任务：${this.submissions?.uncertainCount?.(userId)??0} 条，需核对后再决定是否重试。\n目录：${this.workspaceFor(userId)}\n底座：${this.agentName}\n运行环境：宿主机。`); return }
       if(command?.action==='recover'){
         const n=this.submissions?.recheck?.(userId)??0
         if(n)this.wakeRecovery?.(userId)

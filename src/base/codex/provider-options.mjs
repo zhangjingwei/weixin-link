@@ -10,11 +10,13 @@ export function codexProviderOptions(env = process.env, {prefix = PROVIDER_PREFI
   if (reasoningEffort && !['low','high','max'].includes(reasoningEffort)) throw Error('Invalid Codex reasoning effort')
   const model = value('MODEL')
   const overrides=[]
+  let credentialEnvKey
   if(provider){
     const baseUrl = value('BASE_URL')
     const apiKeyEnv = value('API_KEY_ENV')
     if(!baseUrl?.startsWith('https://'))throw Error('HTTPS Codex provider URL required')
     if(typeof apiKeyEnv!=='string'||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(apiKeyEnv))throw Error('Invalid Codex provider API key environment name')
+    credentialEnvKey=apiKeyEnv
     const values={model,model_provider:provider,model_reasoning_effort:reasoningEffort,
       [`model_providers.${provider}.name`]:provider,
       [`model_providers.${provider}.base_url`]:baseUrl,
@@ -32,6 +34,8 @@ export function codexProviderOptions(env = process.env, {prefix = PROVIDER_PREFI
       ...(provider ? {modelProvider: provider} : {}),
       ...(reasoningEffort ? {reasoningEffort} : {})},
     provider: provider || null,
+    credentialEnvKey,
+    credentialReady: !provider || Boolean(env[credentialEnvKey]?.trim()),
     prefix,
   }
 }

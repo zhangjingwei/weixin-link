@@ -51,7 +51,6 @@ async function probeConfiguration(kind,config,{home=currentHome(),env=process.en
   }else if(kind==='installation'){
    if(!(await stat(config.workspace)).isDirectory())throw Error()
    await access(config.workspace,fsConstants.W_OK)
-   if(config.codexBinary){const {stdout}=await exec(config.codexBinary,['--version'],{timeout:10000,maxBuffer:65536});if(!/^codex(?:-cli)?\s+\d+\.\d+/i.test(stdout.trim()))throw Error()}
   }
  }catch(error){if(error instanceof ConfigError)throw error;throw new ConfigError('CONFIG_CONNECTION_CHECK_FAILED',kind)}
 }
@@ -80,7 +79,7 @@ export async function configure(kind,input,{home=currentHome(),workspace,env=pro
  result=await write()
  let guidance
  if(kind==='installation'){
-  try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:config.codexBinary??findCodex(home)})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
+  try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:findCodex(home)})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
  }
  return {kind,version:config.version,verified:kind!=='remote-hosts',written:true,...result,effective:kind==='installation'?'next_service_start':'next_operation',...(guidance?{guidance}:{}),restartRequired:kind==='installation'}
 }

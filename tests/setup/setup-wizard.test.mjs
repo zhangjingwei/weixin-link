@@ -5,16 +5,47 @@ import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {InstallationWizard} from '../../src/setup/setup-wizard.mjs'
 import {SetupController} from '../../src/setup/setup-controller.mjs'
-async function fixture(t,{installed=false,loggedIn=false,backend={kind:'host'}}={}){const stateDir=await mkdtemp(join(tmpdir(),'numeric-wizard-'));t.after(()=>rm(stateDir,{recursive:true,force:true}));const calls=[],out=[],status={installed,loggedIn};const ops={availability:async()=>({...status}),manual:async r=>r('manual'),bindingStatus:async()=> 'waiting_idle',errorText:()=> '可重试',perform:async(name)=>{calls.push(name);if(name==='install')status.installed=true;if(name==='login')status.loggedIn=true;return {backend:'agent-test'}}};const w=new InstallationWizard({stateDir,backend,ops});await w.ready;const reply=async s=>out.push(s);const click=async(n,owner='u')=>{const command=w.route(n,owner);assert(command);const [,revision,value]=command.split(':');return w.choice(owner,revision,value,reply)};return {w,ops,status,stateDir,calls,out,reply,click}}
-test('ordinary numeric messages are not intercepted outside an active wizard',async t=>{const f=await fixture(t);assert.equal(f.w.route('1','u'),null);await f.w.start('u',f.reply);assert(f.w.route('1','u'));assert.equal(f.w.route('1','other'),null);assert.equal(f.w.route('计算1+2','u'),null);await f.click('3');assert.equal(f.w.route('1','u'),null)})
-test('host path advances using digits only and exits only after a successful real model test',async t=>{const f=await fixture(t);await f.w.start('u',f.reply);await f.click('1');assert.equal(f.w.states.get('u').phase,'install');await f.click('1');assert.equal(f.w.states.get('u').phase,'login');await f.click('1');assert.equal(f.w.states.get('u').phase,'verify');await f.click('1');assert.equal(f.w.states.get('u').phase,'modelTest');await f.click('1');assert.equal(f.w.states.get('u').active,false);assert.deepEqual(f.calls,['install','login','check','modelTest'])})
-test('already installed and logged-in host skips installation and login',async t=>{const f=await fixture(t,{installed:true,loggedIn:true});await f.w.start('u',f.reply);await f.click('1');assert.equal(f.w.states.get('u').phase,'verify');assert.deepEqual(f.calls,[])})
-test('stale queued digit cannot trigger an action belonging to the next screen',async t=>{const f=await fixture(t,{installed:true,loggedIn:true});await f.w.start('u',f.reply);const stale=f.w.route('1','u').split(':');await f.click('1');await f.w.choice('u',stale[1],stale[2],f.reply);assert.deepEqual(f.calls,[]);assert(f.out.at(-1).includes('步骤已变化'))})
-test('active step survives a restart and unfinished writes require readback rather than automatic replay',async t=>{const f=await fixture(t);await f.w.start('u',f.reply);await f.click('1');const s=f.w.states.get('u');s.running=true;s.lastOperation='install';await f.w.save(s);const resumed=new InstallationWizard({stateDir:f.stateDir,backend:{kind:'host'},ops:f.ops});await resumed.ready;await resumed.start('u',f.reply);assert.equal(resumed.states.get('u').phase,'recovery');assert.deepEqual(f.calls,[]);assert(resumed.route('1','u'))})
-test('container switching remains pending until the actual backend changes',async t=>{const f=await fixture(t);await f.w.start('u',f.reply);for(const n of ['2','1','1','1'])await f.click(n);assert.deepEqual(f.calls,['containerCreate','containerLogin','containerBind']);assert.equal(f.w.states.get('u').phase,'binding');await f.click('1');assert.equal(f.w.states.get('u').phase,'binding');f.w.backend={kind:'podman',id:'agent-test'};await f.click('1');assert.equal(f.w.states.get('u').phase,'verify')})
-test('failed model test stays retryable and does not claim completion',async t=>{const f=await fixture(t,{installed:true,loggedIn:true});f.ops.perform=async()=>{throw Error('inference failed')};await f.w.start('u',f.reply);const s=f.w.states.get('u');s.phase='modelTest';await f.w.save(s);await f.click('1');assert.equal(s.active,true);assert.equal(s.phase,'modelTest');assert(!f.out.at(-1).includes('已确认本次推理成功'))})
-test('invalid choice stays in the wizard, and state never stores device login prompts',async t=>{const f=await fixture(t);await f.w.start('u',f.reply);await f.click('8');assert(f.out.at(-1).includes('请选择 1、2 或 3'));for(const file of await readdir(join(f.stateDir,'installation-wizard')))assert(!String(await readFile(join(f.stateDir,'installation-wizard',file))).includes('验证码'))})
-test('controller supports digit 3 cancelling an in-flight install without leaving wizard active',async t=>{const dir=await mkdtemp(join(tmpdir(),'wizard-cancel-'));t.after(()=>rm(dir,{recursive:true,force:true}));let started;const ready=new Promise(r=>started=r);const c=await new SetupController({stateDir:dir,home:dir,accountId:'account',backend:{kind:'host'},runDoctor:async()=>({codexInstalled:false,codexLoggedIn:false}),runInstall:async({signal})=>new Promise((resolve,reject)=>{started();signal.addEventListener('abort',()=>reject(Error('SETUP_CANCELLED')),{once:true})})}).init();const out=[],reply=async s=>out.push(s),options={scope:'u'};await c.handle('wizard',reply,options);await c.handle(c.command('1','u'),reply,options);const pending=c.handle(c.command('1','u'),reply,options);await ready;await c.handle(c.command('3','u'),reply,options);await pending;assert.equal(c.wizard.states.get('u').active,false);assert.equal(c.busy,false)})
-test('an active wizard does not intercept numeric chat in another Codex conversation',async t=>{const f=await fixture(t);await f.w.start('u',f.reply,{executionKey:'conversation-a'});assert(f.w.route('1','u','conversation-a'));assert.equal(f.w.route('1','u','conversation-b'),null);await f.w.start('u',f.reply,{executionKey:'conversation-b'});assert(f.w.route('1','u','conversation-b'));assert.equal(f.w.route('1','u','conversation-a'),null)})
-test('exit invokes pending switch cancellation and discloses an already submitted switch',async t=>{const f=await fixture(t);let cancelled;f.ops.cancelBinding=async owner=>{cancelled=owner;return 'committing'};await f.w.start('u',f.reply);await f.click('3');assert.equal(cancelled,'u');assert.match(f.out.at(-1),/已经提交/);assert.equal(f.w.states.get('u').active,false)})
-test('container creation crash recovers target from registry without creating again',async t=>{const f=await fixture(t);await f.w.start('u',f.reply);const s=f.w.states.get('u');Object.assign(s,{mode:'container',phase:'containerConfig',running:true,lastOperation:'containerCreate'});await f.w.save(s);f.ops.containerReadback=async()=> 'agent-recovered';await f.w.start('u',f.reply);await f.click('1');assert.equal(s.target,'agent-recovered');assert.equal(s.phase,'containerLogin');assert.deepEqual(f.calls,[])})
+
+async function fixture(t,status={installed:true,loggedIn:false,profileKind:null,activeKind:'subscription'}){
+ const stateDir=await mkdtemp(join(tmpdir(),'numeric-wizard-'));t.after(()=>rm(stateDir,{recursive:true,force:true}))
+ const calls=[],out=[],ops={availability:async()=>({...status}),manual:async reply=>reply('manual'),errorText:()=> '可重试',perform:async name=>{calls.push(name);if(name==='login')status.loggedIn=true}}
+ const w=new InstallationWizard({stateDir,ops});await w.ready
+ const reply=async text=>out.push(text),click=async(n,owner='u')=>{const command=w.route(n,owner);assert(command);const [,revision,value]=command.split(':');return w.choice(owner,revision,value,reply)}
+ return {w,ops,status,stateDir,calls,out,reply,click}
+}
+
+test('first push offers three model access methods and leaves ordinary numbers alone after exit',async t=>{
+ const f=await fixture(t);assert.equal(f.w.route('1','u'),null)
+ await f.w.start('u',f.reply);assert.match(f.out.at(-1),/1\. 订阅登录[\s\S]*2\. 配置 DeepSeek[\s\S]*3\. 配置 Qwen/)
+ await f.click('3');assert.equal(f.w.states.get('u').provider,'qwen')
+ await f.w.exit('u',f.reply);assert.equal(f.w.route('1','u'),null)
+})
+test('subscription path logs in and checks before real model test',async t=>{
+ const f=await fixture(t);await f.w.start('u',f.reply);await f.click('1');assert.equal(f.w.states.get('u').phase,'subscription')
+ await f.click('1');assert.equal(f.w.states.get('u').phase,'modelTest');await f.click('1')
+ assert.equal(f.w.states.get('u').active,false);assert.deepEqual(f.calls,['login','check','modelTest'])
+})
+test('configured third-party path requires active service restart and never calls device login',async t=>{
+ const f=await fixture(t);await f.w.start('u',f.reply);await f.click('2');assert.equal(f.w.states.get('u').phase,'provider')
+ assert.match(f.out.at(-1),/provider-config deepseek/);assert.match(f.out.at(-1),/不要发送到微信/)
+ f.status.profileKind='deepseek';await f.click('1');assert.equal(f.w.states.get('u').phase,'provider');assert.match(f.out.at(-1),/重启/)
+ f.status.activeKind='deepseek';await f.click('1');assert.equal(f.w.states.get('u').phase,'modelTest');assert.deepEqual(f.calls,[])
+})
+test('stale digit cannot be applied to next screen',async t=>{const f=await fixture(t);await f.w.start('u',f.reply);const stale=f.w.route('1','u').split(':');await f.click('1');await f.w.choice('u',stale[1],stale[2],f.reply);assert.deepEqual(f.calls,[]);assert.match(f.out.at(-1),/步骤已变化/)})
+test('restart does not repeat an unfinished operation or persist credentials',async t=>{
+ const f=await fixture(t);await f.w.start('u',f.reply);await f.click('1')
+ const s=f.w.states.get('u');s.running=true;s.lastOperation='login';await f.w.save(s)
+ const resumed=new InstallationWizard({stateDir:f.stateDir,ops:f.ops});await resumed.ready;await resumed.start('u',f.reply)
+ assert.equal(resumed.states.get('u').phase,'recovery');assert.deepEqual(f.calls,[])
+ for(const file of await readdir(join(f.stateDir,'installation-wizard')))assert(!String(await readFile(join(f.stateDir,'installation-wizard',file))).includes('API Key'))
+})
+test('failed model test stays retryable',async t=>{const f=await fixture(t,{installed:true,loggedIn:true,profileKind:null,activeKind:'subscription'});f.ops.perform=async()=>{throw Error('inference failed')};await f.w.start('u',f.reply);await f.click('1');await f.click('1');assert.equal(f.w.states.get('u').phase,'modelTest');await f.click('1');assert.equal(f.w.states.get('u').active,true)})
+test('exit command cancels an in-flight subscription login',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'wizard-cancel-'));t.after(()=>rm(dir,{recursive:true,force:true}))
+ let started;const ready=new Promise(resolve=>started=resolve)
+ const c=await new SetupController({stateDir:dir,home:dir,accountId:'default',runDoctor:async()=>({codexInstalled:true,codexLoggedIn:false}),runLogin:async({signal})=>new Promise((resolve,reject)=>{started();signal.addEventListener('abort',()=>reject(Error('SETUP_CANCELLED')),{once:true})})}).init()
+ const out=[],reply=async text=>out.push(text),options={scope:'u'};await c.handle('wizard',reply,options);await c.handle(c.command('1','u'),reply,options)
+ const pending=c.handle(c.command('1','u'),reply,options);await ready;await c.handle('wizardExit',reply,options);await pending
+ assert.equal(c.wizard.states.get('u').active,false);assert.equal(c.busy,false)
+})
+test('wizard digits are scoped to the opening conversation',async t=>{const f=await fixture(t);await f.w.start('u',f.reply,{executionKey:'a'});assert(f.w.route('1','u','a'));assert.equal(f.w.route('1','u','b'),null);await f.w.start('u',f.reply,{executionKey:'b'});assert(f.w.route('1','u','b'))})

@@ -6,6 +6,8 @@
 accounts/** export-ignore
 **/accounts/** export-ignore
 src/infrastructure/accounts/account-store.mjs -export-ignore
+src/infrastructure/accounts/codex-home.mjs -export-ignore
+src/infrastructure/accounts/provider-profile.mjs -export-ignore
 outputs export-ignore
 **/outputs export-ignore
 attachments export-ignore

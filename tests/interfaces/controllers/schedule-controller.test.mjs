@@ -33,7 +33,7 @@ test('schedule controller routes due reminders to the presenter and tasks to the
   controller.close()
 })
 
-test('scheduled tasks enter the same queue for a container backend', async t => {
+test('scheduled tasks enter the account queue', async t => {
   const stateDir = await mkdtemp(join(tmpdir(), 'schedule-controller-'))
   t.after(() => rm(stateDir, {recursive: true, force: true}))
   let now = Date.parse('2026-11-06T12:00:00Z')
@@ -43,7 +43,7 @@ test('scheduled tasks enter the same queue for a container backend', async t => 
     manager: {sessions: new Map([['alice', {userId: 'alice', threadId: 'thread-alice'}]])},
     conversations: {recipient: key => key, realOwners: new Set(['alice']), entry: key => ({owner: key})},
     enqueueTask: (...args) => {submissions.push(args); return 'queued-codex'},
-    backend: {kind: 'podman'}, view: {notice: () => {throw Error('must not notify')}}, log: () => {},
+    backend: {kind: 'host'}, view: {notice: () => {throw Error('must not notify')}}, log: () => {},
   })
   await controller.onRequest({action: 'create', threadId: 'thread-alice', kind: 'task', at: new Date(now + 1000).toISOString(), text: 'x'})
   now += 1000

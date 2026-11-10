@@ -29,3 +29,10 @@ test('real stdio transport uses the configured executable and preserves protocol
  try{const result=await rpc.request('fs/getMetadata',{path:'/explicit/local/path'});assert.equal(result.target,'stdio-child');assert.equal(result.params.path,'/explicit/local/path');assert.notEqual(rpc.child.pid,process.pid)}
  finally{const stopped=once(rpc.child,'close');rpc.close();await stopped}
 })
+test('local app-server child receives the account Codex home instead of the user home',async()=>{
+ const script="require('node:readline').createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);if(m.id!==undefined)process.stdout.write(JSON.stringify({id:m.id,result:{codexHome:process.env.CODEX_HOME}})+'\\n')})"
+ const codexHome='/tmp/weixin-link-account-codex-home'
+ const rpc=new CodexRpc({binary:process.execPath,codexHome,providerOptions:{args:['-e',script],thread:{}},cwd:process.cwd()})
+ try{assert.equal((await rpc.request('test',{})).codexHome,codexHome)}
+ finally{const stopped=once(rpc.child,'close');rpc.close();await stopped}
+})

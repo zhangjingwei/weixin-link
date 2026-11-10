@@ -6,9 +6,7 @@ import {recoverFailedFinal} from '../notifications/failed-final-recovery.mjs'
 import {nativeCommandKind} from './native-command-kind.mjs'
 
 const READINESS_NOTICE = {
-  CONTAINER_NOT_READY: '微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。',
   CODEX_NOT_INSTALLED: '微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。',
-  CODEX_NOT_LOGGED_IN: '微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。',
 }
 
 export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,confirmedRejection,deferMaintenance,systemNotice,diagnosticServices,diagnosticService}){
@@ -89,7 +87,7 @@ return async function handleMessage(message) {
     durable.submit(message.userId,{...(typeof input==='string'?{text:input}:input),nativeCommand:control,traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
     return
   }
-  if(control){await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token);if(nativeKind==='mutation')jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  if(control){await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token,control);if(nativeKind==='mutation')jobs.acknowledge([message._ingressId].filter(Boolean));return}
   try {
     const current=()=>token.current()
     if(!current()){log('message.cancelled',{trace_id,userId:message.userId,reason:'control_cancelled'});return}

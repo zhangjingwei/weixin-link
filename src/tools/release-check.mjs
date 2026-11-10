@@ -4,11 +4,11 @@ import {fileURLToPath} from 'node:url'
 import {resolve} from 'node:path'
 const privateParts=new Set(['.ssh','.private','.codex','.config','.local','accounts','attachments','outputs','backups','logs','node_modules'])
 const privateNames=new Set(['ha.json','backup.json','monitor.json','credentials.json','account.json','account-identity.json','codex-owners.json','codex-sessions.json','remote-sessions.json','remote-hosts.json','targets.json','installation.json','integrations.json','notification-jobs.json','runtime.sock','wechat_hosts_config','known_hosts','authorized_keys'])
-const accountStore='src/infrastructure/accounts/account-store.mjs'
+const sourceAccountModules=new Set(['src/infrastructure/accounts/account-store.mjs','src/infrastructure/accounts/codex-home.mjs','src/infrastructure/accounts/provider-profile.mjs'])
 export function checkReleaseFile(path,bytes,mode='100644'){
  const parts=path.replaceAll('\\','/').split('/'),name=parts.at(-1),issues=[]
- const sourceAccountStore=path===accountStore
- if((!sourceAccountStore&&parts.some(p=>privateParts.has(p)))||privateNames.has(name)||/^\.env(?:\.|$)/.test(name)||/^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:\.|$)|.*\.(?:pem|key|p12|pfx|sqlite|sqlite3|db)(?:-wal|-shm)?$|.*\.local\.(?:json|md)$)/i.test(name))issues.push('PRIVATE_PATH')
+ const sourceAccountModule=sourceAccountModules.has(path)
+ if((!sourceAccountModule&&parts.some(p=>privateParts.has(p)))||privateNames.has(name)||/^\.env(?:\.|$)/.test(name)||/^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:\.|$)|.*\.(?:pem|key|p12|pfx|sqlite|sqlite3|db)(?:-wal|-shm)?$|.*\.local\.(?:json|md)$)/i.test(name))issues.push('PRIVATE_PATH')
  if(mode==='120000')issues.push('SYMLINK_NOT_ALLOWED_IN_RELEASE')
  const text=bytes.toString('utf8')
  if(/-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/.test(text))issues.push('PRIVATE_KEY')
@@ -21,18 +21,21 @@ export function checkIndex(cwd=process.cwd()){
  const git=args=>execFileSync('git',args,{cwd,maxBuffer:64*1024*1024})
  const rows=git(['ls-files','--stage','-z']).toString().split('\0').filter(Boolean),issues=[]
  for(const row of rows){const [meta,path]=row.split('\t'),[mode,oid,stage]=meta.split(' ');if(stage!=='0'){issues.push({path,code:'UNMERGED_FILE'});continue}issues.push(...checkReleaseFile(path,git(['cat-file','blob',oid]),mode))}
- if(rows.some(row=>row.endsWith('\t'+accountStore))&&!issues.some(issue=>issue.code==='UNMERGED_FILE')){
+ if(!issues.some(issue=>issue.code==='UNMERGED_FILE')){
   const tree=git(['write-tree']).toString().trim()
-  const archive=git(['archive','--format=tar',tree,accountStore])
-  let included=false
-  for(let offset=0;offset<archive.length;){
-   const header=archive.subarray(offset,offset+512)
-   if(!header[0])break
-   if(header.subarray(0,100).toString('utf8').split('\0')[0]===accountStore){included=true;break}
-   const size=Number.parseInt(header.subarray(124,136).toString('ascii').trim(),8)
-   offset+=512+Math.ceil(size/512)*512
+  for(const path of sourceAccountModules){
+   if(!rows.some(row=>row.endsWith('\t'+path)))continue
+   const archive=git(['archive','--format=tar',tree,path])
+   let included=false
+   for(let offset=0;offset<archive.length;){
+    const header=archive.subarray(offset,offset+512)
+    if(!header[0])break
+    if(header.subarray(0,100).toString('utf8').split('\0')[0]===path){included=true;break}
+    const size=Number.parseInt(header.subarray(124,136).toString('ascii').trim(),8)
+    offset+=512+Math.ceil(size/512)*512
+   }
+   if(!included)issues.push({path,code:'ARCHIVE_MISSING_REQUIRED_FILE'})
   }
-  if(!included)issues.push({path:accountStore,code:'ARCHIVE_MISSING_REQUIRED_FILE'})
  }
  return {checked:rows.length,issues}
 }

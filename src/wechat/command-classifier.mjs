@@ -14,8 +14,8 @@ export function createCommandClassifier() {
     setup: message => message._setupAction,
     agent: (_message, text) => agentSwitchCommand(text),
     upgrade: (_message, text) => chatUpgradeCommand(text),
-    conversation: (_message, text) => conversationCommand(text),
-    session: (_message, text) => controlCommand(text),
+    conversation: (message, text) => Object.hasOwn(message,'_conversationCommand')?message._conversationCommand:conversationCommand(text),
+    session: (message, text) => message._sessionCommand??controlCommand(text),
   }
   return message => messageIntent(message, parsers)
 }

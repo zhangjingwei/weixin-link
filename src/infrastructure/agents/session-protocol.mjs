@@ -7,9 +7,9 @@ import {nativeMemoryConfig,enableThreadMemory,publicMemoryText} from '../../base
 const clientInfo={name:'wechat_codex',title:'WeChat',version:'3.0.0'}
 
 // SessionManager depends on this narrow agent protocol, not on either wire format.
-export function createSessionProtocol({rpcFactory,providerEnv=process.env,codexBinary}={}){
+export function createSessionProtocol({rpcFactory,providerEnv=process.env,providerSecrets={},codexBinary,codexHome}={}){
  const factory=rpcFactory??(options=>new CodexRpc(options))
- const providerOptions=()=>codexProviderOptions(providerEnv)
+ const providerOptions=()=>codexProviderOptions({...providerEnv,...providerSecrets})
  const params=({cwd,instructions,provider})=>({config:nativeMemoryConfig,sandbox:'danger-full-access',approvalPolicy:'never',cwd,developerInstructions:instructions,...provider.thread})
  const verify=result=>{
   if(!result?.thread?.id)throw Error('底座未确认会话标识。')
@@ -24,7 +24,7 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,codexB
  }
  return {
   name:'Codex',kind:'codex',supportsMemory:true,supportsModels:true,supportsNativeCommands:true,providerOptions,
-  createRpc:options=>factory({...options,binary:options.binary??codexBinary?.()}),
+  createRpc:options=>factory({...options,binary:options.binary??codexBinary?.(),codexHome,providerSecrets}),
   input:codexInput,
   eventCode:providerEventCode,
   cleanOutputText:publicMemoryText,

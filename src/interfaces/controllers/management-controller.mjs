@@ -1,7 +1,7 @@
 import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 
-/** Management commands from WeChat. Installation, backend switching and
- * upgrades remain outside the ordinary model task queue.
+/** Management commands from WeChat. Installation and upgrades remain outside
+ * the ordinary model task queue.
  */
 export function createManagementController({manager, jobs, runtime, setupReceipts, setupController, agentSwitcher, upgrader, view, log}) {
   const acknowledge = message => jobs.acknowledge([message._ingressId].filter(Boolean))

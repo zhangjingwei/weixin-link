@@ -53,7 +53,7 @@ test('inbound trace is retained through message logging and durable submission',
  assert.equal(f.submitted[0][1].traceId,'message-trace-123')
 })
 test('diagnostic controls bypass missing model/backend and never submit inference',async()=>{
- const f=fixture();f.deps.stateDir='/nonexistent-wechat-diagnostic-test';f.deps.manager.sessions.clear();f.deps.backend.kind='podman';f.deps.backend.preflight=()=>{throw Error('must not invoke backend')};f.deps.runtime.track=async(kind,fn)=>fn()
+ const f=fixture();f.deps.stateDir='/nonexistent-wechat-diagnostic-test';f.deps.manager.sessions.clear();f.deps.backend.kind='remote';f.deps.backend.preflight=()=>{throw Error('must not invoke backend')};f.deps.runtime.track=async(kind,fn)=>fn()
  await f.handle({userId:'owner',text:'查看最近错误',_ingressId:'diagnostic-id'})
  assert.equal(f.submitted.length,0);assert.deepEqual(f.acked,['diagnostic-id']);assert.equal(f.sent.length,1);assert.match(f.sent[0][1],/诊断日志|诊断未完成/)
 })
@@ -128,7 +128,7 @@ test('explicit setup commands continue without a duplicate welcome',async()=>{
 
 test('voice status bypasses unavailable model and stop bypasses maintenance gating',async()=>{
  const f=fixture(),handled=[]
- f.deps.manager.sessions.clear();f.deps.backend.kind='podman';f.deps.backend.preflight=()=>{throw Error('must not preflight')}
+ f.deps.manager.sessions.clear();f.deps.backend.kind='remote';f.deps.backend.preflight=()=>{throw Error('must not preflight')}
  f.deps.manager.acceptMessage=async()=>true;f.deps.manager.handle=async(owner,text)=>handled.push([owner,text])
  f.handle=createMessageProcessor(f.deps)
  const voice=text=>({userId:'owner',type:'voice',text:'[voice]',voices:[{text}],_ingressId:text,raw:{item_list:[{voice_item:{text}}]}})

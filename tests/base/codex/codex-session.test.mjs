@@ -22,11 +22,8 @@ test('custom provider profile overrides resumed model and disables unsupported s
 
 test('only session controls are intercepted; business requests go to Codex verbatim', () => {
   assert.equal(controlCommand('停止').action, 'stop')
-  assert.equal(controlCommand('关闭 codex').action, 'exit')
-  assert.equal(controlCommand('停止当前任务').action, 'stop')
-  assert.equal(controlCommand('进度如何了').action, 'progress')
-  assert.equal(controlCommand('进度如何了？').action, 'progress')
-  assert.equal(controlCommand('现在到哪一步了').action, 'progress')
+  assert.equal(controlCommand('进度').action, 'progress')
+  assert.equal(controlCommand('进度？').action, 'progress')
   assert.equal(controlCommand('命令列表').action,'help')
   assert.deepEqual(controlCommand('批准 abc123'),{action:'approval',accept:true,code:'abc123'})
   assert.deepEqual(controlCommand('回答 abc123 内容'),{action:'answer',code:'abc123',text:'内容'})
@@ -89,7 +86,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     assert.ok(output.includes('正在检查项目配置。'))
     assert.equal(replyOptions.at(-1).traceId,'known-trace-123')
     const callsBeforeProgress=first.calls.length
-    await manager.handle('owner', '进度如何了', reply, 3)
+    await manager.handle('owner', '进度', reply, 3)
     assert.match(output.at(-1), /正在处理[\s\S]*最近进展：正在检查项目配置。/)
     assert.equal(first.calls.length,callsBeforeProgress)
     assert.equal(manager.sessions.get('owner').queue.length,0)
@@ -130,7 +127,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     assert.ok(second.calls.some(c => c.method === 'thread/resume' && c.params.threadId === 'thread-1'))
     await complete(second, '', 'failed')
     assert.ok(output.some(text => text.includes('任务失败：test failure')))
-    await manager.handle('owner', '重置Codex会话', reply)
+    await manager.handle('owner', '重置会话', reply)
     assert.equal(manager.state.users.owner.threadId, 'thread-2')
     assert.deepEqual(manager.state.users.owner.previous, ['thread-1'])
     await manager.handle('owner', '这个任务应被关闭', reply)
@@ -237,7 +234,7 @@ test('state persistence failure does not suppress final delivery or leave the se
 })
 
 test('status and models are explicit controls; commands with other arguments remain user text',()=>{
- for(const input of ['状态','任务状态'])assert.equal(controlCommand(input).action,'status')
+ assert.equal(controlCommand('状态').action,'status');assert.equal(controlCommand('任务状态'),null)
  for(const input of ['/states','/state','/codex states'])assert.equal(controlCommand(input),null)
  assert.equal(controlCommand('模型').action,'models');assert.equal(controlCommand('/codex models'),null);assert.equal(controlCommand('/models extra'),null)
 })
@@ -251,7 +248,7 @@ test('models failures do not fabricate a catalogue or launch model inference',as
 })
 test('stop clears queued instructions during final delivery; status/new reflect finishing state',async()=>{
  const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={};const s={userId:'owner',threadId:'thread',busy:false,finishing:true,queue:['queued'],rpc:{closed:false,close(){throw Error('must not close during final delivery')}}};manager.sessions.set('owner',s)
- await manager.handle('owner','停止',async text=>output.push(text));assert.equal(s.queue.length,0);assert.ok(output.at(-1).includes('已清空'));await manager.handle('owner','状态',async text=>output.push(text));assert.ok(output.at(-1).includes('正在发送最终回复'));await manager.handle('owner','重置Codex会话',async text=>output.push(text));assert.ok(output.at(-1).includes('仍在发送'))
+ await manager.handle('owner','停止',async text=>output.push(text));assert.equal(s.queue.length,0);assert.ok(output.at(-1).includes('已清空'));await manager.handle('owner','状态',async text=>output.push(text));assert.ok(output.at(-1).includes('正在发送最终回复'));await manager.handle('owner','重置会话',async text=>output.push(text));assert.ok(output.at(-1).includes('仍在发送'))
 })
 test('partial answers do not suppress the final answer or intervening tool events',async()=>{
  const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={};const s={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>output.push(text)}
@@ -310,7 +307,7 @@ test('reset invalidates connecting session even when closing the process is asyn
  let release,count=0;const calls=[]
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>{const n=++count;return {closed:false,write(){},close(){},async request(method){calls.push([n,method]);if(method==='initialize'){if(n===1)await new Promise(r=>{release=r});return {}}if(method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'new-thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};throw Error('unexpected inference')}}}});manager.save=async()=>{}
  const old=manager.handle('owner','old work',async()=>{});await new Promise(r=>setImmediate(r))
- await manager.handle('owner','重置Codex会话',async()=>{});release();await old
+ await manager.handle('owner','重置会话',async()=>{});release();await old
  assert.ok(!calls.some(([n,m])=>n===1&&m==='thread/start'));assert.ok(!calls.some(([,m])=>m==='turn/start'));assert.equal(manager.sessions.get('owner').threadId,'new-thread');manager.close()
 })
 test('all pre-stop connecting messages are cancelled; a later message still starts',async()=>{
@@ -338,7 +335,7 @@ test('rejected new conversation does not cancel current work or pending attachme
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{}
  const token=manager.lifecycle.capture('owner');let cancelled=false;manager.lifecycle.onCancel(()=>{cancelled=true})
  manager.sessions.set('owner',{userId:'owner',busy:true,queue:['retained'],rpc:{closed:false}})
- const output=[];await manager.handle('owner','重置Codex会话',async t=>output.push(t));assert.equal(token.current(),true);assert.equal(cancelled,false);assert.deepEqual(manager.sessions.get('owner').queue,['retained']);assert.ok(output[0].includes('停止'))
+ const output=[];await manager.handle('owner','重置会话',async t=>output.push(t));assert.equal(token.current(),true);assert.equal(cancelled,false);assert.deepEqual(manager.sessions.get('owner').queue,['retained']);assert.ok(output[0].includes('停止'))
 })
 
 test('deltas are silent and authoritative final text is delivered once',async()=>{

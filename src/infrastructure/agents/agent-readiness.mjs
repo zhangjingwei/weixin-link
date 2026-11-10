@@ -3,14 +3,9 @@
  */
 export function createAgentReadiness({backend, owners, codexAvailability}) {
   return async () => {
-    if (backend.kind === 'podman') {
-      try { await backend.preflight(owners) } catch { return 'CONTAINER_NOT_READY' }
-      return null
-    }
     if (backend.kind === 'host') {
-      const ready = await codexAvailability()
+      const ready = await codexAvailability({checkLogin:false})
       if (!ready.installed) return 'CODEX_NOT_INSTALLED'
-      if (!ready.loggedIn) return 'CODEX_NOT_LOGGED_IN'
     }
     return null
   }

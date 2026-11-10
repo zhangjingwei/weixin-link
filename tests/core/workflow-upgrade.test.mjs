@@ -6,7 +6,7 @@ import {join} from 'node:path'
 import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 import {CancellationScopes} from '../../src/infrastructure/runtime/cancellation-scopes.mjs'
 import {bindNewWorkspace} from '../../src/application/conversations/workspace.mjs'
-import {conversationCommand} from '../../src/interfaces/wechat/conversation-command.mjs'
+import {conversationCommand,conversationInput} from '../../src/interfaces/wechat/conversation-command.mjs'
 import {SessionManager} from '../../src/wechat/session-manager.mjs'
 import {OutputStore,OutputTransport} from '../../src/infrastructure/media/outbound-media.mjs'
 async function fixture(t){const dir=await mkdtemp(join(tmpdir(),'workflow-test-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir}
@@ -15,7 +15,8 @@ test('workspace binding validates existing paths, is immutable after connection 
  const dir=await fixture(t),project=join(dir,'project');await mkdir(project)
  const manager=await new SessionManager({stateDir:join(dir,'state'),cwd:dir,owners:['a'],remoteControl:async()=>({})}).init()
  t.after(()=>manager.close())
- assert.equal(conversationCommand(`新建项目 demo | ${project}`).workspace,project)
+ assert.equal(conversationCommand('新建项目').action,'prompt')
+ assert.equal(conversationInput(`demo | ${project}`,{pending:{target:'newProject'}}).command.workspace,project)
  assert.equal(conversationCommand('当前目录').action,'workspace')
  await assert.rejects(bindNewWorkspace({manager},'a','relative'))
  await bindNewWorkspace({manager},'a',project)
