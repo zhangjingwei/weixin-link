@@ -63,7 +63,9 @@ export function createSessionProtocol({kind='codex',rpcFactory,providerEnv=proce
    return null
   },
   supportsRemoteTaskRecovery:codex,
-  startTurn:(rpc,{threadId,input,deliveryId,plan=false,model,fastMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},...plan&&codex?{collaborationMode:{mode:'plan',settings:{model}}}:{},...typeof fastMode==='boolean'&&codex?{serviceTier:fastMode?'fast':'auto'}:{}}),
+  // Collaboration mode is stored on the Codex thread. Always select it for
+  // each turn, otherwise a normal request after a plan can remain in Plan Mode.
+  startTurn:(rpc,{threadId,input,deliveryId,plan=false,model,fastMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},...codex?{collaborationMode:{mode:plan?'plan':'default',settings:{model,reasoning_effort:null,developer_instructions:null}}}:{},...typeof fastMode==='boolean'&&codex?{serviceTier:fastMode?'fast':'auto'}:{}}),
   startReview:(rpc,threadId,target)=>rpc.request('review/start',{threadId,target}),
   goal:async(rpc,threadId,command)=>{
    if(command.op==='get')return (await rpc.request('thread/goal/get',{threadId})).goal

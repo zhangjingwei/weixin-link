@@ -55,6 +55,12 @@ test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
     assert.equal(turn.params.collaborationMode.mode,'plan')
     assert.equal(turn.params.serviceTier,'fast')
     f.manager.sessions.get('owner').busy=false;f.manager.sessions.get('owner').state='idle'
+    await f.manager.handle('owner','按这个方案实施',f.reply)
+    const turns=f.calls.filter(c=>c.method==='turn/start')
+    assert.equal(turns.length,2)
+    assert.equal(turns[1].params.threadId,turn.params.threadId)
+    assert.deepEqual(turns[1].params.collaborationMode,{mode:'default',settings:{model:'gpt-test',reasoning_effort:null,developer_instructions:null}})
+    f.manager.sessions.get('owner').busy=false;f.manager.sessions.get('owner').state='idle'
     await f.manager.handle('owner','代码审查',f.reply)
     assert.deepEqual(f.calls.find(c=>c.method==='review/start').params,{threadId:'original',target:{type:'uncommittedChanges'}})
     f.manager.sessions.get('owner').busy=false;f.manager.sessions.get('owner').state='idle'
