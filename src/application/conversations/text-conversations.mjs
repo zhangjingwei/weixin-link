@@ -27,7 +27,7 @@ export class TextConversations{
   let home=r.entries.find(e=>e.id===r.dailyId);
   if(!home||home.deleted){home={id:String(r.entries.length+1),key:owner+'#conversation#'+randomUUID(),name:'日常助手',titleSource:'placeholder'};r.entries.push(home);r.dailyId=home.id;this.manager.owners.add(home.key);command.name='日常助手';}
   command.id=home.id;
-  if(home.archived)error=`日常助手会话${home.id}已归档，发送“还原${home.id}”后再发“日常”。`;
+  if(home.archived)error=`日常助手会话${home.id}已归档，发送“还原”并选择该会话后再发“日常”。`;
   else if(home.deleteIntent||home.archiveSync==='missing')error='日常助手会话状态待核对，请先发“列表”；未新建替代会话。';
   else r.active=home.id;
  }
@@ -66,7 +66,7 @@ export class TextConversations{
    await reply('可切换的会话：\n'+(lines.length?lines.join('\n'):'暂无会话')+'\n回复前面的序号切换；序号只用于这次选择。发送“取消”放弃。')
    return choices
   }
-  const help=local?'新建（按提示输入项目名）｜切换｜日常。当前底座暂不支持项目归档、永久删除和历史检索。':'新建｜切换｜命名｜历史｜归档编号｜还原编号｜删除编号（永久删除，含派生子会话）\n日常对话独立保留，发“日常”进入；停止只影响当前对话。'
+  const help=local?'新建（按提示输入项目名）｜切换｜日常。当前底座暂不支持项目归档、永久删除和历史检索。':'新建｜切换｜命名｜历史｜归档｜还原｜删除（永久删除，含派生子会话）\n日常对话独立保留，发“日常”进入；停止只影响当前对话。'
   await reply('项目列表\n'+(lines.length?lines.join('\n'):'暂无项目')+'\n'+help)
  }
  async listHistoryChoices(owner,reply){
@@ -74,6 +74,15 @@ export class TextConversations{
   const root=this.ensure(owner),entries=root.entries.filter(e=>!e.deleted),choices=entries.map(e=>e.id)
   if(root.prompt?.target==='history'){root.prompt.choices=choices;await this.manager.save()}
   await reply('选择要查看历史的会话：\n'+(entries.length?entries.map((e,index)=>`${index+1}. ${e.name}${e.archived?'（已归档）':''}`).join('\n'):'暂无会话')+'\n回复前面的序号；发送“取消”放弃。')
+  return choices
+ }
+ async listOperationChoices(owner,target,reply){
+  if(this.backendPort?.capabilities.catalog===false||target==='delete'&&!this.backendPort?.capabilities.delete||target!=='delete'&&!this.backendPort?.capabilities.archive){delete this.ensure(owner).prompt;await this.manager.save();await reply('当前底座暂不支持该会话操作；未修改会话。');return []}
+  await this.refreshTitles(owner)
+  const root=this.ensure(owner),entries=root.entries.filter(e=>!e.deleted&&(target==='unarchive'?e.archived:target==='archive'?!e.archived:!!this.manager.state.users[e.key]?.threadId)),choices=entries.map(e=>e.id)
+  if(root.prompt?.target===target){root.prompt.choices=choices;await this.manager.save()}
+  const label={archive:'归档',unarchive:'还原',delete:'永久删除'}[target]
+  await reply(`选择要${label}的会话：\n`+(entries.length?entries.map((e,index)=>`${index+1}. ${e.name}${e.archived?'（已归档）':''}`).join('\n'):'暂无可选会话')+'\n回复前面的序号；序号只用于这次选择。发送“取消”放弃。')
   return choices
  }
  async control(message,reply){
@@ -94,6 +103,11 @@ export class TextConversations{
    if(cmd.target==='history'){
     if(this.backendPort?.capabilities.catalog===false){delete this.ensure(owner).prompt;await this.manager.save();await reply('当前会话暂不支持查看历史。');return true}
     const choices=await this.listHistoryChoices(owner,reply)
+    if(!choices.length){delete this.ensure(owner).prompt;await this.manager.save()}
+    return true
+   }
+   if(['archive','unarchive','delete'].includes(cmd.target)){
+    const choices=await this.listOperationChoices(owner,cmd.target,reply)
     if(!choices.length){delete this.ensure(owner).prompt;await this.manager.save()}
     return true
    }

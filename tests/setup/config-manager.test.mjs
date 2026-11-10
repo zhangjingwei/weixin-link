@@ -73,7 +73,7 @@ test('config-set saves offline remote hosts without trying to connect',async t=>
 })
 test('managed workspace guidance preserves user content and is idempotent',async t=>{
  const options=await fixture(t);await mkdir(options.workspace);const path=join(options.workspace,'AGENTS.md'),original='# User rules\nKeep this exact text.\n';await writeFile(path,original)
- const args={workspace:options.workspace,root:repo,codexBinary:process.execPath};await updateWorkspaceGuidance(args);const first=await readFile(path,'utf8');assert.ok(first.startsWith(original));assert.ok(first.includes('config-set'));assert.ok(first.includes('原生记忆'))
+ const args={workspace:options.workspace,root:repo,codexBinary:process.execPath};await updateWorkspaceGuidance(args);const first=await readFile(path,'utf8');assert.ok(first.startsWith(original));assert.ok(first.includes('config-set'));assert.ok(first.includes('当前智能体的原生记忆'));assert.ok(first.includes('项目自带智能体可执行路径'));assert.ok(!first.includes('Codex'))
  await updateWorkspaceGuidance(args);assert.equal(await readFile(path,'utf8'),first)
  await writeFile(path,'user text\n<!-- zerolink:managed:start -->broken');await assert.rejects(updateWorkspaceGuidance(args),/AGENTS_MANAGED_SECTION_INVALID/)
  assert.equal(await readFile(path,'utf8'),'user text\n<!-- zerolink:managed:start -->broken')

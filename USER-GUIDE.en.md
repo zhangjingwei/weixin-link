@@ -40,7 +40,7 @@ You can also ask for a reminder in ordinary language, such as “Remind me about
 
 3. Projects and the everyday conversation
 
-Projects and the everyday conversation share one WeChat chat. Use `list` to find a project's fixed ID, then append that ID to `archive`, `restore`, or `delete`. These commands do not open a numbered selection prompt. Selection numbers for `switch` and `history` apply only to that list.
+Projects and the everyday conversation share one WeChat chat. For `archive`, `restore`, `delete`, and `switch`, send the command first, then reply with a number from its list. The number applies only to that selection.
 
 - `list`: List projects.
 - `daily`: Return to the everyday conversation.
@@ -50,9 +50,9 @@ Projects and the everyday conversation share one WeChat chat. Use `list` to find
 - `history`: Show conversations, including archived ones, then reply with a number to read its history.
 - `older`: See earlier history.
 - `search`: Enter a term to search the latest 50 turns of the current conversation.
-- `archive2`: Archive project 2 while keeping its history. Replace 2 with the project ID shown in `list`.
-- `restore2`: Restore archived project 2. Replace 2 with its project ID.
-- `delete2`: Permanently delete project 2 and its derived conversations. Replace 2 with its project ID; this cannot be undone.
+- `archive`: List conversations you can archive, then reply with a number. History is kept.
+- `restore`: List archived conversations, then reply with a number to restore one.
+- `delete`: List conversations you can delete, then reply with a number to permanently delete one and its derived conversations. This cannot be undone.
 
 4. Tasks, reviews, and conversations
 

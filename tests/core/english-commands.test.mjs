@@ -8,7 +8,7 @@ import {agentSwitchCommand} from '../../src/setup/agent-switch.mjs'
 import {chatUpgradeCommand} from '../../src/setup/chat-upgrade.mjs'
 
 test('project commands have equivalent English names without a slash',()=>{
- const pairs={daily:'日常',list:'列表',new:'新建',switch:'切换',history:'历史',rename:'命名',older:'翻页',search:'搜索',folder:'当前目录','new-project':'新建项目',archive2:'归档2',restore2:'还原2',delete2:'删除2'}
+ const pairs={daily:'日常',list:'列表',new:'新建',switch:'切换',history:'历史',rename:'命名',older:'翻页',search:'搜索',folder:'当前目录','new-project':'新建项目',archive:'归档',restore:'还原',delete:'删除',archive2:'归档2',restore2:'还原2',delete2:'删除2'}
  for(const [english,chinese] of Object.entries(pairs)){
   assert.deepEqual(conversationCommand(english),conversationCommand(chinese),english)
   assert.deepEqual(conversationCommand(english.toUpperCase()),conversationCommand(chinese),english)
@@ -16,6 +16,7 @@ test('project commands have equivalent English names without a slash',()=>{
  }
  assert.deepEqual(conversationInput('cancel',{pending:{target:'new'}}).command,{action:'promptCancel'})
  assert.deepEqual(conversationInput('2',{pending:{target:'switch',choices:['1','3']}}).command,{action:'switch',id:'3'})
+ for(const [target,action] of [['archive','archive'],['unarchive','unarchive'],['delete','delete']])assert.deepEqual(conversationInput('2',{pending:{target,choices:['1','3']}}).command,{action,id:'3'})
 })
 
 test('task and interaction commands have equivalent English names',()=>{

@@ -1,7 +1,7 @@
 import {controlCommand,completeControlPrompt} from './control-command.mjs'
 
 const english={
- 'new-project':'新建项目',folder:'当前目录',daily:'日常',list:'列表',new:'新建',switch:'切换',
+ 'new-project':'新建项目',folder:'当前目录',daily:'日常',list:'列表',new:'新建',switch:'切换',archive:'归档',restore:'还原',delete:'删除',
  history:'历史',rename:'命名',older:'翻页',search:'搜索',
 }
 
@@ -22,6 +22,9 @@ export function conversationCommand(text=''){
  if(s==='切换')return {action:'prompt',target:'switch'};
  if(s==='历史')return {action:'prompt',target:'history'};
  if(s==='命名')return {action:'prompt',target:'rename'};
+ if(s==='归档')return {action:'prompt',target:'archive'};
+ if(s==='还原')return {action:'prompt',target:'unarchive'};
+ if(s==='删除')return {action:'prompt',target:'delete'};
  if((m=s.match(/^(归档|删除|还原)\s*(\d+)$/)))return {action:m[1]==='还原'?'unarchive':m[1]==='删除'?'delete':'archive',id:m[2]};
  if((m=raw.match(/^(archive|delete|restore)(\d+)$/i)))return {action:m[1].toLowerCase()==='restore'?'unarchive':m[1].toLowerCase(),id:m[2]};
  if(s==='翻页')return {action:'older'};
@@ -40,7 +43,7 @@ export function conversationInput(text='',{pending}={}){
   if(info&&(promptInfoActions.has(info.action)||info.action==='goal'&&info.op==='get'||info.action==='memory'&&info.op==='list'))return {sessionCommand:info,promptResult:'keep'}
   if(promptInfoCommands.has(value.toLowerCase()))return {command:null,promptResult:'keep'}
   const navigation=conversationCommand(input)
-  if(navigation?.action==='prompt'&&['switch','history'].includes(navigation.target))return {command:navigation,promptResult:'done'}
+  if(navigation?.action==='prompt'&&['switch','history','archive','unarchive','delete'].includes(navigation.target))return {command:navigation,promptResult:'done'}
   if(navigation&&['switch','archive','unarchive','delete'].includes(navigation.action))return {command:navigation,promptResult:'done'}
   const approval=controlCommand(input)
   if(approval?.action==='prompt'&&approval.target==='approvalChoice')return {command:approval,promptResult:'done'}
@@ -53,6 +56,10 @@ export function conversationInput(text='',{pending}={}){
   else if(pending.target==='history'){
    const id=/^[1-9]\d*$/.test(value)?pending.choices?.[Number(value)-1]:null
    result=id?{command:{action:'history',id}}:{error:'请回复列表中的编号。'}
+  }
+  else if(['archive','unarchive','delete'].includes(pending.target)){
+   const id=/^[1-9]\d*$/.test(value)?pending.choices?.[Number(value)-1]:null
+   result=id?{command:{action:pending.target,id}}:{error:'请回复列表中的编号。'}
   }
   else if(pending.target==='approvalChoice'){
    const selected=/^[1-9]\d*$/.test(value)?pending.choices?.[Number(value)-1]:null

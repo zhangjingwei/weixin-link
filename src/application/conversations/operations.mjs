@@ -77,7 +77,7 @@ export async function archive(context,owner,entry,archived,reply){
     if(tid&&session&&context.manager.sessions.get(entry.key)===session){context.manager.sessions.delete(entry.key);context.backendPort.closeSession(session)}
     if(archived&&r.active===entry.id)r.active=next.id;
     await context.manager.save();
-    await reply(archived?`已归档会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致，':'空白会话已隐藏，'}历史保留；发送“还原${entry.id}”可恢复。当前会话${r.active}。`:`已还原会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致。':''}发送“切换${entry.id}”进入。`);
+    await reply(archived?`已归档会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致，':'空白会话已隐藏，'}历史保留；发送“还原”并选择该会话可恢复。当前会话${r.active}。`:`已还原会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致。':''}发送“切换”并选择该会话进入。`);
    });
   }finally{if(locked)session.selecting=false;context.archiveLocks.delete(entry.key)}
  }

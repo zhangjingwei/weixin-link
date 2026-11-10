@@ -714,7 +714,7 @@ export class SessionManager {
           '【会话】',
           '会话状态（session-status）', '恢复会话（resume-session）', '重置会话（reset-session）', '压缩上下文（compact）', '分叉会话（fork）', '旁支会话（branch）',
           '【项目】',
-          '日常（daily）', '列表（list）', '新建（new）', '切换（switch）', '命名（rename）', '历史（history）', '搜索（search）', '归档2（archive2）', '还原2（restore2）', '删除2（delete2）', '当前目录（folder）', '新建项目（new-project）',
+          '日常（daily）', '列表（list）', '新建（new）', '切换（switch）', '命名（rename）', '历史（history）', '搜索（search）', '归档（archive）', '还原（restore）', '删除（delete）', '当前目录（folder）', '新建项目（new-project）',
           '【模型与记忆】',
           '模型（models）', '开启快速模式（fast-on）', '关闭快速模式（fast-off）', '记忆（memory）', '开启记忆（memory-on）', '关闭记忆（memory-off）',
           '【服务】',

@@ -40,7 +40,7 @@ export const USER_GUIDE=`微信助手使用说明
 
 三、项目与日常
 
-项目和日常会话都在同一个微信聊天窗口中使用。先发“列表”查看固定的项目编号；归档、还原和删除要把这个编号写在命令后面，不会再弹出编号选择。切换和历史显示的序号只用于当次选择。
+项目和日常会话都在同一个微信聊天窗口中使用。归档、还原、删除和切换时，先发送命令，再从回复的列表中选择序号。序号只用于这次选择。
 
 - “列表”：查看项目列表。
 - “日常”：切回日常会话。
@@ -50,9 +50,9 @@ export const USER_GUIDE=`微信助手使用说明
 - “历史”：先显示可查看的会话列表，再回复序号查看；已归档会话也会列出。
 - “翻页”：查看更早的历史。
 - “搜索”：按提示输入关键词，搜索当前会话最近 50 轮。
-- “归档2”：归档固定编号为 2 的项目，保留历史。
-- “还原2”：还原固定编号为 2 的已归档项目。
-- “删除2”：永久删除固定编号为 2 的项目及其派生会话，无法还原。
+- “归档”：列出可归档的会话，回复序号后归档并保留历史。
+- “还原”：列出已归档的会话，回复序号后还原。
+- “删除”：列出可删除的会话，回复序号后永久删除该会话及其派生会话，无法还原。
 
 四、任务、审查与会话
 
@@ -172,7 +172,7 @@ You can also ask for a reminder in ordinary language, such as “Remind me about
 
 3. Projects and the everyday conversation
 
-Projects and the everyday conversation share one WeChat chat. Use list to find a project's fixed ID, then append that ID to archive, restore, or delete. These commands do not open a numbered selection prompt. Selection numbers for switch and history apply only to that list.
+Projects and the everyday conversation share one WeChat chat. For archive, restore, delete, and switch, send the command first, then reply with a number from its list. The number applies only to that selection.
 
 - list: List projects.
 - daily: Return to the everyday conversation.
@@ -182,9 +182,9 @@ Projects and the everyday conversation share one WeChat chat. Use list to find a
 - history: Show conversations, including archived ones, then reply with a number to read its history.
 - older: See earlier history.
 - search: Enter a term to search the latest 50 turns of the current conversation.
-- archive2: Archive project 2 while keeping its history. Replace 2 with the project ID shown in list.
-- restore2: Restore archived project 2. Replace 2 with its project ID.
-- delete2: Permanently delete project 2 and its derived conversations. Replace 2 with its project ID; this cannot be undone.
+- archive: List conversations you can archive, then reply with a number. History is kept.
+- restore: List archived conversations, then reply with a number to restore one.
+- delete: List conversations you can delete, then reply with a number to permanently delete one and its derived conversations. This cannot be undone.
 
 4. Tasks, reviews, and conversations
 
