@@ -64,3 +64,23 @@ test('terminal probe passes Responses configuration and checks the model output'
  assert(!captured.args.join(' ').includes('sk-private-test-key'))
  assert.equal(captured.options.env.WECHAT_KIMI_API_KEY,'sk-private-test-key')
 })
+
+test('terminal probe reports a timed-out inference without marking setup verified',async t=>{
+ const f=await fixture(t),choices=['1','0'],messages=[]
+ const probe=options=>probeTerminalModel({...options,execute:async(_binary,_args,runOptions)=>{
+  assert.equal(runOptions.timeout,60000)
+  throw Object.assign(Error('private upstream details'),{killed:true,signal:'SIGTERM'})
+ }})
+ const result=await runTerminalWizard({home:f.home,choose:async()=>choices.shift(),login:async()=>{},check:async()=>{},probe,write:text=>messages.push(text)})
+ assert.equal(result.deferred,true)
+ assert.equal(await readTerminalSetupStatus(f.stateDir),null)
+ assert(messages.some(message=>message.includes('MODEL_PROBE_TIMEOUT')&&message.includes('OpenAI')))
+ assert(!messages.join('\n').includes('private upstream details'))
+})
+
+test('terminal probe distinguishes a wrong model answer from a connection timeout',async t=>{
+ const f=await fixture(t)
+ await assert.rejects(probeTerminalModel({home:f.home,execute:async(_binary,args)=>{
+  await writeFile(args[args.indexOf('--output-last-message')+1],'wrong answer')
+ }}),/MODEL_PROBE_RESPONSE_MISMATCH/)
+})

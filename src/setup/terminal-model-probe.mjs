@@ -11,7 +11,7 @@ import {codexProviderOptions} from '../base/codex/provider-options.mjs'
 
 const run=promisify(execFile)
 
-export async function probeTerminalModel({accountId='default',home,root,execute=run,timeoutMs=120000}={}){
+export async function probeTerminalModel({accountId='default',home,root,execute=run,timeoutMs=60000}={}){
  const profile=await accountProviderProfile(accountId,home),provider=providerEnvironment(profile)
  const selected=codexProviderOptions({...provider.options,...provider.secrets})
  const configs=[];for(let i=1;i<selected.args.length;i++)if(selected.args[i]==='-c')configs.push('-c',selected.args[++i])
@@ -23,5 +23,10 @@ export async function probeTerminalModel({accountId='default',home,root,execute=
   await execute(findCodex(home,{root}),args,{cwd:installConfig(home,{root}).workspace,env,timeout:timeoutMs,maxBuffer:1024*1024})
   if((await readFile(output,'utf8')).trim()!==nonce)throw Error('MODEL_PROBE_RESPONSE_MISMATCH')
   return {verified:true,provider:profile?.kind??'subscription',model:profile?.model??null}
- }catch{throw Error('MODEL_PROBE_FAILED')}finally{await rm(dir,{recursive:true,force:true})}
+ }catch(error){
+  if(error.message==='MODEL_PROBE_RESPONSE_MISMATCH')throw error
+  if(error.killed||error.code==='ETIMEDOUT')throw Error('MODEL_PROBE_TIMEOUT')
+  if(error.code==='ENOENT')throw Error('MODEL_PROBE_NO_RESPONSE')
+  throw Error('MODEL_PROBE_FAILED')
+ }finally{await rm(dir,{recursive:true,force:true})}
 }
