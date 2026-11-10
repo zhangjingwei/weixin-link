@@ -20,11 +20,18 @@ async function accountCommand(action,accountId,{run=exec}={}){
  }
 }
 
-async function waitForLogin(accountId,{start=spawn,language}={}){
+export async function waitForLogin(accountId,{start=spawn,language,run=exec}={}){
  const child=start(process.execPath,[manager,'verify-wait',accountId,'--human'],{stdio:'inherit',env:{...process.env,WEIXIN_LINK_LANG:language}})
  return new Promise((resolve,reject)=>{
   child.on('error',()=>reject(Error('VERIFICATION_FLOW_FAILED')))
-  child.on('exit',code=>code===0?resolve():reject(Error('VERIFICATION_FLOW_FAILED')))
+  child.on('exit',code=>{
+   if(code===0)return resolve()
+   accountCommand('list',accountId,{run}).then(result=>{
+    const row=result.accounts?.find(account=>account.account===accountId)
+    if(row?.ready)return resolve()
+    reject(Error(['WECHAT_SERVICE_NOT_READY','LOGIN_OR_START_FAILED','VERIFICATION_TIMEOUT'].includes(row?.pairing)?row.pairing:'VERIFICATION_FLOW_FAILED'))
+   },()=>reject(Error('VERIFICATION_FLOW_FAILED')))
+  })
  })
 }
 
@@ -40,6 +47,6 @@ export async function runWeChatLogin({accountId='default',relogin=false,human=fa
  if(login.status!=='scan_to_login'||typeof login.url!=='string')throw Error('LOGIN_URL_UNAVAILABLE')
  await showLoginLink(login,{output,human,language})
  if(human)output.write(en?'Confirm with WeChat on your phone. If prompted for a PIN, enter it in this terminal.\n':'请在手机微信确认；如需 PIN，请按本终端提示输入。\n')
- if(output.isTTY&&process.stdin.isTTY){await waitForLogin(accountId,{start,language});return {status:'logged_in',account:accountId}}
+ if(output.isTTY&&process.stdin.isTTY){await waitForLogin(accountId,{start,language,run});return {status:'logged_in',account:accountId}}
  return {status:'scan_to_login',account:accountId}
 }

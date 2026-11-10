@@ -11,7 +11,8 @@ export async function waitForPairingVerification({status,readCode,submitCode,wai
   if(signal?.aborted)throw Error('VERIFICATION_CANCELLED')
   const current=await status()
   if(current.status==='service_started')return {status:'login_complete',pin_submitted:submitted}
-  if(FAILURES.has(current.status)||current.running===false)throw Error('PAIRING_STOPPED')
+  if(FAILURES.has(current.status))throw Error(current.status==='pairing_stopped'?'PAIRING_STOPPED':current.status)
+  if(current.running===false)throw Error('PAIRING_STOPPED')
   if(CHALLENGES.has(current.status)){
    const marker=current.status+':'+current.updated_at
    if(marker!==handled){

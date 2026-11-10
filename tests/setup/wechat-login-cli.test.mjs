@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {runWeChatLogin} from '../../src/setup/wechat-login-cli.mjs'
+import {runWeChatLogin,waitForLogin} from '../../src/setup/wechat-login-cli.mjs'
+import {EventEmitter} from 'node:events'
 
 function fixture({ready=false,active=false,stop='stopped'}={}){
  const calls=[],messages=[],output={isTTY:false,write:text=>messages.push(text)}
@@ -42,4 +43,14 @@ test('failed stop prevents a new login request',async()=>{
  const f=fixture({ready:true,active:true,stop:'pending'})
  await assert.rejects(runWeChatLogin({...f.options,relogin:true}),/ACCOUNT_STOP_UNCONFIRMED/)
  assert.deepEqual(f.calls,['list','stop'])
+})
+test('a stopped pairing worker accepts a ready account service',async()=>{
+ const start=()=>{const child=new EventEmitter();queueMicrotask(()=>child.emit('exit',1));return child}
+ const run=async()=>({stdout:JSON.stringify({accounts:[{account:'default',ready:true,pairing:'WECHAT_SERVICE_NOT_READY'}]})})
+ await waitForLogin('default',{start,run,language:'zh'})
+})
+test('a stopped pairing worker reports service startup failure',async()=>{
+ const start=()=>{const child=new EventEmitter();queueMicrotask(()=>child.emit('exit',1));return child}
+ const run=async()=>({stdout:JSON.stringify({accounts:[{account:'default',ready:false,pairing:'WECHAT_SERVICE_NOT_READY'}]})})
+ await assert.rejects(waitForLogin('default',{start,run,language:'zh'}),/WECHAT_SERVICE_NOT_READY/)
 })

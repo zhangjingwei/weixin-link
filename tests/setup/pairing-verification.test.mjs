@@ -39,3 +39,7 @@ test('stopped pairing does not request or submit a PIN',async()=>{
  await assert.rejects(waitForPairingVerification(f.options),/PAIRING_STOPPED/)
  assert.deepEqual(f.submitted,[])
 })
+test('service readiness failure keeps its diagnostic code',async()=>{
+ const f=fixture([{status:'WECHAT_SERVICE_NOT_READY',running:false}])
+ await assert.rejects(waitForPairingVerification(f.options),/WECHAT_SERVICE_NOT_READY/)
+})
