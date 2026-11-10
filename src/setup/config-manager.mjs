@@ -6,7 +6,6 @@ import {constants as fsConstants} from 'node:fs'
 import {createPublicKey} from 'node:crypto'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
-import {randomUUID} from 'node:crypto'
 import {ConfigError,validateConfig,parseConfig} from './config-schema.mjs'
 import {atomicConfigWrite,readPrivateFile,digest} from './config-files.mjs'
 import {installConfig,projectRoot,findCodex} from './install-config.mjs'
@@ -64,16 +63,6 @@ export async function runtimeEndpoints(home=currentHome()){
  }
  return endpoints
 }
-export async function guardRemoteConfiguration({home=currentHome(),endpoints,control}={}){
- if(!control)control=(await import('../infrastructure/runtime/runtime-control.mjs')).controlRequest
- endpoints??=await runtimeEndpoints(home)
- const lease='config-'+randomUUID(),attempted=[]
- const release=async()=>{const failed=[];for(const endpoint of attempted.slice().reverse()){try{await control(endpoint,'POST','/resume',{lease},5000)}catch{failed.push(endpoint)}}return {resumed:failed.length===0}}
- try{
-  for(const endpoint of endpoints){attempted.push(endpoint);const status=await control(endpoint,'POST','/drain',{lease},5000);if(!status.idle)throw new ConfigError('CONFIG_RUNTIME_BUSY');await control(endpoint,'POST','/seal',{lease},5000)}
- }catch(error){await release();if(error instanceof ConfigError)throw error;throw new ConfigError('CONFIG_RUNTIME_UNAVAILABLE')}
- return release
-}
 async function checkRemoteTransition(previous,config,options){
  const path=join(dirname(configPath('remote-hosts',options)),'remote-sessions.json'),text=await readPrivateFile(path)
  if(text===null)return []
@@ -82,34 +71,29 @@ async function checkRemoteTransition(previous,config,options){
  for(const task of tasks){
   const next=Object.hasOwn(config.hosts,task.host)?config.hosts[task.host]:null
   if(!next)throw new ConfigError('CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION')
-  if(old?.hosts[task.host]&&['platform','binary','root','transport','port'].some(k=>old.hosts[task.host][k]!==next[k]))throw new ConfigError('CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION')
+  if(!old?.hosts[task.host])throw new ConfigError('CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION')
+  if(['platform','binary','root','transport','port'].some(k=>old.hosts[task.host][k]!==next[k]))throw new ConfigError('CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION')
   const paths=next.platform==='win32'?win32:posix,relative=typeof task.cwd==='string'?paths.relative(next.root,task.cwd):'..'
   if(relative==='..'||relative.startsWith('..'+paths.sep)||paths.isAbsolute(relative))throw new ConfigError('CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION')
  }
  return tasks
 }
-export async function configure(kind,input,{home=currentHome(),workspace,env=process.env,verify=probeConfiguration,guard=guardRemoteConfiguration,restoring=false}={}){
+export async function configure(kind,input,{home=currentHome(),workspace,env=process.env,verify=probeConfiguration,restoring=false}={}){
  const config=validateConfig(kind,input),options={home,workspace,env},path=configPath(kind,options),previous=await readPrivateFile(path),expected=digest(previous)
- if(kind==='remote-hosts')options.remoteTasks=await checkRemoteTransition(previous,config,options)
  if(kind==='installation'&&previous&&!restoring){const old=parseConfig(kind,previous);if(old.workspace!==config.workspace)throw new ConfigError('CONFIG_WORKSPACE_MIGRATION_REQUIRED')}
  if(kind==='installation'&&(await runtimeEndpoints(home)).length)throw new ConfigError('CONFIG_INSTALLATION_REQUIRES_STOP')
  if(kind!=='remote-hosts')await verify(kind,config,options)
  if(kind==='installation'&&(await runtimeEndpoints(home)).length)throw new ConfigError('CONFIG_INSTALLATION_REQUIRES_STOP')
- let release=async()=>({resumed:true}),committed=false
- if(kind==='remote-hosts')release=await guard(options)
- try{
-  const write=()=>atomicConfigWrite(path,JSON.stringify(config,null,2)+'\n',{expected,backup:!restoring})
-  let result
-  if(kind==='remote-hosts'){const {RemoteStore}=await import('../infrastructure/storage/registry-lock.mjs');result=await new RemoteStore(dirname(path)).locked('host-config',async()=>{const tasks=await checkRemoteTransition(previous,config,options);if(tasks.some(t=>!options.remoteTasks.some(old=>old.thread_id===t.thread_id&&old.turn_id===t.turn_id)))throw new ConfigError('CONFIG_REMOTE_STATE_CHANGED');return write()})}
-  else result=await write()
-  committed=true
-  let guidance
-  if(kind==='installation'){
-   try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:config.codexBinary??findCodex(home),agentBackend:config.agentBackend??'codex',claudeBinary:config.claudeBinary})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
-  }
-  const runtime=await release();release=async()=>({resumed:true})
-  return {kind,version:config.version,verified:kind!=='remote-hosts',written:true,...result,effective:kind==='installation'?'next_service_start':'next_operation',runtimeResumed:runtime.resumed,...(!runtime.resumed?{warning:'CONFIG_RUNTIME_RESUME_UNCONFIRMED'}:{}),...(guidance?{guidance}:{}),restartRequired:kind==='installation'}
- }finally{if(!committed)await release()}
+ const write=()=>atomicConfigWrite(path,JSON.stringify(config,null,2)+'\n',{expected,backup:!restoring})
+ let result
+ // Remote operations and configuration share this lock. Do not drain the caller's chat turn.
+ if(kind==='remote-hosts'){const {RemoteStore}=await import('../infrastructure/storage/registry-lock.mjs');result=await new RemoteStore(dirname(path)).locked('host-config',async()=>{await checkRemoteTransition(previous,config,options);return write()})}
+ else result=await write()
+ let guidance
+ if(kind==='installation'){
+  try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:config.codexBinary??findCodex(home),agentBackend:config.agentBackend??'codex',claudeBinary:config.claudeBinary})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
+ }
+ return {kind,version:config.version,verified:kind!=='remote-hosts',written:true,...result,effective:kind==='installation'?'next_service_start':'next_operation',...(guidance?{guidance}:{}),restartRequired:kind==='installation'}
 }
 export async function restoreConfiguration(kind,options={}){
  const path=configPath(kind,options),previous=await readPrivateFile(path+'.previous');if(previous===null)throw new ConfigError('CONFIG_NO_PREVIOUS_VERSION')

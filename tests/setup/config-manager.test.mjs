@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os'
 import {execFileSync,spawnSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
 import {validateConfig,configSchema} from '../../src/setup/config-schema.mjs'
-import {configure,restoreConfiguration,configStatus,configPath,guardRemoteConfiguration} from '../../src/setup/config-manager.mjs'
+import {configure,restoreConfiguration,configStatus,configPath} from '../../src/setup/config-manager.mjs'
 import {atomicConfigWrite,digest} from '../../src/setup/config-files.mjs'
 import {updateWorkspaceGuidance} from '../../src/setup/workspace-guidance.mjs'
 const repo=fileURLToPath(new URL('../../',import.meta.url)),verify=async()=>{}
@@ -51,13 +51,6 @@ test('installation config cannot silently migrate an existing workspace',async t
  const options=await fixture(t);await mkdir(options.workspace);await configure('installation',{workspace:options.workspace},options)
  await assert.rejects(configure('installation',{workspace:join(options.home,'different')},options),/CONFIG_WORKSPACE_MIGRATION_REQUIRED/)
 })
-test('remote configuration seals only idle runtimes and reports unconfirmed resume after a committed write',async t=>{
- const calls=[];const control=async(endpoint,method,path)=>{calls.push(path);if(path==='/drain')return {idle:false};return {}}
- await assert.rejects(guardRemoteConfiguration({endpoints:['test'],control}),/CONFIG_RUNTIME_BUSY/);assert.deepEqual(calls,['/drain','/resume'])
- const options=await fixture(t);await mkdir(options.workspace)
- const result=await configure('remote-hosts',{hosts:{}},{...options,guard:async()=>async()=>({resumed:false})})
- assert.equal(result.written,true);assert.equal(result.runtimeResumed,false);assert.equal(result.warning,'CONFIG_RUNTIME_RESUME_UNCONFIRMED')
-})
 test('config-set saves offline remote hosts without trying to connect',async t=>{
  const options=await fixture(t);await mkdir(options.workspace)
  const host={platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}
@@ -100,9 +93,51 @@ test('versioned remote configuration reloads, while existing transports keep the
 })
 test('remote configuration cannot remove or retarget an unreconciled task host',async t=>{
  const options=await fixture(t);await mkdir(options.workspace)
- const host={platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'},guard=async()=>async()=>({resumed:true})
- await configure('remote-hosts',{hosts:{server:host}},{...options,guard})
+ const host={platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}
+ await configure('remote-hosts',{hosts:{server:host}},options)
  await writeFile(join(options.workspace,'remote-sessions.json'),JSON.stringify({task:{kind:'official-remote-task',host:'server',cwd:'/projects/demo',thread_id:'owned-thread',turn_id:'owned-turn'}}))
- await assert.rejects(configure('remote-hosts',{hosts:{}},{...options,guard}),/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
- await assert.rejects(configure('remote-hosts',{hosts:{server:{...host,root:'/other'}}},{...options,guard}),/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
+ await assert.rejects(configure('remote-hosts',{hosts:{}},options),/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
+ await assert.rejects(configure('remote-hosts',{hosts:{server:{...host,root:'/other'}}},options),/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
+})
+test('remote configuration writes and restores while the requesting runtime is busy', {skip:process.platform==='win32'},async t=>{
+ const {RuntimeControl}=await import('../../src/infrastructure/runtime/runtime-control.mjs')
+ const {accountPaths}=await import('../../src/infrastructure/accounts/account-store.mjs')
+ const home=await mkdtemp('/tmp/rc-'),options={home,workspace:join(home,'workspace'),env:{}}
+ const account=accountPaths('default',home);await mkdir(account.stateDir,{recursive:true})
+ let drained=0;const runtime=new RuntimeControl({snapshot:()=>({turns:1}),onSeal(){},onResume(){},onDrainRelease(){drained++}})
+ await runtime.listen(account.socket)
+ t.after(async()=>{await runtime.close();await rm(home,{recursive:true,force:true})})
+ assert.equal(runtime.status().idle,false)
+ const host={platform:'win32',binary:'C:\\tools\\codex.cmd',root:'D:\\workspace',transport:'ssh-websocket',port:47831}
+ await configure('remote-hosts',{hosts:{}},options)
+ const result=await configure('remote-hosts',{hosts:{windows:host}},options)
+ assert.equal(result.written,true);assert.equal(result.verified,false)
+ assert.deepEqual(JSON.parse(await readFile(configPath('remote-hosts',options),'utf8')).hosts,{windows:host})
+ await restoreConfiguration('remote-hosts',options)
+ assert.deepEqual(JSON.parse(await readFile(configPath('remote-hosts',options),'utf8')).hosts,{})
+ assert.equal(runtime.draining,false);assert.equal(drained,0)
+})
+test('configuration waits for a remote operation and rechecks its newly recorded task',async t=>{
+ const {RemoteStore}=await import('../../src/infrastructure/storage/registry-lock.mjs')
+ const options=await fixture(t);await mkdir(options.workspace)
+ const host={platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}
+ await configure('remote-hosts',{hosts:{server:host}},options)
+ const path=configPath('remote-hosts',options),original=await readFile(path,'utf8'),store=new RemoteStore(options.workspace)
+ let changing
+ await store.locked('host-config',async()=>{
+  changing=configure('remote-hosts',{hosts:{server:{...host,root:'/other'}}},options)
+  // Attach the rejection assertion immediately, before releasing the operation lock.
+  changing=assert.rejects(changing,/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
+  await store.update(s=>{s.task={kind:'official-remote-task',host:'server',cwd:'/projects/demo',thread_id:'t',turn_id:null,submission:'unknown'}})
+ })
+ await changing
+ assert.equal(await readFile(path,'utf8'),original)
+ const added={platform:'posix',binary:'/opt/codex',root:'/another',transport:'daemon-proxy'}
+ await configure('remote-hosts',{hosts:{server:host,another:added}},options)
+ assert.deepEqual(JSON.parse(await readFile(path,'utf8')).hosts,{server:host,another:added})
+})
+test('an unreconciled task with no trusted previous host cannot be silently adopted',async t=>{
+ const options=await fixture(t);await mkdir(options.workspace)
+ await writeFile(join(options.workspace,'remote-sessions.json'),JSON.stringify({task:{kind:'official-remote-task',host:'server',cwd:'/projects/demo'}}))
+ await assert.rejects(configure('remote-hosts',{hosts:{server:{platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}}},options),/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
 })
