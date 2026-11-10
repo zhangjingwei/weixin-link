@@ -27,9 +27,9 @@ async function removeStaleSocket(path){
 
 /** Private, live control plane. Logs never participate in restart decisions. */
 export class RuntimeControl {
- constructor({snapshot,ready=()=>false,startup=()=>undefined,onSeal,onResume,onDrainRelease=()=>{},onRemoteText=async()=>{throw Error("Unavailable")},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
+ constructor({snapshot,ready=()=>false,startup=()=>undefined,onSeal,onResume,onDrainRelease=()=>{},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
   this.canSeal=typeof snapshot==='function'&&typeof onSeal==='function'&&typeof onResume==='function'
-  Object.assign(this,{snapshot:snapshot??(()=>({})),ready,startup,onSeal:onSeal??(()=>{}),onResume:onResume??(()=>{}),onDrainRelease,onRemoteText,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
+  Object.assign(this,{snapshot:snapshot??(()=>({})),ready,startup,onSeal:onSeal??(()=>{}),onResume:onResume??(()=>{}),onDrainRelease,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
  }
  get draining(){
   if(this.lease&&!this.sealed&&this.lease.expires<=this.now()){this.lease=null;queueMicrotask(()=>{if(!this.lease)this.onDrainRelease()})}
@@ -70,7 +70,6 @@ export class RuntimeControl {
     if(this.token&&req.headers['x-control-token']!==this.token)throw Object.assign(Error('Unauthorized'),{statusCode:403})
     let result
     if(req.method==='GET'&&req.url==='/status')result=this.status()
-    else if(req.method==='POST'&&req.url==='/remote-text'){let body='';for await(const chunk of req){body+=chunk;if(body.length>16384)throw Object.assign(Error('Too large'),{statusCode:413})}result=await this.onRemoteText(JSON.parse(body))}
     else if(req.method==='POST'&&req.url==='/schedules'){
      if(this.sealed||this.draining)throw Object.assign(Error('Unavailable'),{statusCode:409})
      let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>4096)throw Object.assign(Error('Too large'),{statusCode:413})}

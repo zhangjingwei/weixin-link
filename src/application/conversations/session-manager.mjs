@@ -7,13 +7,12 @@ import {transition} from '../../domain/tasks/lifecycle.mjs'
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import {remoteScopeId} from '../remote-tasks/scope-id.mjs'
 
 const goalStatusText=status=>({active:'已启用',paused:'已暂停',complete:'已完成'})[status]??'未知'
 
 export class SessionManager {
-  constructor({ stateDir, cwd, owners, backend = null, sessionProtocol, remoteControl, sessionPorts, completionMarkers = false, scheduleGuidance = '', log = () => {} }) {
-    if (typeof remoteControl !== 'function' || typeof sessionPorts?.assistantInstructions !== 'string' ||
+  constructor({ stateDir, cwd, owners, backend = null, sessionProtocol, sessionPorts, completionMarkers = false, scheduleGuidance = '', log = () => {} }) {
+    if (typeof sessionPorts?.assistantInstructions !== 'string' ||
       ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
     this.ports=sessionPorts
     this.log = log
@@ -24,7 +23,6 @@ export class SessionManager {
     this.backend=backend
     this.instructions=this.ports.assistantInstructions+(backend?.instructions?'\n'+backend.instructions:'')
     this.completionMarkers = completionMarkers
-    this.remoteControl = remoteControl
     this.lifecycle = this.ports.cancellationScopes()
     this.stateDir = stateDir
     this.cwd = cwd
@@ -226,14 +224,6 @@ export class SessionManager {
     delete record.compaction
     try{await this.save()}catch(error){this.diagnostic(session,'compaction.save_failed',this.ports.errorFields(error))}
   }
-  async assertNoOutstandingRemoteTasks(threadId) {
-    const scope=remoteScopeId(threadId)
-    const account=process.env.WECHAT_ACCOUNT??'default'
-    const legacyScope=account==='default'?null:remoteScopeId(threadId,'default')
-    let remote={};try{remote=JSON.parse(await readFile(join(this.cwd,'remote-sessions.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}
-    if(legacyScope&&Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===legacyScope&&!t.account))throw Error('旧版远程任务的账号归属不明，未切换对话。')
-    if(Object.values(remote).some(t=>t?.kind==='official-remote-task'&&t.scope===scope&&!t.stop_confirmed))throw Error('当前对话仍有未确认停止的远程任务，请先用 “停止” 核实，再切换。')
-  }
   async listConversations(userId,reply) {
     const ids=this.conversationIds(userId)
     if(!ids.length){await reply('暂无本账号下属于你的历史对话。');return}
@@ -259,7 +249,6 @@ export class SessionManager {
     if(id===session.threadId){await reply('当前已在该对话中，直接发消息即可。');return}
     session.selecting=true
     try{
-      await this.assertNoOutstandingRemoteTasks(session.threadId)
       const meta=await this.protocol.read(session.rpc,id)
       if(meta?.id!==id||meta.cwd&&meta.cwd!==this.workspaceFor(userId))throw Error('历史对话目录不匹配，未切换。')
       if(meta.status?.type==='active')throw Error('目标对话正在执行任务，未切换。')
@@ -328,7 +317,6 @@ export class SessionManager {
     const traceId=session.traceId
     let result
     try {
-      await this.remoteControl(this.cwd,session.threadId,'activate')
       if(!token.current()){if(!session.exited&&session.traceId===traceId){transition(session,'idle');session.turnReady=true;this.resolveWaiters(session,{status:'interrupted',reply:'任务已取消。'})}return}
       const deliveryId=typeof text==='object'?text.deliveryId:undefined
       if(deliveryId){this.submissions?.context?.(deliveryId,{task:session.localTask,request:session.requestText,continuation:session.attachmentContinuation,flowNonce:session.traceId,materials:currentMaterials(text,deliveryId)});this.submissions?.bind(deliveryId,session.threadId)}
@@ -679,7 +667,6 @@ export class SessionManager {
         if(command.action==='fork'){
           session.selecting=true
           try{
-            if(command.switchTo)await this.assertNoOutstandingRemoteTasks(session.threadId)
             const sourceId=session.threadId,result=await this.protocol.fork(session.rpc,sourceId),id=result?.thread?.id
             if(!id||id===sourceId||result.thread.cwd&&result.thread.cwd!==this.workspaceFor(userId))throw Error('底座未确认同目录的新会话，未切换。')
             const saved=this.state.users[userId]
@@ -730,18 +717,13 @@ export class SessionManager {
         if(this.state.users[userId]?.waitingAttachment){delete this.state.users[userId].waitingAttachment;if(this.state.users[userId].recovery)this.state.users[userId].recovery.execution='interrupted';await this.save()}
         const scopeId=runtime?.threadId??this.state.users[userId]?.threadId
         if(runtime?.compacting||this.state.users[userId]?.compaction?.threadId===scopeId)await reply('上下文压缩可能仍在进行；本次停止未确认取消压缩。新任务会先核对状态。')
-        // Seal remote submission before local interruption, then stop owned daemon work.
-        let remoteStop
-        const stopRemote=async()=>{if(!remoteStop)remoteStop=this.remoteControl(this.cwd,scopeId,'stop');const result=await remoteStop;if(result.tasks?.length)await reply(result.stop_confirmed?'本对话委托的远程任务及对应命令已确认停止。':'远程任务尚未全部确认停止，请保留会话并重试 “停止”。');if(!result.stop_confirmed)throw Error('远程停止未确认');return result}
-        if (!runtime || runtime.rpc.closed) { await stopRemote(); await reply(`当前没有运行中的本地 ${this.agentName} 任务。`); return }
+        if (!runtime || runtime.rpc.closed) { await reply(`当前没有运行中的本地 ${this.agentName} 任务。`); return }
         const queued=runtime.queue.length;runtime.queue=[]
         const stopTrace=runtime.traceId
         let localInterrupt
         const interruptOnce=()=>{if(runtime.traceId!==stopTrace)return Promise.resolve();return localInterrupt??=this.interrupt(runtime)}
         let localStopError
-        try{await this.remoteControl(this.cwd,scopeId,'seal')}catch(error){localStopError=error}
         try{if(runtime.busy&&!runtime.connecting)await interruptOnce()}catch(error){localStopError??=error}
-        await stopRemote()
         if(localStopError)throw localStopError
         runtime.reply = reply
         if (command.action === 'stop') {

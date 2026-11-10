@@ -1,14 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,rm,writeFile} from 'node:fs/promises'
+import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {createHash} from 'node:crypto'
 import {controlCommand,SessionManager} from '../../src/wechat/session-manager.mjs'
 import {createReceiveMessage} from '../../src/application/intake/receive-message.mjs'
 import {createMessageApplication} from '../../src/application/intake/message-application.mjs'
 import {quoteInput} from '../../src/infrastructure/wechat/weixin-protocol.mjs'
-import {remoteScopeId} from '../../src/application/remote-tasks/scope-id.mjs'
 import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 
 test('native Chinese controls are explicit and slash aliases remain ordinary text',()=>{
@@ -156,37 +154,6 @@ test('failed compaction status check leaves the queued task unsubmitted',async()
     assert.equal(job.state,'cancelled')
     assert.match(notices[0],/未提交/)
   }finally{await f.close()}
-})
-
-test('fork cannot switch away from an unconfirmed remote task',async()=>{
-  const f=await fixture()
-  try{
-    await f.manager.connect('owner',f.reply)
-    const scope=createHash('sha256').update('original').digest('hex').slice(0,24)
-    await writeFile(join(f.dir,'work','remote-sessions.json'),JSON.stringify({task:{kind:'official-remote-task',scope,stop_confirmed:false}}))
-    await f.manager.handle('owner','分叉会话',f.reply)
-    assert.equal(f.calls.filter(c=>c.method==='thread/fork').length,0)
-    assert.equal(f.manager.state.users.owner.threadId,'original')
-    assert.match(f.output.at(-1),/远程任务/)
-  }finally{await f.close()}
-})
-
-test('fork checks the account-scoped remote task ledger',async()=>{
-  const previous=process.env.WECHAT_ACCOUNT
-  process.env.WECHAT_ACCOUNT='secondary'
-  const f=await fixture()
-  try{
-    await f.manager.connect('owner',f.reply)
-    const scope=remoteScopeId('original','secondary')
-    assert.notEqual(scope,remoteScopeId('original','default'))
-    await writeFile(join(f.dir,'work','remote-sessions.json'),JSON.stringify({task:{kind:'official-remote-task',scope,account:'secondary',stop_confirmed:false}}))
-    await f.manager.handle('owner','分叉会话',f.reply)
-    assert.equal(f.calls.filter(c=>c.method==='thread/fork').length,0)
-    await writeFile(join(f.dir,'work','remote-sessions.json'),JSON.stringify({legacy:{kind:'official-remote-task',scope:remoteScopeId('original','default'),stop_confirmed:true}}))
-    await f.manager.handle('owner','分叉会话',f.reply)
-    assert.equal(f.calls.filter(c=>c.method==='thread/fork').length,0)
-    assert.match(f.output.at(-1),/归属不明/)
-  }finally{await f.close();if(previous===undefined)delete process.env.WECHAT_ACCOUNT;else process.env.WECHAT_ACCOUNT=previous}
 })
 
 test('compaction intent survives restart and is cleared after the thread is idle',async()=>{

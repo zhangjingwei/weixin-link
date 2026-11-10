@@ -27,7 +27,6 @@ export async function recover(context,job,reply,token){
    }
    const meta=await context.manager.protocol.read(session.rpc,job.thread_id)
    if(meta?.status?.type!=='active'){
-    if(context.manager.protocol.supportsRemoteTaskRecovery){await context.recoverRemote(job,reply,token);return}
     throw Error('LOCAL_TURN_ABANDONED')
    }
    context.manager.state.users[job.owner].recovery={task:session.localTask,execution:'running',delivery:null};await context.manager.save();if(!session.busy)transition(session,'running')

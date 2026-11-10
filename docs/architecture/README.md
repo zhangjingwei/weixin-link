@@ -2,7 +2,7 @@
 
 ![目标架构](message-flow-target.svg)
 
-本项目保持每个微信账号一个本地服务实例的模块化单体。`src/interfaces/` 按四个 Controller、微信 Presenter 和结构化 CLI 组织；`src/infrastructure/` 提供外部边界；收件、会话、任务执行与恢复、远程任务、计划和通知用例位于 `src/application/`。会话、消息、任务、投递、计划和版本的不变量位于 `src/domain/`。DDD 用于划清职责，不引入第二套状态仓库或空壳聚合。
+本项目保持每个微信账号一个本地服务实例的模块化单体。`src/interfaces/` 按四个 Controller、微信 Presenter 和结构化 CLI 组织；`src/infrastructure/` 提供外部边界；收件、会话、任务执行与恢复、SSH 远端操作、计划和通知用例位于 `src/application/`。会话、消息、任务、投递、计划和版本的不变量位于 `src/domain/`。DDD 用于划清职责，不引入第二套状态仓库或空壳聚合。
 
 静态模块依赖按 `domain → base → infrastructure → application → integrations → setup → interfaces → wechat` 的方向收敛，允许跳过中间层直接依赖更低层；`wechat/` 为账号服务组合根。`src/setup/service-entry.mjs` 是独立的 Windows 服务进程入口，启动 `wechat/bot.mjs`，不作为供其他模块复用的库。`tests/domain/layer-dependencies.test.mjs` 检查普通运行模块的跨层引用和循环。
 
@@ -17,7 +17,7 @@
 | 管理 Controller | `src/interfaces/controllers/management-controller.mjs` | 接入微信安装、切换、升级命令与配置 CLI 参数；执行委托原管理和配置模块 |
 | 命令意图 | `src/application/intake/message-intent.mjs`、`src/wechat/command-classifier.mjs`、`src/interfaces/wechat/*-command.mjs` | 接口层解析微信文本格式，应用层按优先级选择意图，领域层判断解析后的动作；重放时按同一规则重新判定，不另存意图状态 |
 | 消息应用处理 | `src/application/intake/receive-message.mjs`、`message-application.mjs`、`src/application/tasks/durable-intake.mjs` | 游标前保存后入队；控制命令立即处理；普通任务经账号级持久队列逐会话执行、恢复和取消；队列记录保留所属底座，切换时不交给另一底座执行 |
-| 会话与远程任务协调 | `src/application/conversations/`、`tasks/local-recovery.mjs`、`tasks/remote-recovery.mjs`、`remote-tasks/` | 沿用原会话状态、任务账本和锁；未知提交先对账，停止只作用于本会话任务 |
+| 会话与 SSH 远端操作 | `src/application/conversations/`、`tasks/local-recovery.mjs`、`remote-tasks/` | 本机 Codex 通过已启用集成从部署设备运行 SSH 命令；断线后的写结果保持不确定 |
 | 附件消息 | `src/interfaces/wechat/voice-text.mjs`、`src/application/intake/single-media.mjs`、`src/infrastructure/media/` | 接口层提取微信转写和消息 ID；应用层提交单条附件任务；基础设施层下载、解析和交付文件 |
 | 领域规则 | `src/domain/conversations/`、`messages/`、`tasks/`、`delivery/`、`schedules/`、`updates/` | 以归一化的会话归属、外部消息 ID、已确认拒绝证据判断状态；不读取微信原始字段或 API 错误码，不直接执行 I/O |
 | 会话与底座 | `src/application/conversations/session-manager.mjs`、`src/wechat/session-manager.mjs`、`src/infrastructure/agents/session-protocol.mjs` | 应用层管理会话归属、排队、状态与投递；基础设施适配器封装底座建连、输入、恢复和能力；组合根按账号注入所选适配器 |
@@ -31,8 +31,8 @@
 - `src/application/schedules/`：计划用例管理到期状态，注入的 `src/infrastructure/storage/schedule-state.mjs` 保存计划；到期任务提交到既有队列，提醒通过微信 Presenter 投递。时间规则位于 `src/domain/schedules/`。
 - `src/application/notifications/`：版本提示和失败终答复恢复用例；通知状态与版本查询由 `src/infrastructure/` 适配，版本比较与重试资格位于 `src/domain/`。更新 Controller 只触发检查，不自动升级。
 - `src/setup/`：安装、账号启用和配置属于组合与管理边界，不是消息执行旁路。
-- `src/integrations/`：按账号启用，运行时重新核验；本机智能体按需调用。SSH 远程 Codex 是此类集成和 `src/application/remote-tasks/` 的协作，不是消息处理器里的另一个智能体底座。
-- `src/infrastructure/remote/`：提供 SSH 传输、连接重试、主机配置快照和路径边界；远程任务账本与协调仍由 `src/application/remote-tasks/` 使用原账号工作目录。
+- `src/integrations/`：按账号启用，运行时重新核验；本机智能体按需调用。SSH 远端操作由本机 Codex 调用，远端不运行 Codex。
+- `src/infrastructure/remote/`：提供 SSH 命令传输、主机配置和路径边界；不再维护远端 Codex 任务账本。
 - 权限、账号隔离、去重、取消代际、未知投递结果和运行控制跨越上述边界，继续使用现有状态来源。
 
 ## 消息顺序

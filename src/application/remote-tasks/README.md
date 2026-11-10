@@ -1,11 +1,5 @@
-# 远程任务协调
+# SSH 远端操作
 
-`src/infrastructure/agents/remote-rpc.mjs` 将共享 Codex 协议客户端接到远程连接管理器。每条新连接通过统一握手初始化，并按原 thread_id/cwd 恢复会话；不重新创建轮次。
+`ssh-operations.mjs` 提供主机列表、项目检查、命令执行、文件读取和新文件写入。调用由当前账号启用的 `ssh-remote` 集成接入；本机 Codex 决定操作，部署设备通过 SSH 执行。远端无需 Codex。
 
-读取只有在 Codex 只读方法白名单中才允许断线后重试一次。写请求的结果不确定时只恢复连接，保留不确定结果交给账本对账，绝不自动重放。
-
-remote-controller.mjs 负责项目边界、会话归属、提交、对账、指定轮次停止、后台命令清理和文件交付。持久化复用 `src/infrastructure/storage/registry-lock.mjs`；remote-watch.mjs 负责进度去重和投递；remote-stop.mjs 接入本地停止流程。
-
-`src/interfaces/cli/remote-cli.mjs` 是结构化 JSON 命令入口。凭据、主机配置和 remote-sessions.json 继续位于用户私有工作目录，不随源码发布。
-
-协调器在单次操作中使用同一份已验证的主机配置：路径授权、RPC 重连和 SSH 传输都由该快照决定。多个账号共用工作目录时仍按账号与会话核对归属；旧记录归属不明时暂停对应会话。配置更新共用账本所在工作目录的 `host-config` 锁；未结束任务的主机不可被静默撤销或重定向，结果未知的写请求仍需对账。
+主机来自私有 `remote-hosts.json`。项目必须位于配置的授权根目录内，文件 API 会检查规范路径并拒绝符号链接目录或已有目标文件。命令在远端 POSIX shell 或 PowerShell 中运行，项目目录只是初始工作目录；命令可访问的范围仍取决于远端 SSH 账号权限。连接中断或超时返回结果不确定，写操作不能自动重试。

@@ -1,6 +1,6 @@
 import {integrations,integrationByConfig} from '../integrations/registry.mjs'
 import {homedir} from 'node:os'
-import {join,dirname,posix,win32} from 'node:path'
+import {join} from 'node:path'
 import {access,stat,readFile} from 'node:fs/promises'
 import {constants as fsConstants} from 'node:fs'
 import {createPublicKey} from 'node:crypto'
@@ -62,21 +62,6 @@ export async function runtimeEndpoints(home=currentHome()){
  }
  return endpoints
 }
-async function checkRemoteTransition(previous,config,options){
- const path=join(dirname(configPath('remote-hosts',options)),'remote-sessions.json'),text=await readPrivateFile(path)
- if(text===null)return []
- let tasks;try{tasks=Object.values(JSON.parse(text)).filter(t=>t?.kind==='official-remote-task'&&!t.stop_confirmed)}catch{throw new ConfigError('CONFIG_REMOTE_STATE_INVALID')}
- let old;try{if(previous)old=parseConfig('remote-hosts',previous)}catch{}
- for(const task of tasks){
-  const next=Object.hasOwn(config.hosts,task.host)?config.hosts[task.host]:null
-  if(!next)throw new ConfigError('CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION')
-  if(!old?.hosts[task.host])throw new ConfigError('CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION')
-  if(['platform','binary','root','transport','port'].some(k=>old.hosts[task.host][k]!==next[k]))throw new ConfigError('CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION')
-  const paths=next.platform==='win32'?win32:posix,relative=typeof task.cwd==='string'?paths.relative(next.root,task.cwd):'..'
-  if(relative==='..'||relative.startsWith('..'+paths.sep)||paths.isAbsolute(relative))throw new ConfigError('CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION')
- }
- return tasks
-}
 export async function configure(kind,input,{home=currentHome(),workspace,env=process.env,verify=probeConfiguration,restoring=false}={}){
  const config=validateConfig(kind,input),options={home,workspace,env},path=configPath(kind,options),previous=await readPrivateFile(path),expected=digest(previous)
  if(kind==='installation'&&previous&&!restoring){
@@ -92,9 +77,7 @@ export async function configure(kind,input,{home=currentHome(),workspace,env=pro
  if(kind==='installation'&&(await runtimeEndpoints(home)).length)throw new ConfigError('CONFIG_INSTALLATION_REQUIRES_STOP')
  const write=()=>atomicConfigWrite(path,JSON.stringify(config,null,2)+'\n',{expected,backup:!restoring})
  let result
- // Remote operations and configuration share this lock. Do not drain the caller's chat turn.
- if(kind==='remote-hosts'){const {RemoteStore}=await import('../infrastructure/storage/registry-lock.mjs');result=await new RemoteStore(dirname(path)).locked('host-config',async()=>{await checkRemoteTransition(previous,config,options);return write()})}
- else result=await write()
+ result=await write()
  let guidance
  if(kind==='installation'){
   try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:config.codexBinary??findCodex(home)})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}

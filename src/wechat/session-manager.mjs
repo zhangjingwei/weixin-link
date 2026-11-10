@@ -1,6 +1,5 @@
 import {SessionManager} from '../application/conversations/session-manager.mjs'
 import {createSessionProtocol} from '../infrastructure/agents/session-protocol.mjs'
-import {remoteScope} from '../application/remote-tasks/remote-stop.mjs'
 import {recoveryText} from '../application/tasks/recovery-state.mjs'
 import {integrationGuidance} from '../integrations/runtime.mjs'
 import {materialInput} from '../infrastructure/agents/material-context.mjs'
@@ -28,7 +27,7 @@ export const sessionPorts = Object.freeze({
 export class ConfiguredSessionManager extends SessionManager {
   constructor(options) {
     const {rpcFactory,providerEnv,sessionProtocol,...rest}=options
-    super({sessionPorts, remoteControl: remoteScope, ...rest,sessionProtocol:sessionProtocol??createSessionProtocol({rpcFactory,providerEnv,codexBinary:sessionPorts.codexBinary})})
+    super({sessionPorts,...rest,sessionProtocol:sessionProtocol??createSessionProtocol({rpcFactory,providerEnv,codexBinary:sessionPorts.codexBinary})})
   }
 }
 export {ConfiguredSessionManager as SessionManager}

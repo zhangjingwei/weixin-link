@@ -64,7 +64,8 @@ export async function invokeIntegration(id, request, options = {}) {
   const config = await configuration(item, options)
   try { return await item.invoke(config, request, {...context(options), scope: options.scope ?? process.env.CODEX_THREAD_ID}) } catch (error) {
     const safe = ['INTEGRATION_OPERATION_NOT_ALLOWED', 'INTEGRATION_ARGUMENTS_INVALID',
-      'REMOTE_STATE_LOCATION_MISMATCH', 'REMOTE_LEGACY_SCOPE_UNOWNED', 'REMOTE_HOST_CONFIG_CHANGED']
+      'REMOTE_RESULT_UNCERTAIN', 'REMOTE_OUTPUT_TOO_LARGE', 'REMOTE_FILE_EXISTS',
+      'REMOTE_PROJECT_UNAVAILABLE', 'REMOTE_FILE_UNAVAILABLE', 'REMOTE_INPUT_TOO_LARGE']
     throw new ConfigError(safe.includes(error.message) ? error.message : 'INTEGRATION_CALL_FAILED')
   }
 }

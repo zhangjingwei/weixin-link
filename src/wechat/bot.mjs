@@ -24,7 +24,6 @@ import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
 import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from '../infrastructure/accounts/account-store.mjs'
 import {DurableIntake} from '../application/tasks/durable-intake.mjs'
-import {createRemoteProgressDelivery} from '../application/remote-tasks/remote-progress-delivery.mjs'
 import {RuntimeControl} from '../infrastructure/runtime/runtime-control.mjs'
 import {nonBlockingHandler} from './message-handler.mjs'
 import {MessageDispatch} from './message-dispatch.mjs'
@@ -95,20 +94,10 @@ let intakeHandler,durable
 const replayMaintenance=()=>{
  for(const [id,message] of maintenancePending){maintenancePending.delete(id);if(jobs.rawCurrent(id))intakeHandler(message)}
 }
-const deliverRemoteProgress=createRemoteProgressDelivery({
- findSession:scope=>[...manager.sessions.values()].find(session=>session.threadId===scope),
- verifyTask:async(scope,task)=>{
-  const {RemoteController}=await import('../application/remote-tasks/remote-controller.mjs')
-  const controller=new RemoteController({root:cwd,scope}),record=await controller.task(task)
-  if(record.stop_confirmed||(await controller.store.read())._cancelled?.[controller.scope])throw Error('Cancelled task')
- },
- deliver:(session,text,current)=>manager.emit(session,text,current,true),
-})
 // 私有控制端点可在微信登录前启动，用于状态检查和维护控制。
 const runtime=new RuntimeControl({
  backend:{id:backend.id,kind:backend.kind,agentKind:agent.kind,container:backend.container??null,memoryMode:backend.memoryMode??'wechat'},
- features:{daily_assistant:true,numeric_setup_wizard:true,setup_commands:true,codex_backend_binding:true,container_backend:backend.kind==='podman',native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,remote_stream:true,update_notice:true},
- onRemoteText:deliverRemoteProgress,
+ features:{daily_assistant:true,numeric_setup_wizard:true,setup_commands:true,codex_backend_binding:true,container_backend:backend.kind==='podman',native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,update_notice:true},
  onSchedule:request=>{if(!schedules)throw Error('SCHEDULE_STATE_UNAVAILABLE');return schedules.onRequest(request)},
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
   startup:()=>startupPhase,

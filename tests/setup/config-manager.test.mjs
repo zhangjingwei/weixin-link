@@ -19,7 +19,8 @@ test('published samples are accepted by the actual schemas, and legacy configura
  for(const value of [{...ha('x'),version:2},{...ha('x'),arbitrary:'ignored'},{...ha('x'),token:'x\ny'},{...ha('x'),baseUrl:'http://user:password@host'}])assert.throws(()=>validateConfig('ha',value),/CONFIG_/)
  assert.throws(()=>validateConfig('backup',{host:'-oProxyCommand=bad',remoteDirectory:'/tmp'}),/CONFIG_/)
  assert.throws(()=>validateConfig('backup',{host:'backup',remoteDirectory:'/srv/../etc'}),/CONFIG_/)
- assert.throws(()=>validateConfig('remote-hosts',{server:{platform:'win32',binary:'C:\\codex.exe',root:'C:\\work',transport:'daemon-proxy'}}),/CONFIG_INVALID_TRANSPORT/)
+ assert.equal(validateConfig('remote-hosts',{server:{platform:'win32',root:'C:\\work'}}).hosts.server.platform,'win32')
+ assert.throws(()=>validateConfig('remote-hosts',{server:{platform:'posix',root:'/work',transport:'daemon-proxy'}}),/CONFIG_UNKNOWN_FIELD/)
 })
 test('successful updates verify first, keep a private previous version and restore without replaying writes',async t=>{
  const options=await fixture(t),path=configPath('ha',options);let probes=0;options.verify=async()=>{probes++}
@@ -62,7 +63,7 @@ test('config-set replaces unsupported installation fields while preserving the w
 })
 test('config-set saves offline remote hosts without trying to connect',async t=>{
  const options=await fixture(t);await mkdir(options.workspace)
- const host={platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}
+ const host={platform:'posix',root:'/projects'}
  const input={hosts:{offlineA:host,offlineB:{...host,root:'/workspace'}}}
  const env={...process.env,HOME:options.home,WECHAT_REMOTE_WORKSPACE:options.workspace};delete env.WECHAT_REMOTE_HOSTS
  const command=spawnSync(process.execPath,[join(repo,'src/setup/setup.mjs'),'config-set','remote-hosts'],{input:JSON.stringify(input),encoding:'utf8',env,timeout:3000})
@@ -95,58 +96,13 @@ test('invalid installation binary cannot replace the active installation file',a
  await assert.rejects(configure('installation',{workspace:options.workspace,codexBinary:process.execPath},{...options,verify:undefined}),/CONFIG_CONNECTION_CHECK_FAILED/)
  assert.equal(await readFile(path,'utf8'),old)
 })
-test('versioned remote configuration reloads, while existing transports keep their original destination',async t=>{
- const options=await fixture(t);await mkdir(options.workspace);const path=join(options.workspace,'remote-hosts.json')
- const script=`import {writeFileSync} from 'node:fs';const path=process.env.WECHAT_REMOTE_HOSTS;const host={platform:'posix',binary:'/opt/codex',root:'/old',transport:'daemon-proxy'};writeFileSync(path,JSON.stringify({version:1,hosts:{server:host}}));const {configuredHost,remoteConfigStatus}=await import(${JSON.stringify(new URL('../../src/infrastructure/remote/host-config.mjs',import.meta.url).href)});const {RemoteTransport}=await import(${JSON.stringify(new URL('../../src/infrastructure/remote/ssh-transport.mjs',import.meta.url).href)});const t=new RemoteTransport('server');writeFileSync(path,JSON.stringify({version:1,hosts:{server:{...host,root:'/new'}}}));const current=configuredHost('server').root;writeFileSync(path,'{invalid');console.log(JSON.stringify({original:t.config.root,current,invalid:!remoteConfigStatus().valid}));`
- const result=JSON.parse(execFileSync(process.execPath,['--input-type=module','-e',script],{encoding:'utf8',env:{...process.env,HOME:options.home,WECHAT_REMOTE_WORKSPACE:options.workspace,WECHAT_REMOTE_HOSTS:path}}));assert.deepEqual(result,{original:'/old',current:'/new',invalid:true})
-})
-test('remote configuration cannot remove or retarget an unreconciled task host',async t=>{
+test('remote host configuration reloads without a remote Codex transport',async t=>{
  const options=await fixture(t);await mkdir(options.workspace)
- const host={platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}
- await configure('remote-hosts',{hosts:{server:host}},options)
- await writeFile(join(options.workspace,'remote-sessions.json'),JSON.stringify({task:{kind:'official-remote-task',host:'server',cwd:'/projects/demo',thread_id:'owned-thread',turn_id:'owned-turn'}}))
- await assert.rejects(configure('remote-hosts',{hosts:{}},options),/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
- await assert.rejects(configure('remote-hosts',{hosts:{server:{...host,root:'/other'}}},options),/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
-})
-test('remote configuration writes and restores while the requesting runtime is busy', {skip:process.platform==='win32'},async t=>{
- const {RuntimeControl}=await import('../../src/infrastructure/runtime/runtime-control.mjs')
- const {accountPaths}=await import('../../src/infrastructure/accounts/account-store.mjs')
- const home=await mkdtemp('/tmp/rc-'),options={home,workspace:join(home,'workspace'),env:{}}
- const account=accountPaths('default',home);await mkdir(account.stateDir,{recursive:true})
- let drained=0;const runtime=new RuntimeControl({snapshot:()=>({turns:1}),onSeal(){},onResume(){},onDrainRelease(){drained++}})
- await runtime.listen(account.socket)
- t.after(async()=>{await runtime.close();await rm(home,{recursive:true,force:true})})
- assert.equal(runtime.status().idle,false)
- const host={platform:'win32',binary:'C:\\tools\\codex.cmd',root:'D:\\workspace',transport:'ssh-websocket',port:47831}
- await configure('remote-hosts',{hosts:{}},options)
- const result=await configure('remote-hosts',{hosts:{windows:host}},options)
- assert.equal(result.written,true);assert.equal(result.verified,false)
- assert.deepEqual(JSON.parse(await readFile(configPath('remote-hosts',options),'utf8')).hosts,{windows:host})
+ const path=configPath('remote-hosts',options)
+ await configure('remote-hosts',{hosts:{server:{platform:'posix',root:'/old'}}},options)
+ assert.equal(JSON.parse(await readFile(path,'utf8')).hosts.server.root,'/old')
+ await configure('remote-hosts',{hosts:{server:{platform:'posix',root:'/new'}}},options)
+ assert.equal(JSON.parse(await readFile(path,'utf8')).hosts.server.root,'/new')
  await restoreConfiguration('remote-hosts',options)
- assert.deepEqual(JSON.parse(await readFile(configPath('remote-hosts',options),'utf8')).hosts,{})
- assert.equal(runtime.draining,false);assert.equal(drained,0)
-})
-test('configuration waits for a remote operation and rechecks its newly recorded task',async t=>{
- const {RemoteStore}=await import('../../src/infrastructure/storage/registry-lock.mjs')
- const options=await fixture(t);await mkdir(options.workspace)
- const host={platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}
- await configure('remote-hosts',{hosts:{server:host}},options)
- const path=configPath('remote-hosts',options),original=await readFile(path,'utf8'),store=new RemoteStore(options.workspace)
- let changing
- await store.locked('host-config',async()=>{
-  changing=configure('remote-hosts',{hosts:{server:{...host,root:'/other'}}},options)
-  // Attach the rejection assertion immediately, before releasing the operation lock.
-  changing=assert.rejects(changing,/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
-  await store.update(s=>{s.task={kind:'official-remote-task',host:'server',cwd:'/projects/demo',thread_id:'t',turn_id:null,submission:'unknown'}})
- })
- await changing
- assert.equal(await readFile(path,'utf8'),original)
- const added={platform:'posix',binary:'/opt/codex',root:'/another',transport:'daemon-proxy'}
- await configure('remote-hosts',{hosts:{server:host,another:added}},options)
- assert.deepEqual(JSON.parse(await readFile(path,'utf8')).hosts,{server:host,another:added})
-})
-test('an unreconciled task with no trusted previous host cannot be silently adopted',async t=>{
- const options=await fixture(t);await mkdir(options.workspace)
- await writeFile(join(options.workspace,'remote-sessions.json'),JSON.stringify({task:{kind:'official-remote-task',host:'server',cwd:'/projects/demo'}}))
- await assert.rejects(configure('remote-hosts',{hosts:{server:{platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}}},options),/CONFIG_REMOTE_TASKS_REQUIRE_RECONCILIATION/)
+ assert.equal(JSON.parse(await readFile(path,'utf8')).hosts.server.root,'/old')
 })

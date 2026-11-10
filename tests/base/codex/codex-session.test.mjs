@@ -341,17 +341,6 @@ test('rejected new conversation does not cancel current work or pending attachme
  const output=[];await manager.handle('owner','重置Codex会话',async t=>output.push(t));assert.equal(token.current(),true);assert.equal(cancelled,false);assert.deepEqual(manager.sessions.get('owner').queue,['retained']);assert.ok(output[0].includes('停止'))
 })
 
-test('stop seals remote submissions, interrupts local turn, then confirms remote cleanup',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'remote-full-stop-')),events=[],output=[]
- const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],remoteControl:async(cwd,scope,action)=>{events.push(action);return {stop_confirmed:true,tasks:action==='stop'?[{task:'remote',stop_confirmed:true}]:[]}},rpcFactory:()=>({closed:false,request:async(m)=>{if(m==='thread/start')return {thread:{id:'local-scope'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};if(m==='turn/start')return {turn:{id:'local-turn'}};if(m==='turn/interrupt')events.push('interrupt');return {}},write(){},close(){this.closed=true}})}).init()
- try{await manager.handle('owner','start',async t=>output.push(t),1);events.length=0;await manager.handle('owner','停止',async t=>output.push(t),2);assert.deepEqual(events,['seal','interrupt','stop']);assert.ok(output.some(t=>t.includes('远程任务及对应命令已确认停止')))}finally{manager.close();await rm(dir,{recursive:true,force:true})}
-})
-test('stop cleans saved remote scope even when local runtime is absent; uncertainty is explicit',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'remote-stop-offline-')),output=[],calls=[]
- const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],remoteControl:async(cwd,scope,action)=>{calls.push({scope,action});return {stop_confirmed:false,tasks:[{task:'unknown',stop_confirmed:false}]}}}).init()
- try{manager.state.users.owner={threadId:'saved-thread'};await manager.handle('owner','停止',async t=>output.push(t),1);assert.deepEqual(calls,[{scope:'saved-thread',action:'stop'}]);assert.ok(output.some(t=>t.includes('尚未全部确认停止')));assert.ok(!output.some(t=>t.includes('已确认停止')))}finally{manager.close();await rm(dir,{recursive:true,force:true})}
-})
-
 test('deltas are silent and authoritative final text is delivered once',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'wechat-stream-')),output=[]
  const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],remoteControl:async()=>({active:true}),rpcFactory:()=>({closed:false,request:async m=>m==='thread/start'?{thread:{id:'thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'}:m==='turn/start'?{turn:{id:'turn'}}:{},write(){},close(){this.closed=true}})}).init()
@@ -479,14 +468,14 @@ test('waiting attachment preserves logical task and produces only one completion
  }finally{await rm(dir,{recursive:true,force:true})}
 })
 
-test('stop and exit each issue one interrupt while retaining remote stop verification',async()=>{
+test('stop and exit each issue one local interrupt',async()=>{
  for(const command of ['停止','退出']){
-  const dir=await mkdtemp(join(tmpdir(),'one-interrupt-')),calls=[],remote=[]
-  const m=await new SessionManager({stateDir:dir,cwd:dir,owners:['u'],remoteControl:async(c,t,a)=>{remote.push(a);return {stop_confirmed:true,tasks:[]}},rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method){calls.push(method);if(method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'t'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};if(method==='turn/start')return {turn:{id:'turn'}};return {}}})}).init()
+  const dir=await mkdtemp(join(tmpdir(),'one-interrupt-')),calls=[]
+  const m=await new SessionManager({stateDir:dir,cwd:dir,owners:['u'],rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method){calls.push(method);if(method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'t'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};if(method==='turn/start')return {turn:{id:'turn'}};return {}}})}).init()
   try{
    await m.handle('u','work',async()=>{})
    await m.handle('u',command,async()=>{})
-   assert.equal(calls.filter(x=>x==='turn/interrupt').length,1);assert.ok(remote.includes('stop'));assert.ok(remote.includes('seal'))
+   assert.equal(calls.filter(x=>x==='turn/interrupt').length,1)
   }finally{for(const s of m.sessions.values())clearTimeout(s.exitTimer);m.close();await m.saving;await rm(dir,{recursive:true,force:true})}
  }
 })

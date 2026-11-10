@@ -1,36 +1,31 @@
 import {spawn} from 'node:child_process'
-import net from 'node:net'
-import {HOSTS,sshConfig,shellQuote,configuredHost,validateHostConfig} from './host-config.mjs'
-export {HOSTS} from './host-config.mjs'
-export class RemoteTransport {
- constructor(host,{onMessage=()=>{},onDisconnect=()=>{},config}={}){const hostConfig=config??configuredHost(host);validateHostConfig(host,hostConfig);Object.assign(this,{host,config:structuredClone(hostConfig),onMessage,onDisconnect});this.closed=false;this.opened=false}
- async connect(){
-  try{
-   if(this.config.transport==='ssh-websocket'){
-    const reservation=net.createServer();await new Promise((ok,fail)=>{reservation.once('error',fail);reservation.listen(0,'127.0.0.1',ok)});const port=reservation.address().port;await new Promise(ok=>reservation.close(ok));
-    this.child=spawn('ssh',['-F',sshConfig,'-N','-o','BatchMode=yes','-o','ExitOnForwardFailure=yes','-o','ClearAllForwardings=no','-o','ConnectTimeout=8','-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3','-o','TCPKeepAlive=yes','-L',`127.0.0.1:${port}:127.0.0.1:${this.config.port}`,this.host],{stdio:['pipe','pipe','pipe']});
-    this.child.stdin.on('error',()=>{});this.child.stderr.on('data',()=>{});this.child.on('error',()=>this.close());this.child.on('close',()=>this.close());
-    await new Promise((ok,fail)=>{let attempts=0;const check=()=>{if(this.closed)return fail(Error('REMOTE_CONNECT_FAILED'));const probe=net.connect(port,'127.0.0.1');probe.once('connect',()=>{probe.destroy();ok()});probe.once('error',()=>{probe.destroy();if(++attempts>=50)fail(Error('REMOTE_CONNECT_TIMEOUT'));else setTimeout(check,100)})};check()});
-    this.ws=new WebSocket('ws://127.0.0.1:'+port)
-   }else{
-   this.server=net.createServer(socket=>{
-    this.socket=socket;this.server.close()
-    this.child=spawn('ssh',['-F',sshConfig,'-o','BatchMode=yes','-o','ConnectTimeout=8','-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3','-o','TCPKeepAlive=yes',this.host,'exec '+shellQuote(this.config.binary)+' app-server proxy'],{stdio:['pipe','pipe','pipe']})
-    this.child.stdin.on('error',()=>{});this.child.stdout.pipe(socket);socket.pipe(this.child.stdin);socket.on('error',()=>{});this.child.stderr.on('data',()=>{})
-    this.child.on('error',()=>this.close());this.child.on('close',()=>this.close());socket.on('close',()=>this.close())
-   });this.server.maxConnections=1
-   await new Promise((resolve,reject)=>{this.server.once('error',reject);this.server.listen(0,'127.0.0.1',resolve)})
-   this.ws=new WebSocket('ws://127.0.0.1:'+this.server.address().port)
-   }
-   this.ws.addEventListener('message',event=>{
-    if(typeof event.data!=='string'||event.data.length>72*1024*1024){this.close();return}
-    let message;try{message=JSON.parse(event.data)}catch{this.close();return}
-    this.onMessage(message)
-   });this.ws.addEventListener('close',()=>this.close());this.ws.addEventListener('error',()=>this.close())
-   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('REMOTE_CONNECT_TIMEOUT')),10000);this.ws.addEventListener('open',()=>{clearTimeout(timer);this.opened=true;resolve()},{once:true});this.ws.addEventListener('error',()=>{clearTimeout(timer);reject(Error('REMOTE_CONNECT_FAILED'))},{once:true})})
-   return this
-  }catch(error){this.close();throw error}
- }
- send(message){if(this.closed||!this.opened)throw Error('REMOTE_DISCONNECTED');this.ws.send(JSON.stringify(message))}
- close(){if(this.closed)return;this.closed=true;try{this.ws?.close()}catch{}this.socket?.destroy();this.server?.close();this.child?.kill();this.onDisconnect()}
+import {homedir} from 'node:os'
+import {join} from 'node:path'
+
+export const sshConfig=process.env.WECHAT_SSH_CONFIG??join(homedir(),'.ssh/wechat_hosts_config')
+export const shellQuote=value=>"'"+value.replaceAll("'", "'\"'\"'")+"'"
+
+// A lost SSH connection does not tell us whether the remote shell ran the command.
+export async function sshCommand(host,command,{input,timeoutMs=30000,maxBytes=65536,spawnImpl=spawn,config=sshConfig}={}){
+ if(typeof host!=='string'||!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(host)||typeof command!=='string'||!command||command.length>65536||/[\0\r]/.test(command))throw Error('REMOTE_ARGUMENTS_INVALID')
+ if(!Number.isInteger(timeoutMs)||timeoutMs<1000||timeoutMs>120000||!Number.isInteger(maxBytes)||maxBytes<1||maxBytes>1048576)throw Error('REMOTE_ARGUMENTS_INVALID')
+ const bytes=input===undefined?undefined:Buffer.isBuffer(input)?input:Buffer.from(input)
+ if(bytes&&bytes.length>1048576)throw Error('REMOTE_INPUT_TOO_LARGE')
+ return new Promise((resolve,reject)=>{
+  const child=spawnImpl('ssh',['-F',config,'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=8','-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3',host,command],{stdio:['pipe','pipe','pipe']})
+  let stdout=[],stderr=[],outSize=0,errSize=0,settled=false,timedOut=false,tooLarge=false
+  const finish=(error,result)=>{if(settled)return;settled=true;clearTimeout(timer);if(error)reject(error);else resolve(result)}
+  const timer=setTimeout(()=>{timedOut=true;child.kill()},timeoutMs)
+  child.stdout.on('data',chunk=>{outSize+=chunk.length;if(outSize>maxBytes){tooLarge=true;child.kill()}else stdout.push(chunk)})
+  child.stderr.on('data',chunk=>{errSize+=chunk.length;if(errSize>4096){tooLarge=true;child.kill()}else stderr.push(chunk)})
+  child.on('error',()=>finish(Error('REMOTE_CONNECTION_FAILED')))
+  child.on('close',code=>{
+   if(timedOut)return finish(Error('REMOTE_RESULT_UNCERTAIN'))
+   if(tooLarge)return finish(Error('REMOTE_OUTPUT_TOO_LARGE'))
+   if(code===255||code===null)return finish(Error('REMOTE_RESULT_UNCERTAIN'))
+   finish(null,{exitCode:code,stdout:Buffer.concat(stdout),stderr:Buffer.concat(stderr)})
+  })
+  child.stdin.on('error',()=>{})
+  if(bytes)child.stdin.end(bytes);else child.stdin.end()
+ })
 }

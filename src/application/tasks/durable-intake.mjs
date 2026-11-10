@@ -1,5 +1,4 @@
 import {recover} from './local-recovery.mjs'
-import {recoverRemote} from './remote-recovery.mjs'
 import {localTaskLabel} from '../../domain/tasks/task-label.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 export class DurableIntake {
@@ -25,6 +24,5 @@ export class DurableIntake {
   }
  }
  async recover(...args){return recover(this,...args)}
- async recoverRemote(...args){return recoverRemote(this,...args)}
  close(){this.closed=true}
 }

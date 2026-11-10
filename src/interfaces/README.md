@@ -7,7 +7,7 @@
 - `controllers/update-controller.mjs`：定时版本检查入口，委托 `UpdateNotifier` 去重和保存投递状态。
 - `controllers/management-controller.mjs`：聊天中的安装、切换和升级指令；配置 CLI 动作由 `src/setup/config-action.mjs` 执行，旧导出保留兼容。
 - `views/wechat-presenter.mjs`：收件人映射、系统通知格式和微信投递入口。
-- `cli/`：定时与远程任务的结构化标准输入命令入口。
+- `cli/`：定时任务的结构化标准输入命令入口；SSH 操作经集成 CLI 调用。
 - `wechat/voice-text.mjs`：从微信消息字段提取转写文字和附件指令上下文，供应用层使用。
 - `wechat/conversation-command.mjs`、`wechat/control-command.mjs`：把微信中文控制文字解析成结构化动作；会话状态与权限判断仍由领域和应用层执行。
 

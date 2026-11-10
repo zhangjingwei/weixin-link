@@ -13,12 +13,12 @@ export async function runIntegrationCommand(action, args = [], input = process.s
   const [id, account] = args, options = {account}
   if (action === 'enable' || action === 'disable') return setIntegrationEnabled(id, action === 'enable', options)
   if (action === 'check') return checkIntegration(id, options)
-  return invokeIntegration(id, await readConfigStdin(input), options)
+  return invokeIntegration(id, await readConfigStdin(input, id==='ssh-remote'?2*1024*1024:1024*1024), options)
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try { console.log(JSON.stringify(await runIntegrationCommand(process.argv[2], process.argv.slice(3)))) }
   catch (error) {
-    const code = /^(?:CONFIG|INTEGRATION)_[A-Z_]+$/.test(error.message) ? error.message : 'INTEGRATION_FAILED'
+    const code = /^(?:CONFIG|INTEGRATION|REMOTE)_[A-Z_]+$/.test(error.message) ? error.message : 'INTEGRATION_FAILED'
     console.error(JSON.stringify({ok: false, error: code})); process.exitCode = 1
   }
 }

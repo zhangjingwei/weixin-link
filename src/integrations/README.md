@@ -1,6 +1,6 @@
 # 可选集成
 
-核心通过静态注册表提供发现、配置、启停、检查、调用和会话指引。当前注册 Home Assistant、SSH 远程 Codex 任务和 RSSHub。运行时入口位于 `src/integrations/runtime.mjs`；配置格式与文件读写位于 `src/infrastructure/config/`。备份仍沿用现有配置实现。
+核心通过静态注册表提供发现、配置、启停、检查、调用和会话指引。当前注册 Home Assistant、SSH 远端操作和 RSSHub。运行时入口位于 `src/integrations/runtime.mjs`；配置格式与文件读写位于 `src/infrastructure/config/`。备份仍沿用现有配置实现。
 
 ## 使用和迁移
 
@@ -26,7 +26,7 @@ RSSHub 使用源码外的 `~/.config/wechat-assistant/rsshub.json`，配置示�
 
 `feeds` 中的名称由用户自定，值为该 RSSHub 实例上的路由；调用时只能选配置过的名称。通过 `config-set rsshub` 写入后，运行 `integration-enable rsshub [账号]`，再用 `integration-call rsshub [账号]` 传入 `{"operation":"latest","source":"tech","limit":10}`。插件请求 RSSHub 的 JSON Feed 输出，最多返回 30 条，限制响应大小和请求时间；不自动抓取链接正文。RSSHub 路由和 JSON Feed 格式参见[官方文档](https://docs.rsshub.app/guide/parameters)。
 
-SSH 插件 ID 为 `ssh-remote`，沿用现有 `remote-hosts` 配置和远程任务账本，不复制 SSH 凭据或 Codex 协议。先用既有 `config-set remote-hosts` 配置主机，再按账号执行 `integration-enable ssh-remote [账号]`。调用时必须有当前会话的 `CODEX_THREAD_ID`，例如 `{"action":"list","host":"example"}`；插件仅允许远程 Codex 任务操作，不提供任意 SSH shell。启用前会探测已配置的第一台主机。既有 `remote-cli.mjs` 是受信任宿主的兼容入口；新插件的账号开关只约束插件入口，不能当作同一 OS 用户的安全隔离。
+SSH 插件 ID 为 `ssh-remote`。先用 `config-set remote-hosts` 配置主机和授权目录，再按账号执行 `integration-enable ssh-remote [账号]`。调用时必须有当前会话的 `CODEX_THREAD_ID`。支持主机列表、目录检查、命令执行、文件读取和新文件写入；部署设备运行本机 Codex，远端只需 SSH 服务。启用前探测第一台主机。命令由远端 shell 执行，授权目录只约束项目选择和文件 API，不能隔离命令自身的文件访问；账号开关也不能隔离同一 OS 用户的 SSH 凭据。
 
 `list` / `status` 接受一个可选账号；`enable` / `disable` / `check` / `call` 接受集成 ID 和可选账号。未指定账号时取 `WECHAT_ACCOUNT`，再回退 `default`。安装入口同时支持 `integration-list/status/enable/disable/check/call`，参数与上述入口一致。
 

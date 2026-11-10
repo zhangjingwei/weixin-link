@@ -161,7 +161,7 @@ If the `bot2` service is still running and needs a new login, use `./qr.sh --rel
 
 ## More capabilities and documentation
 
-**Codex** handles tasks. Remote hosts and isolated Linux containers currently use Codex paths.
+**Codex** handles tasks. SSH operations on remote hosts do not require Codex there.
 
 - [User guide](USER-GUIDE.md): conversations, models, memory, attachments and results.
 - [Configuration and maintenance](CONFIGURATION.md): installation, upgrades, backups and troubleshooting.
@@ -169,7 +169,7 @@ If the `bot2` service is still running and needs a new login, use `./qr.sh --rel
 - [Configuration examples](config-templates/): deployment references.
 - [Contributing](CONTRIBUTING.md): report issues and contribute changes.
 
-Optional integrations: [Home Assistant read-only queries, SSH remote Codex tasks, and RSSHub feeds](src/integrations/README.md) require explicit per-account enablement. Backup migration to this interface remains pending.
+Optional integrations: [Home Assistant read-only queries, SSH remote operations, and RSSHub feeds](src/integrations/README.md) require explicit per-account enablement. Backup migration to this interface remains pending.
 
 ## Security and license
 

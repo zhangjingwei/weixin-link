@@ -94,24 +94,24 @@ node src/setup/setup.mjs config-status
 node src/setup/setup.mjs config-restore ha
 ```
 
-类型支持 `installation`、`ha`、`backup`、`remote-hosts`。schema 返回格式；check 校验输入；set 原子写入并保留上一版；status 返回配置状态；restore 重新校验并恢复上一版。`remote-hosts` 写入时只校验格式与现有任务的安全边界，不连接主机；连接问题在使用该主机时报告。远程配置与远程操作共用配置锁，无需等待聊天会话空闲；未结束或结果未确认任务所用的主机不能删除或改向，已有连接保留原配置快照。其他配置类型保留各自的连接或运行条件检查。配置通过标准输入提供，不将令牌放入命令参数。
+类型支持 `installation`、`ha`、`backup`、`remote-hosts`。schema 返回格式；check 校验输入；set 原子写入并保留上一版；status 返回配置状态；restore 重新校验并恢复上一版。`remote-hosts` 写入时只校验格式，不连接主机；启用集成或使用主机时检查连接。配置变更从下一次调用生效。其他配置类型保留各自的连接或运行条件检查。配置通过标准输入提供，不将令牌放入命令参数。
 
 `installation` 配置只接受工作目录和 Codex CLI 路径等安装字段。旧安装配置含已删除字段时，先停服务，再通过 `config-set installation` 写入同一 `workspace` 和所需的 `codexBinary`；配置入口会校验工作目录不变。旧底座会话和任务不迁移。微信发送“重启”可在当前账号空闲后安排服务重启。
 
-安装工作区不能直接迁移。存在运行实例时，安装路径配置需先停服务；远程主机有未对账任务时，删除或改变目标会被拒绝。恢复配置同样遵守这些检查。
+安装工作区不能直接迁移。存在运行实例时，安装路径配置需先停服务。远程主机配置从下一次 SSH 操作起生效。
 
 多账号入口为 `node src/setup/account-manager.mjs`，支持 `list`、`create`、`login`、`refresh-qr`、`qr`、`start`、`stop`、`verify`。`qr` 导出可交付文件；`stop` 等待指定账号空闲后停用，不影响其他账号。
 
 ## 远程主机与可选集成
 
-- **远程主机**：私有工作区 `remote-hosts.json` 使用 `version: 1` 和 `hosts` 对象；每个主机包含 `platform`、`binary`、`root`、`transport`，`ssh-websocket` 另需 `port`。兼容旧版主机映射格式。用 config-schema 查看完整规则。
+- **远程主机**：私有工作区 `remote-hosts.json` 使用 `version: 1` 和 `hosts` 对象；每个主机包含 `platform`（`posix` 或 `win32`）和授权目录 `root`。Windows 远端需启用 OpenSSH Server 并具备 PowerShell；SSH 别名与密钥在私有 SSH 配置中管理，远端无需 Codex。用 config-schema 查看完整规则。
 - **SSH**：`WECHAT_SSH_CONFIG` 指定配置文件，默认 `~/.ssh/wechat_hosts_config`。示例见 [SSH 配置模板](config-templates/ssh-config.example)，保持主机密钥校验。
 - **HA**：智能体参考 [HA 模板](config-templates/ha.example.json)，通过配置接口写入 `~/.config/wechat-assistant/ha.json`；还需运行 `node src/integrations/cli.mjs enable home-assistant <账号>` 显式启用，当前仅支持只读查询。旧凭据路径继续兼容，新账号不继承启用状态；详见 [集成说明](src/integrations/README.md)。
 - **备份（Linux）**：智能体参考 [备份模板](config-templates/backup.example.json)，通过配置接口写入 `~/.config/wechat-assistant/backup.json`；目标、加密公钥及远端私钥独立准备。
 
 运行时可通过 `WECHAT_REMOTE_HOSTS`、`WECHAT_BACKUP_CONFIG` 指向外部配置；配置管理接口不接管自定义路径，遇到不一致时返回 `CONFIG_CUSTOM_PATH_UNMANAGED`。远程工作区可用 `WECHAT_REMOTE_WORKSPACE` 指定。
 
-项目定位由智能体结合请求和实际目录处理，主机注册与允许根目录只限定执行边界。远程连接入口见 [远程连接文档](src/infrastructure/remote/README.md)，无需向私有工作区复制执行脚本。
+项目定位由智能体结合请求和实际目录处理，主机注册与允许根目录限定项目选择和文件 API；命令执行权限由远端 SSH 账号控制。远程连接入口见 [远程连接文档](src/infrastructure/remote/README.md)，无需向私有工作区复制执行脚本。
 
 ## 升级与验证
 

@@ -6,7 +6,7 @@ export class ConfigError extends Error{constructor(code,field){super(code);this.
 const text={type:'string',minLength:1,maxLength:8192,pattern:'^[^\\r\\n\\u0000]+$'}
 const absolute={...text,format:'absolute-path'}
 const object=(properties,required)=>({type:'object',properties,required,additionalProperties:false})
-const host=object({platform:{enum:['posix','win32']},binary:{...text,format:'remote-path'},root:{...text,format:'remote-path'},transport:{enum:['daemon-proxy','ssh-websocket']},port:{type:'integer',minimum:1024,maximum:65535}},['platform','binary','root','transport'])
+const host=object({platform:{enum:['posix','win32']},root:{...text,format:'remote-path'}},['platform','root'])
 export const CONFIG_SCHEMAS={
  installation:object({version:{const:1},workspace:absolute,codexBinary:absolute,createdAt:{...text,format:'date-time'}},['version','workspace']),
  ha: haSchema,
@@ -42,8 +42,6 @@ function validate(schema,value,path='',parent){
 export function validateHostConfig(name,value){
  if(!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name))fail('CONFIG_INVALID_HOST_NAME','hosts')
  validate(host,value,'hosts.'+name)
- if(value.platform==='win32'&&value.transport!=='ssh-websocket')fail('CONFIG_INVALID_TRANSPORT','hosts.'+name+'.transport')
- if(value.transport==='ssh-websocket'&&value.port===undefined)fail('CONFIG_REQUIRED_FIELD','hosts.'+name+'.port')
  return value
 }
 export function validateConfig(kind,input){
