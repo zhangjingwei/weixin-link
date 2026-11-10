@@ -113,9 +113,9 @@ See the [English user guide](USER-GUIDE.en.md) for branch or commit reviews, sav
 
 ## Installation and upgrades
 
-To upgrade, rerun the installation command in [Quick start](#quick-start) and choose **1. Upgrade**. Standard installations also prompt you when a stable update is available and upgrade only after you confirm. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments and recovery.
+To upgrade, rerun the installation command in [Quick start](#quick-start) and choose **Upgrade**. Standard installations also prompt you when a stable update is available and upgrade only after you confirm. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments and recovery.
 
-The installer guides you through the first WeChat login. To log in again later, rerun the same installation command and choose **3. Log in to WeChat again** from the menu. You do not need to find the installation directory.
+The installer guides you through the first WeChat login. To log in again later, rerun the same installation command and choose **Log in to WeChat again** from the menu. You do not need to find the installation directory.
 
 **Linux / macOS**:
 
@@ -129,7 +129,9 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-To add another WeChat account, choose **4. Add WeChat account**. See [WeChat login maintenance](CONFIGURATION.md#微信登录维护) for other cases.
+To add another WeChat account, choose **Add WeChat account**. See [WeChat login maintenance](CONFIGURATION.md#微信登录维护) for other cases.
+
+To uninstall, rerun the same command, choose **Uninstall**, and confirm. Account data and the workspace are kept.
 
 ## More capabilities and documentation
 

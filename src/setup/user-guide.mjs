@@ -6,7 +6,7 @@ export const USER_GUIDE=`微信助手使用说明
 
 1. 按 README 的步骤在电脑上运行安装命令。安装器会提示选择订阅登录、DeepSeek、Qwen 或 Kimi，并完成授权、连接检查和真实模型测试。第三方密钥只在终端输入，不要发到微信。
 2. 安装器显示微信登录地址，并尝试打开浏览器。请在手机微信确认登录；若要求输入 PIN，请按同一终端的提示操作。登录后微信 Link 会主动推送连接结果。
-3. 若跳过或未完成模型配置，重新运行安装命令，在菜单中选择“2 配置模型”。
+3. 若跳过或未完成模型配置，重新运行安装命令，在菜单中选择“配置模型”。
 
 - “安装向导”：返回本机终端向导的启动方法。
 
@@ -138,7 +138,7 @@ Send English commands as plain text, without a slash. Commands are case insensit
 
 1. Follow the installation steps in README.en.md on your computer. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
 2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message after login.
-3. If you skipped or did not complete model setup, rerun the installer and choose 2. Configure model from the menu.
+3. If you skipped or did not complete model setup, rerun the installer and choose Configure model from the menu.
 
 - setup: Show how to start the setup wizard on your computer.
 

@@ -56,7 +56,7 @@ node src/setup/setup.mjs deps --human
 if test -t 0 && test -t 1; then
  node src/setup/setup.mjs wizard --human
 else
- if test "$setup_english" = 1; then echo 'This terminal is not interactive, so model setup was skipped. Rerun the installer and choose 2. Configure model.'; else echo '当前终端无法交互，已跳过模型设置。请重新运行安装命令，在菜单中选择「2 配置模型」。'; fi
+ if test "$setup_english" = 1; then echo 'This terminal is not interactive, so model setup was skipped. Rerun the installer and choose Configure model.'; else echo '当前终端无法交互，已跳过模型设置。请重新运行安装命令，在菜单中选择「配置模型」。'; fi
 fi
 node src/setup/setup.mjs services --human
 node src/setup/setup.mjs wechat-login --human

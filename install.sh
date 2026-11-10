@@ -24,6 +24,48 @@ bootstrap_run_interactive() {
   else "$@"
   fi
 }
+bootstrap_select() (
+  bootstrap_title=$1 bootstrap_selected=$2
+  shift 2
+  bootstrap_count=$#
+  bootstrap_tty_state=$(stty -g </dev/tty) || exit 1
+  stty -echo -icanon min 1 time 0 </dev/tty
+  trap 'stty "$bootstrap_tty_state" </dev/tty 2>/dev/null || true' EXIT
+  trap 'exit 130' INT TERM HUP
+  bootstrap_draw() {
+    bootstrap_index=1
+    for bootstrap_label do
+      if test "$bootstrap_index" -eq "$bootstrap_selected"; then
+        printf '\033[2K> %s\n' "$bootstrap_label" >/dev/tty
+      else
+        printf '\033[2K  %s\n' "$bootstrap_label" >/dev/tty
+      fi
+      bootstrap_index=$((bootstrap_index + 1))
+    done
+  }
+  printf '\n%s\n' "$bootstrap_title" >/dev/tty
+  bootstrap_draw "$@"
+  while :; do
+    bootstrap_key=$(dd bs=1 count=1 2>/dev/null </dev/tty)
+    case "$bootstrap_key" in
+      ''|"$(printf '\r')") printf '%s\n' "$bootstrap_selected"; exit 0 ;;
+      "$(printf '\033')")
+        bootstrap_key=$(dd bs=1 count=1 2>/dev/null </dev/tty)
+        if test "$bootstrap_key" = '['; then
+          bootstrap_key=$(dd bs=1 count=1 2>/dev/null </dev/tty)
+          case "$bootstrap_key" in
+            A) bootstrap_selected=$((bootstrap_selected - 1)); test "$bootstrap_selected" -ge 1 || bootstrap_selected=$bootstrap_count ;;
+            B) bootstrap_selected=$((bootstrap_selected + 1)); test "$bootstrap_selected" -le "$bootstrap_count" || bootstrap_selected=1 ;;
+          esac
+        fi ;;
+      [1-9]) if test "$bootstrap_key" -le "$bootstrap_count"; then bootstrap_selected=$bootstrap_key; else continue; fi ;;
+      0) if test "$bootstrap_count" -eq 6; then bootstrap_selected=6; else continue; fi ;;
+      *) continue ;;
+    esac
+    printf '\033[%sA' "$bootstrap_count" >/dev/tty
+    bootstrap_draw "$@"
+  done
+)
 if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
   if test -L "$bootstrap_dest" || ! test -d "$bootstrap_dest" || ! test -f "$bootstrap_dest/package.json" || { ! test -f "$bootstrap_dest/src/setup/account-manager.mjs" && ! test -f "$bootstrap_dest/src/wechat/account-manager.mjs"; } || ! test -f "$bootstrap_dest/src/setup/setup.mjs"; then
     echo "Installation directory already exists but is not a supported installation: $bootstrap_dest" >&2; exit 1
@@ -37,11 +79,10 @@ if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
   bootstrap_mode=upgrade
   if ( : </dev/tty ) 2>/dev/null; then
     if test "$bootstrap_english" = 1; then
-      printf 'Existing installation found. Choose: 1 Upgrade  2 Configure model  3 Log in to WeChat again  4 Add WeChat account  0 Exit\nChoice: ' >/dev/tty
+      bootstrap_choice=$(bootstrap_select 'Use ↑/↓ to choose, then press Enter:' 1 'Upgrade' 'Configure model' 'Log in to WeChat again' 'Add WeChat account' 'Uninstall' 'Exit')
     else
-      printf '检测到已有安装。请选择：1 升级  2 配置模型  3 重新登录微信  4 添加微信账号  0 退出\n输入序号：' >/dev/tty
+      bootstrap_choice=$(bootstrap_select '用 ↑/↓ 选择，回车确认：' 1 '升级' '配置模型' '重新登录微信' '添加微信账号' '卸载' '退出')
     fi
-    IFS= read -r bootstrap_choice </dev/tty || bootstrap_choice=0
     case "$bootstrap_choice" in
       1) ;;
       2) bootstrap_command=setup; bootstrap_mode=maintenance ;;
@@ -51,7 +92,16 @@ if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
         if test "$bootstrap_english" = 1; then printf 'New account name (lowercase letters, digits, hyphens): ' >/dev/tty; else printf '新账号名称（小写字母、数字、连字符）：' >/dev/tty; fi
         IFS= read -r bootstrap_account </dev/tty || exit 1
         ;;
-      0) exit 0 ;;
+      5)
+        bootstrap_command=uninstall; bootstrap_mode=maintenance
+        if test "$bootstrap_english" = 1; then
+          bootstrap_confirm=$(bootstrap_select 'Uninstall the program? Account data and workspace will be kept.' 1 'Cancel' 'Confirm uninstall')
+        else
+          bootstrap_confirm=$(bootstrap_select '卸载程序？账号数据和工作区会保留。' 1 '取消' '确认卸载')
+        fi
+        test "$bootstrap_confirm" = 2 || exit 0
+        ;;
+      6) exit 0 ;;
       *) echo 'INVALID_INSTALL_CHOICE' >&2; exit 1 ;;
     esac
   fi
@@ -81,6 +131,16 @@ if test "$bootstrap_mode" = maintenance; then
    setup) bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wizard "$bootstrap_account" --human ;;
    relogin) bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wechat-login --relogin "$bootstrap_account" --human ;;
    account-create) "$bootstrap_node" src/setup/account-manager.mjs create "$bootstrap_account" --human; bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wizard "$bootstrap_account" --human; bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wechat-login "$bootstrap_account" --human ;;
+   uninstall)
+     test ! -e .git || { echo 'UNINSTALL_SOURCE_REQUIRES_REVIEW' >&2; exit 1; }
+     test -f src/setup/uninstall.mjs || { echo '请先升级当前安装版本，再使用卸载菜单。' >&2; exit 1; }
+     "$bootstrap_node" src/setup/uninstall.mjs
+     bootstrap_target=$(pwd -P)
+     case "$bootstrap_target" in /|"$HOME") echo 'INVALID_INSTALLATION_DIR' >&2; exit 1;; esac
+     cd "$(dirname -- "$bootstrap_target")"
+     rm -rf -- "$bootstrap_target"
+     echo '程序已卸载，账号数据和工作区已保留。'
+     ;;
   esac
   exit 0
 fi

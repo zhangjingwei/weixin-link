@@ -6,7 +6,7 @@ Send English commands as plain text, without a slash. Commands are case insensit
 
 1. Follow the installation steps in README.en.md on your computer. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
 2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message after login.
-3. If you skipped or did not complete model setup, rerun the installer and choose **2. Configure model** from the menu.
+3. If you skipped or did not complete model setup, rerun the installer and choose **Configure model** from the menu.
 
 - `setup`: Show how to start the setup wizard on your computer.
 

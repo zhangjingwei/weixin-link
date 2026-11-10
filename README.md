@@ -39,6 +39,8 @@
 
 ## 快速开始
 
+安装时用方向键选择，回车确认。
+
 ### 首次安装
 
 Linux / macOS：
@@ -57,7 +59,7 @@ Windows x64（PowerShell）：
 
 ### 升级
 
-运行命令，在菜单中选择“1 升级”：
+运行命令，在菜单中选择“升级”：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
@@ -71,7 +73,7 @@ Windows x64（PowerShell）：
 
 ### 重新登录微信
 
-运行命令，在菜单中选择“3 重新登录微信”：
+运行命令，在菜单中选择“重新登录微信”：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
@@ -82,6 +84,22 @@ Windows x64（PowerShell）：
 ```powershell
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
+
+### 卸载
+
+运行命令，在菜单中选择“卸载”，按提示确认：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
+```
+
+Windows x64（PowerShell）：
+
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
+```
+
+卸载会保留账号数据和工作区。
 
 支持 Linux（x64、arm64）、macOS（Intel、Apple Silicon）和 Windows（x64）。
 

@@ -59,13 +59,19 @@ test('existing installation menu handles local maintenance without downloading a
  const f=await fixture(t),env=await installed(f)
  await writeFile(join(f.bin,'node'),'#!/bin/sh\nif [ "$1" = -e ]; then exit 0; fi\nprintf "%s\\n" "$*" > "$UPGRADE_CAPTURE"\n',{mode:0o755})
  for(const [choice,expected]of [['2','wizard default --human'],['3','wechat-login --relogin default --human'],['4','wechat-login bot2 --human']]){
-  const script=`spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "输入序号："\nsend "${choice}\\r"\n${choice==='4'?'expect "新账号名称*"\nsend "bot2\\r"\n':''}expect eof`
+  const script=`spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "${choice}\\r"\n${choice==='4'?'expect "新账号名称*"\nsend "bot2\\r"\n':''}expect eof`
   await exec('expect',['-c',script],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
   assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes(expected))
  }
- await exec('expect',['-c','spawn sh -c {cat "$BOOTSTRAP_SCRIPT" | sh}\nexpect "输入序号："\nsend "2\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
+ await exec('expect',['-c','spawn sh -c {cat "$BOOTSTRAP_SCRIPT" | sh}\nexpect "回车确认："\nsend "\\033\\[B\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
  assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes('wizard default --human'))
  assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
+ await writeFile(join(f.dest,'src/setup/uninstall.mjs'),'// fixture\n')
+ await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "5\\r"\nexpect "卸载程序？"\nsend "\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
+ assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
+ await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "5\\r"\nexpect "卸载程序？"\nsend "\\033\\[B\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
+ assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes('uninstall.mjs'))
+ await assert.rejects(readFile(join(f.dest,'keep')),{code:'ENOENT'})
 })
 test('piped entry keeps noninteractive upgrade behavior',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t),env=await installed(f)

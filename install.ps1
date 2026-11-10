@@ -7,6 +7,34 @@ if ([Environment]::OSVersion.Platform -ne 'Win32NT' -or $env:PROCESSOR_ARCHITECT
 }
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $bootstrapHome = [Environment]::GetFolderPath('UserProfile')
+function Select-BootstrapOption([string]$Title,[string[]]$Options,[int]$Default=1){
+    [Console]::WriteLine($Title)
+    for($i=0;$i -lt $Options.Count;$i++){[Console]::WriteLine($(if($i+1 -eq $Default){'> '}else{'  '})+$Options[$i])}
+    $top=[Console]::CursorTop-$Options.Count
+    $selected=$Default
+    while($true){
+        $key=[Console]::ReadKey($true)
+        $old=$selected
+        switch($key.Key.ToString()){
+            'UpArrow' {$selected=if($selected -eq 1){$Options.Count}else{$selected-1}}
+            'DownArrow' {$selected=if($selected -eq $Options.Count){1}else{$selected+1}}
+            'Enter' {[Console]::WriteLine();return $selected}
+            default {
+                $number=0
+                if([int]::TryParse([string]$key.KeyChar,[ref]$number)){
+                    if($number -eq 0 -and $Options.Count -eq 6){$selected=6}
+                    elseif($number -ge 1 -and $number -le $Options.Count){$selected=$number}
+                }
+            }
+        }
+        if($selected -ne $old){
+            $bottom=[Console]::CursorTop
+            [Console]::SetCursorPosition(0,$top+$old-1);[Console]::Write('  ')
+            [Console]::SetCursorPosition(0,$top+$selected-1);[Console]::Write('> ')
+            [Console]::SetCursorPosition(0,$bottom)
+        }
+    }
+}
 $bootstrapDest = if ($env:WEIXIN_LINK_DIR) { $env:WEIXIN_LINK_DIR } elseif ($env:ZERO_LINK_DIR) { $env:ZERO_LINK_DIR } else { Join-Path $bootstrapHome '.local\share\weixin-link\source' }
 $bootstrapDest = [IO.Path]::GetFullPath($bootstrapDest)
 if (!$env:WEIXIN_LINK_DIR -and !$env:ZERO_LINK_DIR -and (Get-Item -LiteralPath (Join-Path $bootstrapHome '.local\share\zero-link\source') -Force -ErrorAction SilentlyContinue)) {
@@ -30,13 +58,27 @@ if ($bootstrapExisting) {
     if($bootstrapEnglish){throw 'A background service exists but the selected source directory is missing. Set WEIXIN_LINK_DIR to the original source; no new installation was created.'}else{throw '检测到已有后台服务，但所选源码目录不存在。请用 WEIXIN_LINK_DIR 指定原目录；未创建新安装。'}
 }
 if ($bootstrapExisting -and -not [Console]::IsInputRedirected) {
-    if($bootstrapEnglish){Write-Output 'Existing installation found. Choose: 1 Upgrade  2 Configure model  3 Log in to WeChat again  4 Add WeChat account  0 Exit'}
-    else{Write-Output '检测到已有安装。请选择：1 升级  2 配置模型  3 重新登录微信  4 添加微信账号  0 退出'}
-    $choice = Read-Host $(if($bootstrapEnglish){'Choice'}else{'输入序号'})
-    if($choice -eq '0'){return}
-    if($choice -notin @('1','2','3','4')){throw 'INVALID_INSTALL_CHOICE'}
+    if($bootstrapEnglish){$choice=Select-BootstrapOption 'Use ↑/↓ to choose, then press Enter:' @('Upgrade','Configure model','Log in to WeChat again','Add WeChat account','Uninstall','Exit')}
+    else{$choice=Select-BootstrapOption '用 ↑/↓ 选择，回车确认：' @('升级','配置模型','重新登录微信','添加微信账号','卸载','退出')}
+    if($choice -eq 6){return}
     if($choice -ne '1'){
         if(!(Test-Path -LiteralPath (Join-Path $bootstrapDest 'src\setup\account-manager.mjs') -PathType Leaf)){throw 'UPGRADE_REQUIRED_FOR_MENU'}
+        if($choice -eq '5'){
+            if($bootstrapDest -eq [IO.Path]::GetPathRoot($bootstrapDest) -or $bootstrapDest -eq $bootstrapHome){throw 'INVALID_INSTALLATION_DIR'}
+            if(Test-Path -LiteralPath (Join-Path $bootstrapDest '.git')){throw 'UNINSTALL_SOURCE_REQUIRES_REVIEW'}
+            if(!(Test-Path -LiteralPath (Join-Path $bootstrapDest 'src\setup\uninstall.mjs') -PathType Leaf)){throw 'UPGRADE_REQUIRED_FOR_UNINSTALL'}
+            if($bootstrapEnglish){$confirmation=Select-BootstrapOption 'Uninstall the program? Account data and workspace will be kept.' @('Cancel','Confirm uninstall')}
+            else{$confirmation=Select-BootstrapOption '卸载程序？账号数据和工作区会保留。' @('取消','确认卸载')}
+            if($confirmation -ne 2){return}
+            $env:HOME = $bootstrapHome
+            $env:PATH = (Split-Path -Parent $bootstrapNode) + ';' + $env:PATH
+            Set-Location (Split-Path -Parent $bootstrapDest)
+            & $bootstrapNode (Join-Path $bootstrapDest 'src\setup\uninstall.mjs')
+            if($LASTEXITCODE -ne 0){throw 'UNINSTALL_FAILED'}
+            Remove-Item -LiteralPath $bootstrapDest -Recurse -Force
+            if($bootstrapEnglish){Write-Output 'Program uninstalled. Account data and workspace were kept.'}else{Write-Output '程序已卸载，账号数据和工作区已保留。'}
+            return
+        }
         $account = 'default'
         if($choice -eq '4'){
             $account = Read-Host $(if($bootstrapEnglish){'New account name (lowercase letters, digits, hyphens)'}else{'新账号名称（小写字母、数字、连字符）'})

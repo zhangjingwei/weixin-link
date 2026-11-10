@@ -27,5 +27,14 @@ switch($d.action){
  'start' {if(!$t){throw 'SERVICE_NOT_INSTALLED'};Start-ScheduledTask -TaskName $d.name}
  'stop' {if($t){Stop-ScheduledTask -TaskName $d.name;for($i=0;$i -lt 100;$i++){if((Get-ScheduledTask -TaskName $d.name).State -ne 'Running'){break};Start-Sleep -Milliseconds 100};if((Get-ScheduledTask -TaskName $d.name).State -eq 'Running'){throw 'SERVICE_STOP_UNCONFIRMED'}}}
  'status' {@{active=($t -and $t.State -eq 'Running');pid=0}|ConvertTo-Json -Compress}
+ 'remove' {
+  if($t){
+   if($t.Actions.Count -ne 1 -or $t.Actions[0].WorkingDirectory -ne $d.root){throw 'SERVICE_CONFIGURATION_CHANGED_REQUIRES_REVIEW'}
+   Stop-ScheduledTask -TaskName $d.name -ErrorAction SilentlyContinue
+   for($i=0;$i -lt 100;$i++){if((Get-ScheduledTask -TaskName $d.name).State -ne 'Running'){break};Start-Sleep -Milliseconds 100}
+   if((Get-ScheduledTask -TaskName $d.name).State -eq 'Running'){throw 'SERVICE_STOP_UNCONFIRMED'}
+   Unregister-ScheduledTask -TaskName $d.name -Confirm:$false
+  }
+ }
  default {throw 'INVALID_ACTION'}
 }
