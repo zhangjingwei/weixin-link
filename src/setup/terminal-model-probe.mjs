@@ -3,15 +3,20 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {randomUUID} from 'node:crypto'
 import {execFile} from 'node:child_process'
-import {promisify} from 'node:util'
 import {findCodex,installConfig} from './install-config.mjs'
 import {ensureAccountCodexHome} from '../infrastructure/accounts/codex-home.mjs'
 import {accountProviderProfile,providerEnvironment} from './provider-profile.mjs'
 import {codexProviderOptions} from '../base/codex/provider-options.mjs'
 
-const run=promisify(execFile)
+export function runModelProbeCommand(binary,args,options){
+ return new Promise((resolve,reject)=>{
+  const child=execFile(binary,args,options,(error,stdout,stderr)=>error?reject(error):resolve({stdout,stderr}))
+  child.stdin.on('error',()=>{})
+  child.stdin.end()
+ })
+}
 
-export async function probeTerminalModel({accountId='default',home,root,execute=run,timeoutMs=60000}={}){
+export async function probeTerminalModel({accountId='default',home,root,execute=runModelProbeCommand,timeoutMs=60000}={}){
  const profile=await accountProviderProfile(accountId,home),provider=providerEnvironment(profile)
  const selected=codexProviderOptions({...provider.options,...provider.secrets})
  const configs=[];for(let i=1;i<selected.args.length;i++)if(selected.args[i]==='-c')configs.push('-c',selected.args[++i])

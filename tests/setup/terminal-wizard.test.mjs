@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {runTerminalWizard} from '../../src/setup/terminal-wizard.mjs'
-import {probeTerminalModel} from '../../src/setup/terminal-model-probe.mjs'
+import {probeTerminalModel,runModelProbeCommand} from '../../src/setup/terminal-model-probe.mjs'
 import {readTerminalSetupStatus} from '../../src/setup/terminal-setup-status.mjs'
 import {saveProviderProfile,readProviderProfile} from '../../src/setup/provider-profile.mjs'
 import {accountPaths} from '../../src/infrastructure/accounts/account-store.mjs'
@@ -63,6 +63,11 @@ test('terminal probe passes Responses configuration and checks the model output'
  assert(captured.args.join(' ').includes('model_context_window=1048576'))
  assert(!captured.args.join(' ').includes('sk-private-test-key'))
  assert.equal(captured.options.env.WECHAT_KIMI_API_KEY,'sk-private-test-key')
+})
+
+test('terminal probe closes unused stdin before waiting for Codex',async()=>{
+ const {stdout}=await runModelProbeCommand(process.execPath,['-e',"process.stdin.resume();process.stdin.once('end',()=>process.stdout.write('stdin-closed'))"],{timeout:3000})
+ assert.equal(stdout,'stdin-closed')
 })
 
 test('terminal probe reports a timed-out inference without marking setup verified',async t=>{
