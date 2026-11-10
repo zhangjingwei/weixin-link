@@ -4,6 +4,7 @@ import {promisify} from 'node:util'
 import {homedir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {readFile,readdir,unlink,lstat} from 'node:fs/promises'
+import {setTimeout as delay} from 'node:timers/promises'
 import {ServiceManager,xml} from './platform-service.mjs'
 
 const exec=promisify(execFile)
@@ -23,7 +24,20 @@ const managed=async(path,root)=>{
  return true
 }
 
-export async function uninstallInstallation({home=process.env.HOME||homedir(),root=source,platform=process.platform,run=exec,manager=new ServiceManager({home,root,platform,run})}={}){
+async function launchAgentLoaded(run,target){
+ try{await run('launchctl',['print',target],{timeout:10000});return true}
+ catch(error){if(Number(error.code)===113)return false;throw Error('SERVICE_STATUS_UNCONFIRMED')}
+}
+
+async function waitForLaunchAgentUnload(run,target,wait){
+ for(let attempt=0;attempt<40;attempt++){
+  if(!await launchAgentLoaded(run,target))return true
+  if(attempt<39)await wait(250)
+ }
+ return false
+}
+
+export async function uninstallInstallation({home=process.env.HOME||homedir(),root=source,platform=process.platform,run=exec,manager=new ServiceManager({home,root,platform,run}),wait=delay}={}){
  const packageFile=JSON.parse(await readFile(join(root,'package.json'),'utf8'))
  if(!['weixin-link','wechat-ping-bot'].includes(packageFile.name))throw Error('INSTALLATION_NOT_FOUND')
  const ids=await accounts(home)
@@ -65,9 +79,11 @@ export async function uninstallInstallation({home=process.env.HOME||homedir(),ro
    const path=join(directory,name)
    if(!await managed(path,root))continue
    const target=manager.domain+'/'+name.slice(0,-6)
-   await run('launchctl',['bootout',target]).catch(()=>{})
-   const status=await run('launchctl',['print',target]).then(()=>true,()=>false)
-   if(status)throw Error('SERVICE_STOP_UNCONFIRMED')
+   try{await run('launchctl',['bootout',target],{timeout:30000})}
+   catch{
+    if(await launchAgentLoaded(run,target))await run('launchctl',['bootout',manager.domain,path],{timeout:30000}).catch(()=>{})
+   }
+   if(!await waitForLaunchAgentUnload(run,target,wait))throw Error('SERVICE_STOP_UNCONFIRMED')
    await unlink(path)
   }
  }else if(platform==='win32'){

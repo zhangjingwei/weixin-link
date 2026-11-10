@@ -45,10 +45,59 @@ test('uninstall removes a managed macOS launch agent without touching account da
  const plist=join(agents,'com.wechat-assistant.wechat-ping-bot.plist')
  await writeFile(plist,`<!-- Managed by wechat-assistant setup v1 -->\n<string>${root}</string>`)
  const calls=[]
- await uninstallInstallation({home,root,platform:'darwin',manager:{domain:'gui/42'},run:async(binary,args)=>{calls.push([binary,...args]);if(args[0]==='print')throw Error('not loaded');return {stdout:''}}})
+ await uninstallInstallation({home,root,platform:'darwin',manager:{domain:'gui/42'},run:async(binary,args)=>{calls.push([binary,...args]);if(args[0]==='print')throw Object.assign(Error('not loaded'),{code:113});return {stdout:''}}})
  assert(calls.some(call=>call[1]==='bootout'))
  await assert.rejects(readFile(plist),{code:'ENOENT'})
  assert.equal(await readFile(join(state,'private'),'utf8'),'kept')
+})
+
+test('macOS uninstall waits for launchctl to finish unloading before removing its plist',async t=>{
+ const home=await mkdtemp(join(tmpdir(),'weixin-uninstall-'))
+ t.after(()=>rm(home,{recursive:true,force:true}))
+ const root=join(home,'source'),agents=join(home,'Library/LaunchAgents')
+ await Promise.all([mkdir(root,{recursive:true}),mkdir(agents,{recursive:true})])
+ await writeFile(join(root,'package.json'),'{"name":"weixin-link"}')
+ const plist=join(agents,'com.wechat-assistant.wechat-ping-bot.plist')
+ await writeFile(plist,'<!-- Managed by wechat-assistant setup v1 -->\n<string>'+root+'</string>')
+ let checks=0,waits=0
+ await uninstallInstallation({home,root,platform:'darwin',manager:{domain:'gui/42'},wait:async()=>{waits++},run:async(_binary,args)=>{
+  if(args[0]==='print'&&++checks<3)return {stdout:'state = running'}
+  if(args[0]==='print')throw Object.assign(Error('not loaded'),{code:113})
+  return {stdout:''}
+ }})
+ assert.equal(waits,2)
+ await assert.rejects(readFile(plist),{code:'ENOENT'})
+})
+
+test('macOS uninstall keeps its plist if bootout never stops the service',async t=>{
+ const home=await mkdtemp(join(tmpdir(),'weixin-uninstall-'))
+ t.after(()=>rm(home,{recursive:true,force:true}))
+ const root=join(home,'source'),agents=join(home,'Library/LaunchAgents')
+ await Promise.all([mkdir(root,{recursive:true}),mkdir(agents,{recursive:true})])
+ await writeFile(join(root,'package.json'),'{"name":"weixin-link"}')
+ const plist=join(agents,'com.wechat-assistant.wechat-ping-bot.plist')
+ await writeFile(plist,'<!-- Managed by wechat-assistant setup v1 -->\n<string>'+root+'</string>')
+ await assert.rejects(uninstallInstallation({home,root,platform:'darwin',manager:{domain:'gui/42'},wait:async()=>{},run:async(_binary,args)=>args[0]==='print'?{stdout:'state = running'}:{stdout:''}}),/SERVICE_STOP_UNCONFIRMED/)
+ assert(await readFile(plist,'utf8'))
+})
+
+test('macOS uninstall retries bootout using the verified plist when the service target fails',async t=>{
+ const home=await mkdtemp(join(tmpdir(),'weixin-uninstall-'))
+ t.after(()=>rm(home,{recursive:true,force:true}))
+ const root=join(home,'source'),agents=join(home,'Library/LaunchAgents')
+ await Promise.all([mkdir(root,{recursive:true}),mkdir(agents,{recursive:true})])
+ await writeFile(join(root,'package.json'),'{"name":"weixin-link"}')
+ const plist=join(agents,'com.wechat-assistant.wechat-ping-bot.plist')
+ await writeFile(plist,'<!-- Managed by wechat-assistant setup v1 -->\n<string>'+root+'</string>')
+ let loaded=true,fallback=false
+ await uninstallInstallation({home,root,platform:'darwin',manager:{domain:'gui/42'},run:async(_binary,args)=>{
+  if(args[0]==='bootout'&&args.length===2)throw Error('service target failed')
+  if(args[0]==='bootout'&&args.length===3){assert.equal(args[2],plist);fallback=true;loaded=false}
+  if(args[0]==='print'&&!loaded)throw Object.assign(Error('not loaded'),{code:113})
+  return {stdout:''}
+ }})
+ assert.equal(fallback,true)
+ await assert.rejects(readFile(plist),{code:'ENOENT'})
 })
 
 test('an interrupted installation without services can be uninstalled',async t=>{
