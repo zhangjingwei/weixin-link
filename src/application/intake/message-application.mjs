@@ -29,7 +29,7 @@ return async function handleMessage(message) {
   const initialControl=intent?.value
   const nativeKind=nativeCommandKind(intent)
   if(runtime.sealed)return
-  if(runtime.draining&&!(typeof initialControl==='string'&&/^wizardChoice:\d+:3$/.test(initialControl))&&!['stop','exit','status','result','help'].includes(initialControl?.action)){
+  if(runtime.draining&&!['stop','exit','status','result','help'].includes(initialControl?.action)){
     if(message._ingressId){
       deferMaintenance?.(message)
       try{await view.directNotice(message,'服务正在维护，当前消息已保留，恢复后继续处理。')}
@@ -70,7 +70,11 @@ return async function handleMessage(message) {
   if(agentAction){await management.agent(agentAction,message,deliver,trace_id);return}
   if(upgradeAction){await management.upgrade(message,deliver,trace_id);return}
   if(!hasMedia(message)&&await conversations.control(message,reply)){jobs.acknowledge([message._ingressId].filter(Boolean));return}
-  const control = intent?.kind==='session'?intent.value:null
+  let control = intent?.kind==='session'?intent.value:null
+  if(control?.action==='reviewCommit'){
+    try{control=manager.resolveReviewCommit(message.userId,control.selection)}
+    catch(error){await reply(error.message);jobs.acknowledge([message._ingressId].filter(Boolean));return}
+  }
   if(!control&&!token.current())return
   const notice=receiptPolicy({media,busy:manager.sessions.get(message.userId)?.busy,waiting:!!manager.state.users[message.userId]?.waitingAttachment})
   message._receiptDeferred=notice==='defer'
@@ -83,7 +87,7 @@ return async function handleMessage(message) {
   if(control&&['plan','review'].includes(control.action)){
     if(!manager.supportsNativeCommands){await reply(`当前 ${manager.agentName} 底座未接入这项原生命令；没有执行。`);jobs.acknowledge([message._ingressId].filter(Boolean));return}
     if(!token.current())return
-    const input=control.action==='plan'?quoteInput(control.text,message.references):'请审查当前工作区变更。'
+    const input=control.action==='plan'?quoteInput(control.text,message.references):control.target?.type==='commit'?'请审查选定的提交。':control.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
     durable.submit(message.userId,{...(typeof input==='string'?{text:input}:input),nativeCommand:control,traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
     return
   }

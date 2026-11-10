@@ -30,7 +30,9 @@ test('list shows projects only while daily stays available through its own comma
  const projects=await list('列表');assert.match(projects,/2\. Work \[当前\]/);assert(!projects.includes('1. 原有对话'))
  router.bind({userId:'alice',text:'日常'})
  const fromDaily=await list('列表');assert.match(fromDaily,/2\. Work/);assert(!fromDaily.includes('[当前]'))
- assert.equal(router.bind({userId:'alice',text:'切换2'}).userId,project.userId)
+ router.bind({userId:'alice',text:'切换'})
+ router.ensure('alice').prompt.choices=['1','2']
+ assert.equal(router.bind({userId:'alice',text:'2'}).userId,project.userId)
 })
 test('daily entry reuses original owned thread without creating threads or stopping project work',async()=>{
  const {manager,router,calls}=fixture(),project=create(router,'Project')

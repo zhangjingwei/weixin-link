@@ -223,9 +223,9 @@ export class SessionManager {
     delete record.compaction
     try{await this.save()}catch(error){this.diagnostic(session,'compaction.save_failed',this.ports.errorFields(error))}
   }
-  async listConversations(userId,reply) {
+  async listConversations(userId,reply,{selecting=false}={}) {
     const ids=this.conversationIds(userId)
-    if(!ids.length){await reply('暂无本账号下属于你的历史对话。');return}
+    if(!ids.length){await reply('暂无可恢复的会话。');return}
     const session=await this.connect(userId,reply),lines=[]
     for(const [index,id] of ids.entries()){
       let title='历史对话'
@@ -233,13 +233,27 @@ export class SessionManager {
       lines.push(`${index+1}. ${id===session.threadId?'[当前] ':''}${title}（${id}）`)
     }
     this.state.users[userId].conversationChoices=ids;await this.save()
-    await reply('你保存的会话：\n'+lines.join('\n')+'\n发送“恢复会话 编号”继续；也可使用列表中的完整会话 ID。')
+    await reply('你保存的会话：\n'+lines.join('\n')+(selecting?'\n回复编号即可切换；发送“取消”放弃。':'\n发送“恢复会话”后可按编号切换。'))
+  }
+  async listRecentCommits(userId,reply){
+    const cwd=this.workspaceFor(userId),commits=await this.ports.recentCommits(cwd)
+    if(!commits.length){await reply('没有找到可审查的提交，请检查当前项目目录。');return false}
+    this.state.users[userId]??={}
+    this.state.users[userId].reviewChoices={cwd,ids:commits.map(commit=>commit.sha)}
+    await this.save()
+    await reply('最近的提交：\n'+commits.map((commit,index)=>`${index+1}. ${commit.title}`).join('\n')+'\n回复编号开始审查；发送“取消”放弃。')
+    return true
+  }
+  resolveReviewCommit(userId,selection){
+    const choices=this.state.users[userId]?.reviewChoices,index=Number(selection)-1
+    if(!/^\d{1,2}$/.test(String(selection))||!choices||choices.cwd!==this.workspaceFor(userId)||!choices.ids?.[index])throw Error('请重新发送“审查提交”并选择列表中的编号。')
+    return {action:'review',target:{type:'commit',sha:choices.ids[index]}}
   }
   async resumeConversation(userId,selection,reply,token) {
     if(!selection){await this.listConversations(userId,reply);return}
     const saved=this.state.users[userId]??{},ids=this.conversationIds(userId)
     const id=/^[0-9]+$/.test(selection)?saved.conversationChoices?.[Number(selection)-1]:selection
-    if(!id||!ids.includes(id))throw Error('只能选择本账号下属于你的会话，请先发送“会话列表”查看。')
+    if(!id||!ids.includes(id))throw Error('请选择本账号会话列表中的编号。')
     const busy=()=>{const r=this.sessions.get(userId);return r&&(r.busy||r.finishing||r.connecting||r.selecting||r.exiting||r.queue?.length||r.state==='stopping')}
     if(busy()||(this.submissions?.pending?.()??[]).some(j=>j.owner===userId)||this.submissions?.uncertainCount?.(userId))throw Error('仍有执行、排队或未确认任务，请先处理完再切换对话。')
     const session=await this.connect(userId,reply)
@@ -416,16 +430,16 @@ export class SessionManager {
       question.timer = setTimeout(() => {
         this.questions.delete(code)
         try { session.rpc.respond(message.id, this.deny(message.method)) } catch {}
-        this.notify(session, `请求 ${code} 已过期，未予批准。`)
+        this.notify(session, '这项请求已过期，未予批准。')
       }, 10 * 60_000)
       this.questions.set(code, question)
       this.diagnostic(session,'interaction.requested',{method:message.method})
       let text
       if (message.method === 'item/tool/requestUserInput') {
         text = p.questions.map((q, i) => `${i + 1}. ${q.question}${q.options?.length ? '\n' + q.options.map(o => `${o.label}：${o.description}`).join('\n') : ''}`).join('\n\n')
-        text += `\n\n回答 ${code} 你的答案\n多个问题的答案用 | 分隔。`
+        text += '\n\n发送“回答”，选择问题后输入答案。'
       } else {
-        text = `${p.reason ?? `${this.agentName} 请求批准操作`}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n批准 ${code}\n拒绝 ${code}`
+        text = `${p.reason ?? `${this.agentName} 请求批准操作`}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n发送“批准”或“拒绝”，再从列表中选择操作。`
       }
       await this.notify(session, text)
       return
@@ -589,10 +603,13 @@ export class SessionManager {
   async handle(userId, text, reply, messageId, token = this.lifecycle.capture(userId), parsedCommand) {
     if (!this.owners.has(userId)) { await reply('当前微信账号未获授权。'); return }
     if (!await this.acceptMessage(userId,messageId)) return
-    const command = parsedCommand??(typeof text === 'string' ? this.ports.controlCommand(text) : null)
+    let command = parsedCommand??(typeof text === 'string' ? this.ports.controlCommand(text) : null)
     if(!command&&!token.current())return
     this.log('message.handled',{userId,messageId,kind:command?.action??(typeof text==='string'?'text':'media')})
     try {
+      if(command?.action==='reviewCommit'){
+        command=this.resolveReviewCommit(userId,command.selection)
+      }
       if(command?.action==='steer'){await this.steer(userId,command.text,reply,token);return}
       if(command?.action==='memory'){
         if(!this.protocol.supportsMemory){await reply(await this.protocol.memory(null,null,command));return}
@@ -604,7 +621,7 @@ export class SessionManager {
         if (!question || question.session.userId !== userId) throw new Error('请求已过期、不存在或不属于当前账号。')
         const { session, message } = question
         const isQuestion = message.method === 'item/tool/requestUserInput'
-        if ((command.action === 'answer') !== isQuestion) throw new Error(isQuestion ? '请用“回答 编号 答案”提供答案。' : '请用“批准 编号”或“拒绝 编号”。')
+        if ((command.action === 'answer') !== isQuestion) throw new Error(isQuestion ? '请发送“回答”选择问题。' : '请发送“批准”或“拒绝”选择操作。')
         let result
         if (isQuestion) {
           const answers = command.text.split('|').map(s => s.trim())
@@ -617,7 +634,6 @@ export class SessionManager {
         await reply(`已将答复发送给 ${this.agentName}。`)
         return
       }
-      if(command?.action==='sessions'){await this.listConversations(userId,reply);return}
       if(command?.action==='resume'){await this.resumeConversation(userId,command.selection,reply,token);return}
       if(command?.action==='models'){
         if(!this.protocol.supportsModels){await reply(await this.protocol.models(null));return}
@@ -672,7 +688,7 @@ export class SessionManager {
             const withFork={...saved,previous:[...(saved.previous??[]),id].slice(-20)}
             this.state.users[userId]=withFork
             try{await this.save()}catch(error){this.state.users[userId]=saved;throw Error(`已创建会话 ${id}，但保存归属失败；请在主机核对后恢复。`,{cause:error})}
-            if(!command.switchTo){await reply(`已创建旁支会话 ${id}。当前会话不变；发送“恢复会话 ${id}”可切换。`);return}
+            if(!command.switchTo){await reply(`已创建旁支会话 ${id}。当前会话不变；发送“恢复会话”后选择旁支即可切换。`);return}
             const resumed=await this.protocol.resume(session.rpc,{threadId:id,cwd:this.workspaceFor(userId),instructions:await this.sessionInstructions(userId),provider:this.providerOptions()})
             if(!token.current())return
             const next={...withFork,threadId:id,previous:[...(saved.previous??[]),sourceId].slice(-20),hasMessages:true}
@@ -682,28 +698,29 @@ export class SessionManager {
             await reply(`已分叉并切换到会话 ${id}。`);return
           }finally{session.selecting=false}
         }
-        await this.send(session,command.action==='plan'?command.text:'请审查当前工作区变更。',token,command)
+        const reviewText=command.target?.type==='commit'?'请审查选定的提交。':command.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
+        await this.send(session,command.action==='plan'?command.text:reviewText,token,command)
         return
       }
       if (command?.action === 'help') {
         await reply([
           '微信命令列表：',
           '【当前任务】',
-          '状态', '进度', '补充', '停止', '结果', '恢复', '退出',
+          '状态（status）', '进度（progress）', '补充（supplement）', '停止（stop）', '结果（result）', '恢复（recover）', '退出（exit）',
           '【长任务与计划】',
-          '长任务', '长任务状态', '暂停长任务', '继续长任务', '完成长任务', '清除长任务', '计划',
+          '长任务（goal）', '长任务状态（goal-status）', '暂停长任务（goal-pause）', '继续长任务（goal-resume）', '完成长任务（goal-complete）', '清除长任务（goal-clear）', '计划（plan）',
           '【代码审查】',
-          '代码审查', '代码审查 对比 分支名', '代码审查 提交 SHA',
+          '代码审查（review）', '对比审查（compare）', '审查提交（commit-review）',
           '【会话】',
-          '会话状态', '会话列表', '恢复会话 编号', '重置会话', '压缩上下文', '分叉会话', '旁支会话',
+          '会话状态（session-status）', '恢复会话（resume-session）', '重置会话（reset-session）', '压缩上下文（compact）', '分叉会话（fork）', '旁支会话（branch）',
           '【项目】',
-          '日常', '列表', '新建', '切换编号', '命名', '历史', '搜索', '归档编号', '还原编号', '删除编号', '当前目录', '新建项目',
+          '日常（daily）', '列表（list）', '新建（new）', '切换（switch）', '命名（rename）', '历史（history）', '搜索（search）', '归档2（archive2）', '还原2（restore2）', '删除2（delete2）', '当前目录（folder）', '新建项目（new-project）',
           '【模型与记忆】',
-          '模型', '开启快速模式', '关闭快速模式', '记忆', '开启记忆', '关闭记忆',
+          '模型（models）', '开启快速模式（fast-on）', '关闭快速模式（fast-off）', '记忆（memory）', '开启记忆（memory-on）', '关闭记忆（memory-off）',
           '【服务】',
-          '安装状态', '安装向导', '退出向导', '重启', '升级', '诊断', '服务状态', '查看最近错误', '导出诊断报告', '安装帮助', '命令列表', '使用说明',
+          '安装状态（setup-status）', '安装向导（setup）', '安装智能体（install-agent）', '登录智能体（login-agent）', '验收智能体（check-agent）', '重启（restart）', '升级（upgrade）', '诊断（diagnose）', '服务状态（service-status）', '查看最近错误（recent-errors）', '导出诊断报告（export-diagnostics）', '安装帮助（install-help）', '命令列表（help）', '使用说明（guide）',
           '【交互答复】',
-          '批准 编号', '拒绝 编号', '回答 编号 答案',
+          '批准（approve）', '拒绝（reject）', '回答（answer）',
           '远程主机和设备配置可以直接描述需求。',
           '发送“使用说明”查看各命令用途。',
         ].join('\n'))

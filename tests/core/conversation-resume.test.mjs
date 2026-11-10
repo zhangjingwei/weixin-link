@@ -4,25 +4,39 @@ import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {SessionManager,controlCommand} from '../../src/wechat/session-manager.mjs'
+import {completeControlPrompt} from '../../src/interfaces/wechat/control-command.mjs'
+import {conversationInput} from '../../src/interfaces/wechat/conversation-command.mjs'
+import {TextConversations} from '../../src/application/conversations/text-conversations.mjs'
 async function fixture(){
  const dir=await mkdtemp(join(tmpdir(),'resume-owned-')),calls=[],out=[];let fail=false,gate
  const options={stateDir:dir,cwd:join(dir,'work'),owners:['a','b'],remoteControl:async()=>({stop_confirmed:true}),rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method,p){calls.push({method,p});if(method==='thread/read')return {thread:{id:p.threadId,cwd:options.cwd,name:'Saved topic',status:{type:'idle'}}};if(method==='thread/resume'){if(p.threadId==='old'&&gate)await gate;if(p.threadId==='old'&&fail)throw Error('Cannot resume');return {thread:{id:p.threadId},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'}};if(method==='turn/start')return {turn:{id:'next'}};return {}}})}
  const m=await new SessionManager(options).init();m.state.users={a:{threadId:'current',previous:['old'],hasMessages:true},b:{threadId:'foreign'}};await m.save()
  return {m,calls,out,options,setFail:v=>fail=v,setGate:v=>gate=v,reply:async s=>out.push(s),async close(){m.close();m.memory?.db.close();await rm(dir,{recursive:true,force:true})}}
 }
-test('session commands use one Chinese name per action',()=>{assert.deepEqual(controlCommand('恢复会话 1'),{action:'resume',selection:'1'});assert.equal(controlCommand('会话列表').action,'sessions');assert.equal(controlCommand('会话状态').action,'agentStatus');assert.equal(controlCommand('重置会话').action,'new');for(const old of ['恢复Codex会话 1','Codex会话列表','Codex状态','重置Codex会话','继续上次开发','/resume 1','/sessions'])assert.equal(controlCommand(old),null)})
+test('session commands use one Chinese name per action',()=>{assert.deepEqual(controlCommand('恢复会话'),{action:'prompt',target:'resume'});assert.deepEqual(conversationInput('恢复会话').command,{action:'prompt',target:'resume'});assert.deepEqual(conversationInput('2',{pending:{target:'resume'}}).sessionCommand,{action:'resume',selection:'2'});assert.deepEqual(completeControlPrompt('resume','2').command,{action:'resume',selection:'2'});assert.equal(completeControlPrompt('resume','foreign').error,'请回复列表中的编号。');assert.equal(controlCommand('会话列表'),null);assert.equal(controlCommand('会话状态').action,'agentStatus');assert.equal(controlCommand('重置会话').action,'new');for(const old of ['恢复会话 1','恢复Codex会话 1','Codex会话列表','Codex状态','重置Codex会话','继续上次开发','/resume 1','/sessions'])assert.equal(controlCommand(old),null)})
+const resume=(f,selection)=>f.m.handle('a',String(selection),f.reply,undefined,undefined,{action:'resume',selection:String(selection)})
+test('restore command displays choices and the next reply selects by number',async()=>{const f=await fixture();try{
+ const conversations=new TextConversations(f.m,['a','b'],conversationInput,{capabilities:{catalog:false},confirmSession:async()=>({id:'current'})})
+ const prompt=conversations.bind({userId:'a',text:'恢复会话',raw:{message_id:'prompt'}})
+ await conversations.control(prompt,f.reply)
+ assert(f.out.at(-1).includes('回复编号即可切换'))
+ const choice=conversations.bind({userId:'a',text:'2',raw:{message_id:'choice'}})
+ assert.deepEqual(choice._sessionCommand,{action:'resume',selection:'2'})
+ await f.m.handle(choice.userId,choice.text,f.reply,undefined,undefined,choice._sessionCommand)
+ assert.equal(f.m.state.users.a.threadId,'old')
+ }finally{await f.close()}})
 test('owned list selection resumes original ID without a new thread, survives restart, and binds next turn',async()=>{const f=await fixture();try{
- await f.m.handle('a','会话列表',f.reply);assert(f.out.join('').includes('Saved topic'));assert(!f.out.join('').includes('foreign'))
- await f.m.handle('a','恢复会话 2',f.reply);assert.equal(f.m.state.users.a.threadId,'old');assert(!f.calls.some(c=>c.method==='thread/start'))
+ await f.m.listConversations('a',f.reply);assert(f.out.join('').includes('Saved topic'));assert(!f.out.join('').includes('foreign'))
+ await resume(f,2);assert.equal(f.m.state.users.a.threadId,'old');assert(!f.calls.some(c=>c.method==='thread/start'))
  f.m.close();const m=await new SessionManager(f.options).init();try{await m.handle('a','继续',f.reply);assert.equal(f.calls.findLast(c=>c.method==='turn/start').p.threadId,'old')}finally{m.close();}
  }finally{await f.close()}})
 test('foreign IDs, missing choices, busy and uncertain queues cannot switch conversations',async()=>{const f=await fixture();try{
- await f.m.handle('a','恢复会话 foreign',f.reply);await f.m.handle('a','恢复会话 1',f.reply);assert.equal(f.calls.length,0)
- const s=await f.m.connect('a',f.reply);s.busy=true;await f.m.handle('a','恢复会话 old',f.reply);s.busy=false
- f.m.submissions={pending:()=>[{owner:'a'}]};await f.m.handle('a','恢复会话 old',f.reply)
+ await resume(f,'foreign');await resume(f,1);assert.equal(f.calls.length,0)
+ const s=await f.m.connect('a',f.reply);s.busy=true;await resume(f,'old');s.busy=false
+ f.m.submissions={pending:()=>[{owner:'a'}]};await resume(f,'old')
  assert(!f.calls.some(c=>c.method==='thread/resume'&&c.p.threadId==='old'));assert.equal(f.m.state.users.a.threadId,'current')
  }finally{await f.close()}})
 test('resume failure and cancellation during resume preserve the current binding',async()=>{const f=await fixture();try{
- f.setFail(true);await f.m.handle('a','恢复会话 old',f.reply);assert.equal(f.m.state.users.a.threadId,'current')
- f.setFail(false);let release;f.setGate(new Promise(r=>release=r));const p=f.m.handle('a','恢复会话 old',f.reply);while(!f.m.sessions.get('a')?.selecting)await new Promise(r=>setTimeout(r,1));f.m.lifecycle.cancel('a');release();await p;assert.equal(f.m.state.users.a.threadId,'current')
+ f.setFail(true);await resume(f,'old');assert.equal(f.m.state.users.a.threadId,'current')
+ f.setFail(false);let release;f.setGate(new Promise(r=>release=r));const p=resume(f,'old');while(!f.m.sessions.get('a')?.selecting)await new Promise(r=>setTimeout(r,1));f.m.lifecycle.cancel('a');release();await p;assert.equal(f.m.state.users.a.threadId,'current')
  }finally{await f.close()}})

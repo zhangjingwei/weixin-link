@@ -14,7 +14,7 @@ import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 const exec=promisify(execFile)
 const root=fileURLToPath(new URL('../../',import.meta.url))
 const repository='zhangjingwei/weixin-link'
-export const chatUpgradeCommand=text=>typeof text==='string'&&text.trim()==='升级'?{action:'upgrade'}:null
+export const chatUpgradeCommand=text=>typeof text==='string'&&['升级','upgrade'].includes(text.trim().toLowerCase())?{action:'upgrade'}:null
 export const chatUpgradePath=home=>join(home,'.local/share/weixin-link/chat-upgrade.json')
 
 export async function readChatUpgrade(home){

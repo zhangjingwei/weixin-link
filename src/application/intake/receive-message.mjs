@@ -13,7 +13,7 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
         message._setupAction = frozenSetup.action
         message._setupReceiptId = frozenSetup.id
       }
-      if (!Object.hasOwn(message, '_setupAction')) message._setupAction = previous ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
+      if (!Object.hasOwn(message, '_setupAction')) message._setupAction = previous||message._promptReply ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
       message.references ??= quote(message)
       return message
     },
@@ -36,7 +36,7 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
       if (!conversations.realOwners.has(message._conversationOwner ?? message.userId) || runtime.sealed) return
       message = normalizeVoice(message)
       if (!message._conversationOwner) message = conversations.bind(message)
-      if (!Object.hasOwn(message, '_setupAction')) message._setupAction = message._recovered ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
+      if (!Object.hasOwn(message, '_setupAction')) message._setupAction = message._recovered||message._promptReply ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
       const intent=classifyMessage(message)
       if (intent&&!nativeCommandKind(intent)) { dispatch(message); return }
       const token = manager.lifecycle.capture(message.userId)

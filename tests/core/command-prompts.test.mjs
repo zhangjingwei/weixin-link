@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import {TextConversations} from '../../src/application/conversations/text-conversations.mjs'
 import {conversationInput} from '../../src/interfaces/wechat/conversation-command.mjs'
 import {createCommandClassifier} from '../../src/wechat/command-classifier.mjs'
+import {setupCommand} from '../../src/setup/setup-controller.mjs'
+import {createReceiveMessage} from '../../src/application/intake/receive-message.mjs'
 
 function fixture(state={users:{alice:{},bob:{}}}){
  const manager={state,owners:new Set(['alice','bob']),sessions:new Map(),questions:new Map(),save:async()=>{}}
@@ -53,7 +55,7 @@ test('prompt state survives reload, stays within its owner, and can be cancelled
  assert.equal(restored.ensure('alice').prompt,undefined)
 })
 
-test('invalid or media input does not consume a prompt; stop and approval remain controls',()=>{
+test('invalid or media input does not consume a prompt; stop and approval commands remain controls',()=>{
  const {manager,router}=fixture()
  router.bind({userId:'alice',text:'命名'})
  assert.equal(router.bind({userId:'alice',text:'x'.repeat(41)})._conversationCommand.action,'promptInvalid')
@@ -62,8 +64,8 @@ test('invalid or media input does not consume a prompt; stop and approval remain
  router.bind({userId:'alice',images:[{}]})
  assert.equal(router.ensure('alice').prompt.target,'rename')
  manager.questions.set('abc123',{session:{userId:'alice'}})
- assert.equal(router.bind({userId:'alice',text:'批准 abc123'})._sessionCommand,undefined)
- assert.equal(router.ensure('alice').prompt.target,'rename')
+ assert.equal(router.bind({userId:'alice',text:'批准'})._conversationCommand.target,'approvalChoice')
+ assert.equal(router.ensure('alice').prompt.target,'approvalChoice')
  assert.equal(router.bind({userId:'alice',text:'停止'})._sessionCommand.action,'stop')
  assert.equal(router.ensure('alice').prompt,undefined)
 })
@@ -74,5 +76,41 @@ test('old inline free-text commands remain ordinary messages',()=>{
   const message=router.bind({userId:'alice',text})
   assert.equal(message._conversationCommand,null)
   assert.equal(message._sessionCommand,undefined)
+ }
+})
+
+test('guide and status can be viewed during a project-name prompt without consuming the answer',async()=>{
+ const {router}=fixture(),classify=createCommandClassifier()
+ const start=router.bind({userId:'alice',text:'新建项目',raw:{message_id:'start'}})
+ await router.control(start,()=>{})
+ const guide=router.bind({userId:'alice',text:'guide',raw:{message_id:'guide'}})
+ guide._setupAction=setupCommand(guide.text)
+ assert.equal(classify(guide).kind,'setup')
+ assert.equal(guide._setupAction,'manualEn')
+ assert.equal(router.ensure('alice').prompt.target,'newProject')
+ const status=router.bind({userId:'alice',text:'status',raw:{message_id:'status'}})
+ assert.equal(classify(status).value.action,'status')
+ assert.equal(router.ensure('alice').prompt.target,'newProject')
+ const answer=router.bind({userId:'alice',text:'demo',raw:{message_id:'answer'}})
+ assert.deepEqual(answer._conversationCommand,{action:'projectFolderPrompt',name:'demo'})
+ assert.equal(classify(answer).kind,'conversation')
+ assert.equal(router.ensure('alice').prompt.target,'projectFolder')
+})
+
+test('command-shaped project names cannot turn into setup, restart, or upgrade commands',()=>{
+ const classify=createCommandClassifier()
+ for(const name of ['setup','restart','upgrade','memory-on']){
+  const {manager,router}=fixture()
+  router.bind({userId:'alice',text:'新建项目',raw:{message_id:'start'}})
+  const receive=createReceiveMessage({manager,jobs:{findCaptured:()=>null},conversations:router,normalizeVoice:message=>message,setupReceipts:{get:()=>null},setupController:{command:setupCommand}})
+  const answer=receive.prepare({userId:'alice',text:name,raw:{message_id:'answer'}},{traceId:'test',quote:()=>[]})
+  assert.deepEqual(answer._conversationCommand,{action:'projectFolderPrompt',name})
+  assert.equal(answer._promptReply,true)
+  assert.equal(answer._setupAction,null)
+  assert.equal(classify(answer).kind,'conversation')
+  assert.equal(router.ensure('alice').prompt.target,'projectFolder')
+  const replay=fixture(structuredClone(manager.state)).router.bind({userId:'alice',text:name,raw:{message_id:'answer'}})
+  assert.equal(replay._promptReply,true)
+  assert.equal(classify(replay).kind,'conversation')
  }
 })

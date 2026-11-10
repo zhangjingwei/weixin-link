@@ -16,7 +16,7 @@ export const agentSwitchPath=account=>join(account.stateDir,'agent-switch.json')
 
 export function agentSwitchCommand(text=''){
  const value=text.trim().replace(/[。！!]$/,'')
- if(value==='重启')return {action:'restart',target:null}
+ if(value==='重启'||value.toLowerCase()==='restart')return {action:'restart',target:null}
  return null
 }
 

@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {createHash} from 'node:crypto'
 import {completeControlPrompt} from '../../src/interfaces/wechat/control-command.mjs'
-import {controlCommand,SessionManager} from '../../src/wechat/session-manager.mjs'
+import {controlCommand,SessionManager,sessionPorts} from '../../src/wechat/session-manager.mjs'
 import {createReceiveMessage} from '../../src/application/intake/receive-message.mjs'
 import {createMessageApplication} from '../../src/application/intake/message-application.mjs'
 import {quoteInput} from '../../src/infrastructure/wechat/weixin-protocol.mjs'
@@ -14,14 +14,20 @@ import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 test('native Chinese controls are explicit and slash aliases remain ordinary text',()=>{
   assert.deepEqual(controlCommand('长任务'),{action:'prompt',target:'goal'});assert.equal(controlCommand('长任务 修复收件队列'),null);assert.deepEqual(completeControlPrompt('goal','修复收件队列').command,{action:'goal',op:'create',objective:'修复收件队列'})
   assert.deepEqual(completeControlPrompt('goal','修复收件队列 | 预算 10000').command,{action:'goal',op:'create',objective:'修复收件队列',tokenBudget:10000})
-  assert.deepEqual(controlCommand('代码审查 对比 origin/main'),{action:'review',target:{type:'baseBranch',branch:'origin/main'}})
+  assert.deepEqual(controlCommand('对比审查'),{action:'prompt',target:'reviewBranch'})
+  assert.deepEqual(completeControlPrompt('reviewBranch','origin/main').command,{action:'review',target:{type:'baseBranch',branch:'origin/main'}})
+  assert.deepEqual(controlCommand('审查提交'),{action:'prompt',target:'reviewCommit'})
+  assert.deepEqual(completeControlPrompt('reviewCommit','1').command,{action:'reviewCommit',selection:'1'})
+  assert.equal(completeControlPrompt('reviewCommit','abc1234').error,'请回复列表中的编号。')
+  assert.equal(controlCommand('代码审查 对比 origin/main'),null)
+  assert.equal(controlCommand('代码审查 提交 abc1234'),null)
   assert.deepEqual(controlCommand('代码审查'),{action:'review',target:{type:'uncommittedChanges'}})
   assert.deepEqual(controlCommand('计划'),{action:'prompt',target:'plan'});assert.equal(controlCommand('计划 修复测试'),null)
   assert.equal(controlCommand('/review'),null)
   assert.equal(controlCommand('帮我代码审查'),null)
 })
 
-async function fixture(){
+async function fixture({recentCommits}={}){
   const dir=await mkdtemp(join(tmpdir(),'native-command-')),calls=[],output=[]
   const rpcFactory=()=>({closed:false,write(){},close(){this.closed=true},async request(method,params){
     calls.push({method,params})
@@ -34,12 +40,22 @@ async function fixture(){
     if(method==='turn/start'||method==='review/start')return {turn:{id:'turn-1'}}
     return {}
   }})
-  const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],rpcFactory}).init()
+  const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],rpcFactory,...(recentCommits?{sessionPorts:{...sessionPorts,recentCommits}}:{})}).init()
   const reply=async text=>{output.push(text)}
   return {dir,manager,rpcFactory,calls,output,reply,async close(){manager.close();await rm(dir,{recursive:true,force:true})}}
 }
 
 const sendPrompt=(f,user,target,text)=>f.manager.handle(user,text,f.reply,undefined,undefined,completeControlPrompt(target,text).command)
+test('commit review lists titles and resolves a selected number without exposing a hash',async()=>{
+  const sha='a'.repeat(40),f=await fixture({recentCommits:async()=>[{sha,title:'修复登录错误'}]})
+  try{
+    assert.equal(await f.manager.listRecentCommits('owner',f.reply),true)
+    assert.match(f.output.at(-1),/1\. 修复登录错误/)
+    assert(!f.output.at(-1).includes(sha))
+    await sendPrompt(f,'owner','reviewCommit','1')
+    assert.deepEqual(f.calls.find(c=>c.method==='review/start').params,{threadId:'original',target:{type:'commit',sha}})
+  }finally{await f.close()}
+})
 test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
   const f=await fixture()
   try{
@@ -64,6 +80,9 @@ test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
     f.manager.sessions.get('owner').busy=false;f.manager.sessions.get('owner').state='idle'
     await f.manager.handle('owner','代码审查',f.reply)
     assert.deepEqual(f.calls.find(c=>c.method==='review/start').params,{threadId:'original',target:{type:'uncommittedChanges'}})
+    f.manager.sessions.get('owner').busy=false;f.manager.sessions.get('owner').state='idle'
+    await sendPrompt(f,'owner','reviewBranch','main')
+    assert.deepEqual(f.calls.filter(c=>c.method==='review/start').at(-1).params,{threadId:'original',target:{type:'baseBranch',branch:'main'}})
     f.manager.sessions.get('owner').busy=false;f.manager.sessions.get('owner').state='idle'
     await f.manager.handle('owner','分叉会话',f.reply)
     assert.equal(f.manager.state.users.owner.threadId,'forked')
@@ -124,8 +143,8 @@ test('plan and review ingress are captured before dispatch and retain their ingr
 test('state-changing native controls are captured before cursor checkpoint',async()=>{
   const captured=[]
   const receiver=createReceiveMessage({manager:{save:async()=>{}},jobs:{capture:message=>captured.push(message.text)},classifyMessage:message=>{const value=message._sessionCommand??controlCommand(message.text);return value?{kind:'session',value}:null}})
-  await receiver.captureBatch([{text:'修复队列',_sessionCommand:{action:'goal',op:'create',objective:'修复队列'}},...['暂停长任务','分叉会话','压缩上下文','开启快速模式','长任务状态','会话状态'].map(text=>({text}))])
-  assert.deepEqual(captured,['修复队列','暂停长任务','分叉会话','压缩上下文','开启快速模式'])
+  await receiver.captureBatch([{text:'修复队列',_sessionCommand:{action:'goal',op:'create',objective:'修复队列'}},{text:'1',_sessionCommand:{action:'reviewCommit',selection:'1'}},...['暂停长任务','分叉会话','压缩上下文','开启快速模式','长任务状态','会话状态'].map(text=>({text}))])
+  assert.deepEqual(captured,['修复队列','1','暂停长任务','分叉会话','压缩上下文','开启快速模式'])
 })
 
 test('cancelling a task while compaction is active does not submit a turn',async()=>{
@@ -189,7 +208,8 @@ test('fast mode remains explicit after restoring an owned Codex session',async()
   try{
     await f.manager.handle('owner','开启快速模式',f.reply)
     f.manager.state.users.owner.previous=['older']
-    await f.manager.handle('owner','恢复会话 older',f.reply)
+    await f.manager.listConversations('owner',f.reply)
+    await f.manager.handle('owner','2',f.reply,undefined,undefined,{action:'resume',selection:'2'})
     assert.equal(f.manager.state.users.owner.fastMode,true)
     await sendPrompt(f,'owner','plan','检查')
     assert.equal(f.calls.findLast(c=>c.method==='turn/start').params.serviceTier,'fast')
@@ -205,6 +225,14 @@ test('quoted WeChat plan keeps the referenced message in the durable task',async
   assert.equal(submissions.length,1)
   assert.equal(submissions[0][1].text,'修复这个问题')
   assert.deepEqual(submissions[0][1].references,references)
+})
+
+test('selected commit review enters the durable task queue with its resolved target',async()=>{
+  const submissions=[],sha='b'.repeat(40)
+  const manager={owners:new Set(['owner']),sessions:new Map(),state:{users:{owner:{}}},supportsNativeCommands:true,agentName:'Codex',lifecycle:{capture:()=>({current:()=>true})},acceptMessage:async()=>true,resolveReviewCommit:(_owner,selection)=>({action:'review',target:{type:'commit',sha:selection==='1'?sha:null}})}
+  const handle=createMessageApplication({view:{context(){},deliver:async()=>{}},manager,jobs:{rawCurrent:()=>true,acknowledge(){},claimReceipt:()=>false},conversations:{recipient:()=> 'owner',control:async()=>false},runtime:{sealed:false,draining:false},log(){},durable:{submit:(...args)=>submissions.push(args)},classifyMessage:message=>({kind:'session',value:message._sessionCommand}),hasMedia:()=>false,normalizeVoice:message=>message,quoteInput,systemNotice:value=>value})
+  await handle({userId:'owner',text:'1',_sessionCommand:{action:'reviewCommit',selection:'1'},raw:{message_id:'45'},_ingressId:'ingress-45'})
+  assert.deepEqual(submissions[0][1].nativeCommand,{action:'review',target:{type:'commit',sha}})
 })
 
 test('replayed native mutation reports unknown outcome without sending the RPC again',async()=>{

@@ -5,8 +5,9 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 import {CancellationScopes} from '../../src/infrastructure/runtime/cancellation-scopes.mjs'
-import {bindNewWorkspace} from '../../src/application/conversations/workspace.mjs'
+import {bindNewWorkspace,projectFolderChoices} from '../../src/application/conversations/workspace.mjs'
 import {conversationCommand,conversationInput} from '../../src/interfaces/wechat/conversation-command.mjs'
+import {TextConversations} from '../../src/application/conversations/text-conversations.mjs'
 import {SessionManager} from '../../src/wechat/session-manager.mjs'
 import {OutputStore,OutputTransport} from '../../src/infrastructure/media/outbound-media.mjs'
 async function fixture(t){const dir=await mkdtemp(join(tmpdir(),'workflow-test-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir}
@@ -16,7 +17,12 @@ test('workspace binding validates existing paths, is immutable after connection 
  const manager=await new SessionManager({stateDir:join(dir,'state'),cwd:dir,owners:['a'],remoteControl:async()=>({})}).init()
  t.after(()=>manager.close())
  assert.equal(conversationCommand('新建项目').action,'prompt')
- assert.equal(conversationInput(`demo | ${project}`,{pending:{target:'newProject'}}).command.workspace,project)
+ assert.deepEqual(conversationInput('demo',{pending:{target:'newProject'}}).command,{action:'projectFolderPrompt',name:'demo'})
+ const folders=await projectFolderChoices({manager},'a')
+ assert.deepEqual(folders.map(folder=>folder.path),[await realpath(dir),await realpath(project)])
+ assert.deepEqual(conversationInput('2',{pending:{target:'projectFolder',name:'demo',choices:folders}}).command,{action:'new',name:'demo',workspace:await realpath(project)})
+ assert.equal(conversationInput('99',{pending:{target:'projectFolder',name:'demo',choices:folders}}).command.action,'promptInvalid')
+ assert.equal(conversationInput(`demo | ${project}`,{pending:{target:'newProject'}}).command.action,'promptInvalid')
  assert.equal(conversationCommand('当前目录').action,'workspace')
  await assert.rejects(bindNewWorkspace({manager},'a','relative'))
  await bindNewWorkspace({manager},'a',project)
@@ -26,6 +32,18 @@ test('workspace binding validates existing paths, is immutable after connection 
  manager.state.users.a.threadId='existing'
  await assert.rejects(bindNewWorkspace({manager},'a',dir),/已有会话/)
  assert.equal(manager.workspaceFor('b'),dir)
+})
+
+test('new project asks for a name, then lists folders for numeric selection',async t=>{
+ const dir=await fixture(t),project=join(dir,'project');await mkdir(project)
+ const manager=await new SessionManager({stateDir:join(dir,'state'),cwd:dir,owners:['a']}).init();t.after(()=>manager.close())
+ const conversations=new TextConversations(manager,['a'],conversationInput,{capabilities:{catalog:false},confirmSession:async()=>({id:'unused'})}),out=[]
+ await conversations.control(conversations.bind({userId:'a',text:'新建项目'}),async text=>out.push(text))
+ assert(out.at(-1).includes('请给新项目起个名字'))
+ await conversations.control(conversations.bind({userId:'a',text:'demo'}),async text=>out.push(text))
+ assert(out.at(-1).includes('2. project'))
+ const selected=conversations.bind({userId:'a',text:'2'})
+ assert.deepEqual(selected._conversationCommand,{action:'new',name:'demo',workspace:await realpath(project)})
 })
 
 test('missing and mixed artifacts remain partial even if their explanation was delivered',async t=>{

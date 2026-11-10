@@ -1,13 +1,13 @@
 import {homedir as platformHome} from 'node:os'
 import {InstallationWizard} from './setup-wizard.mjs'
-import {USER_GUIDE} from './user-guide.mjs'
+import {USER_GUIDE,USER_GUIDE_EN} from './user-guide.mjs'
 import {doctor,installCodex,checkCodex} from './setup-core.mjs'
 import {deviceLogin} from './setup-login.mjs'
 import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
 import {installConfig} from './install-config.mjs'
 import {readProviderProfile,providerEnvironment} from './provider-profile.mjs'
 
-export function setupCommand(text){const commands={'使用说明':'manual','安装向导':'wizard','退出向导':'wizardExit','安装状态':'status','安装智能体':'install','登录智能体':'login','验收智能体':'check','安装帮助':'help'};return typeof text==='string'?commands[text.trim()]??null:null}
+export function setupCommand(text){const commands={'使用说明':'manual',guide:'manualEn','安装向导':'wizard',setup:'wizard','退出向导':'wizardExit','安装状态':'status','setup-status':'status','安装智能体':'install','install-agent':'install','登录智能体':'login','login-agent':'login','验收智能体':'check','check-agent':'check','安装帮助':'help','install-help':'help'};return typeof text==='string'?commands[text.trim().toLowerCase()]??null:null}
 export class SetupController{
  constructor({stateDir,accountId,home=(process.env.HOME||platformHome()),backend,activeProviderKind='subscription',runDoctor=doctor,runInstall=installCodex,runLogin=deviceLogin,runCheck=checkCodex,runModelTest}={}){
   Object.assign(this,{stateDir,accountId,home,backend,activeProviderKind,runDoctor,runInstall,runLogin,runCheck,runModelTest});this.busy=false
@@ -22,6 +22,7 @@ export class SetupController{
  }
  async handle(command,reply,{signal,scope=this.accountId??'owner',executionKey}={}){
   if(command==='manual'){await reply(USER_GUIDE);return}
+  if(command==='manualEn'){await reply(USER_GUIDE_EN);return}
   if(command==='help'){await reply('安装引导（不需要 Codex 模型在线）：\n安装向导：选择 1 订阅登录、2 DeepSeek、3 Qwen\n退出向导：结束当前向导\n安装状态：环境与模型接入检查\n安装智能体：检查项目自带的 Codex CLI\n登录智能体：获取官方设备登录引导\n验收智能体：检查官方协议与原生记忆接口\n第三方模型密钥只在本机终端配置，不要发送到微信。\n远程主机、家庭设备和备份配置：直接说明需求，由智能体检查格式、连接和写入条件后处理；需要模型可用。');return}
   if(this.busy){if(command==='wizardExit'&&this.wizardOwner===scope){this.wizardAbort?.abort();await reply('已请求停止当前向导步骤。');return}await reply('当前步骤正在执行；可发送“退出向导”停止，其他选项请等待本步骤结束。');return}
   this.busy=true

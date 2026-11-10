@@ -19,16 +19,16 @@ test('Chinese setup names are exact controls without legacy aliases',async()=>{
  assert.equal(controlCommand('帮我创建第二个机器人账号'),null)
 })
 
-test('WeChat help covers Chinese operations and delegates configuration without English chat commands',async()=>{
+test('WeChat help lists Chinese and English commands and delegates configuration',async()=>{
  const {SessionManager}=await import('../../src/wechat/session-manager.mjs')
  const out=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>{throw Error('help must not start model')}})
  manager.save=async()=>{};manager.state.users.owner={}
  await manager.handle('owner','命令列表',async value=>out.push(value))
  assert(out.some(s=>s.includes('开启记忆')&&s.includes('远程主机')&&s.includes('代码审查')))
- assert(out[0].includes('\n状态\n进度\n补充\n'))
+ assert(out[0].includes('\n状态（status）\n进度（progress）\n补充（supplement）\n'))
  assert(!out.join('').includes('/balance'));assert(!out.join('').includes('/memory'))
  const {SetupController}=await import('../../src/setup/setup-controller.mjs')
- const home=await mkdtemp(join(tmpdir(),'zero-help-')),controller=new SetupController({stateDir:home}),help=[];await controller.wizard.ready
+ const home=await mkdtemp(join(tmpdir(),'zero-help-')),controller=await new SetupController({stateDir:home}).init(),help=[]
  await controller.handle('help',async s=>help.push(s))
  assert(help[0].includes('安装智能体'));assert(help[0].includes('配置'));await rm(home,{recursive:true,force:true})
 })

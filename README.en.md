@@ -66,7 +66,7 @@ Scan and confirm the pairing QR code in WeChat. The assistant then sends **安�
 
 Linux/macOS require curl and tar, plus a SHA-256 verification tool when installing private Node.js. The installer verifies official checksums and does not replace system Node.js. Windows ARM64 is not supported, and the installer does not change persistent execution policies.
 
-[v1.3.2](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.2) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details. Supporting guides are currently in Chinese.
+[v1.3.2](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.2) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details.
 
 </details>
 
@@ -88,39 +88,23 @@ These are example requests. Execution depends on your configured workspace, tool
 
 ## Common commands
 
-Send **日常** to return to your fixed everyday conversation, including after service restarts. Use `新建 Project name` for a separate project, then `日常` to return. Existing users keep their original conversation.
-
-Send ordinary requests directly. These fixed commands control the bridge:
+Send ordinary tasks directly. For commands such as `new`, reply to the assistant's follow-up prompt. Send `cancel` to cancel a pending prompt. English commands do not need a slash.
 
 | Command | Purpose |
 | --- | --- |
-| `日常` | Return to the fixed everyday conversation |
-| `诊断` | Show local diagnostics and service status for this account |
-| `重启` | Restart this account's service when idle |
-| `升级` | Upgrade a standard installation to the latest stable release when idle |
-| `状态` | Check the current task and queue |
-| `进度` | Check the current stage and most recent progress without queueing a task |
-| `补充` | Prompt for instructions to add to the active task |
-| `停止` | Cancel the current task and queued messages |
-| `结果` | Retrieve the latest result without rerunning the task |
-| `恢复` | Reconcile a submitted task whose result is uncertain |
-| `新建` / `列表` | Create a conversation or list conversations |
-| `切换 Number` / `历史` / `搜索` | Switch projects or inspect conversation history; search prompts for keywords |
-| `归档 Number` / `还原 Number` / `删除 Number` | Archive, restore, or permanently delete a project |
-| `模型` / `记忆` / `开启记忆` / `关闭记忆` | Inspect models and control native memory |
-| `Codex会话列表` / `恢复Codex会话 Number` / `重置Codex会话` | Manage underlying Codex sessions |
-| `长任务` / `长任务状态` | Save or inspect a Codex goal; send a separate request to start work |
-| `计划` / `代码审查` | Start a Codex plan or review; reviews can also target a branch or commit |
-| `压缩上下文` / `分叉会话` / `Codex状态` | Control the current Codex session |
-| `批准 Code` / `拒绝 Code` / `回答 Code Answer` | Reply to a pending interaction using its displayed code |
-| `安装状态` / `安装向导` | Check setup or continue installation and authentication |
-| `命令列表` / `使用说明` | Read the command summary or full user guide |
+| `daily` | Return to the fixed everyday conversation |
+| `status` | Check the current task and queue |
+| `progress` | See what the assistant is working on now |
+| `supplement` | Add instructions to the current task |
+| `stop` | Stop the current task |
+| `result` | See the latest result |
+| `new` | Create a project |
+| `list` | List projects |
+| `plan` | Ask the assistant to make a plan first |
+| `review` | Review current project changes |
+| `guide` | See the full English guide and more commands |
 
-Each message is processed independently. Text and attachments in the same message are submitted together. See the [user guide](USER-GUIDE.md) for conversation management, attachment limits and diagnostic commands.
-For `补充`, `新建`, `命名`, `搜索`, `长任务`, and `计划`, send the command first, then reply to its prompt with the requested text. Send `取消` to abandon a pending prompt.
-These Chinese controls invoke the corresponding Codex capabilities; see the [user guide](USER-GUIDE.md) for exact forms and limits. Send other tasks as ordinary requests without slash commands.
-
-WeChat voice messages with a complete transcript also support system commands such as `列表`, `状态`, and `停止`.
+See the [English user guide](USER-GUIDE.en.md) for branch or commit reviews, saved sessions, attachments and troubleshooting.
 
 ## Installation and upgrades
 
@@ -164,7 +148,7 @@ If the `bot2` service is still running and needs a new login, use `./qr.sh --rel
 
 **Codex** handles tasks. SSH operations on remote hosts do not require Codex there.
 
-- [User guide](USER-GUIDE.md): conversations, models, memory, attachments and results.
+- [User guide](USER-GUIDE.en.md): conversations, models, memory, attachments and results.
 - [Configuration and maintenance](CONFIGURATION.md): installation, upgrades, backups and troubleshooting.
 - [Remote connections](src/infrastructure/remote/README.md): connect authorized remote workspaces.
 - [Configuration examples](config-templates/): deployment references.
