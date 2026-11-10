@@ -39,7 +39,7 @@
 
 ## 快速开始
 
-**运行安装命令 → 在终端向导选择并验证模型 → 微信扫码 → 收到连接结果。** 需要自己的微信账号，以及 Codex 订阅或受支持的模型服务；Node.js 24+ 由安装器按需准备。
+**运行安装命令 → 在终端向导选择并验证模型 → 打开微信登录地址并确认 → 收到连接结果。** 需要自己的微信账号，以及 Codex 订阅或受支持的模型服务；Node.js 24+ 由安装器按需准备。
 
 **Linux / macOS**：在电脑终端执行：
 
@@ -53,13 +53,13 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-安装器会先在终端提示选择订阅登录、DeepSeek、Qwen 或 Kimi，完成模型测试后显示微信二维码。扫码成功后，助手会推送安装结果。第三方密钥只在电脑终端输入，不要发到微信。
+安装器会先在终端提示选择订阅登录、DeepSeek、Qwen 或 Kimi，完成模型测试后显示微信登录地址，并尝试打开浏览器。登录成功后，助手会推送安装结果。第三方密钥只在电脑终端输入，不要发到微信。
 
 **中国大陆用户注意：** [Codex 订阅登录](https://learn.chatgpt.com/docs/auth) 需要你自己的账号，还要能访问 OpenAI 服务。如果所在地或网络无法连接 OpenAI，这种方式就用不了。DeepSeek、Qwen、Kimi 使用各自平台的密钥，不走 OpenAI 订阅登录。选好模型后，请以安装向导的测试结果为准。
 
 安装向导会自动选择中文或英文。
 
-> 扫码成功只确认微信已连接。终端显示模型测试通过后，才能确认助手可以处理任务。安装遇到问题时，发送 **安装状态**。
+> 微信登录成功只确认通道已连接。终端显示模型测试通过后，才能确认助手可以处理任务。安装遇到问题时，发送 **安装状态**。
 
 <details>
 <summary>平台支持与安装要求</summary>
@@ -113,23 +113,23 @@ Linux/macOS 需要 curl、tar。Windows ARM64 暂不支持。
 
 ## 安装与升级
 
-升级时，重新执行[快速开始](#快速开始)中的安装命令。标准安装也会在发现正式更新时提示，确认后才升级。自定义部署与恢复步骤见[配置与维护](CONFIGURATION.md#已有安装与升级)。
+升级时，重新执行[快速开始](#快速开始)中的安装命令，在菜单中选择“1 升级”。标准安装也会在发现正式更新时提示，确认后才升级。自定义部署与恢复步骤见[配置与维护](CONFIGURATION.md#已有安装与升级)。
 
-首次扫码由安装器带你完成。以后需要重新获取二维码，可直接运行下面的命令，不用找安装目录。
+首次微信登录由安装器带你完成。以后需要重新登录，再运行同一条安装命令，在菜单里选“3 重新登录微信”。不用找安装目录。
 
 **Linux / macOS**：
 
 ```sh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh)" -- login
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
 ```
 
 **Windows x64**：
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1'))) -Action login
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-如果已在微信解绑，需要重新授权，将命令末尾的 `login` 改为 `relogin`。添加其他微信账号等操作见[二维码维护](CONFIGURATION.md#二维码维护)。
+添加其他微信账号时，在菜单里选“4 添加微信账号”。其他情况见[微信登录维护](CONFIGURATION.md#微信登录维护)。
 
 ## 更多能力与文档
 
@@ -142,6 +142,6 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/m
 
 ## 安全与许可
 
-使用自己的微信扫码，不要分享登录二维码或设备验证码。选择订阅登录时，请在官方 OpenAI 页面授权。只授权助手访问你允许的工作区和服务。安全问题请参阅 [安全政策](SECURITY.md)。
+使用自己的微信账号确认登录，不要分享登录地址或设备验证码。选择订阅登录时，请在官方 OpenAI 页面授权。只授权助手访问你允许的工作区和服务。安全问题请参阅 [安全政策](SECURITY.md)。
 
 本项目采用 [MIT License](LICENSE)。第三方依赖与外部服务遵循各自条款，见 [第三方许可](THIRD_PARTY_NOTICES.md)。Weixin Link 是独立项目，不代表微信、OpenAI 或其他服务提供方的官方产品或背书。

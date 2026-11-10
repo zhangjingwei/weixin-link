@@ -31,7 +31,7 @@ import {RuntimeControl} from '../infrastructure/runtime/runtime-control.mjs'
 import {nonBlockingHandler} from './message-handler.mjs'
 import {MessageDispatch} from './message-dispatch.mjs'
 import {createDiagnosticLog,errorFields,createSdkLogger} from '../infrastructure/diagnostics/diagnostic-log.mjs'
-import QRCode from 'qrcode'
+import {browserLoginUrl} from '../infrastructure/wechat/pairing-state.mjs'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { SessionManager } from './session-manager.mjs'
@@ -169,7 +169,7 @@ process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=
 // 登录并核查账号身份后恢复积压消息，最后才启动微信轮询。
 startupPhase='login_in_progress'
 await bot.login({ callbacks: {
-  onQrUrl: url => { startupPhase='login_in_progress';loginQrReady=false;loginPollReady=false;QRCode.toFile(join(stateDir, 'login.png'), url, { width: 480, margin: 2 }).then(() => {loginQrReady=true;markAwaitingLogin();log('wechat.qr_ready')}).catch(error => log('wechat.qr_failed',errorFields(error))) },
+  onQrUrl: url => { startupPhase='login_in_progress';loginQrReady=!!browserLoginUrl(url);loginPollReady=false;markAwaitingLogin();log(loginQrReady?'wechat.login_url_ready':'wechat.login_url_invalid') },
   onScanned: () => log('wechat.qr_scanned'),
 } })
 const loginCheck=await assertUniqueLogin(account.id,bot.getCredentials());for(const issue of loginCheck.issues)log('account.other_profile_unreadable',{code:issue.code});await rememberIdentity(account,bot.getCredentials())

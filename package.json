@@ -20,7 +20,6 @@
     "@openai/codex": "0.163.0",
     "pdfjs-dist": "6.4.299",
     "proper-lockfile": "4.1.2",
-    "qrcode": "1.5.4",
     "sharp": "0.35.5",
     "silk-wasm": "3.7.1",
     "wechatbot-zerolink": "2.2.0-zerolink.2"

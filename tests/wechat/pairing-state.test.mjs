@@ -1,12 +1,38 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises'
-import {join} from 'node:path'
-import {PairingState,pairingStatus,exportQr,readBrowserLoginUrl,QR_FRESHNESS_MS} from '../../src/infrastructure/wechat/pairing-state.mjs'
-async function fixture(work){const dir=await mkdtemp('/tmp/qr-state-');try{await work(dir,new PairingState(dir))}finally{await rm(dir,{recursive:true,force:true})}}
-test('fresh QR exports a versioned actual copy with a local validity description',()=>fixture(async(dir,state)=>{await state.publish(Buffer.from('owned-qr'));const info=await exportQr({id:'test',stateDir:dir},join(dir,'outputs'));assert.equal((await readFile(info.path)).toString(),'owned-qr');assert.ok(info.path.includes('wechat-login-test-'));assert.ok(info.freshness_seconds<=90);assert.ok(info.validity.includes('server may expire earlier'))}))
-test('old QR, dead pairing process and explicit server expiration cannot be delivered',()=>fixture(async(dir,state)=>{await state.publish(Buffer.from('qr'));await assert.rejects(exportQr({id:'test',stateDir:dir},join(dir,'out'),{now:Date.now()+QR_FRESHNESS_MS}),/TOO_OLD/);await assert.rejects(exportQr({id:'test',stateDir:dir},join(dir,'out'),{running:false}),/REFRESH_REQUIRED/);await state.set('qr_expired');await assert.rejects(exportQr({id:'test',stateDir:dir},join(dir,'out')),/REFRESH_REQUIRED/)}))
-test('expired state remains expired after a queued older QR write; refresh gets a new version',()=>fixture(async(dir,state)=>{const first=state.publish(Buffer.from('old')),expired=state.set('qr_expired');await Promise.all([first,expired]);assert.equal((await pairingStatus(dir)).status,'qr_expired');await state.publish(Buffer.from('new'));const info=await exportQr({id:'test',stateDir:dir},join(dir,'out'));assert.equal((await readFile(info.path)).toString(),'new')}))
-test('a QR image that does not match the current metadata is rejected',()=>fixture(async(dir,state)=>{await state.publish(Buffer.from('qr'));const meta=await pairingStatus(dir);await writeFile(join(dir,'login-'+meta.qr_version+'.png'),'tampered');await assert.rejects(exportQr({id:'test',stateDir:dir},join(dir,'out')),/MISMATCH/)}))
-test('legacy waiting flag without generation or timestamps requires refresh',()=>fixture(async(dir)=>{await writeFile(join(dir,'pairing.json'),JSON.stringify({status:'waiting_scan'}));assert.equal((await pairingStatus(dir)).status,'refresh_required');await assert.rejects(exportQr({id:'test',stateDir:dir},join(dir,'out')),/REFRESH_REQUIRED/)}))
-test('browser link is private and only retained for an HTTPS QR payload',()=>fixture(async(dir,state)=>{await state.publish(Buffer.from('qr'),{loginUrl:'https://weixin.qq.com/x/example'});let meta=await pairingStatus(dir);assert.equal(await readBrowserLoginUrl(dir,meta.qr_version),'https://weixin.qq.com/x/example');await state.publish(Buffer.from('qr2'),{loginUrl:'javascript:alert(1)'});meta=await pairingStatus(dir);assert.equal(await readBrowserLoginUrl(dir,meta.qr_version),null)}))
+import {mkdtemp,rm,writeFile,readdir} from 'node:fs/promises'
+import {PairingState,pairingStatus,currentLoginLink,readBrowserLoginUrl,QR_FRESHNESS_MS} from '../../src/infrastructure/wechat/pairing-state.mjs'
+async function fixture(work){const dir=await mkdtemp('/tmp/login-state-');try{await work(dir,new PairingState(dir))}finally{await rm(dir,{recursive:true,force:true})}}
+const account=dir=>({id:'test',stateDir:dir})
+test('fresh login returns only a current HTTPS address',()=>fixture(async(dir,state)=>{
+ await state.publish('https://weixin.qq.com/x/example')
+ const result=await currentLoginLink(account(dir))
+ assert.equal(result.url,'https://weixin.qq.com/x/example')
+ assert.equal(result.path,undefined)
+ assert(result.freshness_seconds<=90)
+ assert(!(await readdir(dir)).some(name=>name.endsWith('.png')||name.endsWith('.terminal')))
+}))
+test('expired or stopped login address cannot be delivered',()=>fixture(async(dir,state)=>{
+ await state.publish('https://weixin.qq.com/x/example')
+ await assert.rejects(currentLoginLink(account(dir),{now:Date.now()+QR_FRESHNESS_MS}),/TOO_OLD/)
+ await assert.rejects(currentLoginLink(account(dir),{running:false}),/REFRESH_REQUIRED/)
+ await state.set('qr_expired')
+ await assert.rejects(currentLoginLink(account(dir)),/REFRESH_REQUIRED/)
+}))
+test('a newer login generation replaces the previous address',()=>fixture(async(dir,state)=>{
+ const first=state.publish('https://weixin.qq.com/x/old'),expired=state.set('qr_expired')
+ await Promise.all([first,expired])
+ assert.equal((await pairingStatus(dir)).status,'qr_expired')
+ await state.publish('https://weixin.qq.com/x/new')
+ assert.equal((await currentLoginLink(account(dir))).url,'https://weixin.qq.com/x/new')
+}))
+test('missing or unsafe login addresses fail closed',()=>fixture(async(dir,state)=>{
+ await assert.rejects(state.publish('javascript:alert(1)'),/INVALID_LOGIN_URL/)
+ await writeFile(dir+'/pairing.json',JSON.stringify({status:'waiting_scan'}))
+ assert.equal((await pairingStatus(dir)).status,'refresh_required')
+ await state.publish('https://weixin.qq.com/x/good')
+ const meta=await pairingStatus(dir)
+ assert.equal(await readBrowserLoginUrl(dir,meta.qr_version),'https://weixin.qq.com/x/good')
+ await writeFile(dir+'/login-'+meta.qr_version+'.url','http://insecure.example')
+ await assert.rejects(currentLoginLink(account(dir)),/LOGIN_URL_UNAVAILABLE/)
+}))

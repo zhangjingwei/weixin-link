@@ -39,7 +39,7 @@ Research, plan, and get results.
 
 ## Quick start
 
-**Run the installer → choose and verify a model in the terminal → scan with WeChat → receive the connection result.** You need your own WeChat account and a Codex subscription or supported model service. The installer prepares Node.js 24+ if needed.
+**Run the installer → choose and verify a model in the terminal → open the WeChat login address and confirm → receive the connection result.** You need your own WeChat account and a Codex subscription or supported model service. The installer prepares Node.js 24+ if needed.
 
 **Linux / macOS** — run in a terminal:
 
@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-The installer first prompts you to choose subscription sign-in, DeepSeek, Qwen or Kimi. After the model test, scan the WeChat QR code; the assistant then reports the installation result. Enter third-party API keys only in the terminal. Installation steps, WeChat login prompts, and setup commands support Chinese and English. Some advanced maintenance and diagnostic messages remain in Chinese.
+The installer first prompts you to choose subscription sign-in, DeepSeek, Qwen or Kimi. After the model test, the installer shows a WeChat login address and tries to open it in your browser; the assistant then reports the installation result. Enter third-party API keys only in the terminal. Installation steps, WeChat login prompts, and setup commands support Chinese and English. Some advanced maintenance and diagnostic messages remain in Chinese.
 
 **For users in mainland China:** [Codex subscription sign-in](https://learn.chatgpt.com/docs/auth) requires your own account and a connection to OpenAI services. If OpenAI is unavailable from your location or network, this option will not work. DeepSeek, Qwen and Kimi use keys from their own platforms instead of Codex subscription sign-in. Confirm your choice with the setup wizard's model test.
 
@@ -113,23 +113,23 @@ See the [English user guide](USER-GUIDE.en.md) for branch or commit reviews, sav
 
 ## Installation and upgrades
 
-To upgrade, rerun the installation command in [Quick start](#quick-start). Standard installations also prompt you when a stable update is available and upgrade only after you confirm. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments and recovery.
+To upgrade, rerun the installation command in [Quick start](#quick-start) and choose **1. Upgrade**. Standard installations also prompt you when a stable update is available and upgrade only after you confirm. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments and recovery.
 
-The installer guides you through the first WeChat login. To get a new QR code later, run one of these commands without finding the installation directory.
+The installer guides you through the first WeChat login. To log in again later, rerun the same installation command and choose **3. Log in to WeChat again** from the menu. You do not need to find the installation directory.
 
 **Linux / macOS**:
 
 ```sh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh)" -- login
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
 ```
 
 **Windows x64**:
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1'))) -Action login
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-If you have unbound the WeChat account and need to authorize it again, replace `login` at the end with `relogin`. See [QR maintenance](CONFIGURATION.md#二维码维护) for additional accounts.
+To add another WeChat account, choose **4. Add WeChat account**. See [WeChat login maintenance](CONFIGURATION.md#微信登录维护) for other cases.
 
 ## More capabilities and documentation
 
@@ -143,6 +143,6 @@ Optional integrations: [Home Assistant read-only queries, SSH remote operations,
 
 ## Security and license
 
-Pair with your own WeChat account. Do not share login QR codes or device authorization codes. For subscription sign-in, use the official OpenAI authorization page. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
+Confirm login with your own WeChat account. Do not share login addresses or device authorization codes. For subscription sign-in, use the official OpenAI authorization page. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
 
 Licensed under the [MIT License](LICENSE). Third-party dependencies and external services have their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Weixin Link is an independent project, not an official product of, or endorsed by, WeChat, OpenAI or other service providers.

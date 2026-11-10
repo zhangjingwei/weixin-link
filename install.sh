@@ -15,19 +15,15 @@ if test -z "${WEIXIN_LINK_DIR:-}${ZERO_LINK_DIR:-}" && { test -e "$HOME/.local/s
   fi
   bootstrap_dest="$HOME/.local/share/zero-link/source"
 fi
-bootstrap_command=${1:-install}
-if test "$bootstrap_command" = help || test "$bootstrap_command" = --help || test "$bootstrap_command" = -h; then
- if test "$bootstrap_english" = 1; then echo 'Usage: sh install.sh [setup|login|relogin|account-create] [account]'; echo 'No subcommand: install or upgrade. Maintenance subcommands use the existing local installation.'; else echo '用法：sh install.sh [setup|login|relogin|account-create] [账号]'; echo '不加子命令时安装或升级；维护子命令使用现有本地安装。'; fi
- exit 0
-fi
-case "$bootstrap_command" in install|setup|login|relogin|account-create) ;; *) if test "$bootstrap_english" = 1; then echo 'Usage: sh install.sh [setup|login|relogin|account-create] [account]' >&2; else echo '用法：sh install.sh [setup|login|relogin|account-create] [账号]' >&2; fi; exit 1;; esac
-if test "$bootstrap_command" = install; then
- test "$#" -eq 0 || test "$#" -eq 1 || { echo 'INSTALL_ARGUMENTS_INVALID' >&2; exit 1; }
-else
- test "$#" -le 2 || { echo 'INSTALL_ARGUMENTS_INVALID' >&2; exit 1; }
-fi
-bootstrap_account=${2:-default}
-if test "$bootstrap_command" = account-create && test "$#" -ne 2; then echo 'ACCOUNT_NAME_REQUIRED' >&2; exit 1; fi
+test "$#" -eq 0 || { echo 'Usage: sh install.sh' >&2; exit 1; }
+bootstrap_command=install
+bootstrap_account=default
+bootstrap_run_interactive() {
+  if test -t 0; then "$@"
+  elif ( : </dev/tty ) 2>/dev/null; then "$@" </dev/tty
+  else "$@"
+  fi
+}
 if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
   if test -L "$bootstrap_dest" || ! test -d "$bootstrap_dest" || ! test -f "$bootstrap_dest/package.json" || { ! test -f "$bootstrap_dest/src/setup/account-manager.mjs" && ! test -f "$bootstrap_dest/src/wechat/account-manager.mjs"; } || ! test -f "$bootstrap_dest/src/setup/setup.mjs"; then
     echo "Installation directory already exists but is not a supported installation: $bootstrap_dest" >&2; exit 1
@@ -38,9 +34,28 @@ if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
     echo 'Existing installation needs Node.js 24+ before upgrading.' >&2; exit 1
   fi
   "$bootstrap_node" -e 'const p=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8"));if(!["weixin-link","wechat-ping-bot"].includes(p.name))process.exit(1)' "$bootstrap_dest/package.json" || { echo 'Unrecognized existing source directory.' >&2; exit 1; }
-  if test "$bootstrap_command" = install; then bootstrap_mode=upgrade; else bootstrap_mode=maintenance; fi
+  bootstrap_mode=upgrade
+  if ( : </dev/tty ) 2>/dev/null; then
+    if test "$bootstrap_english" = 1; then
+      printf 'Existing installation found. Choose: 1 Upgrade  2 Configure model  3 Log in to WeChat again  4 Add WeChat account  0 Exit\nChoice: ' >/dev/tty
+    else
+      printf '检测到已有安装。请选择：1 升级  2 配置模型  3 重新登录微信  4 添加微信账号  0 退出\n输入序号：' >/dev/tty
+    fi
+    IFS= read -r bootstrap_choice </dev/tty || bootstrap_choice=0
+    case "$bootstrap_choice" in
+      1) ;;
+      2) bootstrap_command=setup; bootstrap_mode=maintenance ;;
+      3) bootstrap_command=relogin; bootstrap_mode=maintenance ;;
+      4)
+        bootstrap_command=account-create; bootstrap_mode=maintenance
+        if test "$bootstrap_english" = 1; then printf 'New account name (lowercase letters, digits, hyphens): ' >/dev/tty; else printf '新账号名称（小写字母、数字、连字符）：' >/dev/tty; fi
+        IFS= read -r bootstrap_account </dev/tty || exit 1
+        ;;
+      0) exit 0 ;;
+      *) echo 'INVALID_INSTALL_CHOICE' >&2; exit 1 ;;
+    esac
+  fi
 else
-  if test "$bootstrap_command" != install; then if test "$bootstrap_english" = 1; then echo 'No installation was found. Run the installer without a subcommand first.' >&2; else echo '未找到已安装版本，请先运行不带子命令的安装命令。' >&2; fi; exit 1; fi
   bootstrap_mode=install
   case "$(uname -s)" in
     Linux)
@@ -59,14 +74,13 @@ else
   esac
 fi
 if test "$bootstrap_mode" = maintenance; then
-  if ! test -f "$bootstrap_dest/src/setup/account-manager.mjs"; then if test "$bootstrap_english" = 1; then echo 'This installed version needs an upgrade before using maintenance subcommands.' >&2; else echo '当前安装版本需先升级，才能使用维护子命令。' >&2; fi; exit 1; fi
+  if ! test -f "$bootstrap_dest/src/setup/account-manager.mjs"; then if test "$bootstrap_english" = 1; then echo 'Upgrade this installation before using the menu.' >&2; else echo '请先升级当前安装版本，再使用菜单。' >&2; fi; exit 1; fi
   PATH="$(dirname "$bootstrap_node"):$PATH"; export PATH
   cd "$bootstrap_dest"
   case "$bootstrap_command" in
-   setup) "$bootstrap_node" src/setup/setup.mjs wizard "$bootstrap_account" --human ;;
-   login) "$bootstrap_node" src/setup/setup.mjs wechat-login "$bootstrap_account" --human ;;
-   relogin) "$bootstrap_node" src/setup/setup.mjs wechat-login --relogin "$bootstrap_account" --human ;;
-   account-create) "$bootstrap_node" src/setup/account-manager.mjs create "$bootstrap_account" --human ;;
+   setup) bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wizard "$bootstrap_account" --human ;;
+   relogin) bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wechat-login --relogin "$bootstrap_account" --human ;;
+   account-create) "$bootstrap_node" src/setup/account-manager.mjs create "$bootstrap_account" --human; bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wizard "$bootstrap_account" --human; bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wechat-login "$bootstrap_account" --human ;;
   esac
   exit 0
 fi
@@ -120,4 +134,4 @@ fi
 mkdir "$bootstrap_dest"
 cp -R "$bootstrap_tmp/source/." "$bootstrap_dest/"
 cd "$bootstrap_dest"
-/bin/sh ./src/setup/unix-install.sh
+bootstrap_run_interactive /bin/sh ./src/setup/unix-install.sh

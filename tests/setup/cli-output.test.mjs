@@ -36,12 +36,11 @@ test('human errors retain exit failure and a diagnostic code without raw JSON', 
 })
 test('pairing prompts distinguish an existing login and explain the next step',()=>{
  assert(setupMessage('pair',{status:'already_pairing'},'zh').includes('已在进行'))
- assert(setupMessage('qr',{},'zh').includes('主动推送安装结果'))
- assert(setupMessage('qr',{},'zh').includes('install.sh)" -- setup'))
+ assert(setupMessage('refresh-qr',{},'zh').includes('登录地址'))
  assert(setupError(Error('VERIFICATION_NOT_REQUESTED'),'zh').includes('尚未要求输入 PIN'))
  assert(setupError(Error('ACCOUNT_NOT_FOUND'),'zh').includes('核对账号名'))
  assert(setupMessage('verify-wait',{pin_submitted:true},'zh').includes('PIN 已提交'))
- assert(setupError(Error('QR_NOT_READY_OR_EXPIRED'),'zh').includes('install.sh)" -- login'))
+ assert(setupError(Error('QR_NOT_READY_OR_EXPIRED'),'zh').includes('install.sh | WEIXIN_LINK_LANG=zh sh'))
  assert(!setupError(Error('sensitive raw process output'),'zh').includes('sensitive'))
 })
 test('service conflicts identify the preserved file and do not suggest a network failure',()=>{
@@ -53,7 +52,7 @@ test('service conflicts identify the preserved file and do not suggest a network
 })
 test('English installation CLI shows English progress and safe errors',async()=>{
  const error=setupError(Error('ACCOUNT_RUNNING_NOT_READY'),'en')
- assert(error.includes('install.sh)" -- relogin'))
+ assert(error.includes('install.sh | WEIXIN_LINK_LANG=en sh'))
  assert(setupMessage('verify-wait',{pin_submitted:true},'en').includes('PIN submitted'))
  await assert.rejects(exec(process.execPath,[cli,'init','relative-path','--human','--lang','en']),failure=>failure.stderr.includes('valid absolute path'))
 })

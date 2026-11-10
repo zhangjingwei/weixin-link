@@ -11,6 +11,6 @@ test('terminal language follows Chinese or English locale and supports an explic
  assert.throws(()=>languageOption(['--lang','fr']),/INVALID_SETUP_LANGUAGE/)
 })
 test('installer command gives copyable Unix and Windows maintenance entry points',()=>{
- assert.equal(installerCommand('setup',{platform:'linux',language:'en'}),'WEIXIN_LINK_LANG=en sh -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh)" -- setup')
- assert.equal(installerCommand('relogin',{platform:'win32',accountId:'bot2'}),"& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1'))) -Action relogin -Account bot2")
+ assert.equal(installerCommand('setup',{platform:'linux',language:'en'}),'curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | WEIXIN_LINK_LANG=en sh')
+ assert.equal(installerCommand('relogin',{platform:'win32',accountId:'bot2'}),"& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))")
 })

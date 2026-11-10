@@ -4,9 +4,9 @@ export const USER_GUIDE=`微信助手使用说明
 
 一、首次设置
 
-1. 按 README 的安装步骤在电脑上安装，并用微信扫码。若手机要求输入 PIN，请在显示二维码的终端按提示输入。
-2. 安装器在电脑终端提示选择订阅登录、DeepSeek、Qwen 或 Kimi，并完成授权、连接检查和真实模型测试。第三方密钥只在终端输入，不要发到微信。
-3. 终端提示测试通过后扫描微信二维码；微信 Link 会主动推送连接结果。若跳过或未完成模型配置，可在源码目录运行 sh install.sh setup 继续（Windows：install.ps1 -Action setup）。
+1. 按 README 的步骤在电脑上运行安装命令。安装器会提示选择订阅登录、DeepSeek、Qwen 或 Kimi，并完成授权、连接检查和真实模型测试。第三方密钥只在终端输入，不要发到微信。
+2. 安装器显示微信登录地址，并尝试打开浏览器。请在手机微信确认登录；若要求输入 PIN，请按同一终端的提示操作。登录后微信 Link 会主动推送连接结果。
+3. 若跳过或未完成模型配置，重新运行安装命令，在菜单中选择“2 配置模型”。
 
 - “安装向导”：返回本机终端向导的启动方法。
 
@@ -40,7 +40,7 @@ export const USER_GUIDE=`微信助手使用说明
 
 三、项目与日常
 
-项目和日常会话都在同一个微信聊天窗口中使用。项目编号保持不变。
+项目和日常会话都在同一个微信聊天窗口中使用。先发“列表”查看固定的项目编号；归档、还原和删除要把这个编号写在命令后面，不会再弹出编号选择。切换和历史显示的序号只用于当次选择。
 
 - “列表”：查看项目列表。
 - “日常”：切回日常会话。
@@ -50,9 +50,9 @@ export const USER_GUIDE=`微信助手使用说明
 - “历史”：先显示可查看的会话列表，再回复序号查看；已归档会话也会列出。
 - “翻页”：查看更早的历史。
 - “搜索”：按提示输入关键词，搜索当前会话最近 50 轮。
-- “归档2”：隐藏编号为 2 的项目，保留历史。
-- “还原2”：恢复已归档的项目。
-- “删除2”：永久删除编号为 2 的项目及其派生会话，无法还原。
+- “归档2”：归档固定编号为 2 的项目，保留历史。
+- “还原2”：还原固定编号为 2 的已归档项目。
+- “删除2”：永久删除固定编号为 2 的项目及其派生会话，无法还原。
 
 四、任务、审查与会话
 
@@ -136,9 +136,9 @@ Send English commands as plain text, without a slash. Commands are case insensit
 
 1. First-time setup
 
-1. Follow the installation steps in README.en.md on your computer, then scan the WeChat QR code. If WeChat asks for a PIN, enter it in the terminal showing the QR code.
-2. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
-3. After the model test passes, scan the WeChat QR code. The assistant will send a connection message. If you skipped model setup, run sh install.sh setup from the source directory to continue (Windows: install.ps1 -Action setup).
+1. Follow the installation steps in README.en.md on your computer. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
+2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message after login.
+3. If you skipped or did not complete model setup, rerun the installer and choose 2. Configure model from the menu.
 
 - setup: Show how to start the setup wizard on your computer.
 
@@ -172,7 +172,7 @@ You can also ask for a reminder in ordinary language, such as “Remind me about
 
 3. Projects and the everyday conversation
 
-Projects and the everyday conversation share one WeChat chat. Project IDs stay the same; selection numbers restart from 1 each time you open a list.
+Projects and the everyday conversation share one WeChat chat. Use list to find a project's fixed ID, then append that ID to archive, restore, or delete. These commands do not open a numbered selection prompt. Selection numbers for switch and history apply only to that list.
 
 - list: List projects.
 - daily: Return to the everyday conversation.

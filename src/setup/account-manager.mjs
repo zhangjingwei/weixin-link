@@ -2,8 +2,7 @@ import {setupMessage,setupError} from './cli-output.mjs'
 import {fileURLToPath as repositoryFilePath} from 'node:url'
 const repositoryDirectory=repositoryFilePath(new URL('../../',import.meta.url))
 import {ServiceManager,confirmServiceStopped} from './platform-service.mjs'
-import {installConfig} from './install-config.mjs'
-import {pairingStatus,PairingState,exportQr} from '../infrastructure/wechat/pairing-state.mjs'
+import {pairingStatus,PairingState,currentLoginLink} from '../infrastructure/wechat/pairing-state.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 import {createAccount,listAccounts,assertAccount,loginHealth} from '../infrastructure/accounts/account-store.mjs'
 import {readFile,writeFile,copyFile,mkdir,chmod,rename} from 'node:fs/promises'
@@ -35,10 +34,9 @@ async function run(){
   await services.stop(pairService)
   if(previous.active&&!await confirmServiceStopped(()=>services.status(pairService),previous.pid))throw Error('PAIRING_STOP_UNCONFIRMED')
   await services.pair(p.id)
-  for(let n=0;n<80;n++){const status=await pairingStatus(p.stateDir,{running:await active('wechat-pair-'+p.id+'.service')});if(status.status==='waiting_scan')return exportQr(p,join(installConfig().workspace,'outputs'));await delay(250)}
-  throw Error('QR_NOT_READY_RETRY')
+  for(let n=0;n<80;n++){const status=await pairingStatus(p.stateDir,{running:await active('wechat-pair-'+p.id+'.service')});if(status.status==='waiting_scan')return currentLoginLink(p);await delay(250)}
+  throw Error('LOGIN_URL_NOT_READY_RETRY')
  }
- if(action==='qr')return exportQr(p,join(installConfig().workspace,'outputs'),{running:await active('wechat-pair-'+p.id+'.service')})
  if(action==='verify-wait'){
   const input=process.stdin,privateInput=!!input.isTTY&&typeof input.setRawMode==='function',wasRaw=!!input.isRaw
   const cancelled=new AbortController(),discard=chunk=>{if(Buffer.from(chunk).includes(3))cancelled.abort()}
@@ -65,7 +63,7 @@ async function run(){
  }
  if(action==='stop'){await services.stop('wechat-pair-'+p.id+'.service').catch(()=>{});if(!await active(p.service)){await services.stop(p.service);return {account:p.id,status:'stopped'}}await exec(process.execPath,[join(repositoryDirectory,'src/tools/activate-diagnostics.mjs'),'--stop'],{env:{...process.env,WECHAT_ACCOUNT:p.id},timeout:650000});return {account:p.id,status:'stopped'}}
  if(action==='start'){if(!await readFile(join(p.stateDir,'codex-owners.json'),'utf8'))throw Error('LOGIN_FIRST');await services.start(p.service);return {account:p.id,status:'starting'}}
- throw Error('USAGE: create|login|qr|refresh-qr|verify|verify-wait|list|start|stop ACCOUNT')
+ throw Error('USAGE: create|login|refresh-qr|verify|verify-wait|list|start|stop ACCOUNT')
 }
 const human=process.argv.includes('--human')
 try{const result=await run();console.log(human?setupMessage(action,result):JSON.stringify({ok:true,...result}))}catch(e){if(human)console.error(setupError(e));else console.log(JSON.stringify({ok:false,error:/^[A-Z0-9_:| -]+$/.test(e.message)?e.message:e.code??'ACCOUNT_OPERATION_FAILED'}));process.exitCode=1}

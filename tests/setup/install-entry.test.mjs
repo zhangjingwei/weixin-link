@@ -55,19 +55,23 @@ test('same entry routes an existing installation to upgrade without running inst
  assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
  assert.equal((await readdir(f.dest)).includes('installed.txt'),false)
 })
-test('installed entry handles setup and login locally without downloading an upgrade',{skip:process.platform==='win32'},async t=>{
+test('existing installation menu handles local maintenance without downloading an upgrade',{skip:process.platform!=='darwin'},async t=>{
  const f=await fixture(t),env=await installed(f)
  await writeFile(join(f.bin,'node'),'#!/bin/sh\nif [ "$1" = -e ]; then exit 0; fi\nprintf "%s\\n" "$*" > "$UPGRADE_CAPTURE"\n',{mode:0o755})
- for(const [command,expected]of [['setup','wizard bot2 --human'],['login','wechat-login bot2 --human'],['relogin','wechat-login --relogin bot2 --human'],['account-create','create bot2 --human']]){
-  await exec('sh',[bootstrap,command,'bot2'],{env})
+ for(const [choice,expected]of [['2','wizard default --human'],['3','wechat-login --relogin default --human'],['4','wechat-login bot2 --human']]){
+  const script=`spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "输入序号："\nsend "${choice}\\r"\n${choice==='4'?'expect "新账号名称*"\nsend "bot2\\r"\n':''}expect eof`
+  await exec('expect',['-c',script],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
   assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes(expected))
  }
+ await exec('expect',['-c','spawn sh -c {cat "$BOOTSTRAP_SCRIPT" | sh}\nexpect "输入序号："\nsend "2\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
+ assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes('wizard default --human'))
  assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
 })
-test('maintenance commands require an existing installation',{skip:process.platform==='win32'},async t=>{
- const f=await fixture(t)
- await assert.rejects(exec('sh',[bootstrap,'login'],{env:f.env}),/未找到已安装版本|No installation was found/)
- assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
+test('piped entry keeps noninteractive upgrade behavior',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t),env=await installed(f)
+ await exec('sh',['-c','cat "$BOOTSTRAP_SCRIPT" | sh'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
+ assert.equal(await readFile(env.UPGRADE_CAPTURE,'utf8'),f.dest)
+ await assert.rejects(exec('sh',[bootstrap,'login'],{env}),/Usage: sh install.sh/)
 })
 test('older manager path remains eligible for in-place upgrade',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t),env=await installed(f,{legacyManager:true})

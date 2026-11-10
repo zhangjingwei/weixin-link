@@ -4,9 +4,9 @@ Send English commands as plain text, without a slash. Commands are case insensit
 
 1. First-time setup
 
-1. Follow the installation steps in README.en.md on your computer, then scan the WeChat QR code. If WeChat asks for a PIN, enter it in the terminal showing the QR code.
-2. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
-3. After the model test passes, scan the WeChat QR code. The assistant will send a connection message. If you skipped model setup, run `sh install.sh setup` from the source directory to continue (Windows: `install.ps1 -Action setup`).
+1. Follow the installation steps in README.en.md on your computer. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
+2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message after login.
+3. If you skipped or did not complete model setup, rerun the installer and choose **2. Configure model** from the menu.
 
 - `setup`: Show how to start the setup wizard on your computer.
 
@@ -40,7 +40,7 @@ You can also ask for a reminder in ordinary language, such as “Remind me about
 
 3. Projects and the everyday conversation
 
-Projects and the everyday conversation share one WeChat chat. Project IDs stay the same; selection numbers restart from 1 each time you open a list.
+Projects and the everyday conversation share one WeChat chat. Use `list` to find a project's fixed ID, then append that ID to `archive`, `restore`, or `delete`. These commands do not open a numbered selection prompt. Selection numbers for `switch` and `history` apply only to that list.
 
 - `list`: List projects.
 - `daily`: Return to the everyday conversation.
