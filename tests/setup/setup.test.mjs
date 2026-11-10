@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,readFile,writeFile,mkdir,rm,readdir,symlink} from 'node:fs/promises'
+import {mkdtemp,readFile,writeFile,mkdir,rm,readdir,symlink,realpath} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {initInstallation,installServices,doctor,unitText,installCodex,codexAvailability} from '../../src/setup/setup-core.mjs'
@@ -10,6 +10,18 @@ import {parseDeviceLogin} from '../../src/setup/setup-login.mjs'
 import {SetupController,setupCommand} from '../../src/setup/setup-controller.mjs'
 const fixture=async t=>{const home=await mkdtemp(join(tmpdir(),'wechat-onboard-'));t.after(()=>rm(home,{recursive:true,force:true}));return home}
 test('fresh installation works without Codex, owners, credentials or npm SDK',async t=>{const home=await fixture(t),root=join(home,'source');await mkdir(root);const r=await initInstallation({home,root});assert(r.initialized);assert((await readFile(join(r.workspace,'AGENTS.md'),'utf8')).includes('原生记忆'));const state=join(home,'.local/share/wechat-ping-bot');assert.deepEqual(await readdir(state),['installation.json']);assert.equal((await initInstallation({home,root})).initialized,true);await assert.rejects(initInstallation({home,root,workspace:join(home,'other')}),/ALREADY_CONFIGURED/)})
+test('installation resumes with an existing symlinked workspace',async t=>{
+ const home=await fixture(t),root=join(home,'source'),actual=join(home,'agent-workspace'),workspace=join(home,'wechat-assistant')
+ await mkdir(root);await mkdir(actual);await symlink(actual,workspace)
+ await writeFile(join(actual,'AGENTS.md'),'# User rules\nKeep this text.\n')
+ const state=join(home,'.local/share/wechat-ping-bot');await mkdir(state,{recursive:true})
+ await writeFile(join(state,'installation.json'),JSON.stringify({version:1,workspace,createdAt:new Date().toISOString()}))
+ const result=await initInstallation({home,root,workspace})
+ assert.equal(result.workspace,workspace)
+ assert.equal(result.guidance.path,join(await realpath(actual),'AGENTS.md'))
+ assert((await readFile(join(actual,'AGENTS.md'),'utf8')).startsWith('# User rules\nKeep this text.\n'))
+ assert.equal(JSON.parse(await readFile(join(state,'installation.json'),'utf8')).workspace,workspace)
+})
 test('service installation prepares both templates and never starts or overrides foreign services',async t=>{const home=await fixture(t),root=join(home,'source with spaces'),calls=[];const run=async(...a)=>{calls.push(a)};await installServices({home,root,run,platform:'linux'});assert.deepEqual(calls[0][1],['--user','daemon-reload']);assert(!calls.some(c=>c[1].includes('start')));const dir=join(home,'.config/systemd/user');const text=await readFile(join(dir,'wechat-ping-bot@.service'),'utf8');assert(text.includes('WECHAT_ACCOUNT=%i'));assert(text.includes('/src/wechat/bot.mjs'));assert(text.includes('source with spaces'));await writeFile(join(dir,'wechat-ping-bot.service'),'foreign service');await assert.rejects(installServices({home,root,run,platform:'linux'}),/REQUIRES_REVIEW/);assert.equal(await readFile(join(dir,'wechat-ping-bot.service'),'utf8'),'foreign service')})
 test('doctor separates a working channel from missing Codex and does not expose command output',async t=>{const home=await fixture(t),root=join(home,'source');await mkdir(join(root,'node_modules/wechatbot-zerolink/dist/messaging'),{recursive:true});await writeFile(join(root,'node_modules/wechatbot-zerolink/dist/index.js'),'');await writeFile(join(root,'node_modules/wechatbot-zerolink/package.json'),JSON.stringify({name:'wechatbot-zerolink',version:'2.2.0-zerolink.2'}));await writeFile(join(root,'node_modules/wechatbot-zerolink/dist/messaging/poller.js'),'beforeCheckpoint');await initInstallation({home,root});await installServices({home,root,reload:false});const r=await doctor({home,root,run:async(bin)=>{if(bin.endsWith('codex'))throw Error('secret failure');return {stdout:'secret'}}});assert.equal(r.codexInstalled,false);assert.equal(r.codexLoggedIn,false);assert.equal(r.channelPrerequisitesReady,true);assert(!JSON.stringify(r).includes('secret'))})
 test('bundled Codex runtime is resolved from the source tree, never the user PATH',async t=>{
