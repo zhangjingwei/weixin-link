@@ -13,7 +13,7 @@ const cli=fileURLToPath(new URL('../../src/setup/setup.mjs',import.meta.url))
 test('installation CLI offers readable progress while retaining its JSON interface', {skip:process.platform==='win32'}, async t=>{
  const home=await mkdtemp(join(tmpdir(),'weixin-cli-'))
  t.after(()=>rm(home,{recursive:true,force:true}))
- const options={env:{...process.env,HOME:home}}
+ const options={env:{...process.env,HOME:home,WEIXIN_LINK_LANG:'zh'}}
  const human=await exec(process.execPath,[cli,'init','--human'],options)
  assert(human.stdout.includes('[1/5]'))
  assert(human.stdout.includes('工作目录已准备'))
@@ -22,7 +22,7 @@ test('installation CLI offers readable progress while retaining its JSON interfa
  assert.equal(JSON.parse(machine.stdout).initialized,true)
 })
 test('human errors retain exit failure and a diagnostic code without raw JSON', async()=>{
- await assert.rejects(exec(process.execPath,[cli,'init','relative-path','--human']),error=>{
+ await assert.rejects(exec(process.execPath,[cli,'init','relative-path','--human'],{env:{...process.env,WEIXIN_LINK_LANG:'zh'}}),error=>{
   assert.equal(error.code,1)
   assert(error.stderr.includes('有效的绝对路径'))
   assert(error.stderr.includes('INVALID_WORKSPACE'))
@@ -35,19 +35,25 @@ test('human errors retain exit failure and a diagnostic code without raw JSON', 
  })
 })
 test('pairing prompts distinguish an existing login and explain the next step',()=>{
- assert(setupMessage('pair',{status:'already_pairing'}).includes('已在进行'))
- assert(setupMessage('qr').includes('主动推送安装向导'))
- assert(setupMessage('qr').includes('account-manager.mjs verify'))
- assert(setupError(Error('VERIFICATION_NOT_REQUESTED')).includes('尚未要求输入 PIN'))
- assert(setupError(Error('ACCOUNT_NOT_FOUND')).includes('核对账号名'))
- assert(setupMessage('verify-wait',{pin_submitted:true}).includes('PIN 已提交'))
- assert(setupError(Error('QR_NOT_READY_OR_EXPIRED')).includes('刷新二维码'))
- assert(!setupError(Error('sensitive raw process output')).includes('sensitive'))
+ assert(setupMessage('pair',{status:'already_pairing'},'zh').includes('已在进行'))
+ assert(setupMessage('qr',{},'zh').includes('主动推送安装结果'))
+ assert(setupMessage('qr',{},'zh').includes('account-manager.mjs verify'))
+ assert(setupError(Error('VERIFICATION_NOT_REQUESTED'),'zh').includes('尚未要求输入 PIN'))
+ assert(setupError(Error('ACCOUNT_NOT_FOUND'),'zh').includes('核对账号名'))
+ assert(setupMessage('verify-wait',{pin_submitted:true},'zh').includes('PIN 已提交'))
+ assert(setupError(Error('QR_NOT_READY_OR_EXPIRED'),'zh').includes('wechat-login'))
+ assert(!setupError(Error('sensitive raw process output'),'zh').includes('sensitive'))
 })
 test('service conflicts identify the preserved file and do not suggest a network failure',()=>{
  const error=Object.assign(Error('EXISTING_SERVICE_REQUIRES_REVIEW'),{servicePath:'/home/test/.config/systemd/user/wechat-ping-bot.service'})
- const text=setupError(error)
+ const text=setupError(error,'zh')
  assert(text.includes('已保留原配置'))
  assert(text.includes(error.servicePath))
  assert(!text.includes('网络'))
+})
+test('English installation CLI shows English progress and safe errors',async()=>{
+ const error=setupError(Error('ACCOUNT_RUNNING_NOT_READY'),'en')
+ assert(error.includes('Use wechat-login --relogin'))
+ assert(setupMessage('verify-wait',{pin_submitted:true},'en').includes('PIN submitted'))
+ await assert.rejects(exec(process.execPath,[cli,'init','relative-path','--human','--lang','en']),failure=>failure.stderr.includes('valid absolute path'))
 })

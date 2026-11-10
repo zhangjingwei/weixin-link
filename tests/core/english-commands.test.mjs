@@ -31,7 +31,7 @@ test('task and interaction commands have equivalent English names',()=>{
 
 test('setup, service and diagnostics accept English names without a slash',()=>{
  for(const [english,chinese] of Object.entries({setup:'安装向导','setup-status':'安装状态','install-agent':'安装智能体','login-agent':'登录智能体','check-agent':'验收智能体','install-help':'安装帮助'})){
-  assert.equal(setupCommand(english),setupCommand(chinese));assert.equal(setupCommand(english.toUpperCase()),setupCommand(chinese));assert.equal(setupCommand('/'+english),null)
+  assert.equal(setupCommand(english),setupCommand(chinese)+'En');assert.equal(setupCommand(english.toUpperCase()),setupCommand(chinese)+'En');assert.equal(setupCommand('/'+english),null)
  }
  assert.equal(setupCommand('guide'),'manualEn')
  assert.equal(setupCommand('GUIDE'),'manualEn')

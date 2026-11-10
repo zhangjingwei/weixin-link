@@ -11,6 +11,7 @@ import {accountPaths,listAccounts} from '../infrastructure/accounts/account-stor
 import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {npmCommand,nodeEnvironment} from './platform-command.mjs'
 import {installConfig} from './install-config.mjs'
+import {setupLanguage} from './setup-locale.mjs'
 
 const exec=promisify(execFile)
 const exists=path=>access(path).then(()=>true,()=>false)
@@ -218,9 +219,21 @@ const errors={
  UPGRADE_ALREADY_RUNNING:'已有升级锁。请先确认之前的升级是否完成，并检查 upgrades 下的恢复记录。',
  UPGRADE_ROLLBACK_FAILED:'自动回滚未能确认完成。备份与恢复记录已保留，请检查服务状态后按恢复记录处理。',
 }
+function upgradeTextEnglish(message){
+ if(message==='源码已是目标版本，未备份或重启服务。')return 'The installed source is already up to date. No backup or service restart was needed.'
+ if(message==='准备新版代码和依赖，现有服务继续运行…')return 'Preparing the new source and dependencies while the existing service keeps running…'
+ if(message==='等待当前任务结束并备份运行数据…')return 'Waiting for current tasks to finish and backing up runtime data…'
+ if(message==='运行数据已备份，正在切换新版代码…')return 'Runtime data is backed up. Switching to the new source…'
+ if(message.startsWith('正在确认后台服务启动'))return message.replace('正在确认后台服务启动','Checking background service startup')
+ if(message.startsWith('升级完成。旧版本与运行数据备份：'))return message.replace('升级完成。旧版本与运行数据备份：','Upgrade completed. Runtime backup: ').replace('；旧源码：','; previous source: ')
+ if(message==='升级未通过，正在恢复旧版本和运行数据…')return 'Upgrade failed. Restoring the previous source and runtime data…'
+ return message
+}
+const errorsEn={UPGRADE_CUSTOM_DEPLOYMENT:'An unmanaged service or custom source was found. The existing deployment was left unchanged.',UPGRADE_CUSTOM_SOURCE:'The source contains a Git workspace or custom .env. Use its original upgrade process.',UPGRADE_BUSY:'A task is still running. Retry after it finishes.',UPGRADE_ALREADY_RUNNING:'Another upgrade is in progress. Check its recovery record before retrying.',UPGRADE_ROLLBACK_FAILED:'Automatic rollback could not be confirmed. Preserve the backup and recovery record.'}
 if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
  const target=process.argv[2]
- if(!target){console.error('用法：node src/setup/upgrade.mjs 已安装源码目录');process.exitCode=1}
- else try{await upgradeInstallation({source:fileURLToPath(new URL('../../',import.meta.url)),target})}
- catch(error){console.error(errors[error.message]??'升级未完成，请检查服务状态和恢复记录。');console.error('错误代码：'+(['ENOENT','EACCES','ETIMEDOUT'].includes(error.code)?'UPGRADE_'+error.code:/^[A-Z0-9_]+$/.test(error.message)?error.message:'UPGRADE_FAILED'));process.exitCode=1}
+ const english=setupLanguage()==='en'
+ if(!target){console.error(english?'Usage: node src/setup/upgrade.mjs INSTALLED_SOURCE_DIR':'用法：node src/setup/upgrade.mjs 已安装源码目录');process.exitCode=1}
+ else try{await upgradeInstallation({source:fileURLToPath(new URL('../../',import.meta.url)),target,log:message=>console.log(english?upgradeTextEnglish(message):message)})}
+ catch(error){console.error(english?errorsEn[error.message]??'Upgrade did not finish. Check service status and recovery records.':errors[error.message]??'升级未完成，请检查服务状态和恢复记录。');console.error((english?'Error code: ':'错误代码：')+(['ENOENT','EACCES','ETIMEDOUT'].includes(error.code)?'UPGRADE_'+error.code:/^[A-Z0-9_]+$/.test(error.message)?error.message:'UPGRADE_FAILED'));process.exitCode=1}
 }

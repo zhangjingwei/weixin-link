@@ -1,10 +1,12 @@
 ﻿$ErrorActionPreference='Stop'
+$setupLocale = if($env:WEIXIN_LINK_LANG){$env:WEIXIN_LINK_LANG}elseif($env:LC_ALL){$env:LC_ALL}else{[cultureinfo]::CurrentUICulture.Name}
+$setupEnglish = $setupLocale -match '^en(?:[-_.@]|$)'
 if($env:PROCESSOR_ARCHITECTURE -ne 'AMD64'){throw 'Supported: Windows x64'}
 # A registered task is an existing deployment, regardless of its source directory.
 $existingTask = Get-ScheduledTask -TaskName 'com.wechat-assistant.wechat-ping-bot' -ErrorAction SilentlyContinue
 if ($existingTask) {
-    Write-Output '检测到已有 Weixin Link 后台服务，跳过重复安装。'
-    Write-Output "服务状态：$($existingTask.State)。请在微信发送「安装状态」检查；升级请重新运行安装命令。"
+    if($setupEnglish){Write-Output 'An existing Weixin Link service was found; skipping duplicate installation.';Write-Output "Service state: $($existingTask.State). Send setup-status in WeChat to check. Run the installer again to upgrade."}
+    else{Write-Output '检测到已有 Weixin Link 后台服务，跳过重复安装。';Write-Output "服务状态：$($existingTask.State)。请在微信发送「安装状态」检查；升级请重新运行安装命令。"}
     return
 }
 $env:HOME=[Environment]::GetFolderPath('UserProfile')
@@ -31,4 +33,9 @@ $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 if($LASTEXITCODE -ne 0){throw 'PRIVATE_STATE_ACL_FAILED'}
 $sourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 Push-Location $sourceRoot
-try{foreach($step in @('init','deps','services','pair','qr')){& $node (Join-Path $sourceRoot 'src/setup/setup.mjs') $step --human;if($LASTEXITCODE -ne 0){throw "SETUP_FAILED_$step"}}}finally{Pop-Location}
+try{
+ foreach($step in @('init','deps')){& $node (Join-Path $sourceRoot 'src/setup/setup.mjs') $step --human;if($LASTEXITCODE -ne 0){throw "SETUP_FAILED_$step"}}
+ if(-not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected){& $node (Join-Path $sourceRoot 'src/setup/setup.mjs') wizard --human;if($LASTEXITCODE -ne 0){throw 'SETUP_FAILED_wizard'}}
+ else{if($setupEnglish){Write-Output 'This terminal is not interactive, so model setup was skipped. Run node src/setup/setup.mjs wizard from the source directory later.'}else{Write-Output '当前终端无法交互，已跳过模型设置。稍后可在源码目录运行 node src/setup/setup.mjs wizard。'}}
+ foreach($step in @('services','wechat-login')){& $node (Join-Path $sourceRoot 'src/setup/setup.mjs') $step --human;if($LASTEXITCODE -ne 0){throw "SETUP_FAILED_$step"}}
+}finally{Pop-Location}

@@ -10,7 +10,7 @@ export function createManagementController({manager, jobs, runtime, setupReceipt
       const receipt = message._setupReceiptId ? {id: message._setupReceiptId} : setupReceipts.capture(message)
       if (!receipt || !setupReceipts.claim(receipt.id)) {
         if (message._recovered) {
-          await deliver('上次安装操作的结果需要核对，未重复执行。发送“安装向导”重新检测并继续。', {conversationControl: true})
+          await deliver('上次安装操作的结果需要核对，未重复执行。请在安装电脑运行 node src/setup/setup.mjs wizard 继续检查。', {conversationControl: true})
           acknowledge(message)
         }
         return

@@ -14,7 +14,7 @@ test('upgrade CLI runs when invoked through a symlinked path',async t=>{
  t.after(()=>rm(directory,{recursive:true,force:true}))
  const entry=join(directory,'upgrade.mjs')
  await symlink(fileURLToPath(new URL('../../src/setup/upgrade.mjs',import.meta.url)),entry)
- await assert.rejects(promisify(execFile)(process.execPath,[entry]),error=>{
+ await assert.rejects(promisify(execFile)(process.execPath,[entry],{env:{...process.env,WEIXIN_LINK_LANG:'zh'}}),error=>{
   assert.equal(error.code,1)
   assert.match(error.stderr,/用法：node src\/setup\/upgrade.mjs/)
   return true
@@ -25,9 +25,15 @@ test('downloaded upgrade CLI loads before dependencies are installed',async t=>{
  t.after(()=>rm(directory,{recursive:true,force:true}))
  const source=fileURLToPath(new URL('../../src/',import.meta.url))
  await cp(source,join(directory,'src'),{recursive:true})
- await assert.rejects(promisify(execFile)(process.execPath,[join(directory,'src/setup/upgrade.mjs')]),error=>{
+ await assert.rejects(promisify(execFile)(process.execPath,[join(directory,'src/setup/upgrade.mjs')],{env:{...process.env,WEIXIN_LINK_LANG:'zh'}}),error=>{
   assert.equal(error.code,1)
   assert.match(error.stderr,/用法：node src\/setup\/upgrade.mjs/)
+  return true
+ })
+})
+test('upgrade CLI uses English when requested',async()=>{
+ await assert.rejects(promisify(execFile)(process.execPath,[fileURLToPath(new URL('../../src/setup/upgrade.mjs',import.meta.url))],{env:{...process.env,WEIXIN_LINK_LANG:'en'}}),error=>{
+  assert.match(error.stderr,/Usage: node src\/setup\/upgrade.mjs/)
   return true
  })
 })

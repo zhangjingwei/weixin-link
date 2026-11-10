@@ -2,13 +2,13 @@
 
 日常配置直接在微信说明需求，例如“帮我配置远程主机”“检查家庭设备连接”或“创建第二个机器人账号”。智能体查询现状、校验参数和连接，再调用管理命令处理，无需用户使用 IDE、nano 或手工编辑运行 JSON。
 
-自然语言配置需要模型可用；安装向导、登录和中文诊断入口由代码处理，不依赖模型。首次建立微信连接、扫码及外部账号授权由用户完成。
+自然语言配置需要模型可用；首次安装的终端向导、登录和中文诊断入口由代码处理，不依赖模型。首次建立微信连接、扫码及外部账号授权由用户完成。
 
 ## 安装来源与目录
 
 仓库已公开，Linux/macOS 使用 `install.sh`，Windows x64 使用 `install.ps1`；各平台安装和升级均复用自己的同一入口。README 提供可匿名下载的命令。克隆源码后，本地安装步骤分别位于 `src/setup/unix-install.sh` 和 `src/setup/windows-install.ps1`。
 
-两个入口默认下载 GitHub 最新正式 Release；开发者可用 `WEIXIN_LINK_REF=main` 跟随主干，也可指定分支、标签或提交。`WEIXIN_LINK_DIR` 指定源码保存目录，默认 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。目标目录已存在时会识别安装并执行标准升级；无法识别的目录仍拒绝覆盖。扫码刷新使用 `qr.sh`。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
+两个入口默认下载 GitHub 最新正式 Release；开发者可用 `WEIXIN_LINK_REF=main` 跟随主干，也可指定分支、标签或提交。`WEIXIN_LINK_DIR` 指定源码保存目录，默认 `~/.local/share/weixin-link/source`；Windows 对应用户目录下的 `.local\share\weixin-link\source`。目标目录已存在时会识别安装并执行标准升级；无法识别的目录仍拒绝覆盖。扫码和重新登录使用 `node src/setup/setup.mjs wechat-login`。Windows 安装子进程使用临时执行策略，不修改系统或用户的持久执行策略。
 
 旧版 `ZERO_LINK_DIR`、`ZERO_LINK_REF` 仍兼容，新变量优先。改名不迁移现有工作区、账号数据或服务；旧源码目录若已存在，先核实原安装再更新。
 
@@ -27,58 +27,41 @@ Git 手动安装的源码位置是克隆目录。工作区由安装配置确定�
 
 ## 微信操作
 
-- `安装向导`：按当前步骤选择运行环境、安装、登录及验证。
-- `安装状态`、`安装智能体`、`登录智能体`、`验收智能体`：运行时检查、登录与验收入口。Codex CLI 随项目依赖安装，无需单独安装。
+- `安装向导`：告知终端向导的启动命令；模型配置在安装电脑完成。
+- `安装状态`、`安装智能体`、`登录智能体`、`验收智能体`：运行时检查和验收入口。Codex CLI 随项目依赖安装，无需单独安装。
 - `运行诊断`、`服务状态`、`查看最近错误`、`导出诊断报告`：查询当前账号诊断和服务状态，不调用模型。
 - 远程主机、HA、备份与多账号：用自然语言说明需求，由智能体执行下方底层接口。
 
-微信在线只代表通道建立。向导可发起一次真实模型测试；协议检查与实际推理分别报告结果。多账号需分别扫码，不复制已有凭据或授权名单。
+微信在线只代表通道建立。终端向导会进行一次真实模型测试，微信首次消息会报告已验证或待配置。多账号需分别扫码，不复制已有凭据或授权名单。
 
-安装脚本默认显示中文步骤、完成状态和扫码提示。Linux/macOS 首次安装通过 `qr.sh` 发起配对并显示二维码。供程序调用的 `src/setup/setup.mjs` 和 `src/setup/account-manager.mjs` 保留原有 JSON 输出；安装相关命令可追加 `--human` 获取易读输出。
+安装脚本默认显示中文步骤、完成状态和扫码提示。首次安装通过 `setup.mjs wechat-login` 发起配对并显示二维码。供程序调用的 `src/setup/setup.mjs` 和 `src/setup/account-manager.mjs` 保留 JSON 输出；安装相关命令可追加 `--human` 获取易读输出。
 
 ## 二维码维护
 
-终端半格字符有断缝时，可试用完整色块模式。它使用黑白背景色与空格绘制，不依赖 `▀`、`▄` 字形，但需要更大的终端窗口：
+首次登录、扫码过期后重新获取二维码：
 
 ```sh
-WEIXIN_LINK_QR_STYLE=full /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+cd ~/.local/share/weixin-link/source
+node src/setup/setup.mjs wechat-login --human
 ```
 
-若已解绑而服务仍在运行，可同时加 `WEIXIN_LINK_RELOGIN=1`。`WEIXIN_LINK_QR_STYLE=compact` 为原紧凑模式（默认）。完整模式同样兼容旧版安装，无需先升级服务；宽度不足时会显示需要的列数。请确保整个二维码及白边都在屏幕内。
+若已解绑而服务仍在运行，显式使用 `--relogin`。终端二维码和 PNG 始终保留；终端字体导致扫码失败时，使用 PNG。
 
 **已经在微信解绑，但脚本仍提示本地服务就绪？** 本地进程状态不能证明服务端绑定有效。使用显式重新登录入口，等待任务结束、安全停止账号后重新扫码：
 
 ```sh
-WEIXIN_LINK_RELOGIN=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+node src/setup/setup.mjs wechat-login --relogin --human
 ```
 
-本地脚本对应 `./qr.sh --relogin` 或 `./qr.sh --relogin bot2`；不指定账号时操作 `default`。账号服务正在运行但尚未就绪时，普通刷新返回 `ACCOUNT_RUNNING_NOT_READY`，不会自行停止；确认要重新登录后再显式加 `--relogin`。该操作不会删除账号档案或改绑另一个微信账号；如无法安全停止服务，操作失败并保留现有状态。旧部署的原停止命令若不支持当前运行状态，需要先按该部署的维护流程停止服务。
+指定账号可用 `node src/setup/setup.mjs wechat-login --relogin bot2 --human`；不指定账号时操作 `default`。账号服务正在运行但尚未就绪时，普通刷新返回 `ACCOUNT_RUNNING_NOT_READY`，不会自行停止；确认要重新登录后再显式加 `--relogin`。该操作不会删除账号档案或改绑另一个微信账号；如无法安全停止服务，操作失败并保留现有状态。
 
-二维码显示后，`qr.sh` 会继续等待微信登录结果；如果手机要求 PIN，同一个交互式终端会自动隐藏输入并提交验证码，输错后可按提示重试。请等终端出现输入提示后再键入手机上的数字，不要把 PIN 放进命令参数或聊天消息。服务端直接确认时不会要求输入。旧版安装若不支持自动输入，脚本会提示先升级源码。
+二维码显示后，交互式命令会继续等待微信登录结果；如果手机要求 PIN，同一个终端会隐藏输入并提交验证码。请等终端出现输入提示后再键入手机上的数字，不要把 PIN 放进命令参数或聊天消息。服务端直接确认时不会要求输入。
 
-Linux/macOS 推荐使用独立入口，无需切换到安装目录：
+在自定义安装目录运行时先切换到该源码目录。SSH 或无图形界面的交互终端会显示当前有效的字符二维码，并保留 PNG 路径。新账号须先创建账号档案，再运行 `node src/setup/setup.mjs wechat-login [账号名] --human`。
 
-```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
-```
+登录服务返回可用的 HTTPS 地址时，本机 macOS 或 Linux 图形桌面会尝试在浏览器打开，并在终端显示地址；如果返回的只是二维码内容，则打开 PNG。两种情况都保留 PNG 路径。SSH 会话不会自动打开浏览器或图片；终端过窄时跳过字符二维码。登录地址只在当前配对期有效，不要分享。
 
-也可在源码目录运行 `./qr.sh`，或 `./qr.sh bot2` 刷新已创建的指定账号。远程一行命令可通过 `WEIXIN_LINK_ACCOUNT=bot2` 选择账号，通过 `WEIXIN_LINK_DIR=/实际源码目录` 选择自定义安装。未指定目录时识别标准路径与旧版 zero-link 路径；若两者同时存在则要求指定目录。脚本不会安装依赖、升级源码或停止在线账号。SSH 或无图形界面的交互终端会显示当前有效的字符二维码，可直接扫码；终端过窄时提示放大窗口，并始终保留 PNG 路径。若字体行距造成断缝或扫码失败，可下载 PNG 扫码。有图形环境的本机终端会尝试自动打开图片。
-
-Linux/macOS 再次获取二维码使用 `qr.sh`；如账号服务仍在运行且需要重新授权，显式使用 `./qr.sh --relogin [账号名]`。新账号须先创建账号档案，然后运行 `./qr.sh [账号名]`。
-
-本机 macOS 或 Linux 图形桌面安装时会自动打开 PNG 二维码，避免终端字体、行距造成变形或断缝。若未自动打开，可手动打开输出的 PNG 路径。SSH 会话不会自动打开图片；终端过窄时跳过字符二维码，仍输出图片路径。
-
-二维码过期且尚未建立微信通道时，由安装维护终端刷新默认账号：
-
-```sh
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/account-manager.mjs refresh-qr default
-```
-
-Windows 使用安装时准备的 Node.js，从源码目录调用同一账号工具；仅安装了私有 Node 时，可执行：
-
-```powershell
-& "$HOME\.local\share\wechat-ping-bot\tools\node\node.exe" src/setup/account-manager.mjs refresh-qr default
-```
+Windows 使用安装时准备的 Node.js，从源码目录运行相同命令。若系统没有 `node` 命令，可用 `$HOME\.local\share\wechat-ping-bot\tools\node\node.exe` 执行 `src/setup/setup.mjs wechat-login --human`。
 
 已在线账号拒绝刷新。二维码采用 90 秒保守本地展示窗口，服务端报过期或配对退出后不继续交付旧码。微信通道建立后，其他账号的创建和二维码交付可直接委托智能体完成。
 
@@ -102,15 +85,16 @@ node src/setup/setup.mjs config-restore ha
 
 ### Codex 模型接入
 
-首次微信推送的向导提供三种接入方式：订阅登录、DeepSeek、Qwen。当前 Codex 自定义提供商使用 **Responses API**；仅声称兼容 OpenAI Chat Completions 的接口不足以接入。向导里的第三方配置只在本机终端录入密钥，保存到对应账号的私有 `codex-provider.json`，服务重启后生效。切回订阅方式可运行 `node src/setup/setup.mjs provider-config subscription [账号档案]` 清除第三方配置。请勿把密钥发到微信。
+首次安装在终端运行交互向导，选择订阅登录、DeepSeek、Qwen 或 Kimi，完成授权或密钥配置、Codex 连接检查及一次真实模型测试，随后才显示微信二维码。安装提示按终端语言环境自动选择中文或英文，可用 `--lang zh`、`--lang en` 或 `WEIXIN_LINK_LANG` 覆盖；`C`/`POSIX` 等无法判定语言的环境默认中文。向导选择的语言会用于首次微信连接通知。当前 Codex 自定义提供商使用 **Responses API**；仅声称兼容 OpenAI Chat Completions 的接口不足以接入。第三方密钥只在本机终端录入，保存到对应账号的私有 `codex-provider.json`。订阅登录保留为独立选项；切回订阅时终端向导清除第三方配置。非交互式安装会跳过模型设置，可稍后在源码目录运行 `node src/setup/setup.mjs wizard [账号档案]`。已有服务运行时重新执行向导，验证成功后会安排该账号空闲时重启以加载新配置。微信连接后主动推送安装验收结果；投递结果不确定时不自动重发。请勿把密钥发到微信。
 
 | 接入方式 | 本项目配置的模型 | 接口依据 |
 | --- | --- | --- |
 | 订阅登录 | 账号可用的 Codex 模型 | [OpenAI Codex 登录说明](https://learn.chatgpt.com/docs/auth) |
 | DeepSeek | `deepseek-flash`；官方另列 `deepseek-v4-pro` | [DeepSeek Codex 集成说明](https://api-docs.deepseek.com/quick_start/agent_integrations/codex/) |
 | 阿里云百炼按量付费 | `qwen3.7-max`，华北 2（北京）Workspace | [百炼 Codex 配置](https://help.aliyun.com/en/model-studio/codex) |
+| Kimi 国际平台 | `kimi-k3.1-pro` | [Kimi Codex 集成说明](https://platform.kimi.ai/docs/guide/codex-kimi) |
 
-百炼 Token Plan 的 `auto` 路由也使用 Responses，但本向导当前未接入；Coding Plan 文档使用旧版 Codex 的 Chat Completions 接口，不适用于本项目的 Codex 版本。Kimi 官方文档也列出 `kimi-k3` 的 Responses 接口；项目暂未内置该预设。以上属于接口与配置兼容性，最终推理和工具调用仍需用向导中的真实模型测试确认。参考：[Kimi Codex 集成说明](https://www.kimi.ai/resources/codex-api)、[OpenAI Codex 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)。
+百炼 Token Plan 的 `auto` 路由也使用 Responses，但本向导当前未接入；Coding Plan 文档使用旧版 Codex 的 Chat Completions 接口，不适用于本项目的 Codex 版本。Kimi 预设使用国际平台 `platform.kimi.ai` 的密钥及 `api.moonshot.ai/v1` 接口，不适用于中国平台密钥。以上属于接口与配置兼容性，最终推理和工具调用仍需用向导中的真实模型测试确认。参考：[OpenAI Codex 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)。
 
 安装工作区不能直接迁移。存在运行实例时，安装路径配置需先停服务。远程主机配置从下一次 SSH 操作起生效。
 
@@ -142,7 +126,7 @@ SSH 私钥、HA 令牌、微信/Codex 凭据、聊天记录、附件、状态数
 
 ## 已有安装与升级
 
-安装与升级入口先核验选定的源码目录。目录不存在而已有后台服务时拒绝创建平行安装；可用 `WEIXIN_LINK_DIR` 指定原目录。自定义服务由升级器拒绝接管。服务运行状态不等于微信登录状态；恢复扫码使用 `qr.sh`。
+安装与升级入口先核验选定的源码目录。目录不存在而已有后台服务时拒绝创建平行安装；可用 `WEIXIN_LINK_DIR` 指定原目录。自定义服务由升级器拒绝接管。服务运行状态不等于微信登录状态；恢复扫码使用 `node src/setup/setup.mjs wechat-login --relogin --human`。
 
 Linux/macOS 首次安装和标准升级使用同一入口：
 

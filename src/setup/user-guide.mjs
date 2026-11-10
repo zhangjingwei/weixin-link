@@ -5,11 +5,10 @@ export const USER_GUIDE=`微信助手使用说明
 一、首次设置
 
 1. 按 README 的安装步骤在电脑上安装，并用微信扫码。若手机要求输入 PIN，请在显示二维码的终端按提示输入。
-2. 在微信中打开安装向导，选择订阅登录、DeepSeek 或 Qwen，并按提示完成设置。订阅登录请在官方 OpenAI 页面授权；使用 DeepSeek 或 Qwen 时，请在电脑上配置密钥，不要把密钥发到微信。
-3. 按向导完成检查和模型测试。
+2. 安装器在电脑终端提示选择订阅登录、DeepSeek、Qwen 或 Kimi，并完成授权、连接检查和真实模型测试。第三方密钥只在终端输入，不要发到微信。
+3. 终端提示测试通过后扫描微信二维码；微信 Link 会主动推送连接结果。若跳过或未完成模型配置，可在源码目录运行 node src/setup/setup.mjs wizard 继续。
 
-- “安装向导”：没有收到向导时发送，或以后继续设置。
-- “退出向导”：中途退出设置。
+- “安装向导”：返回本机终端向导的启动方法。
 
 二、日常使用
 
@@ -137,11 +136,11 @@ Send English commands as plain text, without a slash. Commands are case insensit
 
 1. First-time setup
 
-1. Follow the README.en.md installation steps on your computer and scan the WeChat QR code. If WeChat asks for a PIN, enter it in the terminal showing the QR code.
-2. In WeChat, send setup and choose subscription sign-in, DeepSeek, or Qwen. Complete the prompts. Enter third-party API keys only on your computer.
-3. Finish the connection check and model test in the setup wizard.
+1. Follow the installation steps in README.en.md on your computer, then scan the WeChat QR code. If WeChat asks for a PIN, enter it in the terminal showing the QR code.
+2. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
+3. After the model test passes, scan the WeChat QR code. The assistant will send a connection message. If you skipped model setup, run node src/setup/setup.mjs wizard from the source directory to continue.
 
-- setup: Start or continue the setup wizard in WeChat.
+- setup: Show how to start the setup wizard on your computer.
 
 2. Everyday use
 

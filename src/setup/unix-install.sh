@@ -2,6 +2,7 @@
 # Local Unix setup after the shared install entry downloads the source.
 set -eu
 umask 077
+case "${WEIXIN_LINK_LANG:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}" in en*) setup_english=1;; *) setup_english=0;; esac
 case "$(uname -s):$(uname -m)" in Linux:aarch64) setup_os=linux; setup_arch=arm64;; Linux:x86_64) setup_os=linux; setup_arch=x64;; Darwin:arm64) setup_os=darwin; setup_arch=arm64;; Darwin:x86_64) setup_os=darwin; setup_arch=x64;; *) echo 'Supported: Linux/macOS arm64/x64; Windows: install.ps1'; exit 1;; esac
 # Discover registered services before downloading tools or creating another source tree.
 case "$(uname -s)" in
@@ -9,17 +10,16 @@ case "$(uname -s)" in
   if command -v systemctl >/dev/null 2>&1; then
    existing_service=$(systemctl --user show wechat-ping-bot.service --property=LoadState --property=ActiveState --property=FragmentPath 2>/dev/null || true)
    if printf '%s\n' "$existing_service" | grep -q '^FragmentPath=.'; then
-    echo '检测到已有 Weixin Link 后台服务，跳过重复安装。'
+    if test "$setup_english" = 1; then echo 'An existing Weixin Link service was found; skipping duplicate installation.'; else echo '检测到已有 Weixin Link 后台服务，跳过重复安装。'; fi
     printf '%s\n' "$existing_service" | grep -E '^(ActiveState|FragmentPath)=' || true
-    echo '服务状态不代表微信登录状态；可在微信发送「安装状态」检查。升级请重新运行安装命令。'
+    if test "$setup_english" = 1; then echo 'Service state does not prove WeChat login. Send setup-status in WeChat to check. Run the installer again to upgrade.'; else echo '服务状态不代表微信登录状态；可在微信发送「安装状态」检查。升级请重新运行安装命令。'; fi
     exit 0
    fi
   fi
   ;;
  Darwin)
   if launchctl print "gui/$(id -u)/com.wechat-assistant.wechat-ping-bot" >/dev/null 2>&1; then
-   echo '检测到已有 Weixin Link 后台服务，跳过重复安装。'
-   echo '可在微信发送「安装状态」检查；升级请重新运行安装命令。'
+   if test "$setup_english" = 1; then echo 'An existing Weixin Link service was found; skipping duplicate installation.'; echo 'Send setup-status in WeChat to check. Run the installer again to upgrade.'; else echo '检测到已有 Weixin Link 后台服务，跳过重复安装。'; echo '可在微信发送「安装状态」检查；升级请重新运行安装命令。'; fi
    exit 0
   fi
   ;;
@@ -53,5 +53,10 @@ fi
 cd "$setup_root"
 node src/setup/setup.mjs init --human
 node src/setup/setup.mjs deps --human
+if test -t 0 && test -t 1; then
+ node src/setup/setup.mjs wizard --human
+else
+ if test "$setup_english" = 1; then echo 'This terminal is not interactive, so model setup was skipped. Run node src/setup/setup.mjs wizard from the source directory later.'; else echo '当前终端无法交互，已跳过模型设置。稍后可在源码目录运行 node src/setup/setup.mjs wizard。'; fi
+fi
 node src/setup/setup.mjs services --human
-WEIXIN_LINK_DIR="$setup_root" ./qr.sh
+node src/setup/setup.mjs wechat-login --human

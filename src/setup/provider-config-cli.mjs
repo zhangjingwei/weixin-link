@@ -1,4 +1,6 @@
 import {saveProviderProfile,clearProviderProfile} from './provider-profile.mjs'
+import {accountPaths} from '../infrastructure/accounts/account-store.mjs'
+import {clearTerminalSetupStatus} from './terminal-setup-status.mjs'
 
 function secretPrompt(label){
  if(!process.stdin.isTTY||!process.stdout.isTTY)throw Error('PROVIDER_SETUP_REQUIRES_TERMINAL')
@@ -29,9 +31,11 @@ function publicPrompt(label){
 }
 
 export async function configureProvider(kind,accountId='default',options={}){
- if(kind==='subscription')return clearProviderProfile({accountId,...options})
- if(!['deepseek','qwen'].includes(kind))throw Error('INVALID_PROVIDER_KIND')
- const workspaceId=kind==='qwen'?await publicPrompt('百炼华北 2（北京）Workspace ID：'):undefined
- const apiKey=await secretPrompt('API Key（输入不回显）：')
- try{return await saveProviderProfile({kind,accountId,workspaceId,apiKey,...options})}finally{/* Do not include credentials in output or errors. */}
+ if(kind==='subscription'){await clearTerminalSetupStatus(accountPaths(accountId,options.home).stateDir);return clearProviderProfile({accountId,...options})}
+ if(!['deepseek','qwen','kimi'].includes(kind))throw Error('INVALID_PROVIDER_KIND')
+ const english=options.language==='en'
+ const workspaceId=kind==='qwen'?await publicPrompt(english?'Alibaba Cloud Beijing Workspace ID: ':'百炼华北 2（北京）Workspace ID：'):undefined
+ const apiKey=await secretPrompt(english?'API key (hidden input): ':'API Key（输入不回显）：')
+ await clearTerminalSetupStatus(accountPaths(accountId,options.home).stateDir)
+ return saveProviderProfile({kind,accountId,workspaceId,apiKey,...options})
 }

@@ -2,6 +2,7 @@
 # Install or upgrade a standard Weixin Link deployment from one shell entry.
 set -eu
 umask 077
+case "${WEIXIN_LINK_LANG:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}" in en*) bootstrap_english=1;; *) bootstrap_english=0;; esac
 case "$(uname -s):$(uname -m)" in
   Linux:aarch64|Linux:x86_64|Darwin:arm64|Darwin:x86_64) ;;
   *) echo 'Supported: Linux/macOS arm64/x64. Windows: use install.ps1 in PowerShell.' >&2; exit 1 ;;
@@ -14,7 +15,7 @@ if test -z "${WEIXIN_LINK_DIR:-}${ZERO_LINK_DIR:-}" && { test -e "$HOME/.local/s
   fi
   bootstrap_dest="$HOME/.local/share/zero-link/source"
 fi
-if test "$#" -ne 0; then echo '用法：sh install.sh' >&2; exit 1; fi
+if test "$#" -ne 0; then if test "$bootstrap_english" = 1; then echo 'Usage: sh install.sh' >&2; else echo '用法：sh install.sh' >&2; fi; exit 1; fi
 if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
   if test -L "$bootstrap_dest" || ! test -d "$bootstrap_dest" || ! test -f "$bootstrap_dest/package.json" || { ! test -f "$bootstrap_dest/src/setup/account-manager.mjs" && ! test -f "$bootstrap_dest/src/wechat/account-manager.mjs"; } || ! test -f "$bootstrap_dest/src/setup/setup.mjs"; then
     echo "Installation directory already exists but is not a supported installation: $bootstrap_dest" >&2; exit 1
@@ -33,13 +34,13 @@ else
       if command -v systemctl >/dev/null 2>&1; then
         bootstrap_fragment=$(systemctl --user show wechat-ping-bot.service --property=FragmentPath 2>/dev/null | sed -n 's/^FragmentPath=//p' || true)
         if test -n "$bootstrap_fragment"; then
-          echo '检测到已有后台服务，但所选源码目录不存在。请用 WEIXIN_LINK_DIR 指定原目录；未创建新安装。' >&2; exit 1
+          if test "$bootstrap_english" = 1; then echo 'A background service exists but the selected source directory is missing. Set WEIXIN_LINK_DIR to the original source; no new installation was created.' >&2; else echo '检测到已有后台服务，但所选源码目录不存在。请用 WEIXIN_LINK_DIR 指定原目录；未创建新安装。' >&2; fi; exit 1
         fi
       fi
       ;;
     Darwin)
       if launchctl print "gui/$(id -u)/com.wechat-assistant.wechat-ping-bot" >/dev/null 2>&1; then
-        echo '检测到已有后台服务，但所选源码目录不存在。请用 WEIXIN_LINK_DIR 指定原目录；未创建新安装。' >&2; exit 1
+        if test "$bootstrap_english" = 1; then echo 'A background service exists but the selected source directory is missing. Set WEIXIN_LINK_DIR to the original source; no new installation was created.' >&2; else echo '检测到已有后台服务，但所选源码目录不存在。请用 WEIXIN_LINK_DIR 指定原目录；未创建新安装。' >&2; fi; exit 1
       fi
       ;;
   esac
@@ -85,8 +86,8 @@ if { test "$bootstrap_ref" = main || test "$bootstrap_stable" = true; } && test 
   printf '{"version":1,"repository":"zhangjingwei/weixin-link","ref":"%s","commit":"%s"}\n' "$bootstrap_ref" "$bootstrap_commit" > "$bootstrap_tmp/source/.weixin-link-release.json"
 fi
 if test "$bootstrap_mode" = upgrade; then
-  test -f "$bootstrap_tmp/source/src/setup/upgrade.mjs" || { echo '该版本不支持升级。' >&2; exit 1; }
-  echo '下载升级版本完成，正在检查已安装服务…'
+  test -f "$bootstrap_tmp/source/src/setup/upgrade.mjs" || { if test "$bootstrap_english" = 1; then echo 'This release does not support upgrades.' >&2; else echo '该版本不支持升级。' >&2; fi; exit 1; }
+  if test "$bootstrap_english" = 1; then echo 'Upgrade source downloaded. Checking the installed service…'; else echo '下载升级版本完成，正在检查已安装服务…'; fi
   "$bootstrap_node" "$bootstrap_tmp/source/src/setup/upgrade.mjs" "$bootstrap_dest"
   exit 0
 fi

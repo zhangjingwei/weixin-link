@@ -1,6 +1,7 @@
 import {voiceCommandInput} from './voice-command-input.mjs'
 import {trackLoginValidity} from './login-validity.mjs'
-import {LifecycleNotice,WELCOME_MESSAGE} from './lifecycle-notice.mjs'
+import {LifecycleNotice,welcomeMessage} from './lifecycle-notice.mjs'
+import {setupLanguage} from '../setup/setup-locale.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
 import {createCommandClassifier} from './command-classifier.mjs'
 import {conversationInput} from '../interfaces/wechat/conversation-command.mjs'
@@ -12,6 +13,8 @@ import {setupModelTest} from '../setup/setup-model-test.mjs'
 import {SetupReceipts} from '../setup/setup-receipts.mjs'
 import {USER_GUIDE} from '../setup/user-guide.mjs'
 import {SetupController,setupCommand} from '../setup/setup-controller.mjs'
+import {readTerminalSetupStatus,terminalSetupFingerprint} from '../setup/terminal-setup-status.mjs'
+import {readProviderProfile} from '../setup/provider-profile.mjs'
 import {installConfig} from '../setup/install-config.mjs'
 import {ServiceManager} from '../setup/platform-service.mjs'
 import {createToolNotifier} from './tool-status.mjs'
@@ -66,7 +69,7 @@ if (testing) {
   process.exit(0)
 }
 
-const setupController=await new SetupController({stateDir,backend,accountId:account.id,activeProviderKind:agent.providerKind,runModelTest:options=>setupModelTest(manager,options)}).init()
+const setupController=await new SetupController({stateDir,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)}).init()
 const classifyMessage=createCommandClassifier()
 const conversationBackend=createCodexConversationBackend(manager)
 const conversations=new TextConversations(manager,owners,conversationInput,conversationBackend)
@@ -97,7 +100,7 @@ const replayMaintenance=()=>{
 // 私有控制端点可在微信登录前启动，用于状态检查和维护控制。
 const runtime=new RuntimeControl({
  backend:{id:backend.id,kind:backend.kind,agentKind:agent.kind,memoryMode:backend.memoryMode??'wechat'},
- features:{daily_assistant:true,numeric_setup_wizard:true,setup_commands:true,native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,update_notice:true},
+ features:{daily_assistant:true,setup_commands:true,native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,update_notice:true},
  onSchedule:request=>{if(!schedules)throw Error('SCHEDULE_STATE_UNAVAILABLE');return schedules.onRequest(request)},
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
   startup:()=>startupPhase,
@@ -123,8 +126,10 @@ await runtime.listen(account.socket)
 // 先打开持久收件库并接好入站处理链；登录成功后才恢复未完成工作。
 const jobs=await infrastructure.storage.accountInbox(stateDir);manager.submissions=jobs
 let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(stateDir,'welcome-pending.json'),'utf8')).pending===true}catch{}
-const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,
- welcomeText:async owner=>{let menu;await setupController.wizard.start(owner,text=>{menu=text},{executionKey:owner});return WELCOME_MESSAGE+'\n\n'+menu},
+let savedSetupLanguage;try{savedSetupLanguage=(await readTerminalSetupStatus(stateDir))?.language}catch{}
+const noticeLanguage=savedSetupLanguage??setupLanguage()
+const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,language:noticeLanguage,
+ welcomeText:async()=>{let result,profile;try{result=await readTerminalSetupStatus(stateDir);profile=await readProviderProfile(stateDir)}catch{}return result?.provider===agent.providerKind&&result.fingerprint===terminalSetupFingerprint(profile)?noticeLanguage==='en'?`Weixin Link is connected. ${result.model??'The subscription model'} passed a real inference test during setup. You can start chatting.`:'微信助手已连接，'+(result.model??'订阅模型')+' 已通过安装终端的真实推理测试。现在可以直接聊天。':welcomeMessage(noticeLanguage)},
  send:(owner,text)=>view.announcement(owner,text),log})
 const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace

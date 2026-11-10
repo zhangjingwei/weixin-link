@@ -1,5 +1,7 @@
 ﻿# Install or upgrade a standard Windows deployment from one PowerShell entry.
 $ErrorActionPreference = 'Stop'
+$bootstrapLocale = if($env:WEIXIN_LINK_LANG){$env:WEIXIN_LINK_LANG}elseif($env:LC_ALL){$env:LC_ALL}else{[cultureinfo]::CurrentUICulture.Name}
+$bootstrapEnglish = $bootstrapLocale -match '^en(?:[-_.@]|$)'
 if ([Environment]::OSVersion.Platform -ne 'Win32NT' -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
     throw 'Supported: Windows x64. Linux/macOS: use install.sh.'
 }
@@ -34,7 +36,7 @@ if ($bootstrapExisting) {
     & $bootstrapNode -e 'process.exit(Number(process.versions.node.split(String.fromCharCode(46))[0])>=24?0:1)'
     if ($LASTEXITCODE -ne 0) { throw 'Existing installation needs Node.js 24+ before upgrading.' }
 } elseif (Get-ScheduledTask -TaskName 'com.wechat-assistant.wechat-ping-bot' -ErrorAction SilentlyContinue) {
-    throw '检测到已有后台服务，但所选源码目录不存在。请用 WEIXIN_LINK_DIR 指定原目录；未创建新安装。'
+    if($bootstrapEnglish){throw 'A background service exists but the selected source directory is missing. Set WEIXIN_LINK_DIR to the original source; no new installation was created.'}else{throw '检测到已有后台服务，但所选源码目录不存在。请用 WEIXIN_LINK_DIR 指定原目录；未创建新安装。'}
 }
 $bootstrapParent = Split-Path -Parent $bootstrapDest
 New-Item -ItemType Directory -Path $bootstrapParent -Force | Out-Null
@@ -69,11 +71,11 @@ try {
         [IO.File]::WriteAllText((Join-Path $bootstrapSource '.weixin-link-release.json'), $bootstrapRelease + "`n", (New-Object Text.UTF8Encoding($false)))
     }
     if ($bootstrapExisting) {
-        if (!(Test-Path -LiteralPath (Join-Path $bootstrapSource 'src\setup\upgrade.mjs') -PathType Leaf)) { throw '该版本不支持升级。' }
+        if (!(Test-Path -LiteralPath (Join-Path $bootstrapSource 'src\setup\upgrade.mjs') -PathType Leaf)) { if($bootstrapEnglish){throw 'This release does not support upgrades.'}else{throw '该版本不支持升级。'} }
         $env:PATH = (Split-Path -Parent $bootstrapNode) + ';' + $env:PATH
-        Write-Output '下载升级版本完成，正在检查已安装服务…'
+        if($bootstrapEnglish){Write-Output 'Upgrade source downloaded. Checking the installed service…'}else{Write-Output '下载升级版本完成，正在检查已安装服务…'}
         & $bootstrapNode (Join-Path $bootstrapSource 'src\setup\upgrade.mjs') $bootstrapDest
-        if ($LASTEXITCODE -ne 0) { throw '升级未完成，请查看上面的诊断与恢复记录。' }
+        if ($LASTEXITCODE -ne 0) { if($bootstrapEnglish){throw 'Upgrade did not finish. Check the diagnostics and recovery record above.'}else{throw '升级未完成，请查看上面的诊断与恢复记录。'} }
         return
     }
     # Reserve the destination without replacing another installation.

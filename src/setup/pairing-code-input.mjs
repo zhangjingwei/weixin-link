@@ -1,4 +1,5 @@
 import {emitKeypressEvents} from 'node:readline'
+import {setupLanguage} from './setup-locale.mjs'
 
 // Read the short code from the local terminal without echoing it or putting it in argv.
 export async function readPairingCode({input=process.stdin,output=process.stderr}={}){
@@ -20,7 +21,7 @@ export async function readPairingCode({input=process.stdin,output=process.stderr
    }
    emitKeypressEvents(input)
    input.on('keypress',onKeypress)
-   output.write('请输入微信手机上显示的 PIN（看到提示后再输入，输入不回显）：')
+   output.write(setupLanguage()==='en'?'Enter the PIN shown in WeChat on your phone (input is hidden): ':'请输入微信手机上显示的 PIN（看到提示后再输入，输入不回显）：')
    input.resume()
   })
  }finally{input.setRawMode(wasRaw);input.pause();output.write('\n')}

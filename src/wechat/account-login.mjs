@@ -19,7 +19,7 @@ try{
  await unlink(join(p.stateDir,'pairing-code.txt')).catch(error=>{if(error.code!=='ENOENT')throw error})
  await state('requesting_qr')
  const credentials=await bot.login({force:true,verifyPin:true,callbacks:{
-  onQrUrl:url=>{qrWrites=qrWrites.then(async()=>{await state('requesting_qr');await pairing.publish(await QRCode.toBuffer(url,{type:'png',width:480,margin:4}));const current=JSON.parse(await readFile(join(p.stateDir,'pairing.json'),'utf8'));await writeFile(join(p.stateDir,'login-'+current.qr_version+'.terminal'),await QRCode.toString(url,{type:'terminal',small:true}),{mode:0o600})}).catch(()=>state('qr_write_failed'))},
+  onQrUrl:url=>{qrWrites=qrWrites.then(async()=>{await state('requesting_qr');await pairing.publish(await QRCode.toBuffer(url,{type:'png',width:480,margin:4}),{loginUrl:url});const current=JSON.parse(await readFile(join(p.stateDir,'pairing.json'),'utf8'));await writeFile(join(p.stateDir,'login-'+current.qr_version+'.terminal'),await QRCode.toString(url,{type:'terminal',small:true}),{mode:0o600})}).catch(()=>state('qr_write_failed'))},
   onScanned:()=>{qrWrites=qrWrites.then(()=>state('waiting_confirmation'))},
   onExpired:()=>{qrWrites=qrWrites.then(()=>state('qr_expired'))},
   onVerifyCode:async retry=>{await qrWrites;await state(retry?'verification_code_rejected':'verification_code_required');for(let n=0;n<180;n++){try{const path=join(p.stateDir,'pairing-code.txt'),code=(await readFile(path,'utf8')).trim();await unlink(path);if(/^\d{4,12}$/.test(code))return code}catch(e){if(e.code!=='ENOENT')throw e}await delay(1000)}throw Error('VERIFICATION_TIMEOUT')}

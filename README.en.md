@@ -2,9 +2,9 @@
 
 # Weixin Link
 
-**Away from your computer? Keep your agent working through WeChat.**
+**Your own AI assistant, right in WeChat.**
 
-Start tasks · Add instructions · Check progress · Receive files
+Research, plan, and get results.
 
 [简体中文](README.md) | [English](README.en.md)
 
@@ -16,9 +16,11 @@ Start tasks · Add instructions · Check progress · Receive files
 
 </div>
 
-Weixin Link connects WeChat private chats to **Codex** on your computer or server. While your computer or server stays online, you can start tasks, add instructions and receive answers and files from WeChat.
+**Security & privacy:** Install it on your own computer; your account and keys stay under your control.
 
-The pinned [WeChat SDK](https://www.npmjs.com/package/wechatbot-zerolink) is published from the independent `wechatbot-zerolink` repository; its version and integrity checksum are recorded in the lockfile.
+**Personal assistant:** Your own AI with memory, getting more useful the more you use it.
+
+**Smarter AI:** Choose the model; the agent does the work. It plans, uses tools, and takes complex tasks from start to finish.
 
 <table align="center">
   <tr><th align="center">Clarify a city · Check the weather</th><th align="center">Transcribe speech · Write a story</th></tr>
@@ -37,7 +39,7 @@ The pinned [WeChat SDK](https://www.npmjs.com/package/wechatbot-zerolink) is pub
 
 ## Quick start
 
-**Run the installer → scan with WeChat → receive the setup wizard → reply with a number.** If the wizard does not appear, send `安装向导` to resume it. You need your own WeChat account and model access for your chosen agent backend. The installer prepares Node.js 24+ if needed.
+**Run the installer → choose and verify a model in the terminal → scan with WeChat → receive the connection result.** You need your own WeChat account and a Codex subscription or supported model service. The installer prepares Node.js 24+ if needed.
 
 **Linux / macOS** — run in a terminal:
 
@@ -51,22 +53,25 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-Scan and confirm the pairing QR code in WeChat. The assistant then sends **安装向导** (setup wizard). The project dependencies include a pinned official Codex CLI runtime. Follow the prompts to sign in and run a model test, then send a task in your preferred language. Setup prompts and fixed control commands are currently in Chinese.
+The installer first prompts you to choose subscription sign-in, DeepSeek, Qwen or Kimi. After the model test, scan the WeChat QR code; the assistant then reports the installation result. Enter third-party API keys only in the terminal. Installation steps, WeChat login prompts, and setup commands support Chinese and English. Some advanced maintenance and diagnostic messages remain in Chinese.
 
-> Pairing confirms only the WeChat connection. Codex is confirmed after the wizard's model test. If setup needs attention, send **安装状态** (setup status).
+**Model access:** [Codex subscription sign-in](https://learn.chatgpt.com/docs/auth) requires your own account and access to OpenAI services from the installation device. DeepSeek, Qwen and Kimi use their own platform keys, so they do not need a Codex subscription or its sign-in access. The setup wizard tests the chosen model before WeChat pairing.
+The setup language follows the terminal locale. To override it, use `WEIXIN_LINK_LANG=en` for the installer, or run `node src/setup/setup.mjs wizard --lang en` (or `--lang zh`) from the source directory.
+
+> Pairing confirms only the WeChat connection. The terminal model test confirms whether the assistant can handle tasks. If setup needs attention, send **setup-status**.
 
 <details>
 <summary>Platform support and requirements</summary>
 
 | Platform | Architectures | Requirements and validation |
 | --- | --- | --- |
-| Linux | arm64 / x64 | User-level systemd session and flock; existing deployment validation |
+| Linux | arm64 / x64 | Validated in an existing deployment |
 | macOS | Apple Silicon / Intel | Logged-in graphical session; pairing and text exchange verified, full validation ongoing |
-| Windows | x64 | Current-user Task Scheduler and permission to run PowerShell scripts; full device testing pending |
+| Windows | x64 | Permission to run PowerShell scripts; full device testing pending |
 
-Linux/macOS require curl and tar, plus a SHA-256 verification tool when installing private Node.js. The installer verifies official checksums and does not replace system Node.js. Windows ARM64 is not supported, and the installer does not change persistent execution policies.
+Linux/macOS require curl and tar. Windows ARM64 is not supported.
 
-[v1.3.2](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.2) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details.
+[v1.3.3](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.3) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details.
 
 </details>
 
@@ -77,14 +82,13 @@ These are example requests. Execution depends on your configured workspace, tool
 | What you need | What to send in WeChat |
 | --- | --- |
 | **Keep working on code away from your desk** | “Find the failing tests in this project, fix them, and explain what changed.” |
-| **Add requirements while a task runs** | “补充 Keep the existing interface and add a compatible implementation first.” |
+| **Add requirements while a task runs** | Send `supplement`, then reply: “Keep the existing interface and add a compatible implementation first.” |
 | **Send material from your phone** | Attach a PDF: “Extract the key dates, amounts and action items.” |
 | **Receive a usable file** | “Turn the results into a CSV file and send it to me.” |
 
 - **Continue the same work:** Persistent conversations and task state, with switching between conversations.
 - **Send more than text:** Images, PDFs and Office documents as input; text, images and generated files as output.
-- **Stay in control:** Check progress, add instructions, stop tasks and reconcile uncertain results.
-- **Run in your own environment:** Manage the bridge, conversations and credentials yourself. Model requests and WeChat communication still use the corresponding external services.
+- **Stay in control:** Check progress, add instructions or stop tasks from WeChat.
 
 ## Common commands
 
@@ -108,20 +112,19 @@ See the [English user guide](USER-GUIDE.en.md) for branch or commit reviews, sav
 
 ## Installation and upgrades
 
-To upgrade, rerun the command for your platform in [Quick start](#quick-start). User-approved upgrades from WeChat support installer-managed deployments; see [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments, QR refresh and recovery.
-
-Standard installations check stable GitHub Releases (`vX.Y.Z`) hourly and offer upgrades by version, never by new main commits. Prereleases and automatic downgrades are excluded. Approval pins the release commit for verification. No stable release means no upgrade; there is no fallback to main. Uncertain notification delivery is not automatically retried.
+To upgrade, rerun the installation command in [Quick start](#quick-start). Standard installations also prompt you when a stable update is available and upgrade only after you confirm. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments and recovery.
 
 ## Login QR codes
 
-The commands below apply to Linux/macOS. On Windows, the installer provides the initial QR code.
+These examples run from the installed source directory on Linux or macOS. Windows uses the same `setup.mjs wechat-login` command; see [QR maintenance](CONFIGURATION.md#二维码维护) for the private Node path.
 
 ### First login
 
-Run the [installation command](#quick-start); the installer prepares the service and shows the QR code for the default account. If already installed but not yet paired, run:
+If already installed but not yet paired, run:
 
 ```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+cd ~/.local/share/weixin-link/source
+PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/setup.mjs wechat-login --human
 ```
 
 ### Login again after an upgrade
@@ -129,7 +132,8 @@ Run the [installation command](#quick-start); the installer prepares the service
 Upgrading does not require another scan while the WeChat binding is valid. If the account was unbound, or its service is running but not ready, explicitly start a new login:
 
 ```sh
-WEIXIN_LINK_RELOGIN=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/qr.sh)"
+cd ~/.local/share/weixin-link/source
+PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/setup.mjs wechat-login --relogin --human
 ```
 
 ### Login with another account
@@ -139,14 +143,12 @@ Use a separate profile for each WeChat account. Create the profile in the instal
 ```sh
 cd ~/.local/share/weixin-link/source
 PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/account-manager.mjs create bot2
-./qr.sh bot2
+PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/setup.mjs wechat-login bot2 --human
 ```
 
-If the `bot2` service is still running and needs a new login, use `./qr.sh --relogin bot2`. The command waits for login; if WeChat requests a PIN, enter it when prompted in the same terminal. Set `WEIXIN_LINK_QR_STYLE=full` if terminal QR cells have gaps. See [QR maintenance](CONFIGURATION.md#二维码维护) for custom installation paths and other options.
+If the `bot2` service is still running and needs a new login, use `node src/setup/setup.mjs wechat-login --relogin bot2 --human`. The command waits for login; if WeChat requests a PIN, enter it when prompted in the same terminal. See [QR maintenance](CONFIGURATION.md#二维码维护) for custom installation paths and other options.
 
 ## More capabilities and documentation
-
-**Codex** handles tasks. SSH operations on remote hosts do not require Codex there.
 
 - [User guide](USER-GUIDE.en.md): conversations, models, memory, attachments and results.
 - [Configuration and maintenance](CONFIGURATION.md): installation, upgrades, backups and troubleshooting.
@@ -158,6 +160,6 @@ Optional integrations: [Home Assistant read-only queries, SSH remote operations,
 
 ## Security and license
 
-Pair with your own WeChat account. Do not share login QR codes or device authorization codes. Authenticate Codex on the official OpenAI authorization page. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
+Pair with your own WeChat account. Do not share login QR codes or device authorization codes. For subscription sign-in, use the official OpenAI authorization page. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
 
 Licensed under the [MIT License](LICENSE). Third-party dependencies and external services have their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Weixin Link is an independent project, not an official product of, or endorsed by, WeChat, OpenAI or other service providers.

@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto'
 import {accountPaths,assertAccount} from './account-store.mjs'
 
 const FILE='codex-provider.json'
-const MODELS={deepseek:'deepseek-flash',qwen:'qwen3.7-max'}
+const MODELS={deepseek:'deepseek-flash',qwen:'qwen3.7-max',kimi:'kimi-k3.1-pro'}
 
 function validate(profile){
  if(!profile||profile.version!==1||!Object.hasOwn(MODELS,profile.kind)||profile.model!==MODELS[profile.kind]||typeof profile.apiKey!=='string'||!/^\S{8,4096}$/.test(profile.apiKey))throw Error('INVALID_PROVIDER_PROFILE')
@@ -41,9 +41,9 @@ export async function clearProviderProfile({accountId='default',home}={}){
 export function providerEnvironment(profile,env=process.env){
  if(!profile)return {options:env,secrets:{}}
  validate(profile)
- const key=profile.kind==='deepseek'?'WECHAT_DEEPSEEK_API_KEY':'WECHAT_QWEN_API_KEY'
- const baseUrl=profile.kind==='deepseek'?'https://api.deepseek.com':`https://${profile.workspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
- return {options:{...env,WECHAT_CODEX_PROVIDER:profile.kind,WECHAT_CODEX_MODEL:profile.model,WECHAT_CODEX_BASE_URL:baseUrl,WECHAT_CODEX_API_KEY_ENV:key,WECHAT_CODEX_WEB_SEARCH:'disabled'},secrets:{[key]:profile.apiKey}}
+ const key={deepseek:'WECHAT_DEEPSEEK_API_KEY',qwen:'WECHAT_QWEN_API_KEY',kimi:'WECHAT_KIMI_API_KEY'}[profile.kind]
+ const baseUrl=profile.kind==='deepseek'?'https://api.deepseek.com':profile.kind==='kimi'?'https://api.moonshot.ai/v1':`https://${profile.workspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
+ return {options:{...env,WECHAT_CODEX_PROVIDER:profile.kind,WECHAT_CODEX_MODEL:profile.model,WECHAT_CODEX_BASE_URL:baseUrl,WECHAT_CODEX_API_KEY_ENV:key,WECHAT_CODEX_WEB_SEARCH:'disabled',...(profile.kind==='kimi'?{WECHAT_CODEX_CONTEXT_WINDOW:'1048576'}:{})},secrets:{[key]:profile.apiKey}}
 }
 
 export async function accountProviderProfile(accountId='default',home){return readProviderProfile(accountPaths(accountId,home).stateDir)}
