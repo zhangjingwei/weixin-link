@@ -29,7 +29,7 @@ export async function waitForLogin(accountId,{start=spawn,language,run=exec}={})
    accountCommand('list',accountId,{run}).then(result=>{
     const row=result.accounts?.find(account=>account.account===accountId)
     if(row?.ready)return resolve()
-    reject(Error(['WECHAT_SERVICE_NOT_READY','LOGIN_OR_START_FAILED','VERIFICATION_TIMEOUT'].includes(row?.pairing)?row.pairing:'VERIFICATION_FLOW_FAILED'))
+    reject(Error(['CREDENTIALS_UNREADABLE','WECHAT_ACCOUNT_ALREADY_REGISTERED','PROFILE_BOUND_TO_DIFFERENT_ACCOUNT','WECHAT_SERVICE_NOT_READY','LOGIN_OR_START_FAILED','VERIFICATION_TIMEOUT'].includes(row?.pairing)?row.pairing:'VERIFICATION_FLOW_FAILED'))
    },()=>reject(Error('VERIFICATION_FLOW_FAILED')))
   })
  })

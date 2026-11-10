@@ -31,6 +31,9 @@ export function setupError(error,language=setupLanguage()) {
  const loginCommand=installerCommand('login',{language}),reloginCommand=installerCommand('relogin',{language})
  if(language==='en'){
   const english={QR_NOT_READY_OR_EXPIRED:'No current login address is available. Run '+loginCommand+' again.',QR_TOO_OLD_REFRESH_REQUIRED:'The login address expired. Run '+loginCommand+' again.',QR_REFRESH_REQUIRED:'The login address is unavailable. Run '+loginCommand+' again.',LOGIN_URL_NOT_READY_RETRY:'The login address is not ready. Retry '+loginCommand+' shortly.',VERIFICATION_NOT_REQUESTED:'WeChat has not requested a PIN, or this login has ended.',ACCOUNT_NOT_FOUND:'Account profile not found. Check the account name.',LOGIN_URL_UNAVAILABLE:'No usable HTTPS login address was returned. Retry login or check the WeChat service.',PIN_TERMINAL_REQUIRED:'WeChat requires a PIN. Run '+loginCommand+' in an interactive terminal.',VERIFICATION_WAIT_TIMEOUT:'WeChat login timed out. Request a new login address.',PAIRING_STOPPED:'WeChat pairing stopped. Check the account service before requesting another login address.',WECHAT_SERVICE_NOT_READY:'WeChat confirmed login, but the account service is not ready. Check its status before scanning again.',LOGIN_OR_START_FAILED:'Account registration or service startup did not finish after WeChat login. Check the account service.',ACCOUNT_ONLINE_NO_REFRESH_NEEDED:'This account is already online.',ACCOUNT_RUNNING_NOT_READY:'The account service is running. Rerun '+reloginCommand+' and choose 3 to authorize again.',ACCOUNT_STOP_UNCONFIRMED:'The account service could not be confirmed stopped. No new login address was generated.',VERIFICATION_FLOW_FAILED:'WeChat login did not complete. Check your phone or retry '+loginCommand+'.',INSTALLATION_ALREADY_CONFIGURED:'Installation is already configured. Continue with the existing workspace.',INVALID_WORKSPACE:'The workspace must be a valid absolute path.',EXISTING_SERVICE_REQUIRES_REVIEW:'An unmanaged service with the same name exists. Review its source before continuing.',MACOS_SERVICE_NOT_FOUND:'The macOS login service is not ready. Retry shortly.',INVALID_SETUP_LANGUAGE:'Use WEIXIN_LINK_LANG=zh or WEIXIN_LINK_LANG=en.',ENOENT:'A required file or command is missing.',EACCES:'Access denied. Check installation permissions.'}
+  english.CREDENTIALS_UNREADABLE='The saved WeChat credentials cannot be read. Check this account profile without deleting its data.'
+  english.PROFILE_BOUND_TO_DIFFERENT_ACCOUNT='The scanned WeChat account differs from this saved account profile. Previous credentials were kept.'
+  english.WECHAT_ACCOUNT_ALREADY_REGISTERED='This WeChat account is already registered under another local profile.'
   const detail=code==='EXISTING_SERVICE_REQUIRES_REVIEW'&&typeof error.servicePath==='string'?`\nConflicting file: ${error.servicePath}`:''
   return `Setup did not finish: ${english[code]??'Check the network and local environment, then retry.'}${detail}\nError code: ${code}`
  }
@@ -44,6 +47,9 @@ export function setupError(error,language=setupLanguage()) {
   LOGIN_URL_UNAVAILABLE:'未获取到可用的 HTTPS 登录地址，请重试或检查微信服务。',PIN_TERMINAL_REQUIRED:'微信要求输入 PIN，请在交互式终端重新运行 '+loginCommand+'。',
   VERIFICATION_WAIT_TIMEOUT:'等待微信登录超时，请重新获取登录地址。',
   PAIRING_STOPPED:'微信登录进程已停止；请检查后台服务状态后再决定是否重新登录。',
+  CREDENTIALS_UNREADABLE:'本地微信凭证无法读取；请先检查账号档案，勿删除旧数据。',
+  PROFILE_BOUND_TO_DIFFERENT_ACCOUNT:'扫码账号与本地已有微信账号档案不一致；旧凭证已保留。',
+  WECHAT_ACCOUNT_ALREADY_REGISTERED:'该微信账号已绑定到另一个本地账号档案；请检查账号列表。',
   WECHAT_SERVICE_NOT_READY:'微信已确认登录，但助手后台尚未就绪；请检查服务状态，暂时不要重新扫码。',
   LOGIN_OR_START_FAILED:'微信登录后的账号保存或后台服务启动未完成；请检查服务状态。',
   ACCOUNT_ONLINE_NO_REFRESH_NEEDED:'微信账号已在线，无需重新登录。请在微信发送「安装状态」。',

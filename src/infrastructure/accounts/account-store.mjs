@@ -27,7 +27,7 @@ export async function assertUniqueLogin(id,credentials,home){if(typeof credentia
 
 
 export async function registerLogin(id,credentials,home=(process.env.HOME||platformHome())){const p=await assertAccount(id,home);if(!credentials?.accountId||!credentials?.userId||!credentials?.token)throw Error('INVALID_LOGIN')
- return new RemoteStore(p.base).locked('account-login',async()=>{let existing;try{existing=JSON.parse(await readFile(join(p.stateDir,'credentials.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}if(existing?.accountId&&existing.accountId!==credentials.accountId)throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT');await assertUniqueLogin(id,credentials,home);let owners
+ return new RemoteStore(p.base).locked('account-login',async()=>{let existing;try{existing=JSON.parse(await readFile(join(p.stateDir,'credentials.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}if(existing?.accountId&&existing.accountId!==credentials.accountId)throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT');let bound;try{bound=await bindingIdentity(p)}catch(e){if(e.message!=='WECHAT_BINDING_IDENTITY_MISSING')throw e}if(bound&&bound!==credentials.accountId)throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT');await assertUniqueLogin(id,credentials,home);let owners
   try{owners=JSON.parse(await readFile(join(p.stateDir,'codex-owners.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e;owners=[credentials.userId]}
   if(!Array.isArray(owners)||!owners.length||owners.some(v=>typeof v!=='string'||!v))throw Error('INVALID_OWNERS')
   await rememberIdentity(p,credentials)

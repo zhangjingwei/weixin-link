@@ -1,7 +1,7 @@
 import {setTimeout as delay} from 'node:timers/promises'
 
 const CHALLENGES=new Set(['verification_code_required','verification_code_rejected'])
-const FAILURES=new Set(['pairing_stopped','qr_write_failed','LOGIN_OR_START_FAILED','VERIFICATION_TIMEOUT','WECHAT_SERVICE_NOT_READY'])
+const FAILURES=new Set(['pairing_stopped','qr_write_failed','CREDENTIALS_UNREADABLE','WECHAT_ACCOUNT_ALREADY_REGISTERED','PROFILE_BOUND_TO_DIFFERENT_ACCOUNT','LOGIN_OR_START_FAILED','VERIFICATION_TIMEOUT','WECHAT_SERVICE_NOT_READY'])
 
 // Keep the QR command alive until the SDK asks for a PIN or login finishes.
 export async function waitForPairingVerification({status,readCode,submitCode,wait=delay,now=Date.now,timeoutMs=300000,signal}={}){
