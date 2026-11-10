@@ -3,6 +3,7 @@ import {homedir as platformHome} from 'node:os'
 import {RemoteStore} from '../storage/registry-lock.mjs'
 import {join} from 'node:path'
 import {mkdir,readFile,writeFile,readdir,lstat,rename} from 'node:fs/promises'
+import {randomUUID} from 'node:crypto'
 export function accountPaths(id=process.env.WECHAT_ACCOUNT??'default',home=(process.env.HOME||platformHome())){
  if(typeof id!=='string'||! /^[a-z][a-z0-9-]{0,31}$/.test(id))throw Error('INVALID_ACCOUNT_ID')
  const base=join(home,'.local/share/wechat-ping-bot'),stateDir=id==='default'?base:join(base,'accounts',id)
@@ -27,9 +28,20 @@ export async function assertUniqueLogin(id,credentials,home){if(typeof credentia
 
 
 export async function registerLogin(id,credentials,home=(process.env.HOME||platformHome())){const p=await assertAccount(id,home);if(!credentials?.accountId||!credentials?.userId||!credentials?.token)throw Error('INVALID_LOGIN')
- return new RemoteStore(p.base).locked('account-login',async()=>{let existing;try{existing=JSON.parse(await readFile(join(p.stateDir,'credentials.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}if(existing?.accountId&&existing.accountId!==credentials.accountId)throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT');let bound;try{bound=await bindingIdentity(p)}catch(e){if(e.message!=='WECHAT_BINDING_IDENTITY_MISSING')throw e}if(bound&&bound!==credentials.accountId)throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT');await assertUniqueLogin(id,credentials,home);let owners
+ return new RemoteStore(p.base).locked('account-login',async()=>{let existing;try{existing=JSON.parse(await readFile(join(p.stateDir,'credentials.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}let bound;try{bound=await bindingIdentity(p)}catch(e){if(e.message!=='WECHAT_BINDING_IDENTITY_MISSING')throw e}
+  const botChanged=!!bound&&bound!==credentials.accountId
+  if(botChanged&&(!existing||existing.accountId!==bound||existing.userId!==credentials.userId))throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT')
+  if(existing?.accountId&&existing.accountId!==credentials.accountId&&!botChanged)throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT')
+  await assertUniqueLogin(id,credentials,home);let owners
   try{owners=JSON.parse(await readFile(join(p.stateDir,'codex-owners.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e;owners=[credentials.userId]}
   if(!Array.isArray(owners)||!owners.length||owners.some(v=>typeof v!=='string'||!v))throw Error('INVALID_OWNERS')
+  if(botChanged){
+   const generation=randomUUID()
+   for(const name of ['cursor.json','context_tokens.json','typing_tickets.json']){
+    const path=join(p.stateDir,name)
+    try{await rename(path,path+'.previous-'+generation)}catch(e){if(e.code!=='ENOENT')throw e}
+   }
+  }
   await rememberIdentity(p,credentials)
   for(const [name,value] of [['codex-owners.json',owners],['credentials.json',credentials]]){const path=join(p.stateDir,name);await writeFile(path+'.tmp',JSON.stringify(value)+'\n',{mode:0o600});await rename(path+'.tmp',path)}
  })
