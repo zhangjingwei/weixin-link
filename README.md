@@ -64,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 
 Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验工具。安装器验证官方校验和，不覆盖系统 Node.js。Windows ARM64 暂不支持，安装器不修改持久执行策略。
 
-已发布正式版 [v1.3.2](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.2)，尚无长期版本兼容承诺。更多要求与维护步骤见 [配置说明](CONFIGURATION.md)。
+已发布正式版 [v1.3.3](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.3)，尚无长期版本兼容承诺。更多要求与维护步骤见 [配置说明](CONFIGURATION.md)。
 
 </details>
 
