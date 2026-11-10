@@ -28,6 +28,9 @@ export class LifecycleNotice{
  async onInbound(owner){if(!this.owners.includes(owner))return;if(!this.started){this.commit=await this.release();this.started=true}return this.attempt(owner,true)}
  attempt(owner,inbound){return this.serialize(owner,async()=>{
   let value=await this.read(owner)
+  // A branch install has no official release commit. Keep previous notices
+  // intact and never format an upgrade message with a null commit.
+  if(!this.commit&&value&&(value.commit!==null||value.kind!=='welcome'))return null
   if(!value||value.commit!==this.commit){
    if(!this.commit&&!this.welcomePending)return null
    value={version:1,kind:!value&&this.welcomePending&&!await this.legacyWelcomed(owner)?'welcome':'upgrade',commit:this.commit,status:'pending'}

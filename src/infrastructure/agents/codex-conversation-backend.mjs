@@ -21,7 +21,7 @@ export function createCodexConversationBackend(manager){
    // Empty Codex threads may be absent from thread/list; verify owned IDs only.
    for(const {key,threadId} of ownedThreads){if(!threadId||catalog.has(threadId))continue;
     const own=manager.sessions.get(key);const reader=own?.rpc&&!own.rpc.closed?own.rpc:rpc;
-    let thread;try{thread=await this.readConversation(reader,threadId)}catch(error){if(error.definitiveRpcError&&/no rollout|not found|does not exist/i.test(error.message))continue;throw error}
+    let thread;try{thread=await this.readConversation(reader,threadId)}catch(error){if(error.definitiveRpcError&&/no rollout|not found|does not exist|thread not loaded/i.test(error.message))continue;throw error}
     if(thread?.id!==threadId)throw Error('Codex未确认会话标识，未更新列表。');
     const path=thread.path?.replaceAll('\\','/');
     const archived=typeof thread.archived==='boolean'?thread.archived:path?.includes('/archived_sessions/')?true:path?.includes('/sessions/')?false:undefined;

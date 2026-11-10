@@ -43,6 +43,14 @@ test('upgrade sends one status message for a new commit and not a plain restart'
  await f.release(b);const next=new LifecycleNotice({stateDir:f.notice.stateDir,sourceDir:f.notice.sourceDir,owners:['owner'],send:async(owner,text)=>{f.sent.push([owner,text]);return {status:'accepted'}}})
  await next.start();assert.equal(f.sent.length,2);assert.match(f.sent[1][1],/bbbbbbb/)
 })
+test('a branch install without release metadata does not format a null upgrade',async t=>{
+ const f=await fixture(t);await f.notice.start()
+ await rm(join(f.notice.sourceDir,'.weixin-link-release.json'))
+ const sent=[];const branch=new LifecycleNotice({stateDir:f.notice.stateDir,sourceDir:f.notice.sourceDir,owners:['owner'],send:async(_owner,text)=>{sent.push(text);return {status:'accepted'}}})
+ await branch.start();await branch.onInbound('owner')
+ assert.deepEqual(sent,[])
+ assert.equal((await f.saved()).commit,a)
+})
 test('an account already welcomed by the old flow receives an upgrade notice',async t=>{
  const f=await fixture(t,{welcomePending:true});const legacy=join(f.notice.stateDir,basename(f.notice.path('owner')).replace('lifecycle-notice-','welcome-'))
  await writeFile(legacy,JSON.stringify({state:'accepted'}));await f.notice.start()
