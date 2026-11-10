@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 — 2026-11-10
+
+- Bundle the Codex CLI and configure model access per WeChat account through the terminal installer. Add Chinese and English setup and maintenance flows.
+- Use the published WeChat SDK for PIN pairing. Preserve account data during interrupted installation, recognize an existing scanner during relinking, and distinguish pairing from service startup failures.
+- Add guided conversation management and improve Codex session recovery, including a clear result when an old thread is absent from the current Codex store.
+- Replace the removed Claude and OpenCode backends and remote Codex task path with the Codex backend and SSH host operations.
+- Fix the model probe's stdin handling and suppress release notices when a branch installation has no official release commit.
+
+Automated release, platform, and unit checks are required before publication. Live PIN pairing and new conversation messaging were confirmed on macOS during testing; other platforms have not been verified live for this release.
+
 ## 1.3.2 — 2026-11-10
 
 - Allow `config-set remote-hosts` to save valid host entries while a host is offline. Connection failures are reported when that host is used; configuration writes no longer probe every host.

@@ -72,7 +72,7 @@ The setup wizard automatically uses Chinese or English.
 
 Linux/macOS require curl and tar. Windows ARM64 is not supported.
 
-[v1.3.3](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.3) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details.
+[v1.4.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.4.0) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details.
 
 </details>
 
