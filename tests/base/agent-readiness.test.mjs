@@ -12,8 +12,4 @@ test('agent readiness checks the selected backend without exposing provider erro
   const codex = createAgentReadiness({backend: {kind: 'host', agentKind: 'codex'}, owners, codexAvailability: async () => ({installed: true, loggedIn: false})})
   assert.equal(await codex(), 'CODEX_NOT_LOGGED_IN')
 
-  const claude = createAgentReadiness({backend: {kind: 'host', agentKind: 'claude'}, owners, codexAvailability: async () => {throw Error('wrong provider')}, env: {}})
-  assert.equal(await claude(), 'CLAUDE_CREDENTIALS_REQUIRED')
-  const configured = createAgentReadiness({backend: {kind: 'host', agentKind: 'claude'}, owners, codexAvailability: async () => {throw Error('wrong provider')}, env: {ANTHROPIC_API_KEY: 'test-key'}})
-  assert.equal(await configured(), null)
 })

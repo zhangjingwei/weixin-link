@@ -29,7 +29,7 @@ service/configuration maintenance locks are unchanged.
 
 A newly created project can store a canonical workspace before its first thread
 connection. Existing threads retain their old directory. The same workspace is
-used for RPC creation, thread start/resume, Claude workspace guidance and output
+used for RPC creation, thread start/resume and output
 packaging. Project labels and directory authorization remain distinct.
 
 The experimental global gate from f8146f1 is removed. Its reservation file is no

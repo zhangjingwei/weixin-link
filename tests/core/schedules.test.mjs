@@ -219,11 +219,10 @@ test('repeating task advances after queue acceptance and unavailable target paus
   assert.equal(calls, 2)
 })
 
-test('schedule instructions are available to local agents, independent of model kind', async t => {
+test('schedule instructions are available to the local Codex backend', async t => {
   const {stateDir} = await fixture(t)
   const guidance = 'SCHEDULE_TOOL_MARKER'
-  const make = (backend, agentKind = 'codex') => new SessionManager({stateDir, cwd: stateDir, owners: [], backend, agentKind, scheduleGuidance: guidance})
+  const make = backend => new SessionManager({stateDir, cwd: stateDir, owners: [], backend, scheduleGuidance: guidance})
   assert.match(await make({kind: 'host'}).sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
   assert.doesNotMatch(await make({kind: 'podman'}).sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
-  assert.match(await make({kind: 'host'}, 'claude').sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
 })

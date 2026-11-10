@@ -1,7 +1,4 @@
-import {readFile} from 'node:fs/promises'
-import {join} from 'node:path'
 import {CodexRpc} from '../../base/codex/codex-rpc.mjs'
-import {ClaudeRpc} from '../../base/claude/claude-rpc.mjs'
 import {codexInput} from '../../base/codex/codex-input.mjs'
 import {initializeCodex} from '../../base/codex/protocol-operations.mjs'
 import {codexProviderOptions,providerEventCode} from '../../base/codex/provider-options.mjs'
@@ -10,48 +7,41 @@ import {nativeMemoryConfig,enableThreadMemory,publicMemoryText} from '../../base
 const clientInfo={name:'wechat_codex',title:'WeChat',version:'3.0.0'}
 
 // SessionManager depends on this narrow agent protocol, not on either wire format.
-export function createSessionProtocol({kind='codex',rpcFactory,providerEnv=process.env,codexBinary,claudeBinary,claudeStateDir,claudeEnv}={}){
- if(!['codex','claude'].includes(kind))throw Error('UNKNOWN_AGENT_BACKEND')
- const codex=kind==='codex'
- const factory=rpcFactory??(codex?options=>new CodexRpc(options):options=>new ClaudeRpc({...options,binary:claudeBinary,stateDir:claudeStateDir,env:claudeEnv}))
- const providerOptions=()=>codex?codexProviderOptions(providerEnv):{thread:{},provider:null}
- const params=({cwd,instructions,provider})=>({...codex?{config:nativeMemoryConfig,sandbox:'danger-full-access',approvalPolicy:'never'}:{},cwd,developerInstructions:instructions,...provider.thread})
+export function createSessionProtocol({rpcFactory,providerEnv=process.env,codexBinary}={}){
+ const factory=rpcFactory??(options=>new CodexRpc(options))
+ const providerOptions=()=>codexProviderOptions(providerEnv)
+ const params=({cwd,instructions,provider})=>({config:nativeMemoryConfig,sandbox:'danger-full-access',approvalPolicy:'never',cwd,developerInstructions:instructions,...provider.thread})
  const verify=result=>{
   if(!result?.thread?.id)throw Error('底座未确认会话标识。')
-  if(codex&&(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never'))throw Error('Codex 未应用配置的会话权限。')
+  if(result.sandbox?.type!=='dangerFullAccess'||result.approvalPolicy!=='never')throw Error('Codex 未应用配置的会话权限。')
   return result
  }
  const resume=async(rpc,{threadId,cwd,instructions,provider})=>{
   const result=verify(await rpc.request('thread/resume',{...params({cwd,instructions,provider}),threadId,excludeTurns:true}))
   if(result.thread.id!==threadId)throw Error('底座未确认目标对话，未切换。')
-  if(codex)await enableThreadMemory(rpc,threadId)
+  await enableThreadMemory(rpc,threadId)
   return result
  }
  return {
-  name:codex?'Codex':'Claude',kind,supportsMemory:codex,supportsModels:codex,supportsNativeCommands:codex,providerOptions,
-  createRpc:options=>factory({...options,...codex?{binary:options.binary??codexBinary?.()}:{}}),
+  name:'Codex',kind:'codex',supportsMemory:true,supportsModels:true,supportsNativeCommands:true,providerOptions,
+  createRpc:options=>factory({...options,binary:options.binary??codexBinary?.()}),
   input:codexInput,
   eventCode:providerEventCode,
   cleanOutputText:publicMemoryText,
-  async workspaceRules(cwd){
-   if(codex)return ''
-   try{const content=await readFile(join(cwd,'AGENTS.md'),'utf8');if(Buffer.byteLength(content)>64*1024)throw Error('WORKSPACE_RULES_TOO_LARGE');return '\n\n工作区规则（AGENTS.md）：\n'+content}
-   catch(error){if(error.code==='ENOENT')return '';throw error}
-  },
-  async initialize(rpc){if(codex)await initializeCodex(rpc,clientInfo);else await rpc.request('initialize',{clientInfo})},
+  async workspaceRules(){return ''},
+  async initialize(rpc){await initializeCodex(rpc,clientInfo)},
   async open(rpc,{saved,cwd,instructions,provider}){
    let result
    if(saved.threadId){
     try{result=await resume(rpc,{threadId:saved.threadId,cwd,instructions,provider})}
     catch(error){if(saved.hasMessages||!error.message.includes('no rollout found for thread id'))throw error}
    }
-   if(!result){result=verify(await rpc.request('thread/start',params({cwd,instructions,provider})));if(codex)await enableThreadMemory(rpc,result.thread.id)}
+   if(!result){result=verify(await rpc.request('thread/start',params({cwd,instructions,provider})));await enableThreadMemory(rpc,result.thread.id)}
    return result
   },
   resume,
   read:async(rpc,threadId)=>(await rpc.request('thread/read',{threadId,includeTurns:false})).thread,
   async recoverTurn(rpc,{threadId,turnId,deliveryId}){
-   if(!codex)throw Error('AGENT_RECOVERY_UNAVAILABLE')
    let cursor
    for(let page=0;page<40;page++){
     const result=await rpc.request('thread/turns/list',{threadId,limit:25,sortDirection:'desc',itemsView:'full',...(cursor?{cursor}:{})})
@@ -62,10 +52,10 @@ export function createSessionProtocol({kind='codex',rpcFactory,providerEnv=proce
    }
    return null
   },
-  supportsRemoteTaskRecovery:codex,
+  supportsRemoteTaskRecovery:true,
   // Collaboration mode is stored on the Codex thread. Always select it for
   // each turn, otherwise a normal request after a plan can remain in Plan Mode.
-  startTurn:(rpc,{threadId,input,deliveryId,plan=false,model,fastMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},...codex?{collaborationMode:{mode:plan?'plan':'default',settings:{model,reasoning_effort:null,developer_instructions:null}}}:{},...typeof fastMode==='boolean'&&codex?{serviceTier:fastMode?'fast':'auto'}:{}}),
+  startTurn:(rpc,{threadId,input,deliveryId,plan=false,model,fastMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},collaborationMode:{mode:plan?'plan':'default',settings:{model,reasoning_effort:null,developer_instructions:null}},...typeof fastMode==='boolean'?{serviceTier:fastMode?'fast':'auto'}:{}}),
   startReview:(rpc,threadId,target)=>rpc.request('review/start',{threadId,target}),
   goal:async(rpc,threadId,command)=>{
    if(command.op==='get')return (await rpc.request('thread/goal/get',{threadId})).goal
@@ -78,13 +68,11 @@ export function createSessionProtocol({kind='codex',rpcFactory,providerEnv=proce
   interrupt:(rpc,threadId,turnId)=>rpc.request('turn/interrupt',{threadId,turnId}),
   steer:(rpc,threadId,turnId,text)=>rpc.request('turn/steer',{threadId,expectedTurnId:turnId,input:[{type:'text',text}]}),
   async memory(rpc,threadId,command){
-   if(!codex)return '当前 Claude 底座未接入可验证的长期记忆开关或状态；未执行记忆修改。'
    if(command.op==='auto'){await rpc.request('thread/memoryMode/set',{threadId,mode:command.on?'enabled':'disabled'});return 'Codex已确认当前会话原生记忆模式：'+(command.on?'开启':'关闭')+'。'}
    if(command.op==='list'){const status=await rpc.request('memory/status',{});return '当前使用Codex原生记忆。\n已整合会话：'+(status.v2ConsolidatedThreads??'未知')+'；就绪：'+(status.v2Ready?'是':'否')+'。\n当前不使用微信逐条记忆库；“开启记忆”或“关闭记忆” 控制当前会话原生记忆。'}
    return '当前使用Codex原生记忆，未执行微信逐条记忆的修改或清空。可用“记忆” 查看状态。'
   },
   async models(rpc,currentModel){
-   if(!codex)return 'Claude 底座暂未提供可核验的模型目录；未切换模型。'
    const models=[],cursors=new Set();let cursor
    for(let page=0;page<10;page++){
     const result=await rpc.request('model/list',{limit:50,includeHidden:false,...cursor?{cursor}:{}})

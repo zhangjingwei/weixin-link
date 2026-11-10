@@ -16,7 +16,7 @@ Start tasks · Add instructions · Check progress · Receive files
 
 </div>
 
-Weixin Link connects WeChat private chats to an **agent backend** on your computer or server. It currently supports Codex (the default) and Claude CLI. While your computer or server stays online, you can start tasks, add instructions and receive answers and files from WeChat.
+Weixin Link connects WeChat private chats to **Codex** on your computer or server. While your computer or server stays online, you can start tasks, add instructions and receive answers and files from WeChat.
 
 The pinned [WeChat SDK](https://www.npmjs.com/package/wechatbot-zerolink) is published from the independent `wechatbot-zerolink` repository; its version and integrity checksum are recorded in the lockfile.
 
@@ -51,9 +51,9 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-Scan and confirm the pairing QR code in WeChat, then send **安装向导** (setup wizard). For the default Codex backend, follow the prompts to install, sign in and run a model test. Claude CLI requires a configured executable and service credentials. Once setup is complete, send a task in your preferred language. Setup prompts and fixed control commands are currently in Chinese.
+Scan and confirm the pairing QR code in WeChat, then send **安装向导** (setup wizard). Follow the prompts to install Codex, sign in and run a model test. Once setup is complete, send a task in your preferred language. Setup prompts and fixed control commands are currently in Chinese.
 
-> Pairing confirms only the WeChat connection. Codex is confirmed after the wizard's model test; Claude setup status checks its CLI and credentials, so a real model request still needs separate verification. If setup needs attention, send **安装状态** (setup status).
+> Pairing confirms only the WeChat connection. Codex is confirmed after the wizard's model test. If setup needs attention, send **安装状态** (setup status).
 
 <details>
 <summary>Platform support and requirements</summary>
@@ -114,7 +114,6 @@ Send ordinary requests directly. These fixed commands control the bridge:
 | `压缩上下文` / `分叉会话` / `Codex状态` | Control the current Codex session |
 | `批准 Code` / `拒绝 Code` / `回答 Code Answer` | Reply to a pending interaction using its displayed code |
 | `安装状态` / `安装向导` | Check setup or continue installation and authentication |
-| `切换智能体` / `切换智能体 Codex` / `切换智能体 Claude` | Show the current agent or switch this account after it becomes idle |
 | `命令列表` / `使用说明` | Read the command summary or full user guide |
 
 Each message is processed independently. Text and attachments in the same message are submitted together. See the [user guide](USER-GUIDE.md) for conversation management, attachment limits and diagnostic commands.
@@ -162,7 +161,7 @@ If the `bot2` service is still running and needs a new login, use `./qr.sh --rel
 
 ## More capabilities and documentation
 
-The supported agent backends are **Codex** (default) and **Claude CLI** (explicit setup). Both share WeChat intake, task state and delivery; backend capabilities differ. Claude requires CLI 2.1.259+ and service-side API credentials. It supports local tasks, session continuation and stopping; model catalog, native memory, official history search and permanent deletion are not yet connected. See the [Claude adapter notes](src/base/claude/README.md). Remote hosts and isolated Linux containers currently use Codex paths.
+**Codex** handles tasks. Remote hosts and isolated Linux containers currently use Codex paths.
 
 - [User guide](USER-GUIDE.md): conversations, models, memory, attachments and results.
 - [Configuration and maintenance](CONFIGURATION.md): installation, upgrades, backups and troubleshooting.
@@ -174,6 +173,6 @@ Optional integrations: [Home Assistant read-only queries, SSH remote Codex tasks
 
 ## Security and license
 
-Pair with your own WeChat account. Do not share login QR codes or device authorization codes. Authenticate Codex on the official OpenAI authorization page; provide Claude API credentials through the service environment, never through WeChat. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
+Pair with your own WeChat account. Do not share login QR codes or device authorization codes. Authenticate Codex on the official OpenAI authorization page. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
 
 Licensed under the [MIT License](LICENSE). Third-party dependencies and external services have their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Weixin Link is an independent project, not an official product of, or endorsed by, WeChat, OpenAI or other service providers.

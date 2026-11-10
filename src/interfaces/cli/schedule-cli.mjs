@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url'
 import {accountPaths} from '../../infrastructure/accounts/account-store.mjs'
 import {controlRequest} from '../../infrastructure/runtime/runtime-control.mjs'
 
-export async function runScheduleCommand(input = process.stdin, {threadId = process.env.WECHAT_CONVERSATION_ID ?? process.env.CODEX_THREAD_ID, account = process.env.WECHAT_ACCOUNT ?? 'default', home = process.env.HOME} = {}) {
+export async function runScheduleCommand(input = process.stdin, {threadId = process.env.CODEX_THREAD_ID, account = process.env.WECHAT_ACCOUNT ?? 'default', home = process.env.HOME} = {}) {
   if (typeof threadId !== 'string' || !/^[A-Za-z0-9_-]{8,200}$/.test(threadId)) throw Error('SCHEDULE_SESSION_REQUIRED')
   let text = ''
   for await (const chunk of input) {text += chunk; if (Buffer.byteLength(text) > 4096) throw Error('SCHEDULE_INPUT_TOO_LARGE')}

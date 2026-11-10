@@ -51,8 +51,7 @@ async function probeConfiguration(kind,config,{home=currentHome(),env=process.en
   }else if(kind==='installation'){
    if(!(await stat(config.workspace)).isDirectory())throw Error()
    await access(config.workspace,fsConstants.W_OK)
-   if(config.agentBackend==='claude'){const {stdout}=await exec(config.claudeBinary,['--version'],{timeout:10000,maxBuffer:65536});const version=stdout.match(/\b(\d+)\.(\d+)\.(\d+)\b/);if(!version||Number(version[1])<2||Number(version[1])===2&&Number(version[2])<1||Number(version[1])===2&&Number(version[2])===1&&Number(version[3])<259)throw Error()}
-   else if(config.codexBinary){const {stdout}=await exec(config.codexBinary,['--version'],{timeout:10000,maxBuffer:65536});if(!/^codex(?:-cli)?\s+\d+\.\d+/i.test(stdout.trim()))throw Error()}
+   if(config.codexBinary){const {stdout}=await exec(config.codexBinary,['--version'],{timeout:10000,maxBuffer:65536});if(!/^codex(?:-cli)?\s+\d+\.\d+/i.test(stdout.trim()))throw Error()}
   }
  }catch(error){if(error instanceof ConfigError)throw error;throw new ConfigError('CONFIG_CONNECTION_CHECK_FAILED',kind)}
 }
@@ -80,7 +79,14 @@ async function checkRemoteTransition(previous,config,options){
 }
 export async function configure(kind,input,{home=currentHome(),workspace,env=process.env,verify=probeConfiguration,restoring=false}={}){
  const config=validateConfig(kind,input),options={home,workspace,env},path=configPath(kind,options),previous=await readPrivateFile(path),expected=digest(previous)
- if(kind==='installation'&&previous&&!restoring){const old=parseConfig(kind,previous);if(old.workspace!==config.workspace)throw new ConfigError('CONFIG_WORKSPACE_MIGRATION_REQUIRED')}
+ if(kind==='installation'&&previous&&!restoring){
+  let old
+  try{old=parseConfig(kind,previous)}catch{
+   let raw;try{raw=JSON.parse(previous)}catch{throw new ConfigError('CONFIG_INSTALLATION_UNREADABLE')}
+   old=validateConfig('installation',{workspace:raw?.workspace})
+  }
+  if(old.workspace!==config.workspace)throw new ConfigError('CONFIG_WORKSPACE_MIGRATION_REQUIRED')
+ }
  if(kind==='installation'&&(await runtimeEndpoints(home)).length)throw new ConfigError('CONFIG_INSTALLATION_REQUIRES_STOP')
  if(kind!=='remote-hosts')await verify(kind,config,options)
  if(kind==='installation'&&(await runtimeEndpoints(home)).length)throw new ConfigError('CONFIG_INSTALLATION_REQUIRES_STOP')
@@ -91,7 +97,7 @@ export async function configure(kind,input,{home=currentHome(),workspace,env=pro
  else result=await write()
  let guidance
  if(kind==='installation'){
-  try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:config.codexBinary??findCodex(home),agentBackend:config.agentBackend??'codex',claudeBinary:config.claudeBinary})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
+  try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:config.codexBinary??findCodex(home)})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
  }
  return {kind,version:config.version,verified:kind!=='remote-hosts',written:true,...result,effective:kind==='installation'?'next_service_start':'next_operation',...(guidance?{guidance}:{}),restartRequired:kind==='installation'}
 }

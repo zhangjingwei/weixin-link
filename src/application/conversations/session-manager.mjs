@@ -699,7 +699,7 @@ export class SessionManager {
         await this.send(session,command.action==='plan'?command.text:'请审查当前工作区变更。',token,command)
         return
       }
-      if (command?.action === 'help') {await reply('微信控制命令（直接发送中文）：\n任务：状态、进度、补充 内容、停止、结果、恢复、退出。\nCodex 原生命令：长任务 目标、长任务状态、暂停长任务、继续长任务、完成长任务、清除长任务；计划 需求、代码审查、代码审查 对比 分支、代码审查 提交 SHA、压缩上下文、分叉会话、旁支会话、Codex状态、开启快速模式、关闭快速模式。\n项目：日常、列表、新建 项目名、切换编号、命名 名称、历史、搜索 关键词、归档编号、还原编号、删除编号。删除会永久移除。\n其他：模型、记忆、开启记忆、关闭记忆；Codex会话列表、恢复Codex会话 编号、重置Codex会话；安装状态、安装向导、切换智能体、重启、升级、诊断、服务状态。远程主机和设备配置直接描述需求。\n收到交互请求时按提示回复“批准 编号”“拒绝 编号”或“回答 编号 答案”。Claude 底座会明确提示不支持的原生命令。发送“使用说明”查看完整说明。');return}
+      if (command?.action === 'help') {await reply('微信控制命令（直接发送中文）：\n任务：状态、进度、补充 内容、停止、结果、恢复、退出。\nCodex 原生命令：长任务 目标、长任务状态、暂停长任务、继续长任务、完成长任务、清除长任务；计划 需求、代码审查、代码审查 对比 分支、代码审查 提交 SHA、压缩上下文、分叉会话、旁支会话、Codex状态、开启快速模式、关闭快速模式。\n项目：日常、列表、新建 项目名、切换编号、命名 名称、历史、搜索 关键词、归档编号、还原编号、删除编号。删除会永久移除。\n其他：模型、记忆、开启记忆、关闭记忆；Codex会话列表、恢复Codex会话 编号、重置Codex会话；安装状态、安装向导、重启、升级、诊断、服务状态。远程主机和设备配置直接描述需求。\n收到交互请求时按提示回复“批准 编号”“拒绝 编号”或“回答 编号 答案”。发送“使用说明”查看完整说明。');return}
       const runtime = this.sessions.get(userId)
       if(command?.action==='progress'){
         const queued=(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)

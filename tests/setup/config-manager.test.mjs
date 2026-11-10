@@ -51,6 +51,15 @@ test('installation config cannot silently migrate an existing workspace',async t
  const options=await fixture(t);await mkdir(options.workspace);await configure('installation',{workspace:options.workspace},options)
  await assert.rejects(configure('installation',{workspace:join(options.home,'different')},options),/CONFIG_WORKSPACE_MIGRATION_REQUIRED/)
 })
+test('config-set replaces unsupported installation fields while preserving the workspace',async t=>{
+ const options=await fixture(t);await mkdir(options.workspace)
+ const path=configPath('installation',options)
+ await configure('installation',{workspace:options.workspace},options)
+ await writeFile(path,JSON.stringify({version:1,workspace:options.workspace,obsoleteField:'unused'}))
+ await assert.rejects(configure('installation',{workspace:join(options.home,'other')},options),/CONFIG_WORKSPACE_MIGRATION_REQUIRED/)
+ await configure('installation',{workspace:options.workspace},options)
+ assert.deepEqual(JSON.parse(await readFile(path,'utf8')),{version:1,workspace:options.workspace})
+})
 test('config-set saves offline remote hosts without trying to connect',async t=>{
  const options=await fixture(t);await mkdir(options.workspace)
  const host={platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}

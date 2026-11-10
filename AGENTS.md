@@ -16,7 +16,7 @@
 - **接口层 `src/interfaces/`**：四个 Controller 分别接收微信消息、计划到期与计划请求、版本检查触发、安装/配置/切换等管理动作；`views/` 负责状态、进度、结果和通知的微信呈现；`cli/` 提供定时与远程任务命令入口。微信 Controller 的游标前解析仍属于接口层，保存与入队由应用用例负责。
 - **应用层 `src/application/`**：`intake/` 负责收件、命令/意图分流，`tasks/` 负责持久任务执行与恢复，`conversations/` 负责会话操作与有序投递，`remote-tasks/` 负责远程任务协调，`schedules/` 负责计划，`notifications/` 负责版本提示和终答复恢复，`diagnostics/` 负责诊断命令；`ports/` 定义外部能力的窄接口。沿用既有状态，不另建状态仓库。
 - **领域层 `src/domain/`**：会话、消息、任务、投递、计划和版本规则保护授权归属、消息身份、状态转换、取消代际和未知投递结果等不变量。不为贴合图示增加空壳聚合或第二套状态。
-- **基础设施与外部适配 `src/infrastructure/`**：`wechat/` 接微信协议、入站追踪与出站，`agents/` 选择底座、适配远程 RPC 和提示元数据，`media/` 处理附件，`storage/` 提供持久化与锁，`runtime/` 提供账号私有控制端点，`diagnostics/` 保存脱敏事件。`ports.mjs` 装配实现；底层 Codex/Claude 协议仍在 `src/base/`，集成插件仍在 `src/integrations/`。
+- **基础设施与外部适配 `src/infrastructure/`**：`wechat/` 接微信协议、入站追踪与出站，`agents/` 适配 Codex、远程 RPC 和提示元数据，`media/` 处理附件，`storage/` 提供持久化与锁，`runtime/` 提供账号私有控制端点，`diagnostics/` 保存脱敏事件。`ports.mjs` 装配实现；底层 Codex 协议仍在 `src/base/`，集成插件仍在 `src/integrations/`。
 - **部署、配置与横切策略**：`src/setup/` 负责安装、配置、服务和账号绑定；`src/wechat/` 保留账号档案与组合根；`src/infrastructure/remote/` 负责 SSH 传输、主机配置快照和路径边界。权限、账号隔离、审计、幂等和运行控制贯穿各层。`src/tools/` 放开发与验收工具，`tests/` 按职责组织测试。
 
 **依赖约束：严禁下层反向调用上层，严禁领域层直接依赖具体技术实现。**跨层协作通过上层定义的端口和组合根注入实现，领域规则保持独立于 SDK、数据库、网络和文件系统。

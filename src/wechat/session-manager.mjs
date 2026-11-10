@@ -27,8 +27,8 @@ export const sessionPorts = Object.freeze({
 
 export class ConfiguredSessionManager extends SessionManager {
   constructor(options) {
-    const {agentKind='codex',rpcFactory,providerEnv,sessionProtocol,...rest}=options
-    super({sessionPorts, remoteControl: remoteScope, ...rest,sessionProtocol:sessionProtocol??createSessionProtocol({kind:agentKind,rpcFactory,providerEnv,codexBinary:sessionPorts.codexBinary})})
+    const {rpcFactory,providerEnv,sessionProtocol,...rest}=options
+    super({sessionPorts, remoteControl: remoteScope, ...rest,sessionProtocol:sessionProtocol??createSessionProtocol({rpcFactory,providerEnv,codexBinary:sessionPorts.codexBinary})})
   }
 }
 export {ConfiguredSessionManager as SessionManager}

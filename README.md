@@ -16,7 +16,7 @@
 
 </div>
 
-Weixin Link 把微信私聊接到你电脑或服务器上的**智能体底座**。目前支持 Codex（默认）和 Claude CLI。电脑或服务器保持在线时，你可以从微信发起任务、补充要求，并接收回答和文件。
+Weixin Link 把微信私聊接到你电脑或服务器上的 **Codex**。电脑或服务器保持在线时，你可以从微信发起任务、补充要求，并接收回答和文件。
 
 <table align="center">
   <tr><th align="center">追问城市 · 查询天气</th><th align="center">语音转写 · 生成故事</th></tr>
@@ -49,9 +49,9 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-用微信扫描安装器提供的二维码并确认，然后发送 **安装向导**。默认的 Codex 底座可按提示完成安装、登录和模型测试；Claude CLI 需先配置可执行文件与服务凭据。完成后，直接发一句任务需求即可。
+用微信扫描安装器提供的二维码并确认，然后发送 **安装向导**。按提示完成 Codex 安装、登录和模型测试；完成后，直接发一句任务需求即可。
 
-> 扫码成功只确认微信通道。Codex 向导的模型测试通过后，才能确认 Codex 可处理请求；Claude 的安装状态只检查 CLI 与凭据，实际模型请求需另行验收。安装遇到问题时，发送 **安装状态**。
+> 扫码成功只确认微信通道。Codex 向导的模型测试通过后，才能确认 Codex 可处理请求。安装遇到问题时，发送 **安装状态**。
 
 <details>
 <summary>平台支持与安装要求</summary>
@@ -113,7 +113,6 @@ Linux/macOS 需要 curl、tar；安装私有 Node.js 时还需要 SHA-256 校验
 | `压缩上下文` / `分叉会话` / `Codex状态` | 管理当前 Codex 会话的原生能力 |
 | `批准 编号` / `拒绝 编号` / `回答 编号 答案` | 回复当前任务发出的交互请求；编号以收到的提示为准 |
 | `安装状态` / `安装向导` | 检查配置、继续安装与登录 |
-| `切换智能体` / `切换智能体 Codex` / `切换智能体 Claude` | 查看当前底座，或在本账号空闲后切换已配置的底座 |
 | `命令列表` / `使用说明` | 查看控制命令摘要或完整帮助 |
 
 每条消息独立处理，同一条中的文字和附件一起提交。会话管理、附件限制和诊断命令见 [使用指南](USER-GUIDE.md)。
@@ -161,7 +160,7 @@ PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/ac
 
 ## 更多能力与文档
 
-目前支持 **Codex**（默认）和 **Claude CLI**（需显式配置）。两者共用微信收件、任务状态与投递；具体能力因底座而异。Claude 需 CLI 2.1.259+ 和服务侧 API 凭据，当前支持本机任务、会话续接和停止；模型目录、原生记忆、官方历史检索和永久删除尚未接入，详见 [Claude 接入说明](src/base/claude/README.md)。远程主机和 Linux 独立容器目前使用 Codex 路径。
+当前使用 **Codex** 处理任务。远程主机和 Linux 独立容器也使用 Codex 路径。
 
 - [使用指南](USER-GUIDE.md)：会话、模型、记忆、附件与结果。
 - [配置与维护](CONFIGURATION.md)：安装、升级、备份和故障处理。
@@ -174,6 +173,6 @@ PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/ac
 
 ## 安全与许可
 
-使用自己的微信扫码，不要分享登录二维码或设备验证码。Codex 登录在官方 OpenAI 授权页面完成；Claude 的 API 凭据由服务环境提供，不要通过微信发送。只授权智能体访问你允许的工作区和服务。安全问题请参阅 [安全政策](SECURITY.md)。
+使用自己的微信扫码，不要分享登录二维码或设备验证码。Codex 登录在官方 OpenAI 授权页面完成。只授权智能体访问你允许的工作区和服务。安全问题请参阅 [安全政策](SECURITY.md)。
 
 本项目采用 [MIT License](LICENSE)。第三方依赖与外部服务遵循各自条款，见 [第三方许可](THIRD_PARTY_NOTICES.md)。Weixin Link 是独立项目，不代表微信、OpenAI 或其他服务提供方的官方产品或背书。

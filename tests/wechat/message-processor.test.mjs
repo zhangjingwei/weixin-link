@@ -57,13 +57,13 @@ test('diagnostic controls bypass missing model/backend and never submit inferenc
  await f.handle({userId:'owner',text:'查看最近错误',_ingressId:'diagnostic-id'})
  assert.equal(f.submitted.length,0);assert.deepEqual(f.acked,['diagnostic-id']);assert.equal(f.sent.length,1);assert.match(f.sent[0][1],/诊断日志|诊断未完成/)
 })
-test('agent switch command bypasses inference and acknowledges after the reply',async()=>{
+test('restart command bypasses inference and acknowledges after the reply',async()=>{
  const f=fixture(),events=[]
  f.deps.runtime.track=async(kind,work)=>{events.push('track:'+kind);return work()}
  f.deps.manager.acceptMessage=async()=>true
  f.deps.agentSwitcher={handle:async(command,reply)=>{events.push(command.target);await reply('切换请求已安排')}}
  f.handle=createMessageProcessor(f.deps)
- await f.handle({userId:'owner',text:'切换智能体 Claude',_ingressId:'agent-switch-id'})
+ await f.handle({userId:'owner',text:'重启',_ingressId:'agent-switch-id'})
  assert.deepEqual(f.sent,[['owner','切换请求已安排']])
  assert.deepEqual(f.acked,['agent-switch-id'])
  assert.deepEqual(f.submitted,[])

@@ -21,7 +21,7 @@ test('native Chinese controls are explicit and slash aliases remain ordinary tex
   assert.equal(controlCommand('帮我代码审查'),null)
 })
 
-async function fixture(kind='codex'){
+async function fixture(){
   const dir=await mkdtemp(join(tmpdir(),'native-command-')),calls=[],output=[]
   const rpcFactory=()=>({closed:false,write(){},close(){this.closed=true},async request(method,params){
     calls.push({method,params})
@@ -34,7 +34,7 @@ async function fixture(kind='codex'){
     if(method==='turn/start'||method==='review/start')return {turn:{id:'turn-1'}}
     return {}
   }})
-  const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],agentKind:kind,rpcFactory}).init()
+  const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],rpcFactory}).init()
   const reply=async text=>{output.push(text)}
   return {dir,manager,rpcFactory,calls,output,reply,async close(){manager.close();await rm(dir,{recursive:true,force:true})}}
 }
@@ -85,15 +85,6 @@ test('review keeps its accepted turn when another turn starts on the same thread
     await f.manager.event(session,{method:'item/completed',params:{threadId:'original',turnId:'turn-1',item:{id:'review-progress',type:'agentMessage',phase:'commentary',text:'审查正在检查改动。'}}})
     assert.equal(session.lastProgress?.text,'审查正在检查改动。')
     assert(f.output.some(text=>text.includes('审查正在检查改动。')))
-  }finally{await f.close()}
-})
-
-test('Claude rejects unsupported native commands without calling its RPC',async()=>{
-  const f=await fixture('claude')
-  try{
-    await f.manager.handle('owner','长任务 修复队列',f.reply)
-    assert.match(f.output[0],/未接入.*没有执行/)
-    assert.equal(f.calls.length,0)
   }finally{await f.close()}
 })
 

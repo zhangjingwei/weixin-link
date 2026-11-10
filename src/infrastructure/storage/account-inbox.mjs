@@ -59,11 +59,11 @@ export async function openAccountInbox(accountDir,{backendKey}={}){
   let entries=[]
   try{entries=await readdir(join(accountDir,'backends'),{withFileTypes:true})}catch(error){if(error.code!=='ENOENT')throw error}
   for(const entry of entries){
-   if(!entry.isDirectory()||!/^[a-z0-9-]{1,80}$/.test(entry.name))continue
+   if(!entry.isDirectory()||!/^(?:pilot-[ab]|agent-[a-f0-9]{16})$/.test(entry.name))continue
    const sourceId=`backends/${entry.name}/inbox.sqlite`,path=join(accountDir,sourceId)
    let info;try{info=await lstat(path)}catch(error){if(error.code==='ENOENT')continue;throw error}
    if(!info.isFile())throw Error('LEGACY_INBOX_PATH_UNSAFE')
-   migrateSource(jobs.db,path,sourceId,entry.name==='claude'?'claude:claude-host':`codex:${entry.name}`)
+   migrateSource(jobs.db,path,sourceId,`codex:${entry.name}`)
   }
   return jobs
  }catch(error){jobs.close();throw error}

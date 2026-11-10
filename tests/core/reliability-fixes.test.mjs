@@ -36,17 +36,3 @@ test('restart recovers original logical task and waiting state without completio
  assert.equal(state.users.u.lastTask.id,'original');assert.equal(state.users.u.waitingAttachment.request,'总结文件');assert.equal(out.length,0);assert.equal(jobs.get(id).state,'done')
  }finally{jobs.close();await rm(dir,{recursive:true,force:true})}
 })
-
-test('Claude recovery keeps an unverified turn uncertain without querying Codex history',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'claude-recovery-'));const jobs=new DurableJobs(join(dir,'queue.sqlite'),{backendKey:'claude:claude-host'})
- try{
-  const id=jobs.add('u',{text:'request'},'delivery');jobs.bind(id,'thread');jobs.submitted(id,'turn')
-  const requests=[],state={users:{u:{}}},protocol=createSessionProtocol({kind:'claude'})
-  const manager={owners:new Set(['u']),state,protocol,lifecycle:{capture:()=>({current:()=>true})},connect:async()=>({threadId:'thread',rpc:{request:async method=>{requests.push(method);throw Error('unexpected protocol request')}}}),save:async()=>{}}
-  const intake=new DurableIntake({jobs,manager,reply:async()=>{}})
-  await intake.pump('u')
-  assert.equal(jobs.get(id).state,'uncertain')
-  assert.equal(state.users.u.recovery.execution,'unknown')
-  assert.deepEqual(requests,[])
- }finally{jobs.close();await rm(dir,{recursive:true,force:true})}
-})

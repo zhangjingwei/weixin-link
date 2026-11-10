@@ -1,21 +1,10 @@
 import {loadBackend as loadCodexBackend} from './codex-backend.mjs'
-import {ClaudeRpc} from '../../base/claude/claude-rpc.mjs'
 import {listAccounts} from '../accounts/account-store.mjs'
-import {join} from 'node:path'
 import {createSessionProtocol} from './session-protocol.mjs'
 
-// The account chooses one agent. Transport, session identity and capabilities stay
-// behind this boundary; the intake and delivery engine is shared.
+// Codex transport and session details stay behind this boundary.
 export async function loadAgentAdapter(account,workspace,installation){
- const kind=installation.agentBackend??'codex'
- if(kind==='codex'){
-  const backend=await loadCodexBackend(account,workspace,undefined,{listAccounts})
-  return {kind,name:'Codex',backend,sessionOptions:{sessionProtocol:createSessionProtocol({kind,rpcFactory:backend.rpcFactory,providerEnv:backend.kind==='podman'?{}:process.env,codexBinary:()=>installation.codexBinary})},catalog:'official'}
- }
- if(kind==='claude'){
-  if(!installation.claudeBinary)throw Error('CLAUDE_BINARY_NOT_CONFIGURED')
-  const backend={id:'claude-host',kind:'host',agentKind:'claude',cwd:workspace,stateDir:join(account.stateDir,'backends','claude'),memoryMode:'claude',instructions:'当前底座为 Claude。只使用本轮已关联的材料；交付文件保存到工作目录 outputs/ 并给出绝对路径链接。当前 CLI 会话不提供 Codex 原生记忆接口，不声称已保存长期记忆。'}
-  return {kind,name:'Claude',backend,catalog:'local',sessionOptions:{sessionProtocol:createSessionProtocol({kind,rpcFactory:options=>new ClaudeRpc({...options,binary:installation.claudeBinary,stateDir:backend.stateDir,env:{...process.env,CLAUDE_CONFIG_DIR:join(backend.stateDir,'config')}})})}}
- }
- throw Error('UNKNOWN_AGENT_BACKEND')
+ const kind='codex'
+ const backend=await loadCodexBackend(account,workspace,undefined,{listAccounts})
+ return {kind,name:'Codex',backend,sessionOptions:{sessionProtocol:createSessionProtocol({rpcFactory:backend.rpcFactory,providerEnv:backend.kind==='podman'?{}:process.env,codexBinary:()=>installation.codexBinary})},catalog:'official'}
 }

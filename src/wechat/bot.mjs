@@ -9,7 +9,6 @@ import {createWeChatPresenter} from '../interfaces/views/wechat-presenter.mjs'
 import {createScheduleController} from '../interfaces/controllers/schedule-controller.mjs'
 import {createUpdateController} from '../interfaces/controllers/update-controller.mjs'
 import {setupModelTest} from '../setup/setup-model-test.mjs'
-import {codexAvailability} from '../setup/setup-core.mjs'
 import {SetupReceipts} from '../setup/setup-receipts.mjs'
 import {USER_GUIDE} from '../setup/user-guide.mjs'
 import {SetupController,setupCommand} from '../setup/setup-controller.mjs'
@@ -19,10 +18,8 @@ import {createToolNotifier} from './tool-status.mjs'
 import {createInfrastructurePorts} from './infrastructure-ports.mjs'
 import {AgentSwitcher} from '../setup/agent-switch.mjs'
 import {ChatUpgrader} from '../setup/chat-upgrade.mjs'
-import {ClaudeSetupController} from '../setup/claude-setup.mjs'
 import {TextConversations} from '../application/conversations/text-conversations.mjs'
 import {createCodexConversationBackend} from '../infrastructure/agents/codex-conversation-backend.mjs'
-import {createLocalConversationBackend} from '../infrastructure/agents/local-conversation-backend.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
 import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from '../infrastructure/accounts/account-store.mjs'
@@ -43,7 +40,7 @@ const stateDir = account.stateDir
 const installation=installConfig()
 const cwd = installation.workspace
 const infrastructure=createInfrastructurePorts()
-const agent=await infrastructure.agent.load(account,cwd,{...installation,agentBackend:await infrastructure.agent.selectedKind(account,installation)})
+const agent=await infrastructure.agent.load(account,cwd,installation)
 const backend=agent.backend
 const runtimeStateDir=backend.stateDir
 await mkdir(stateDir, { recursive: true, mode: 0o700 })
@@ -58,7 +55,7 @@ log('service.started',{status:testing?'test':'live'})
 const scheduleGuidance=`定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../interfaces/cli/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2027-01-01T09:00:00+08:00","text":"开会"}。定时提交任务：{"action":"create","kind":"task","at":"2027-01-01T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":"Asia/Shanghai"} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向原会话的持久任务队列提交原样文字，由该会话对应的任务执行链路处理；不预先声称任务完成。命令从环境读取当前会话标识，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
 // 会话编排由应用层负责；底座协议由所选 agent.sessionOptions 注入。
 const manager = await new SessionManager({log, completionMarkers:true, scheduleGuidance, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, ...agent.sessionOptions, ...(backend.kind==='podman'?{remoteControl:backend.remoteControl}:{}) }).init()
-const agentSwitcher=new AgentSwitcher({account,installation,agentKind:agent.kind,backendReady:codexAvailability})
+const agentSwitcher=new AgentSwitcher({account})
 const upgrader=new ChatUpgrader()
 
 if (testing) {
@@ -70,9 +67,9 @@ if (testing) {
   process.exit(0)
 }
 
-const setupController=await (agent.kind==='claude'?new ClaudeSetupController({binary:installation.claudeBinary}):new SetupController({stateDir,backend,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)})).init()
+const setupController=await new SetupController({stateDir,backend,accountId:account.id,runModelTest:options=>setupModelTest(manager,options)}).init()
 const classifyMessage=createCommandClassifier()
-const conversationBackend=agent.catalog==='local'?createLocalConversationBackend():createCodexConversationBackend(manager)
+const conversationBackend=createCodexConversationBackend(manager)
 const conversations=new TextConversations(manager,owners,conversationInput,conversationBackend)
 await manager.save()
 const bot = infrastructure.wechat.createClient({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })

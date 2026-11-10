@@ -5,7 +5,7 @@ import {ingressId, taskId} from '../../domain/messages/message-identity.mjs'
 import {messageOwner, externalMessageId, requireExternalMessageId} from './ingress-envelope.mjs'
 export class DurableJobs {
  constructor(path,{backendKey='codex:host'}={}){
-  if(!/^(?:codex|claude):[a-z0-9-]{1,80}$/.test(backendKey))throw Error('INVALID_INBOX_BACKEND')
+  if(!/^codex:[a-z0-9-]{1,80}$/.test(backendKey))throw Error('INVALID_INBOX_BACKEND')
   this.backendKey=backendKey
   this.db=new DatabaseSync(path)
   chmodSync(path,0o600)

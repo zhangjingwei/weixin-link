@@ -17,7 +17,6 @@ recorded platform, revision, outcome and redacted diagnostic trace.
 | Explicit project directory | New project uses chosen canonical directory before and after reconnect; existing thread never migrates silently. |
 | Missing or mixed deliverables | Preparation warning remains visible and delivery is partial, never accepted for the complete bundle. |
 | Upgrade and rollback | Preserve account state; reconcile unknown tasks before switching versions. |
-| Claude readiness | CLI, supported credentials, real inference, resume and stop each checked separately; simulated adapter tests are insufficient. |
 
 Windows and Linux real-machine validation, real WeChat delivery, network changes,
 OS reboot, and credential-expiry checks are not performed by the unit suite.

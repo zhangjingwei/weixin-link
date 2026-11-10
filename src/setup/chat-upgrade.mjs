@@ -59,7 +59,7 @@ export class ChatUpgrader{
   for(const service of deployment.services){
    if(!service.stateDir)throw Error('CHAT_UPGRADE_ACCOUNT_STATE_UNAVAILABLE')
    const text=await readPrivateFile(join(service.stateDir,'agent-switch.json'))
-   if(text&&['waiting_idle','committing'].includes(JSON.parse(text).status)){await reply('账号维护正在进行，暂不安排升级。');return}
+   if(text){const request=JSON.parse(text);if(request.target==='codex'&&request.previous==='codex'&&['waiting_idle','committing'].includes(request.status)){await reply('账号维护正在进行，暂不安排升级。');return}}
   }
   const outcome=await this.lock(async()=>{
    const pending=await readChatUpgrade(this.home)

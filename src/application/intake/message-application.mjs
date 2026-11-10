@@ -9,7 +9,6 @@ const READINESS_NOTICE = {
   CONTAINER_NOT_READY: '微信已连通，但绑定的容器未就绪。本条没有提交给模型；可发送“安装状态”“启动容器”“登录智能体”进行恢复。',
   CODEX_NOT_INSTALLED: '微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。',
   CODEX_NOT_LOGGED_IN: '微信已连通，Codex 尚未登录。本条没有提交给模型；发送“登录智能体”完成授权。',
-  CLAUDE_CREDENTIALS_REQUIRED: '微信已连通，但 Claude API 凭据未提供。本条没有提交给模型；发送“安装状态”查看当前配置。',
 }
 
 export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,confirmedRejection,deferMaintenance,systemNotice,diagnosticServices,diagnosticService}){

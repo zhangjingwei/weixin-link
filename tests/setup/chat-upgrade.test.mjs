@@ -36,7 +36,7 @@ test('upgrade waits for an existing account maintenance request',async t=>{
  const home=await mkdtemp(join(tmpdir(),'chat-upgrade-conflict-'));t.after(()=>rm(home,{recursive:true,force:true}))
  const target=join(home,'source'),stateDir=join(home,'account');await mkdir(target);await mkdir(stateDir)
  await writeFile(join(target,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'main',commit:oldCommit}))
- await writeFile(join(stateDir,'agent-switch.json'),JSON.stringify({status:'waiting_idle'}))
+ await writeFile(join(stateDir,'agent-switch.json'),JSON.stringify({status:'waiting_idle',target:'codex',previous:'codex'}))
  const sent=[],upgrader=new ChatUpgrader({home,target,latest:async()=>({tag:'v1.1.0',commit:newCommit}),deployment:async()=>({services:[{active:true,stateDir}]}),schedule:async()=>{throw Error('must not schedule')}})
  await upgrader.handle(value=>sent.push(value));assert.match(sent[0],/账号维护正在进行/)
  assert.equal(await readChatUpgrade(home),null)
