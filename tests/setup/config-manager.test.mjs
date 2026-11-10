@@ -58,6 +58,16 @@ test('remote configuration seals only idle runtimes and reports unconfirmed resu
  const result=await configure('remote-hosts',{hosts:{}},{...options,guard:async()=>async()=>({resumed:false})})
  assert.equal(result.written,true);assert.equal(result.runtimeResumed,false);assert.equal(result.warning,'CONFIG_RUNTIME_RESUME_UNCONFIRMED')
 })
+test('config-set saves offline remote hosts without trying to connect',async t=>{
+ const options=await fixture(t);await mkdir(options.workspace)
+ const host={platform:'posix',binary:'/opt/codex',root:'/projects',transport:'daemon-proxy'}
+ const input={hosts:{offlineA:host,offlineB:{...host,root:'/workspace'}}}
+ const env={...process.env,HOME:options.home,WECHAT_REMOTE_WORKSPACE:options.workspace};delete env.WECHAT_REMOTE_HOSTS
+ const command=spawnSync(process.execPath,[join(repo,'src/setup/setup.mjs'),'config-set','remote-hosts'],{input:JSON.stringify(input),encoding:'utf8',env,timeout:3000})
+ assert.equal(command.status,0,command.stderr)
+ const result=JSON.parse(command.stdout);assert.equal(result.written,true);assert.equal(result.verified,false)
+ assert.deepEqual(JSON.parse(await readFile(join(options.workspace,'remote-hosts.json'),'utf8')).hosts,input.hosts)
+})
 test('managed workspace guidance preserves user content and is idempotent',async t=>{
  const options=await fixture(t);await mkdir(options.workspace);const path=join(options.workspace,'AGENTS.md'),original='# User rules\nKeep this exact text.\n';await writeFile(path,original)
  const args={workspace:options.workspace,root:repo,codexBinary:process.execPath};await updateWorkspaceGuidance(args);const first=await readFile(path,'utf8');assert.ok(first.startsWith(original));assert.ok(first.includes('config-set'));assert.ok(first.includes('原生记忆'))

@@ -37,7 +37,7 @@ export async function configStatus(options={}){
  }
  return result
 }
-async function probeConfiguration(kind,config,{home=currentHome(),env=process.env,remoteTasks=[]}={}){
+async function probeConfiguration(kind,config,{home=currentHome(),env=process.env}={}){
  try{
   const integration=integrationByConfig(kind)
   if(integration&&kind!=='remote-hosts'){
@@ -49,12 +49,6 @@ async function probeConfiguration(kind,config,{home=currentHome(),env=process.en
    await exec('python3',['-c','import cryptography,fcntl'],{timeout:6000,maxBuffer:65536})
    const command='test -d '+quote(config.remoteDirectory)+' && test -w '+quote(config.remoteDirectory)+' && test -r .config/wechat-backup-key/private.pem'
    await exec('ssh',['-F',env.WECHAT_SSH_CONFIG??join(home,'.ssh/wechat_hosts_config'),'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=6',config.host,command],{timeout:12000,maxBuffer:65536})
-  }else if(kind==='remote-hosts'){
-   const {RemoteRpc}=await import('../infrastructure/agents/remote-rpc.mjs')
-   for(const [host,hostConfig]of Object.entries(config.hosts)){
-    const rpc=new RemoteRpc(host,{hostConfig,retryDelays:[]})
-    try{await rpc.connect();await rpc.request('thread/list',{limit:1},6000);if(!(await rpc.request('fs/getMetadata',{path:hostConfig.root},6000)).isDirectory)throw Error();if(hostConfig.transport==='ssh-websocket'&&!(await rpc.request('fs/getMetadata',{path:hostConfig.binary},6000)).isFile)throw Error();for(const task of remoteTasks.filter(t=>t.host===host)){if(!task.thread_id)throw Error();const result=await rpc.request('thread/read',{threadId:task.thread_id,includeTurns:false},6000);if(result.thread?.id!==task.thread_id||result.thread?.cwd!==task.cwd)throw Error()}}finally{rpc.close()}
-   }
   }else if(kind==='installation'){
    if(!(await stat(config.workspace)).isDirectory())throw Error()
    await access(config.workspace,fsConstants.W_OK)
@@ -99,7 +93,7 @@ export async function configure(kind,input,{home=currentHome(),workspace,env=pro
  if(kind==='remote-hosts')options.remoteTasks=await checkRemoteTransition(previous,config,options)
  if(kind==='installation'&&previous&&!restoring){const old=parseConfig(kind,previous);if(old.workspace!==config.workspace)throw new ConfigError('CONFIG_WORKSPACE_MIGRATION_REQUIRED')}
  if(kind==='installation'&&(await runtimeEndpoints(home)).length)throw new ConfigError('CONFIG_INSTALLATION_REQUIRES_STOP')
- await verify(kind,config,options)
+ if(kind!=='remote-hosts')await verify(kind,config,options)
  if(kind==='installation'&&(await runtimeEndpoints(home)).length)throw new ConfigError('CONFIG_INSTALLATION_REQUIRES_STOP')
  let release=async()=>({resumed:true}),committed=false
  if(kind==='remote-hosts')release=await guard(options)
@@ -114,7 +108,7 @@ export async function configure(kind,input,{home=currentHome(),workspace,env=pro
    try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:config.codexBinary??findCodex(home),agentBackend:config.agentBackend??'codex',claudeBinary:config.claudeBinary})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
   }
   const runtime=await release();release=async()=>({resumed:true})
-  return {kind,version:config.version,verified:true,written:true,...result,effective:kind==='installation'?'next_service_start':'next_operation',runtimeResumed:runtime.resumed,...(!runtime.resumed?{warning:'CONFIG_RUNTIME_RESUME_UNCONFIRMED'}:{}),...(guidance?{guidance}:{}),restartRequired:kind==='installation'}
+  return {kind,version:config.version,verified:kind!=='remote-hosts',written:true,...result,effective:kind==='installation'?'next_service_start':'next_operation',runtimeResumed:runtime.resumed,...(!runtime.resumed?{warning:'CONFIG_RUNTIME_RESUME_UNCONFIRMED'}:{}),...(guidance?{guidance}:{}),restartRequired:kind==='installation'}
  }finally{if(!committed)await release()}
 }
 export async function restoreConfiguration(kind,options={}){
