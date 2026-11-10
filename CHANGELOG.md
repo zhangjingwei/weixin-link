@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2 — 2026-11-10
+
+- Allow `config-set remote-hosts` to save valid host entries while a host is offline. Connection failures are reported when that host is used; configuration writes no longer probe every host.
+- Keep schema validation, existing remote task reconciliation, atomic writes, and runtime drain checks. The configuration response reports `verified: false` because connectivity was not checked.
+
+Automated tests cover offline configuration writes and remote task safeguards. Live remote connections were not exercised for this patch.
+
 ## 1.3.1 — 2026-11-09
 
 - Use `qr.sh` directly for the initial Linux/macOS pairing flow, including the existing same-terminal PIN prompt.
