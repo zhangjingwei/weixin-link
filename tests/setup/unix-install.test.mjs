@@ -30,6 +30,6 @@ test('Unix install uses the unified WeChat login command',async t=>{
  })
  assert(result.stdout.includes('not interactive'))
  assert.deepEqual((await readFile(log,'utf8')).trim().split('\n'),[
-  'init','deps','services','wechat-login',
+  'deps','init','services','wechat-login',
  ])
 })

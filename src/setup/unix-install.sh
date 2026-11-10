@@ -51,8 +51,8 @@ else
  launchctl print "gui/$(id -u)" >/dev/null 2>&1 || { echo 'A logged-in macOS GUI session is required.'; exit 1; }
 fi
 cd "$setup_root"
-node src/setup/setup.mjs init --human
 node src/setup/setup.mjs deps --human
+node src/setup/setup.mjs init --human
 if test -t 0 && test -t 1; then
  node src/setup/setup.mjs wizard --human
 else

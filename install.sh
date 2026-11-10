@@ -77,7 +77,15 @@ if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
   fi
   "$bootstrap_node" -e 'const p=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8"));if(!["weixin-link","wechat-ping-bot"].includes(p.name))process.exit(1)' "$bootstrap_dest/package.json" || { echo 'Unrecognized existing source directory.' >&2; exit 1; }
   bootstrap_mode=upgrade
-  if ( : </dev/tty ) 2>/dev/null; then
+  if test -f "$bootstrap_dest/.weixin-link-install-pending" || { test -z "${WEIXIN_LINK_DIR:-}${ZERO_LINK_DIR:-}" && test "$bootstrap_dest" = "$HOME/.local/share/weixin-link/source" && ! test -d "$bootstrap_dest/node_modules/proper-lockfile" && ! test -f "$HOME/.local/share/wechat-ping-bot/installation.json" && ! test -e "$bootstrap_dest/.git"; }; then
+    bootstrap_service_found=false
+    case "$(uname -s)" in
+      Linux) if command -v systemctl >/dev/null 2>&1 && systemctl --user show wechat-ping-bot.service --property=FragmentPath 2>/dev/null | grep -q '^FragmentPath=.'; then bootstrap_service_found=true; fi ;;
+      Darwin) if launchctl print "gui/$(id -u)/com.wechat-assistant.wechat-ping-bot" >/dev/null 2>&1; then bootstrap_service_found=true; fi ;;
+    esac
+    if test "$bootstrap_service_found" = false; then bootstrap_mode=resume; fi
+  fi
+  if test "$bootstrap_mode" = upgrade && ( : </dev/tty ) 2>/dev/null; then
     if test "$bootstrap_english" = 1; then
       bootstrap_choice=$(bootstrap_select 'Use ↑/↓ to choose, then press Enter:' 1 'Upgrade' 'Configure model' 'Log in to WeChat again' 'Add WeChat account' 'Uninstall' 'Exit')
     else
@@ -122,6 +130,14 @@ else
       fi
       ;;
   esac
+fi
+if test "$bootstrap_mode" = resume; then
+  PATH="$(dirname "$bootstrap_node"):$PATH"; export PATH
+  cd "$bootstrap_dest"
+  if ! test -d node_modules/proper-lockfile; then npm ci; fi
+  bootstrap_run_interactive /bin/sh ./src/setup/unix-install.sh
+  rm -f .weixin-link-install-pending
+  exit 0
 fi
 if test "$bootstrap_mode" = maintenance; then
   if ! test -f "$bootstrap_dest/src/setup/account-manager.mjs"; then if test "$bootstrap_english" = 1; then echo 'Upgrade this installation before using the menu.' >&2; else echo '请先升级当前安装版本，再使用菜单。' >&2; fi; exit 1; fi
@@ -194,4 +210,6 @@ fi
 mkdir "$bootstrap_dest"
 cp -R "$bootstrap_tmp/source/." "$bootstrap_dest/"
 cd "$bootstrap_dest"
+touch .weixin-link-install-pending
 bootstrap_run_interactive /bin/sh ./src/setup/unix-install.sh
+rm -f .weixin-link-install-pending

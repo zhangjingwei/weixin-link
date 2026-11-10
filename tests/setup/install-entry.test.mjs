@@ -79,6 +79,19 @@ test('piped entry keeps noninteractive upgrade behavior',{skip:process.platform=
  assert.equal(await readFile(env.UPGRADE_CAPTURE,'utf8'),f.dest)
  await assert.rejects(exec('sh',[bootstrap,'login'],{env}),/Usage: sh install.sh/)
 })
+test('an interrupted default installation resumes without downloading an upgrade',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t)
+ f.dest=join(f.root,'.local/share/weixin-link/source')
+ const env=await installed(f)
+ env.WEIXIN_LINK_DIR=''
+ await writeFile(join(f.bin,'npm'),'#!/bin/sh\nprintf "%s" "$*" > "$UPGRADE_CAPTURE"\n',{mode:0o755})
+ await writeFile(join(f.dest,'src/setup/unix-install.sh'),'#!/bin/sh\nprintf resumed > resumed.txt\n')
+ await exec('sh',[bootstrap],{env})
+ assert.equal(await readFile(env.UPGRADE_CAPTURE,'utf8'),'ci')
+ assert.equal(await readFile(join(f.dest,'resumed.txt'),'utf8'),'resumed')
+ assert.equal((await readdir(f.dest)).includes('.weixin-link-install-pending'),false)
+ assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
+})
 test('older manager path remains eligible for in-place upgrade',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t),env=await installed(f,{legacyManager:true})
  await exec('sh',[bootstrap],{env})
