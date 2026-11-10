@@ -94,6 +94,18 @@ test('an interrupted default installation resumes without downloading an upgrade
  assert.equal((await readdir(f.dest)).includes('.weixin-link-install-pending'),false)
  assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
 })
+test('a pinned retry refreshes incomplete installation source before resuming',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t),env=await installed(f)
+ await writeFile(join(f.dest,'.weixin-link-install-pending'),'')
+ const expected='abc1234'+'0'.repeat(33)
+ const {stdout}=await exec('sh',[bootstrap],{env:{...env,WEIXIN_LINK_EXPECTED_COMMIT:expected}})
+ assert.equal(await readFile(join(f.dest,'installed.txt'),'utf8'),'installed')
+ assert.equal((await readdir(f.dest)).includes('.weixin-link-install-pending'),false)
+ const backup=stdout.match(/Previous incomplete source saved at: (.+)\n/)?.[1]
+ assert(backup)
+ assert.equal(await readFile(join(backup,'keep'),'utf8'),'original')
+ await assert.rejects(readFile(join(f.dest,'keep')),{code:'ENOENT'})
+})
 test('an interrupted installation without services can be removed from the menu',{skip:process.platform!=='darwin'},async t=>{
  const f=await fixture(t),env=await installed(f)
  await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "5\\r"\nexpect "卸载程序？"\nsend "\\033\\[B\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})

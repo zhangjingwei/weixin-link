@@ -131,7 +131,7 @@ else
       ;;
   esac
 fi
-if test "$bootstrap_mode" = resume; then
+if test "$bootstrap_mode" = resume && test -z "${WEIXIN_LINK_EXPECTED_COMMIT:-}"; then
   PATH="$(dirname "$bootstrap_node"):$PATH"; export PATH
   cd "$bootstrap_dest"
   if ! test -d node_modules/proper-lockfile; then npm ci; fi
@@ -216,6 +216,22 @@ if test "$bootstrap_stable" = true; then
 fi
 if { test "$bootstrap_ref" = main || test "$bootstrap_stable" = true; } && test -n "$bootstrap_commit"; then
   printf '{"version":1,"repository":"zhangjingwei/weixin-link","ref":"%s","commit":"%s"}\n' "$bootstrap_ref" "$bootstrap_commit" > "$bootstrap_tmp/source/.weixin-link-release.json"
+fi
+if test "$bootstrap_mode" = resume; then
+  if test -e "$bootstrap_dest/.git" || test -e "$bootstrap_dest/.env"; then echo 'Pending installation contains local source or configuration; inspect before replacing.' >&2; exit 1; fi
+  bootstrap_backup=$(mktemp -d "$(dirname -- "$bootstrap_dest")/.weixin-link-pending-backup.XXXXXX")
+  mv "$bootstrap_dest" "$bootstrap_backup/source"
+  if ! mv "$bootstrap_tmp/source" "$bootstrap_dest"; then mv "$bootstrap_backup/source" "$bootstrap_dest"; rmdir "$bootstrap_backup"; exit 1; fi
+  touch "$bootstrap_dest/.weixin-link-install-pending"
+  PATH="$(dirname "$bootstrap_node"):$PATH"; export PATH
+  cd "$bootstrap_dest"
+  if bootstrap_run_interactive /bin/sh ./src/setup/unix-install.sh; then
+    rm -f .weixin-link-install-pending
+    printf 'Previous incomplete source saved at: %s\n' "$bootstrap_backup/source"
+    exit 0
+  fi
+  printf 'Installation remains incomplete; previous source saved at: %s\n' "$bootstrap_backup/source" >&2
+  exit 1
 fi
 if test "$bootstrap_mode" = upgrade; then
   test -f "$bootstrap_tmp/source/src/setup/upgrade.mjs" || { if test "$bootstrap_english" = 1; then echo 'This release does not support upgrades.' >&2; else echo '该版本不支持升级。' >&2; fi; exit 1; }
