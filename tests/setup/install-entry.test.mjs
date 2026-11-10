@@ -69,6 +69,8 @@ test('existing installation menu handles local maintenance without downloading a
  await writeFile(join(f.dest,'src/setup/uninstall.mjs'),'// fixture\n')
  await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "5\\r"\nexpect "卸载程序？"\nsend "\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
  assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
+ await mkdir(join(f.root,'Library/LaunchAgents'),{recursive:true})
+ await writeFile(join(f.root,'Library/LaunchAgents/com.wechat-assistant.wechat-ping-bot.plist'),'managed fixture')
  await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "5\\r"\nexpect "卸载程序？"\nsend "\\033\\[B\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
  assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes('uninstall.mjs'))
  await assert.rejects(readFile(join(f.dest,'keep')),{code:'ENOENT'})
@@ -91,6 +93,11 @@ test('an interrupted default installation resumes without downloading an upgrade
  assert.equal(await readFile(join(f.dest,'resumed.txt'),'utf8'),'resumed')
  assert.equal((await readdir(f.dest)).includes('.weixin-link-install-pending'),false)
  assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
+})
+test('an interrupted installation without services can be removed from the menu',{skip:process.platform!=='darwin'},async t=>{
+ const f=await fixture(t),env=await installed(f)
+ await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "5\\r"\nexpect "卸载程序？"\nsend "\\033\\[B\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
+ await assert.rejects(readFile(join(f.dest,'keep')),{code:'ENOENT'})
 })
 test('older manager path remains eligible for in-place upgrade',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t),env=await installed(f,{legacyManager:true})

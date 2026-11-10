@@ -50,3 +50,17 @@ test('uninstall removes a managed macOS launch agent without touching account da
  await assert.rejects(readFile(plist),{code:'ENOENT'})
  assert.equal(await readFile(join(state,'private'),'utf8'),'kept')
 })
+
+test('an interrupted installation without services can be uninstalled',async t=>{
+ const home=await mkdtemp(join(tmpdir(),'weixin-uninstall-'))
+ t.after(()=>rm(home,{recursive:true,force:true}))
+ const root=join(home,'source')
+ await mkdir(root,{recursive:true})
+ await writeFile(join(root,'package.json'),'{"name":"weixin-link"}')
+ const commands=[]
+ const run=async(binary,args)=>{commands.push([binary,...args]);return {stdout:''}}
+ assert.deepEqual(await uninstallInstallation({home,root,platform:'darwin',run}),{servicesRemoved:false,accountDataPreserved:true,workspacePreserved:true})
+ assert.deepEqual(await uninstallInstallation({home,root,platform:'linux',run}),{servicesRemoved:false,accountDataPreserved:true,workspacePreserved:true})
+ assert(commands.some(command=>command[0]==='launchctl'))
+ assert(commands.some(command=>command[0]==='systemctl'))
+})

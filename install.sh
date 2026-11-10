@@ -149,8 +149,25 @@ if test "$bootstrap_mode" = maintenance; then
    account-create) "$bootstrap_node" src/setup/account-manager.mjs create "$bootstrap_account" --human; bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wizard "$bootstrap_account" --human; bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wechat-login "$bootstrap_account" --human ;;
    uninstall)
      test ! -e .git || { echo 'UNINSTALL_SOURCE_REQUIRES_REVIEW' >&2; exit 1; }
-     test -f src/setup/uninstall.mjs || { echo '请先升级当前安装版本，再使用卸载菜单。' >&2; exit 1; }
-     "$bootstrap_node" src/setup/uninstall.mjs
+     bootstrap_has_service=false
+     case "$(uname -s)" in
+       Darwin)
+         for bootstrap_file in "$HOME"/Library/LaunchAgents/com.wechat-assistant.wechat-ping-bot*.plist "$HOME"/Library/LaunchAgents/com.wechat-assistant.wechat-pair-*.plist; do
+           if test -e "$bootstrap_file" || test -L "$bootstrap_file"; then bootstrap_has_service=true; fi
+         done
+         if launchctl list 2>/dev/null | grep -Eq 'com\.wechat-assistant\.(wechat-ping-bot|wechat-pair-)'; then bootstrap_has_service=true; fi
+         ;;
+       Linux)
+         for bootstrap_file in "$HOME"/.config/systemd/user/wechat-ping-bot.service "$HOME"/.config/systemd/user/wechat-ping-bot@.service; do
+           if test -e "$bootstrap_file" || test -L "$bootstrap_file"; then bootstrap_has_service=true; fi
+         done
+         if systemctl --user list-units --all --plain --no-legend 'wechat-ping-bot*.service' 'wechat-pair-*.service' 2>/dev/null | grep -q 'wechat-'; then bootstrap_has_service=true; fi
+         ;;
+     esac
+     if test "$bootstrap_has_service" = true; then
+       test -f src/setup/uninstall.mjs || { echo '请先升级当前安装版本，再使用卸载菜单。' >&2; exit 1; }
+       "$bootstrap_node" src/setup/uninstall.mjs
+     fi
      bootstrap_target=$(pwd -P)
      case "$bootstrap_target" in /|"$HOME") echo 'INVALID_INSTALLATION_DIR' >&2; exit 1;; esac
      cd "$(dirname -- "$bootstrap_target")"

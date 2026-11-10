@@ -32,7 +32,11 @@ export async function uninstallInstallation({home=process.env.HOME||homedir(),ro
   const directory=join(home,'.config/systemd/user')
   const files=['wechat-ping-bot.service','wechat-ping-bot@.service'].map(name=>join(directory,name))
   const present=await Promise.all(files.map(path=>managed(path,root)))
-  if(!present.some(Boolean))throw Error('UNINSTALL_SERVICE_REQUIRES_REVIEW')
+  if(!present.some(Boolean)){
+   const result=await run('systemctl',['--user','list-units','--all','--plain','--no-legend','wechat-ping-bot*.service','wechat-pair-*.service']).catch(()=>({stdout:''}))
+   if(result.stdout.trim())throw Error('UNINSTALL_SERVICE_REQUIRES_REVIEW')
+   return {servicesRemoved:false,accountDataPreserved:true,workspacePreserved:true}
+  }
   for(const id of ids){
    const unit=`wechat-pair-${id}.service`
    await run('systemctl',['--user','stop',unit]).catch(()=>{})
@@ -52,7 +56,11 @@ export async function uninstallInstallation({home=process.env.HOME||homedir(),ro
  }else if(platform==='darwin'){
   const directory=join(home,'Library/LaunchAgents')
   const files=(await readdir(directory).catch(error=>{if(error.code==='ENOENT')return [];throw error})).filter(name=>/^com\.wechat-assistant\.(wechat-ping-bot(?:\.[a-z][a-z0-9-]{0,31})?|wechat-pair-[a-z][a-z0-9-]{0,31})\.plist$/.test(name))
-  if(!files.length)throw Error('UNINSTALL_SERVICE_REQUIRES_REVIEW')
+  if(!files.length){
+   const result=await run('launchctl',['list']).catch(()=>({stdout:''}))
+   if(/com\.wechat-assistant\.(wechat-ping-bot|wechat-pair-)/.test(result.stdout))throw Error('UNINSTALL_SERVICE_REQUIRES_REVIEW')
+   return {servicesRemoved:false,accountDataPreserved:true,workspacePreserved:true}
+  }
   for(const name of files){
    const path=join(directory,name)
    if(!await managed(path,root))continue
