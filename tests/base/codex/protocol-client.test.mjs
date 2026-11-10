@@ -36,3 +36,17 @@ test('local app-server child receives the account Codex home instead of the user
  try{assert.equal((await rpc.request('test',{})).codexHome,codexHome)}
  finally{const stopped=once(rpc.child,'close');rpc.close();await stopped}
 })
+test('local app-server child inherits the service time zone',async()=>{
+ const previousTimeZone=process.env.TZ
+ process.env.TZ='Pacific/Auckland'
+ const script="require('node:readline').createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);if(m.id!==undefined)process.stdout.write(JSON.stringify({id:m.id,result:{tz:process.env.TZ,timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone}})+'\\n')})"
+ let rpc
+ try{
+  rpc=new CodexRpc({binary:process.execPath,providerOptions:{args:['-e',script],thread:{}},cwd:process.cwd()})
+  assert.deepEqual(await rpc.request('test',{}),{tz:'Pacific/Auckland',timeZone:'Pacific/Auckland'})
+ }finally{
+  if(rpc){const stopped=once(rpc.child,'close');rpc.close();await stopped}
+  if(previousTimeZone===undefined)delete process.env.TZ
+  else process.env.TZ=previousTimeZone
+ }
+})

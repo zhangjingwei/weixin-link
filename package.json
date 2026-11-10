@@ -1,6 +1,6 @@
 {
   "name": "weixin-link",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "A self-hosted bridge for continuing Codex tasks from WeChat.",
   "main": "src/wechat/bot.mjs",
   "scripts": {

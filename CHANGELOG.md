@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.1 — 2026-11-10
+
+- Let the local Codex process inherit the service time zone instead of forcing `Asia/Shanghai`.
+- Use the service's system time zone when guiding Codex to create recurring schedules, and clarify that one-time schedules need the offset for their target date.
+
+Automated release, platform, Codex protocol, and schedule tests passed. Live WeChat messaging and other platforms were not verified for this patch.
+
 ## 1.4.0 — 2026-11-10
 
 - Bundle the Codex CLI and configure model access per WeChat account through the terminal installer. Add Chinese and English setup and maintenance flows.
