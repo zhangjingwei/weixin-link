@@ -23,7 +23,7 @@ test('ready account is not paired again without explicit relogin',async()=>{
  const f=fixture({ready:true,active:true}),result=await runWeChatLogin(f.options)
  assert.equal(result.status,'already_ready')
  assert.deepEqual(f.calls,['list'])
- assert(f.messages.join('').includes('--relogin'))
+ assert(f.messages.join('').includes('install.sh)" -- relogin'))
 })
 test('English login gives English guidance and passes language to QR display',async()=>{
  const f=fixture({ready:true,active:true})

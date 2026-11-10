@@ -55,8 +55,9 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 
 The installer first prompts you to choose subscription sign-in, DeepSeek, Qwen or Kimi. After the model test, scan the WeChat QR code; the assistant then reports the installation result. Enter third-party API keys only in the terminal. Installation steps, WeChat login prompts, and setup commands support Chinese and English. Some advanced maintenance and diagnostic messages remain in Chinese.
 
-**Model access:** [Codex subscription sign-in](https://learn.chatgpt.com/docs/auth) requires your own account and access to OpenAI services from the installation device. DeepSeek, Qwen and Kimi use their own platform keys, so they do not need a Codex subscription or its sign-in access. The setup wizard tests the chosen model before WeChat pairing.
-The setup language follows the terminal locale. To override it, use `WEIXIN_LINK_LANG=en` for the installer, or run `node src/setup/setup.mjs wizard --lang en` (or `--lang zh`) from the source directory.
+**For users in mainland China:** [Codex subscription sign-in](https://learn.chatgpt.com/docs/auth) requires your own account and a connection to OpenAI services. If OpenAI is unavailable from your location or network, this option will not work. DeepSeek, Qwen and Kimi use keys from their own platforms instead of Codex subscription sign-in. Confirm your choice with the setup wizard's model test.
+
+The setup wizard automatically uses Chinese or English.
 
 > Pairing confirms only the WeChat connection. The terminal model test confirms whether the assistant can handle tasks. If setup needs attention, send **setup-status**.
 
@@ -114,39 +115,21 @@ See the [English user guide](USER-GUIDE.en.md) for branch or commit reviews, sav
 
 To upgrade, rerun the installation command in [Quick start](#quick-start). Standard installations also prompt you when a stable update is available and upgrade only after you confirm. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments and recovery.
 
-## Login QR codes
+The installer guides you through the first WeChat login. To get a new QR code later, run one of these commands without finding the installation directory.
 
-These examples run from the installed source directory on Linux or macOS. Windows uses the same `setup.mjs wechat-login` command; see [QR maintenance](CONFIGURATION.md#二维码维护) for the private Node path.
-
-### First login
-
-If already installed but not yet paired, run:
+**Linux / macOS**:
 
 ```sh
-cd ~/.local/share/weixin-link/source
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/setup.mjs wechat-login --human
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh)" -- login
 ```
 
-### Login again after an upgrade
+**Windows x64**:
 
-Upgrading does not require another scan while the WeChat binding is valid. If the account was unbound, or its service is running but not ready, explicitly start a new login:
-
-```sh
-cd ~/.local/share/weixin-link/source
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/setup.mjs wechat-login --relogin --human
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1'))) -Action login
 ```
 
-### Login with another account
-
-Use a separate profile for each WeChat account. Create the profile in the installed source directory, then get its QR code. Skip the creation command if the profile already exists:
-
-```sh
-cd ~/.local/share/weixin-link/source
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/account-manager.mjs create bot2
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/setup.mjs wechat-login bot2 --human
-```
-
-If the `bot2` service is still running and needs a new login, use `node src/setup/setup.mjs wechat-login --relogin bot2 --human`. The command waits for login; if WeChat requests a PIN, enter it when prompted in the same terminal. See [QR maintenance](CONFIGURATION.md#二维码维护) for custom installation paths and other options.
+If you have unbound the WeChat account and need to authorize it again, replace `login` at the end with `relogin`. See [QR maintenance](CONFIGURATION.md#二维码维护) for additional accounts.
 
 ## More capabilities and documentation
 

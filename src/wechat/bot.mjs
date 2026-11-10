@@ -129,7 +129,7 @@ let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(state
 let savedSetupLanguage;try{savedSetupLanguage=(await readTerminalSetupStatus(stateDir))?.language}catch{}
 const noticeLanguage=savedSetupLanguage??setupLanguage()
 const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,language:noticeLanguage,
- welcomeText:async()=>{let result,profile;try{result=await readTerminalSetupStatus(stateDir);profile=await readProviderProfile(stateDir)}catch{}return result?.provider===agent.providerKind&&result.fingerprint===terminalSetupFingerprint(profile)?noticeLanguage==='en'?`Weixin Link is connected. ${result.model??'The subscription model'} passed a real inference test during setup. You can start chatting.`:'微信助手已连接，'+(result.model??'订阅模型')+' 已通过安装终端的真实推理测试。现在可以直接聊天。':welcomeMessage(noticeLanguage)},
+ welcomeText:async()=>{let result,profile;try{result=await readTerminalSetupStatus(stateDir);profile=await readProviderProfile(stateDir)}catch{}return result?.provider===agent.providerKind&&result.fingerprint===terminalSetupFingerprint(profile)?noticeLanguage==='en'?`Weixin Link is connected. ${result.model??'The subscription model'} passed a real inference test during setup. You can start chatting.`:'微信助手已连接，'+(result.model??'订阅模型')+' 已通过安装终端的真实推理测试。现在可以直接聊天。':welcomeMessage(noticeLanguage,account.id)},
  send:(owner,text)=>view.announcement(owner,text),log})
 const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace

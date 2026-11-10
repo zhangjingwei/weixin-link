@@ -1,4 +1,8 @@
 ﻿# Install or upgrade a standard Windows deployment from one PowerShell entry.
+param(
+    [ValidateSet('install','setup','login','relogin','account-create','help')][string]$Action = 'install',
+    [string]$Account = 'default'
+)
 $ErrorActionPreference = 'Stop'
 $bootstrapLocale = if($env:WEIXIN_LINK_LANG){$env:WEIXIN_LINK_LANG}elseif($env:LC_ALL){$env:LC_ALL}else{[cultureinfo]::CurrentUICulture.Name}
 $bootstrapEnglish = $bootstrapLocale -match '^en(?:[-_.@]|$)'
@@ -7,6 +11,34 @@ if ([Environment]::OSVersion.Platform -ne 'Win32NT' -or $env:PROCESSOR_ARCHITECT
 }
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $bootstrapHome = [Environment]::GetFolderPath('UserProfile')
+if($Action -eq 'help') { if($bootstrapEnglish){Write-Output 'Usage: .\install.ps1 -Action setup|login|relogin|account-create [-Account NAME]. Without -Action: install or upgrade.'}else{Write-Output '用法：.\install.ps1 -Action setup|login|relogin|account-create [-Account 账号]。不指定 -Action 时安装或升级。'}; return }
+if ($Action -ne 'install') {
+    if ($Account -cnotmatch '^[a-z][a-z0-9-]{0,31}$') { throw 'INVALID_ACCOUNT_ID' }
+    if ($Action -eq 'account-create' -and $Account -eq 'default') { throw 'ACCOUNT_NAME_REQUIRED' }
+    $bootstrapDest = if ($env:WEIXIN_LINK_DIR) { $env:WEIXIN_LINK_DIR } elseif ($env:ZERO_LINK_DIR) { $env:ZERO_LINK_DIR } else { Join-Path $bootstrapHome '.local\share\weixin-link\source' }
+    if (!$env:WEIXIN_LINK_DIR -and !$env:ZERO_LINK_DIR -and !(Test-Path -LiteralPath $bootstrapDest) -and (Test-Path -LiteralPath (Join-Path $bootstrapHome '.local\share\zero-link\source'))) { $bootstrapDest = Join-Path $bootstrapHome '.local\share\zero-link\source' }
+    $bootstrapDest = [IO.Path]::GetFullPath($bootstrapDest)
+    $maintenanceSource = Get-Item -LiteralPath $bootstrapDest -Force -ErrorAction SilentlyContinue
+    if (!$maintenanceSource -or !$maintenanceSource.PSIsContainer -or ($maintenanceSource.Attributes -band [IO.FileAttributes]::ReparsePoint) -or !(Test-Path -LiteralPath (Join-Path $bootstrapDest 'src\setup\setup.mjs') -PathType Leaf) -or !(Test-Path -LiteralPath (Join-Path $bootstrapDest 'package.json') -PathType Leaf)) { throw 'INSTALLATION_NOT_FOUND' }
+    $maintenancePackage = Get-Content -LiteralPath (Join-Path $bootstrapDest 'package.json') -Raw | ConvertFrom-Json
+    if($maintenancePackage.name -notin @('weixin-link','wechat-ping-bot')){throw 'INSTALLATION_NOT_FOUND'}
+    if(!(Test-Path -LiteralPath (Join-Path $bootstrapDest 'src\setup\account-manager.mjs') -PathType Leaf)){throw 'UPGRADE_REQUIRED_FOR_MAINTENANCE'}
+    $bootstrapNode = Join-Path $bootstrapHome '.local\share\wechat-ping-bot\tools\node\node.exe'
+    if (!(Test-Path -LiteralPath $bootstrapNode)) { $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue; if (!$nodeCommand) { throw 'NODE_24_REQUIRED' }; $bootstrapNode = $nodeCommand.Source }
+    $env:HOME = $bootstrapHome
+    $env:PATH = (Split-Path -Parent $bootstrapNode) + ';' + $env:PATH
+    Push-Location $bootstrapDest
+    try {
+        switch ($Action) {
+            'setup' { & $bootstrapNode 'src/setup/setup.mjs' wizard $Account --human }
+            'login' { & $bootstrapNode 'src/setup/setup.mjs' wechat-login $Account --human }
+            'relogin' { & $bootstrapNode 'src/setup/setup.mjs' wechat-login --relogin $Account --human }
+            'account-create' { & $bootstrapNode 'src/setup/account-manager.mjs' create $Account --human }
+        }
+        if ($LASTEXITCODE -ne 0) { throw "SETUP_FAILED_$Action" }
+    } finally { Pop-Location }
+    return
+}
 $bootstrapRef = if ($env:WEIXIN_LINK_REF) { $env:WEIXIN_LINK_REF } elseif ($env:ZERO_LINK_REF) { $env:ZERO_LINK_REF } else { 'latest' }
 if ($bootstrapRef -eq 'latest') {
     $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/zhangjingwei/weixin-link/releases/latest'
@@ -26,9 +58,10 @@ if (!$env:WEIXIN_LINK_DIR -and !$env:ZERO_LINK_DIR -and (Get-Item -LiteralPath (
 $bootstrapExisting = Get-Item -LiteralPath $bootstrapDest -Force -ErrorAction SilentlyContinue
 if ($bootstrapExisting) {
     if (!$bootstrapExisting.PSIsContainer -or ($bootstrapExisting.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Installation directory already exists but is not a supported installation.' }
-    foreach ($bootstrapRequired in @('package.json', 'src\wechat\account-manager.mjs', 'src\setup\setup.mjs')) {
+    foreach ($bootstrapRequired in @('package.json', 'src\setup\setup.mjs')) {
         if (!(Test-Path -LiteralPath (Join-Path $bootstrapDest $bootstrapRequired) -PathType Leaf)) { throw 'Installation directory already exists but is not a supported installation.' }
     }
+    if (!(Test-Path -LiteralPath (Join-Path $bootstrapDest 'src\setup\account-manager.mjs') -PathType Leaf) -and !(Test-Path -LiteralPath (Join-Path $bootstrapDest 'src\wechat\account-manager.mjs') -PathType Leaf)) { throw 'Installation directory already exists but is not a supported installation.' }
     $bootstrapPackage = Get-Content -LiteralPath (Join-Path $bootstrapDest 'package.json') -Raw | ConvertFrom-Json
     if ($bootstrapPackage.name -notin @('weixin-link', 'wechat-ping-bot')) { throw 'Unrecognized existing source directory.' }
     $bootstrapNode = Join-Path $bootstrapHome '.local\share\wechat-ping-bot\tools\node\node.exe'

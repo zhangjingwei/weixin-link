@@ -15,7 +15,19 @@ if test -z "${WEIXIN_LINK_DIR:-}${ZERO_LINK_DIR:-}" && { test -e "$HOME/.local/s
   fi
   bootstrap_dest="$HOME/.local/share/zero-link/source"
 fi
-if test "$#" -ne 0; then if test "$bootstrap_english" = 1; then echo 'Usage: sh install.sh' >&2; else echo '用法：sh install.sh' >&2; fi; exit 1; fi
+bootstrap_command=${1:-install}
+if test "$bootstrap_command" = help || test "$bootstrap_command" = --help || test "$bootstrap_command" = -h; then
+ if test "$bootstrap_english" = 1; then echo 'Usage: sh install.sh [setup|login|relogin|account-create] [account]'; echo 'No subcommand: install or upgrade. Maintenance subcommands use the existing local installation.'; else echo '用法：sh install.sh [setup|login|relogin|account-create] [账号]'; echo '不加子命令时安装或升级；维护子命令使用现有本地安装。'; fi
+ exit 0
+fi
+case "$bootstrap_command" in install|setup|login|relogin|account-create) ;; *) if test "$bootstrap_english" = 1; then echo 'Usage: sh install.sh [setup|login|relogin|account-create] [account]' >&2; else echo '用法：sh install.sh [setup|login|relogin|account-create] [账号]' >&2; fi; exit 1;; esac
+if test "$bootstrap_command" = install; then
+ test "$#" -eq 0 || test "$#" -eq 1 || { echo 'INSTALL_ARGUMENTS_INVALID' >&2; exit 1; }
+else
+ test "$#" -le 2 || { echo 'INSTALL_ARGUMENTS_INVALID' >&2; exit 1; }
+fi
+bootstrap_account=${2:-default}
+if test "$bootstrap_command" = account-create && test "$#" -ne 2; then echo 'ACCOUNT_NAME_REQUIRED' >&2; exit 1; fi
 if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
   if test -L "$bootstrap_dest" || ! test -d "$bootstrap_dest" || ! test -f "$bootstrap_dest/package.json" || { ! test -f "$bootstrap_dest/src/setup/account-manager.mjs" && ! test -f "$bootstrap_dest/src/wechat/account-manager.mjs"; } || ! test -f "$bootstrap_dest/src/setup/setup.mjs"; then
     echo "Installation directory already exists but is not a supported installation: $bootstrap_dest" >&2; exit 1
@@ -26,8 +38,9 @@ if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
     echo 'Existing installation needs Node.js 24+ before upgrading.' >&2; exit 1
   fi
   "$bootstrap_node" -e 'const p=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8"));if(!["weixin-link","wechat-ping-bot"].includes(p.name))process.exit(1)' "$bootstrap_dest/package.json" || { echo 'Unrecognized existing source directory.' >&2; exit 1; }
-  bootstrap_mode=upgrade
+  if test "$bootstrap_command" = install; then bootstrap_mode=upgrade; else bootstrap_mode=maintenance; fi
 else
+  if test "$bootstrap_command" != install; then if test "$bootstrap_english" = 1; then echo 'No installation was found. Run the installer without a subcommand first.' >&2; else echo '未找到已安装版本，请先运行不带子命令的安装命令。' >&2; fi; exit 1; fi
   bootstrap_mode=install
   case "$(uname -s)" in
     Linux)
@@ -44,6 +57,18 @@ else
       fi
       ;;
   esac
+fi
+if test "$bootstrap_mode" = maintenance; then
+  if ! test -f "$bootstrap_dest/src/setup/account-manager.mjs"; then if test "$bootstrap_english" = 1; then echo 'This installed version needs an upgrade before using maintenance subcommands.' >&2; else echo '当前安装版本需先升级，才能使用维护子命令。' >&2; fi; exit 1; fi
+  PATH="$(dirname "$bootstrap_node"):$PATH"; export PATH
+  cd "$bootstrap_dest"
+  case "$bootstrap_command" in
+   setup) "$bootstrap_node" src/setup/setup.mjs wizard "$bootstrap_account" --human ;;
+   login) "$bootstrap_node" src/setup/setup.mjs wechat-login "$bootstrap_account" --human ;;
+   relogin) "$bootstrap_node" src/setup/setup.mjs wechat-login --relogin "$bootstrap_account" --human ;;
+   account-create) "$bootstrap_node" src/setup/account-manager.mjs create "$bootstrap_account" --human ;;
+  esac
+  exit 0
 fi
 for bootstrap_cmd in curl tar mktemp; do
   command -v "$bootstrap_cmd" >/dev/null 2>&1 || { echo "Missing prerequisite: $bootstrap_cmd" >&2; exit 1; }

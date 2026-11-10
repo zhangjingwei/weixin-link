@@ -55,6 +55,20 @@ test('same entry routes an existing installation to upgrade without running inst
  assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
  assert.equal((await readdir(f.dest)).includes('installed.txt'),false)
 })
+test('installed entry handles setup and login locally without downloading an upgrade',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t),env=await installed(f)
+ await writeFile(join(f.bin,'node'),'#!/bin/sh\nif [ "$1" = -e ]; then exit 0; fi\nprintf "%s\\n" "$*" > "$UPGRADE_CAPTURE"\n',{mode:0o755})
+ for(const [command,expected]of [['setup','wizard bot2 --human'],['login','wechat-login bot2 --human'],['relogin','wechat-login --relogin bot2 --human'],['account-create','create bot2 --human']]){
+  await exec('sh',[bootstrap,command,'bot2'],{env})
+  assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes(expected))
+ }
+ assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
+})
+test('maintenance commands require an existing installation',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t)
+ await assert.rejects(exec('sh',[bootstrap,'login'],{env:f.env}),/未找到已安装版本|No installation was found/)
+ assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
+})
 test('older manager path remains eligible for in-place upgrade',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t),env=await installed(f,{legacyManager:true})
  await exec('sh',[bootstrap],{env})

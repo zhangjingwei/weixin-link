@@ -16,3 +16,9 @@ export function languageOption(args=[]){
  }
  return {language:setupLanguage({explicit}),args:rest}
 }
+
+export function installerCommand(action,{platform=process.platform,accountId='default',language}={}){
+ if(!['setup','login','relogin','account-create'].includes(action))throw Error('INVALID_INSTALL_ACTION')
+ if(platform==='win32')return (language?'$env:WEIXIN_LINK_LANG=\''+language+'\'; ':'')+"& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1'))) -Action "+action+(accountId==='default'?'':' -Account '+accountId)
+ return (language?'WEIXIN_LINK_LANG='+language+' ':'')+'sh -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh)" -- '+action+(accountId==='default'?'':' '+accountId)
+}

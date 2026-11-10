@@ -2,10 +2,11 @@ import {createHash,randomUUID} from 'node:crypto'
 import {readFile,writeFile,rename,unlink,lstat} from 'node:fs/promises'
 import {join} from 'node:path'
 import {deliveryError} from '../infrastructure/wechat/delivery-error.mjs'
+import {installerCommand} from '../setup/setup-locale.mjs'
 
 const RELEASE=/^[0-9a-f]{7,40}$/
-export const WELCOME_MESSAGE='微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 node src/setup/setup.mjs wizard。'
-export const welcomeMessage=language=>language==='en'?'Weixin Link is connected. Complete model setup in your computer terminal with node src/setup/setup.mjs wizard --lang en if needed.':WELCOME_MESSAGE
+export const WELCOME_MESSAGE='微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 '+installerCommand('setup',{language:'zh'})+'。'
+export const welcomeMessage=(language,accountId='default')=>language==='en'?'Weixin Link is connected. Complete model setup in your computer terminal with '+installerCommand('setup',{accountId,language:'en'})+' if needed.':'微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 '+installerCommand('setup',{accountId,language:'zh'})+'。'
 export const upgradeMessage=(commit,language='zh')=>language==='en'?`Weixin Link upgraded to ${commit.slice(0,7)} and is connected. Send status to view tasks, diagnostics to check the service, or guide for help.`:`微信助手已升级到 ${commit.slice(0,7)}，服务已连接。可直接发消息；发「状态」查看任务，发「诊断」检查服务，发「使用说明」查看帮助。`
 
 export class LifecycleNotice{

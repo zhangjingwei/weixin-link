@@ -6,7 +6,7 @@ Send English commands as plain text, without a slash. Commands are case insensit
 
 1. Follow the installation steps in README.en.md on your computer, then scan the WeChat QR code. If WeChat asks for a PIN, enter it in the terminal showing the QR code.
 2. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
-3. After the model test passes, scan the WeChat QR code. The assistant will send a connection message. If you skipped model setup, run `node src/setup/setup.mjs wizard` from the source directory to continue.
+3. After the model test passes, scan the WeChat QR code. The assistant will send a connection message. If you skipped model setup, run `sh install.sh setup` from the source directory to continue (Windows: `install.ps1 -Action setup`).
 
 - `setup`: Show how to start the setup wizard on your computer.
 

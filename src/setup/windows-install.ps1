@@ -36,6 +36,6 @@ Push-Location $sourceRoot
 try{
  foreach($step in @('init','deps')){& $node (Join-Path $sourceRoot 'src/setup/setup.mjs') $step --human;if($LASTEXITCODE -ne 0){throw "SETUP_FAILED_$step"}}
  if(-not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected){& $node (Join-Path $sourceRoot 'src/setup/setup.mjs') wizard --human;if($LASTEXITCODE -ne 0){throw 'SETUP_FAILED_wizard'}}
- else{if($setupEnglish){Write-Output 'This terminal is not interactive, so model setup was skipped. Run node src/setup/setup.mjs wizard from the source directory later.'}else{Write-Output '当前终端无法交互，已跳过模型设置。稍后可在源码目录运行 node src/setup/setup.mjs wizard。'}}
+ else{if($setupEnglish){Write-Output 'This terminal is not interactive, so model setup was skipped. Run .\install.ps1 -Action setup from the source directory later.'}else{Write-Output '当前终端无法交互，已跳过模型设置。稍后可在源码目录运行 .\install.ps1 -Action setup。'}}
  foreach($step in @('services','wechat-login')){& $node (Join-Path $sourceRoot 'src/setup/setup.mjs') $step --human;if($LASTEXITCODE -ne 0){throw "SETUP_FAILED_$step"}}
 }finally{Pop-Location}

@@ -55,9 +55,9 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 
 安装器会先在终端提示选择订阅登录、DeepSeek、Qwen 或 Kimi，完成模型测试后显示微信二维码。扫码成功后，助手会推送安装结果。第三方密钥只在电脑终端输入，不要发到微信。
 
-**模型访问说明：** 选择 [Codex 订阅登录](https://learn.chatgpt.com/docs/auth)，需要你自己的账号，并确保安装设备能正常访问 OpenAI 服务。DeepSeek、Qwen、Kimi 使用各自平台的密钥接入，不需要 Codex 订阅，也不受 OpenAI 订阅登录的访问限制。能否正常使用，以安装向导的模型测试为准。
+**中国大陆用户注意：** [Codex 订阅登录](https://learn.chatgpt.com/docs/auth) 需要你自己的账号，还要能访问 OpenAI 服务。如果所在地或网络无法连接 OpenAI，这种方式就用不了。DeepSeek、Qwen、Kimi 使用各自平台的密钥，不走 OpenAI 订阅登录。选好模型后，请以安装向导的测试结果为准。
 
-模型向导会根据终端语言环境自动使用中文或英文；需要指定时，在源码目录运行 `node src/setup/setup.mjs wizard --lang zh` 或 `node src/setup/setup.mjs wizard --lang en`。
+安装向导会自动选择中文或英文。
 
 > 扫码成功只确认微信已连接。终端显示模型测试通过后，才能确认助手可以处理任务。安装遇到问题时，发送 **安装状态**。
 
@@ -115,41 +115,21 @@ Linux/macOS 需要 curl、tar。Windows ARM64 暂不支持。
 
 升级时，重新执行[快速开始](#快速开始)中的安装命令。标准安装也会在发现正式更新时提示，确认后才升级。自定义部署与恢复步骤见[配置与维护](CONFIGURATION.md#已有安装与升级)。
 
-## 登录二维码
+首次扫码由安装器带你完成。以后需要重新获取二维码，可直接运行下面的命令，不用找安装目录。
 
-以下示例适用于 Linux/macOS，从已安装的源码目录运行。Windows 使用相同的 `setup.mjs wechat-login` 命令；私有 Node 的完整路径见[二维码维护](CONFIGURATION.md#二维码维护)。
-
-### 首次登录
-
-已经安装但尚未扫码时，可单独运行：
+**Linux / macOS**：
 
 ```sh
-cd ~/.local/share/weixin-link/source
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/setup.mjs wechat-login --human
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh)" -- login
 ```
 
-### 升级后再次登录
+**Windows x64**：
 
-再次执行安装命令会检查并升级已有部署；源码已是目标版本时不会重启，也不会重复运行模型向导或要求扫码。如果微信绑定仍有效，无需运行二维码命令。若已解绑，或账号服务仍在运行但尚未就绪，明确选择重新登录：
-
-```sh
-cd ~/.local/share/weixin-link/source
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/setup.mjs wechat-login --relogin --human
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1'))) -Action login
 ```
 
-### 登录不同账号
-
-每个微信账号使用单独的账号档案。先在安装源码目录创建新档案，再获取它的二维码；已创建过的档案可跳过创建命令：
-
-```sh
-cd ~/.local/share/weixin-link/source
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/account-manager.mjs create bot2
-PATH="$HOME/.local/share/wechat-ping-bot/tools/node/bin:$PATH" node src/setup/setup.mjs wechat-login bot2 --human
-```
-
-如果 `bot2` 的服务仍在运行且需要重新授权，使用 `node src/setup/setup.mjs wechat-login --relogin bot2 --human`。扫码后命令会等待登录结果；若手机要求 PIN，同一个终端会提示输入。自定义安装目录和其他维护方式见[二维码维护](CONFIGURATION.md#二维码维护)。
-
-登录服务返回 HTTPS 地址时，命令会在本机图形桌面尝试打开浏览器，并在终端显示地址；仍会保留二维码 PNG。Windows 首次安装也会尝试打开该地址。SSH 会话只显示地址和二维码，不会在远端弹浏览器。地址可能过期，请勿分享。
+如果已在微信解绑，需要重新授权，将命令末尾的 `login` 改为 `relogin`。添加其他微信账号等操作见[二维码维护](CONFIGURATION.md#二维码维护)。
 
 ## 更多能力与文档
 
