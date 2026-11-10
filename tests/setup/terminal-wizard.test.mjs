@@ -60,6 +60,7 @@ test('terminal probe passes Responses configuration and checks the model output'
  const result=await probeTerminalModel({home:f.home,execute:async(binary,args,options)=>{captured={binary,args,options};const path=args[args.indexOf('--output-last-message')+1],nonce=args.at(-1).split('：').at(-1);await writeFile(path,nonce+'\n')}})
  assert.equal(result.provider,'kimi');assert.equal(result.verified,true)
  assert(captured.args.includes('--ephemeral'));assert(captured.args.join(' ').includes('wire_api="responses"'))
+ assert(captured.args.includes('features.respect_system_proxy=true'))
  assert(captured.args.join(' ').includes('model_context_window=1048576'))
  assert(!captured.args.join(' ').includes('sk-private-test-key'))
  assert.equal(captured.options.env.WECHAT_KIMI_API_KEY,'sk-private-test-key')

@@ -31,7 +31,7 @@ export function codexProviderOptions(env = process.env, {prefix = PROVIDER_PREFI
   const search = value('WEB_SEARCH') ?? 'live'
   if (!['live', 'cached', 'disabled'].includes(search)) throw Error('Invalid Codex web search mode')
   return {
-    args: ['app-server', ...Object.entries(nativeMemoryConfig).flatMap(([key,value])=>['-c',`${key}=${value}`]), ...overrides, '-c', `web_search="${search}"`, '--listen', 'stdio://'],
+    args: ['app-server', '-c', 'features.respect_system_proxy=true', ...Object.entries(nativeMemoryConfig).flatMap(([key,value])=>['-c',`${key}=${value}`]), ...overrides, '-c', `web_search="${search}"`, '--listen', 'stdio://'],
     thread: {...(model ? {model} : {}),
       ...(provider ? {modelProvider: provider} : {}),
       ...(reasoningEffort ? {reasoningEffort} : {})},
