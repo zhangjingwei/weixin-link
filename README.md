@@ -8,7 +8,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-[快速开始](#快速开始) · [使用场景](#使用场景) · [常用命令](#常用命令) · [安装与升级](#安装与升级)
+[快速开始](#快速开始) · [使用场景](#使用场景) · [常用命令](#常用命令)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 ![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-417E38)
@@ -39,42 +39,51 @@
 
 ## 快速开始
 
-**运行安装命令 → 在终端向导选择并验证模型 → 打开微信登录地址并确认 → 收到连接结果。** 需要自己的微信账号，受支持的模型服务或者Codex 订阅；Node.js 24+ 由安装器按需准备。
+### 首次安装
 
-**Linux / macOS**：在电脑终端执行：
+Linux / macOS：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
 ```
 
-**Windows x64**：在 PowerShell 执行：
+Windows x64（PowerShell）：
 
 ```powershell
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-安装器会先在终端提示选择订阅登录、DeepSeek、Qwen 或 Kimi，完成模型测试后显示微信登录地址，并尝试打开浏览器。登录成功后，助手会推送安装结果。第三方密钥只在电脑终端输入，不要发到微信。
+按提示选择模型、登录微信。中国大陆如果无法访问 OpenAI，使用 [Codex 订阅](https://learn.chatgpt.com/docs/auth) 需自行解决访问问题；DeepSeek、Qwen、Kimi 不受此限制。
 
-**中国大陆用户注意：** [Codex 订阅登录](https://learn.chatgpt.com/docs/auth) 需要你自己的账号，还要能访问 OpenAI 服务。如果所在地或网络无法连接 OpenAI，这种方式就用不了。DeepSeek、Qwen、Kimi 使用各自平台的密钥，不走 OpenAI 订阅登录。选好模型后，请以安装向导的测试结果为准。
+### 升级
 
-安装向导会自动选择中文或英文。
+运行命令，在菜单中选择“1 升级”：
 
-> 微信登录成功只确认通道已连接。终端显示模型测试通过后，才能确认助手可以处理任务。安装遇到问题时，发送 **安装状态**。
+```sh
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
+```
 
-<details>
-<summary>平台支持与安装要求</summary>
+Windows x64（PowerShell）：
 
-| 平台 | 支持架构 | 要求与验证状态 |
-| --- | --- | --- |
-| Linux | arm64 / x64 | 已有部署验证 |
-| macOS | Apple Silicon / Intel | 已登录的图形会话；已验证扫码和文字收发，完整验收仍在进行 |
-| Windows | x64 | 需允许运行 PowerShell 脚本；待完整真机验收 |
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
+```
 
-Linux/macOS 需要 curl、tar。Windows ARM64 暂不支持。
+### 重新登录微信
 
-已发布正式版 [v1.3.3](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.3.3)，尚无长期版本兼容承诺。更多要求与维护步骤见 [配置说明](CONFIGURATION.md)。
+运行命令，在菜单中选择“3 重新登录微信”：
 
-</details>
+```sh
+curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
+```
+
+Windows x64（PowerShell）：
+
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
+```
+
+支持 Linux（x64、arm64）、macOS（Intel、Apple Silicon）和 Windows（x64）。
 
 ## 使用场景
 
@@ -110,26 +119,6 @@ Linux/macOS 需要 curl、tar。Windows ARM64 暂不支持。
 | `使用说明` | 查看完整用法和更多命令 |
 
 需要审查指定分支或提交、恢复会话、管理附件或排查问题时，见[使用指南](USER-GUIDE.md)。
-
-## 安装与升级
-
-升级时，重新执行[快速开始](#快速开始)中的安装命令，在菜单中选择“1 升级”。标准安装也会在发现正式更新时提示，确认后才升级。自定义部署与恢复步骤见[配置与维护](CONFIGURATION.md#已有安装与升级)。
-
-首次微信登录由安装器带你完成。以后需要重新登录，再运行同一条安装命令，在菜单里选“3 重新登录微信”。不用找安装目录。
-
-**Linux / macOS**：
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | sh
-```
-
-**Windows x64**：
-
-```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
-```
-
-添加其他微信账号时，在菜单里选“4 添加微信账号”。其他情况见[微信登录维护](CONFIGURATION.md#微信登录维护)。
 
 ## 更多能力与文档
 
