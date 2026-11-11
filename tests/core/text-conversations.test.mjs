@@ -102,3 +102,21 @@ test('busy descendant blocks native destructive call',async()=>{const {r,catalog
 test('successful delete notification arriving before RPC response does not close the writer early',async()=>{const {r,manager,rpc}=fixture();const key=r.find('alice','2').key;let closed=false;const request=rpc.request;const writer={...rpc,close:()=>{closed=true},request:async(m,p)=>{if(m==='thread/delete'){await manager.onConversationDelete(p.threadId);assert.equal(closed,false)}return request(m,p)}};manager.sessions.set(key,{userId:key,rpc:writer,queue:[]});await r.deleteConversation('alice',r.find('alice','2'),async()=>{});assert(closed);assert(r.find('alice','2').deleted)});
 test('deleting current conversation delivers the acknowledgement even after selecting its replacement',async()=>{const {r}=fixture();const message=r.bind({userId:'alice',text:'删除1'}),sent=[];await r.control(message,(value,options)=>r.deliver(message.userId,value,options,async(k,v)=>{sent.push(v);return {status:'accepted'}}));assert.equal(r.ensure('alice').active,'2');assert.match(sent.at(-1),/已永久删除会话1/);assert.equal(r.find('alice','1').unread.length,0);const status=await r.deliver('alice','late deleted history',{},async()=>{throw Error('Must not deliver')});assert.equal(status.status,'cancelled')});
 test('archiving current conversation also delivers management reply directly',async()=>{const {r}=fixture();const message=r.bind({userId:'alice',text:'归档1'}),sent=[];await r.control(message,(value,options)=>r.deliver(message.userId,value,options,async(k,v)=>{sent.push(v);return {status:'accepted'}}));assert.equal(r.ensure('alice').active,'2');assert.match(sent.at(-1),/已归档会话1/)});
+
+test('daily conversation has a stable label after blank title refresh and named title updates',async()=>{
+ const {r,manager}=fixture(),out=[];
+ await r.control(r.bind({userId:'alice',text:'切换'}),async text=>out.push(text));
+ assert.match(out.at(-1),/1\. 日常助手/);
+ assert.doesNotMatch(out.at(-1),/1\. 未命名对话/);
+ assert.equal(r.find('alice','1').name,'未命名对话 1'); // display does not rename the native thread
+ await r.titleUpdated('thread-a','购物计划');
+ assert.equal(r.displayName('alice',r.find('alice','1')),'日常助手 · 购物计划');
+ await r.titleUpdated('thread-a',null);
+ assert.equal(r.displayName('alice',r.find('alice','1')),'日常助手');
+ // Daily identity follows dailyId, even after the original daily conversation is replaced.
+ r.bind({userId:'alice',text:'取消'});
+ const extra=create(r,'new daily');r.ensure('alice').dailyId=r.entry(extra.userId).id;
+ assert.equal(r.displayName('alice',r.entry(extra.userId)),'日常助手 · 未命名项目 3');
+ assert.equal(r.displayName('alice',r.find('alice','1')),'未命名对话 1');
+ assert.equal(manager.state.users.alice.threadId,'thread-a');
+});

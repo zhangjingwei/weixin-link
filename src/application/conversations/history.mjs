@@ -15,7 +15,7 @@ export async function history(context,owner,entry,cmd,reply){if(entry?.deleted){
    if(text&&(!cmd.q||text.toLowerCase().includes(cmd.q.toLowerCase())))messages.push({role:item.type==='userMessage'?'你':'助手',text,round:index+1,time:turn.startedAt});
   }
  }
- const title=`会话${entry.id} · ${entry.name} ${cmd.action==='search'?'最近50轮搜索结果':'历史'}`;
+ const title=`会话${entry.id} · ${context.displayName?context.displayName(owner,entry):entry.name} ${cmd.action==='search'?'最近50轮搜索结果':'历史'}`;
  const parts=historyParts(messages);
  for(let index=0;index<parts.length;index++){
   await reply(`${title}\n${cmd.action==='older'?'更早记录':'最近记录'} · 本页从早到晚，最新在下 · ${index+1}/${parts.length}\n\n${parts[index]}`);

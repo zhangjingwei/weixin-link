@@ -46,7 +46,7 @@ export const USER_GUIDE=`微信助手使用说明
 - “日常”：切回日常会话。
 - “新建”：按提示输入项目名。
 - “命名”：按提示输入新名称。
-- “切换”：显示日常和项目列表，回复前面的序号。序号每次从 1 开始，只用于这次选择。
+- “切换”：显示日常和项目列表，回复前面的序号。日常会话显示为“日常助手”，已有标题时显示“日常助手 · 标题”。序号每次从 1 开始，只用于这次选择。
 - “历史”：先显示可查看的会话列表，再回复序号查看最近5轮；页内从早到晚，最新在下。长消息自动分段完整展示，已归档会话也会列出。
 - “翻页”：查看更早的历史。
 - “搜索”：按提示输入关键词，搜索当前会话最近 50 轮。
@@ -178,7 +178,7 @@ Projects and the everyday conversation share one WeChat chat. For archive, resto
 - daily: Return to the everyday conversation.
 - new: Enter a name for a new project when prompted.
 - rename: Enter a new name when prompted.
-- switch: Show conversations, then reply with the number of the one to use.
+- switch: Show conversations, then reply with the number of the one to use. The daily conversation is labeled 日常助手, with its title appended when available.
 - history: Show conversations, including archived ones, then reply with a number to read its latest 5 turns, oldest first within the page. Long messages are delivered in full across numbered parts.
 - older: See earlier history.
 - search: Enter a term to search the latest 50 turns of the current conversation.

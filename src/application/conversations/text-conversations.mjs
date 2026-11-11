@@ -10,6 +10,11 @@ export class TextConversations{
  constructor(manager,owners,parseInput,backendPort){if(typeof parseInput!=='function')throw Error('CONVERSATION_INPUT_PARSER_REQUIRED');this.parseInput=parseInput;this.backendPort=backendPort?defineConversationBackendPort(backendPort):null;this.manager=manager;this.realOwners=new Set(owners);manager.state.textConversations??={};this.root=manager.state.textConversations;this.pages=new Map();for(const owner of owners)this.ensure(owner);manager.onConversationTitle=(threadId,name)=>this.titleUpdated(threadId,name);if(this.backendPort?.capabilities.catalog!==false)this.installOfficialHooks()}
  installOfficialHooks(...args){return installOfficialHooks(this,...args)}
  ensure(owner){if(!this.realOwners.has(owner))throw Error('未授权用户');if(!this.root[owner]){const saved=this.manager.state.users[owner]??{};const entries=[{id:'1',key:owner,name:'原有对话'}];for(const tid of [...new Set(saved.previous??[])].filter(t=>t!==saved.threadId)){const key=owner+'#conversation#'+randomUUID();entries.push({id:String(entries.length+1),key,name:'历史对话 '+(entries.length+1)});this.manager.state.users[key]={threadId:tid,hasMessages:true};}this.root[owner]={active:'1',entries};}const r=this.root[owner];if(!Object.hasOwn(r,'dailyId'))r.dailyId=(r.entries.find(e=>e.key===owner&&!e.deleted)??r.entries.find(e=>e.id===r.active&&!e.deleted)??r.entries.find(e=>!e.deleted))?.id??null;for(const e of this.root[owner].entries)this.manager.owners.add(e.key);return this.root[owner]}
+ displayName(owner,entry){
+  if(entry.id!==this.ensure(owner).dailyId)return entry.name;
+  const name=entry.name?.trim();
+  return !name||/^(?:原有对话|未命名对话 \d+|日常助手)$/.test(name)?'日常助手':`日常助手 · ${name}`;
+ }
  entry(key){for(const [owner,r]of Object.entries(this.root)){const entry=r.entries.find(e=>e.key===key);if(entry)return {...entry,owner};}return null}
  recipient(key){return this.entry(key)?.owner??key}
  find(owner,id){const r=this.ensure(owner);return id?r.entries.find(e=>e.id.toLowerCase()===id.toLowerCase()||this.manager.state.users[e.key]?.threadId===id):r.entries.find(e=>e.id===r.active)}
@@ -55,10 +60,10 @@ export class TextConversations{
   const selectable=r.entries.filter(e=>(selecting||e.id!==r.dailyId)&&!e.archived&&!e.deleted)
   const lines=selectable.map((e,index)=>{
    const session=this.manager.sessions.get(e.key),current=e.id===r.active?' [当前]':''
-   if(local)return `${selecting?index+1:e.id}. ${e.name}${current}${session?.busy?' · 执行中':''}`
+   if(local)return `${selecting?index+1:e.id}. ${this.displayName(owner,e)}${current}${session?.busy?' · 执行中':''}`
    const recovery=this.manager.state.users[e.key]?.recovery?.execution
    const status=session?.busy||e.officialStatus==='active'?'执行中':session?.finishing?'发送中':e.deleteIntent?'删除状态待核对':e.archiveSync==='missing'?'Codex记录缺失':e.archiveIntent!==undefined?'归档状态待核对':recovery==='unknown'?'结果待核对':!this.manager.state.users[e.key]?.threadId?'尚未连接Codex':'空闲'
-   return `${selecting?index+1:e.id}. ${e.name}${current} · ${status}`
+   return `${selecting?index+1:e.id}. ${this.displayName(owner,e)}${current} · ${status}`
   })
   if(selecting){
    const choices=selectable.map(e=>e.id)
@@ -73,7 +78,7 @@ export class TextConversations{
   if(this.backendPort?.capabilities.catalog!==false)await this.refreshTitles(owner)
   const root=this.ensure(owner),entries=root.entries.filter(e=>!e.deleted),choices=entries.map(e=>e.id)
   if(root.prompt?.target==='history'){root.prompt.choices=choices;await this.manager.save()}
-  await reply('选择要查看历史的会话：\n'+(entries.length?entries.map((e,index)=>`${index+1}. ${e.name}${e.archived?'（已归档）':''}`).join('\n'):'暂无会话')+'\n回复前面的序号；发送“取消”放弃。')
+  await reply('选择要查看历史的会话：\n'+(entries.length?entries.map((e,index)=>`${index+1}. ${this.displayName(owner,e)}${e.archived?'（已归档）':''}`).join('\n'):'暂无会话')+'\n回复前面的序号；发送“取消”放弃。')
   return choices
  }
  async listOperationChoices(owner,target,reply){
@@ -82,7 +87,7 @@ export class TextConversations{
   const root=this.ensure(owner),entries=root.entries.filter(e=>!e.deleted&&(target==='unarchive'?e.archived:target==='archive'?!e.archived:!!this.manager.state.users[e.key]?.threadId)),choices=entries.map(e=>e.id)
   if(root.prompt?.target===target){root.prompt.choices=choices;await this.manager.save()}
   const label={archive:'归档',unarchive:'还原',delete:'永久删除'}[target]
-  await reply(`选择要${label}的会话：\n`+(entries.length?entries.map((e,index)=>`${index+1}. ${e.name}${e.archived?'（已归档）':''}`).join('\n'):'暂无可选会话')+'\n回复前面的序号；序号只用于这次选择。发送“取消”放弃。')
+  await reply(`选择要${label}的会话：\n`+(entries.length?entries.map((e,index)=>`${index+1}. ${this.displayName(owner,e)}${e.archived?'（已归档）':''}`).join('\n'):'暂无可选会话')+'\n回复前面的序号；序号只用于这次选择。发送“取消”放弃。')
   return choices
  }
  async control(message,reply){
