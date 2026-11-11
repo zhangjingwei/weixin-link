@@ -1,3 +1,4 @@
+import {LINK_PATTERN,localTarget} from '../media/delivery-links.mjs'
 /** Convert wide Markdown tables to readable records; preserve fenced code verbatim. */
 function cells(line){const result=[];let cell='',escaped=false,ticks=false;for(const c of line.trim()){if(escaped){cell+=c;escaped=false;continue}if(c==='\\'){escaped=true;cell+=c;continue}if(c==='`')ticks=!ticks;if(c==='|'&&!ticks){result.push(cell.trim());cell=''}else cell+=c}result.push(cell.trim());if(result[0]==='')result.shift();if(result.at(-1)==='')result.pop();return result}
 // Protect code spans, URLs and link targets before removing presentation markers.
@@ -5,9 +6,9 @@ function emphasis(text){return text.replace(/(\*\*|__)(?=\S)(.+?\S|\S)\1/g,'$2')
 function plainLine(line){
  const blocks=[],hold=value=>{const key='\u0000'+blocks.length+'\u0000';blocks.push(value);return key}
  let text=line.replace(/(`+)([^`\n]*?)\1/g,(_,ticks,code)=>hold(code))
- text=text.replace(/!?\[([^\]\n]*)\]\((?:<([^>\n]+)>|([^\s)]+))\)/g,(_,label,angled,target)=>{
+ text=text.replace(new RegExp(LINK_PATTERN),(_,label,angled,target)=>{
   const url=angled??target,name=emphasis(label)
-  return hold(/^https?:\/\//i.test(url)?(name===url?url:name+'：'+url):name)
+  return hold(/^https?:\/\//i.test(url)?(name===url?url:name+'：'+url):localTarget(url)?name+'〔附件〕':name)
  })
  text=text.replace(/https?:\/\/[^\s\u0000]+/g,url=>hold(url))
  text=text.replace(/^ {0,3}#{1,6}\s+(.+?)(?:\s+#+)?$/,'$1').replace(/^(\s*)>\s?/,'$1').replace(/^(\s*)[-+*]\s+/, '$1• ')

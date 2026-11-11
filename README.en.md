@@ -153,6 +153,8 @@ See the [official OpenAI device-code login guide](https://learn.chatgpt.com/docs
 
 Optional integrations: [Home Assistant read-only queries, SSH remote operations, and RSSHub feeds](src/integrations/README.md) require explicit per-account enablement. Backup migration to this interface remains pending.
 
+See [artifact delivery and retention](docs/artifact-delivery.md) (Chinese) for private staging, delivery failures, source cleanup, and the 7-day replay window.
+
 ## Security and license
 
 Confirm login with your own WeChat account. Do not share login addresses or device authorization codes. For subscription sign-in, use the official OpenAI authorization page. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
