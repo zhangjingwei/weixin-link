@@ -36,3 +36,13 @@ test('explicit checks run while busy, repeat on request and do not consume autom
  await controller.tick();assert.equal(sends,1)
  controller.close()
 })
+
+test('manual check still reports an available release after the owner skips its notice',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'skip-update-'));t.after(()=>rm(root,{recursive:true,force:true}))
+ await writeFile(join(root,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'v1.0.0',commit:'a'.repeat(40)}))
+ let sends=0
+ const controller=createUpdateController({stateDir:root,sourceDir:root,owners:['alice'],ready:()=>true,fetchLatest:async()=>({tag:'v1.1.0',commit:'b'.repeat(40)}),view:{notice:async()=>{sends++;return {status:'accepted'}}},log:()=>{}})
+ await controller.tick();assert.match(await controller.skip('alice'),/已跳过 v1.1.0/)
+ assert.match(await controller.check(),/有可用更新/)
+ await controller.tick();assert.equal(sends,1);controller.close()
+})

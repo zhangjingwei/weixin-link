@@ -70,7 +70,7 @@ if (testing) {
   process.exit(0)
 }
 
-const setupController=await new SetupController({stateDir,accountId:account.id,checkUpdates:language=>updates.check(language),runModelTest:options=>setupModelTest(manager,options)}).init()
+const setupController=await new SetupController({stateDir,accountId:account.id,checkUpdates:language=>updates.check(language),skipUpdate:(owner,language)=>updates.skip(owner,language),runModelTest:options=>setupModelTest(manager,options)}).init()
 const classifyMessage=createCommandClassifier()
 const conversationBackend=createCodexConversationBackend(manager)
 const conversations=new TextConversations(manager,owners,conversationInput,conversationBackend)

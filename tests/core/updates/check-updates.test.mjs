@@ -29,3 +29,23 @@ test('query command is exact, bypasses model setup and leaves interactive prompt
  await controller.handle('updates',async text=>out.push(text));await controller.handle('updatesEn',async text=>out.push(text))
  assert.deepEqual(calls,['zh','en']);assert.deepEqual(out,['version report','version report'])
 })
+
+test('skip commands target the real owner; cancel keeps priority for an existing conversation prompt',async()=>{
+ for(const text of ['不升级','取消'])assert.equal(setupCommand(text),'skipUpdate')
+ assert.equal(setupCommand('skip-update'),'skipUpdateEn')
+ assert.deepEqual(conversationInput('取消',{pending:{target:'new'}}).command,{action:'promptCancel'})
+ assert.deepEqual(conversationInput('cancel',{pending:{target:'switch'}}).command,{action:'promptCancel'})
+ const called=[],out=[],controller=new SetupController({stateDir:'/unused',skipUpdate:async(owner,language)=>{called.push([owner,language]);return 'saved'}})
+ await controller.handle('skipUpdate',async text=>out.push(text),{scope:'real-owner',executionKey:'conversation-2'})
+ assert.deepEqual(called,[['real-owner','zh']]);assert.deepEqual(out,['saved'])
+ const failed=new SetupController({stateDir:'/unused',skipUpdate:async()=>{throw Error('disk failure secret')}})
+ await failed.handle('skipUpdate',async text=>out.push(text),{scope:'real-owner'})
+ assert.match(out.at(-1),/未能确认保存/);assert.doesNotMatch(out.at(-1),/secret/)
+})
+
+test('uncertain choice acknowledgement is not followed by a second reply or a false save failure',async()=>{
+ let saved=0,sends=0
+ const controller=new SetupController({stateDir:'/unused',skipUpdate:async()=>{saved++;return '已跳过 v1.1.0'}})
+ await assert.rejects(controller.handle('skipUpdate',async()=>{sends++;throw Error('delivery unknown')},{scope:'owner'}),/delivery unknown/)
+ assert.equal(saved,1);assert.equal(sends,1)
+})

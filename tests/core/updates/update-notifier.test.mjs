@@ -84,3 +84,36 @@ test('new release notification includes publisher highlights and a pinned releas
  assert.match(f.sent[0].text,/releases\/tag\/v1.1.0/)
  await new UpdateNotifier(f.options).tick();assert.equal(f.sent.length,1)
 })
+
+test('skipped release is persisted across restart; newer releases still notify and older skipped tags stay suppressed',async t=>{
+ const f=await fixture(t)
+ let release={tag:'v1.1.0',commit:latest}
+ const options={...f.options,fetchLatest:async()=>release}
+ const notifier=new UpdateNotifier(options)
+ await notifier.tick();assert.match(await notifier.skip('owner'),/已跳过 v1.1.0/)
+ assert.equal(JSON.parse(await readFile(noticePath(f),'utf8')).status,'dismissed')
+ await new UpdateNotifier(options).tick();assert.equal(f.sent.length,1)
+ release={tag:'v1.2.0',commit:'c'.repeat(40)}
+ await new UpdateNotifier(options).tick();assert.equal(f.sent.length,2)
+ assert.deepEqual(JSON.parse(await readFile(noticePath(f),'utf8')).skippedTags,['v1.1.0'])
+ release={tag:'v1.1.0',commit:latest};await new UpdateNotifier(options).tick();assert.equal(f.sent.length,2)
+})
+test('skip applies only to the notified version and authorized owner; no record does not fetch or create a preference',async t=>{
+ const f=await fixture(t),notifier=new UpdateNotifier(f.options)
+ assert.match(await notifier.skip('owner'),/没有可跳过/)
+ await assert.rejects(readFile(noticePath(f)),{code:'ENOENT'})
+ await assert.rejects(notifier.skip('someone-else'),/OWNER_INVALID/)
+ await notifier.tick()
+ // Skipping does not fetch whatever version GitHub may publish next.
+ notifier.fetchLatest=async()=>{throw Error('must not fetch')}
+ assert.match(await notifier.skip('owner','en'),/Skipped v1.1.0/)
+})
+test('a choice made during an in-flight send is not overwritten by the send result',async t=>{
+ const f=await fixture(t);let releaseSend,started
+ const ready=new Promise(resolve=>{started=resolve})
+ const notifier=new UpdateNotifier({...f.options,send:async()=>{started();await new Promise(resolve=>{releaseSend=resolve});return {status:'accepted'}}})
+ const check=notifier.tick();await ready
+ const skip=notifier.skip('owner');releaseSend()
+ await Promise.all([check,skip])
+ assert.equal(JSON.parse(await readFile(noticePath(f),'utf8')).status,'dismissed')
+})

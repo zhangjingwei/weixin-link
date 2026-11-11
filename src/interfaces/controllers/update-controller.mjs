@@ -16,6 +16,7 @@ export function createUpdateController({stateDir, sourceDir, owners, ready, view
     start: () => notifier.start(),
     tick: () => notifier.tick(),
     check: (language='zh') => checkUpdates({readInstalled:()=>readInstalledRelease(sourceDir),fetchLatest:fetchLatest??fetchLatestRelease,language}),
+    skip: (owner,language='zh') => notifier.skip(owner,language),
     close: () => notifier.close(),
   }
 }
