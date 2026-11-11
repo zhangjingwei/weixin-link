@@ -42,7 +42,7 @@ test('daily entry reuses original owned thread without creating threads or stopp
  assert.equal(message.userId,'alice');assert.equal(router.find('alice').key,'alice')
  assert.equal(router.ensure('alice').entries.length,count);assert.equal(manager.state.users.alice.threadId,'original-thread')
  assert.equal(manager.sessions.get(project.userId).busy,true);assert.deepEqual(manager.sessions.get(project.userId).queue,['keep'])
- assert.equal(calls.length,1);assert.match(out[0],/已返回日常/)
+ assert.equal(calls.length,1);assert.match(out[0],/已切换到日常助手/)
 })
 test('daily designation survives state reload and later changes to active project',()=>{
  const {manager,router}=fixture();const project=create(router,'Work')
