@@ -5,7 +5,7 @@ export const USER_GUIDE=`微信助手使用说明
 一、首次设置
 
 1. 按 README 的步骤在电脑上运行安装命令。安装器会提示选择订阅登录、DeepSeek、Qwen 或 Kimi，并完成授权、连接检查和真实模型测试。第三方密钥只在终端输入，不要发到微信。
-2. 安装器显示微信登录地址，并尝试打开浏览器。请在手机微信确认登录；若要求输入 PIN，请按同一终端的提示操作。登录后微信 Link 会主动推送连接结果。
+2. 安装器显示微信登录地址，并尝试打开浏览器。请在手机微信确认登录；若要求输入 PIN，请按同一终端的提示操作。登录后微信 Link 会主动推送连接结果和简明使用说明。
 3. 若跳过或未完成模型配置，重新运行安装命令，在菜单中选择“配置模型”。
 
 - “安装向导”：返回本机终端向导的启动方法。
@@ -137,7 +137,7 @@ Send English commands as plain text, without a slash. Commands are case insensit
 1. First-time setup
 
 1. Follow the installation steps in README.en.md on your computer. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
-2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message after login.
+2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message and a short getting-started guide after your first login.
 3. If you skipped or did not complete model setup, rerun the installer and choose Configure model from the menu.
 
 - setup: Show how to start the setup wizard on your computer.
@@ -261,3 +261,28 @@ If WeChat says it cannot connect or the assistant does not respond as expected, 
 
 Projects can share a folder. If they edit the same file at the same time, their changes may conflict; check whether another task is still running. A voice message with a complete text transcript can also contain a command.
 `
+
+// Keep the first-login notice short enough for a single proactive message.
+export function quickStartGuide(language='zh'){
+ return language==='en'?`Getting started
+
+• Send a task directly, or attach an image/file and say what you need.
+• daily: return to your daily conversation.
+• new: create a project conversation by following the prompts.
+• switch: list conversations, then reply with a number.
+• progress: check the current task; stop: stop the current task.
+• result: request the last result again (attachments have a retention window).
+• guide: read the full user guide at any time.
+
+If model setup is incomplete, rerun the installer on your computer and choose Configure model.`:`使用说明 · 快速上手
+
+• 直接发需求，或发送图片、文件并说明要做什么。
+• 发“日常”：回到日常助手。
+• 发“新建”：按提示创建项目会话。
+• 发“切换”：查看会话列表，再回复序号。
+• 发“进度”：查看当前任务；发“停止”：停止当前任务。
+• 发“结果”：重新获取上次结果（附件有保留期限）。
+• 发“使用说明”：随时查看完整手册。
+
+若尚未完成模型配置，请在安装电脑重新运行安装命令，选择“配置模型”。`
+}

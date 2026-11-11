@@ -1,3 +1,4 @@
+import {quickStartGuide} from '../setup/user-guide.mjs'
 import {createHash,randomUUID} from 'node:crypto'
 import {readFile,writeFile,rename,unlink,lstat} from 'node:fs/promises'
 import {join} from 'node:path'
@@ -37,7 +38,7 @@ export class LifecycleNotice{
    await this.write(owner,value)
   }
   if(!['pending',...(inbound?['deferred']:[])].includes(value.status))return null
-  const message=value.kind==='welcome'?await this.welcomeText(owner):upgradeMessage(value.commit,this.language)
+  const message=value.kind==='welcome'?[await this.welcomeText(owner),quickStartGuide(this.language)].join('\n\n'):upgradeMessage(value.commit,this.language)
   await this.write(owner,{...value,status:'sending'})
   let status='unknown'
   try{const result=await this.send(owner,message);status=result?.status==='accepted'?'accepted':'unknown'}
