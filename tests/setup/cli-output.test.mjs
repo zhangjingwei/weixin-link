@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {setupMessage,setupError} from '../../src/setup/cli-output.mjs'
+import {installerCommand} from '../../src/setup/setup-locale.mjs'
 const exec=promisify(execFile)
 const cli=fileURLToPath(new URL('../../src/setup/setup.mjs',import.meta.url))
 
@@ -40,7 +41,7 @@ test('pairing prompts distinguish an existing login and explain the next step',(
  assert(setupError(Error('VERIFICATION_NOT_REQUESTED'),'zh').includes('尚未要求输入 PIN'))
  assert(setupError(Error('ACCOUNT_NOT_FOUND'),'zh').includes('核对账号名'))
  assert(setupMessage('verify-wait',{pin_submitted:true},'zh').includes('PIN 已提交'))
- assert(setupError(Error('QR_NOT_READY_OR_EXPIRED'),'zh').includes('install.sh | WEIXIN_LINK_LANG=zh sh'))
+ assert(setupError(Error('QR_NOT_READY_OR_EXPIRED'),'zh').includes(installerCommand('login',{language:'zh'})))
  assert(!setupError(Error('sensitive raw process output'),'zh').includes('sensitive'))
 })
 test('service conflicts identify the preserved file and do not suggest a network failure',()=>{
@@ -52,7 +53,7 @@ test('service conflicts identify the preserved file and do not suggest a network
 })
 test('English installation CLI shows English progress and safe errors',async()=>{
  const error=setupError(Error('ACCOUNT_RUNNING_NOT_READY'),'en')
- assert(error.includes('install.sh | WEIXIN_LINK_LANG=en sh'))
+ assert(error.includes(installerCommand('relogin',{language:'en'})))
  assert(setupMessage('verify-wait',{pin_submitted:true},'en').includes('PIN submitted'))
  await assert.rejects(exec(process.execPath,[cli,'init','relative-path','--human','--lang','en']),failure=>failure.stderr.includes('valid absolute path'))
 })
