@@ -1,6 +1,7 @@
-import {readFile} from 'node:fs/promises'
+import {changelogSection,releaseDetails} from '../../domain/updates/release-notes.mjs'
+import {readFile,stat} from 'node:fs/promises'
 import {join} from 'node:path'
-import {releaseTag} from '../../domain/updates/release-version.mjs'
+import {releaseTag,installedRelease} from '../../domain/updates/release-version.mjs'
 
 export async function readInstalledRelease(sourceDir) {
   try {return JSON.parse(await readFile(join(sourceDir, '.weixin-link-release.json'), 'utf8'))}
@@ -24,7 +25,22 @@ export async function githubLatestRelease({request=fetch}={}){
   object=(await get('git/tags/'+object.sha))?.object
  }
  if(object?.type!=='commit'||!/^[0-9a-f]{40}$/.test(object.sha??''))throw Error('UPDATE_CHECK_RESPONSE_INVALID')
- return {tag:release.tag_name,commit:object.sha}
+ return {tag:release.tag_name,commit:object.sha,...(typeof release.body==='string'&&release.body.trim()?{notes:release.body.slice(0,16000)}:{})}
 }
 
 export {githubLatestRelease as fetchLatestRelease}
+
+export async function readInstalledNotes(sourceDir,tag){
+ try{
+  const path=join(sourceDir,'CHANGELOG.md')
+  if((await stat(path)).size>1024*1024)return ''
+  return changelogSection(await readFile(path,'utf8'),tag)
+ }catch{return ''}
+}
+
+export async function readInstalledNotice(sourceDir,language='zh'){
+ const installed=await readInstalledRelease(sourceDir)
+ if(!installedRelease(installed))return null
+ const tag=releaseTag(installed.ref)?installed.ref:null
+ return {commit:installed.commit,tag,details:tag?releaseDetails({tag,notes:await readInstalledNotes(sourceDir,tag)},language):''}
+}

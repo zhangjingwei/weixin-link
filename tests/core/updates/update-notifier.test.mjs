@@ -76,3 +76,11 @@ test('network failure and corrupt state do not send or overwrite the state',asyn
  assert.ok(events.includes('update_notice.check_failed'))
  assert.ok(events.includes('update_notice.state_invalid'))
 })
+
+test('new release notification includes publisher highlights and a pinned release link',async t=>{
+ const f=await fixture(t)
+ await new UpdateNotifier({...f.options,fetchLatest:async()=>({tag:'v1.1.0',commit:latest,notes:'- Preserve complete messages\n- Add explicit update checks'})}).tick()
+ assert.match(f.sent[0].text,/Preserve complete messages/)
+ assert.match(f.sent[0].text,/releases\/tag\/v1.1.0/)
+ await new UpdateNotifier(f.options).tick();assert.equal(f.sent.length,1)
+})

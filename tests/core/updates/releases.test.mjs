@@ -27,3 +27,8 @@ test('no release does not fall back to main and prereleases are refused',async()
  assert.equal(calls,1)
  await assert.rejects(githubLatestRelease({request:async()=>response({tag_name:'v2.0.0',prerelease:true})}),/INVALID/)
 })
+
+test('latest release carries maintained notes without changing the verified commit',async()=>{
+ const result=await githubLatestRelease({request:async url=>url.endsWith('releases/latest')?response({tag_name:'v1.2.0',body:'- First change\n- Second change'}):response({object:{type:'commit',sha}})})
+ assert.equal(result.commit,sha);assert.equal(result.notes,'- First change\n- Second change')
+})

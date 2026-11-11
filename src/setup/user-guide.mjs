@@ -35,7 +35,7 @@ export const USER_GUIDE=`微信助手使用说明
 - “服务状态”：查看服务是否运行。
 - “重启”：在当前账号空闲后重启服务。
 - “检查更新”（check-updates）：主动查看当前版本、最新正式版和是否有更新；不会安装，不受自动通知去重限制。源码或自定义安装无法核实当前版本时会明确提示。
-- “升级”：在空闲后升级标准安装的版本；自定义部署可能无法使用。
+- “升级”：在空闲后升级标准安装的版本；自定义部署可能无法使用。发现新版本和升级完成的通知会附上该版本维护的核心变化（最多 5 条）及完整说明链接；未提供摘要时会明确提示。
 
 也可以直接用自然语言安排提醒，例如“明天上午九点提醒我开会”。提醒可以只发送文字，也可以到点后执行指定任务。当前不读取手机日历；定时任务只在本机执行。
 
@@ -168,7 +168,7 @@ Service and help
 - service-status: Check whether the service is running.
 - restart: Restart this account's service when it is idle.
 - check-updates: Show the current version, latest stable release, and update availability without installing. Explicit checks are independent of automatic notification deduplication. Unverified source/custom installations are reported as such.
-- upgrade: Upgrade a standard installation when it is idle. Custom deployments may not support this command.
+- upgrade: Upgrade a standard installation when it is idle. Custom deployments may not support this command. New-version and completed-upgrade notices include up to five maintained highlights and a link to the full release notes; missing highlights are stated explicitly.
 
 You can also ask for a reminder in ordinary language, such as “Remind me about the meeting tomorrow at 9 AM.” A reminder can send a message or start a scheduled task. It runs on the computer and does not read your phone calendar.
 
