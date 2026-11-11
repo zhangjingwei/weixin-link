@@ -27,7 +27,7 @@ async function fixture(t){
  await writeFile(join(bin,'curl'),'#!/bin/sh\nwhile [ "$#" -gt 0 ]; do if [ "$1" = -o ]; then cp "$FIXTURE_ARCHIVE" "$2"; exit; fi; shift; done\nexit 2\n',{mode:0o755})
  await writeFile(join(bin,'launchctl'),'#!/bin/sh\nexit 113\n',{mode:0o755})
  await writeFile(join(bin,'systemctl'),'#!/bin/sh\nprintf "FragmentPath=\\n"\n',{mode:0o755})
- return {root,bin,source,dest,archive,env:{...process.env,HOME:root,WEIXIN_LINK_DIR:dest,WEIXIN_LINK_REF:'main',PATH:bin+':'+process.env.PATH,FIXTURE_ARCHIVE:archive}}
+ return {root,bin,source,dest,archive,env:{...process.env,HOME:root,WEIXIN_LINK_LANG:'zh',WEIXIN_LINK_DIR:dest,WEIXIN_LINK_REF:'main',PATH:bin+':'+process.env.PATH,FIXTURE_ARCHIVE:archive}}
 }
 async function installed(f,{legacyManager=false}={}){
  await mkdir(join(f.dest,'src/wechat'),{recursive:true})
