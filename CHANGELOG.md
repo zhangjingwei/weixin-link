@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.0 — 2026-11-11
+
+- Preserve complete conversation history with readable pagination, and make daily conversation selection and switching notices clearer.
+- Validate generated artifact delivery and keep temporary files private.
+- Add explicit WeChat update checks and a saved choice to skip reminders for a specific release without hiding newer releases.
+- Show maintained release highlights and version links in update notices and completed-upgrade messages.
+- Include a short quick-start guide after first login and clarify Codex device-code authorization setup.
+
+Automated release, platform, and unit checks passed. Live WeChat messaging and other platforms were not verified for this release.
+
 ## 1.4.1 — 2026-11-10
 
 - Let the local Codex process inherit the service time zone instead of forcing `Asia/Shanghai`.

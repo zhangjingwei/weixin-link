@@ -722,7 +722,7 @@ export class SessionManager {
           '【模型与记忆】',
           '模型（models）', '开启快速模式（fast-on）', '关闭快速模式（fast-off）', '记忆（memory）', '开启记忆（memory-on）', '关闭记忆（memory-off）',
           '【服务】',
-          '安装状态（setup-status）', '安装向导（setup）', '安装智能体（install-agent）', '登录智能体（login-agent）', '验收智能体（check-agent）', '重启（restart）', '升级（upgrade）', '诊断（diagnose）', '服务状态（service-status）', '查看最近错误（recent-errors）', '导出诊断报告（export-diagnostics）', '安装帮助（install-help）', '命令列表（help）', '使用说明（guide）',
+          '安装状态（setup-status）', '安装向导（setup）', '安装智能体（install-agent）', '登录智能体（login-agent）', '验收智能体（check-agent）', '重启（restart）', '升级（upgrade）', '诊断（diagnose）', '服务状态（service-status）', '查看最近错误（recent-errors）', '导出诊断报告（export-diagnostics）', '安装帮助（install-help）', '检查更新（check-updates）', '不升级（skip-update）', '命令列表（help）', '使用说明（guide）',
           '【交互答复】',
           '批准（approve）', '拒绝（reject）', '回答（answer）',
           '远程主机和设备配置可以直接描述需求。',

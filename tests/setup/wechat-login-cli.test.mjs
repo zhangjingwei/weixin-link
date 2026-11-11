@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {runWeChatLogin,waitForLogin} from '../../src/setup/wechat-login-cli.mjs'
+import {installerCommand} from '../../src/setup/setup-locale.mjs'
 import {EventEmitter} from 'node:events'
 
 function fixture({ready=false,active=false,stop='stopped'}={}){
@@ -24,7 +25,7 @@ test('ready account is not paired again without explicit relogin',async()=>{
  const f=fixture({ready:true,active:true}),result=await runWeChatLogin(f.options)
  assert.equal(result.status,'already_ready')
  assert.deepEqual(f.calls,['list'])
- assert(f.messages.join('').includes('install.sh | WEIXIN_LINK_LANG=zh sh'))
+ assert(f.messages.join('').includes(installerCommand('setup',{language:'zh'})))
 })
 test('English login gives English guidance and passes language to link display',async()=>{
  const f=fixture({ready:true,active:true})

@@ -5,7 +5,7 @@ export const USER_GUIDE=`微信助手使用说明
 一、首次设置
 
 1. 按 README 的步骤在电脑上运行安装命令。安装器会提示选择订阅登录、DeepSeek、Qwen 或 Kimi，并完成授权、连接检查和真实模型测试。第三方密钥只在终端输入，不要发到微信。
-2. 安装器显示微信登录地址，并尝试打开浏览器。请在手机微信确认登录；若要求输入 PIN，请按同一终端的提示操作。登录后微信 Link 会主动推送连接结果。
+2. 安装器显示微信登录地址，并尝试打开浏览器。请在手机微信确认登录；若要求输入 PIN，请按同一终端的提示操作。登录后微信 Link 会主动推送连接结果和简明使用说明。
 3. 若跳过或未完成模型配置，重新运行安装命令，在菜单中选择“配置模型”。
 
 - “安装向导”：返回本机终端向导的启动方法。
@@ -34,7 +34,9 @@ export const USER_GUIDE=`微信助手使用说明
 - “使用说明”：重新查看本说明。
 - “服务状态”：查看服务是否运行。
 - “重启”：在当前账号空闲后重启服务。
-- “升级”：在空闲后升级标准安装的版本；自定义部署可能无法使用。
+- “检查更新”（check-updates）：主动查看当前版本、最新正式版和是否有更新；不会安装，不受自动通知去重限制。源码或自定义安装无法核实当前版本时会明确提示。
+- “不升级”（skip-update）：跳过最近一次更新提示的版本，重启后仍不再提示该版本，后续新版本照常提醒；主动“检查更新”和“升级”仍可使用。收到更新提示后也可回复“取消”；若正在新建、切换等交互中，“取消”优先取消当前交互。此选择不撤销已经安排的升级任务。
+- “升级”：在空闲后升级标准安装的版本；自定义部署可能无法使用。发现新版本和升级完成的通知会附上该版本维护的核心变化（最多 5 条）及完整说明链接；未提供摘要时会明确提示。
 
 也可以直接用自然语言安排提醒，例如“明天上午九点提醒我开会”。提醒可以只发送文字，也可以到点后执行指定任务。当前不读取手机日历；定时任务只在本机执行。
 
@@ -137,7 +139,7 @@ Send English commands as plain text, without a slash. Commands are case insensit
 1. First-time setup
 
 1. Follow the installation steps in README.en.md on your computer. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
-2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message after login.
+2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message and a short getting-started guide after your first login.
 3. If you skipped or did not complete model setup, rerun the installer and choose Configure model from the menu.
 
 - setup: Show how to start the setup wizard on your computer.
@@ -166,7 +168,9 @@ Service and help
 - guide: Show this guide again.
 - service-status: Check whether the service is running.
 - restart: Restart this account's service when it is idle.
-- upgrade: Upgrade a standard installation when it is idle. Custom deployments may not support this command.
+- check-updates: Show the current version, latest stable release, and update availability without installing. Explicit checks are independent of automatic notification deduplication. Unverified source/custom installations are reported as such.
+- skip-update: Skip the last notified release across restarts without suppressing newer releases. Explicit check-updates and upgrade remain available. You can also reply cancel to an update notice; an active conversation prompt takes priority for cancel. This does not cancel an already scheduled upgrade.
+- upgrade: Upgrade a standard installation when it is idle. Custom deployments may not support this command. New-version and completed-upgrade notices include up to five maintained highlights and a link to the full release notes; missing highlights are stated explicitly.
 
 You can also ask for a reminder in ordinary language, such as “Remind me about the meeting tomorrow at 9 AM.” A reminder can send a message or start a scheduled task. It runs on the computer and does not read your phone calendar.
 
@@ -261,3 +265,28 @@ If WeChat says it cannot connect or the assistant does not respond as expected, 
 
 Projects can share a folder. If they edit the same file at the same time, their changes may conflict; check whether another task is still running. A voice message with a complete text transcript can also contain a command.
 `
+
+// Keep the first-login notice short enough for a single proactive message.
+export function quickStartGuide(language='zh'){
+ return language==='en'?`Getting started
+
+• Send a task directly, or attach an image/file and say what you need.
+• daily: return to your daily conversation.
+• new: create a project conversation by following the prompts.
+• switch: list conversations, then reply with a number.
+• progress: check the current task; stop: stop the current task.
+• result: request the last result again (attachments have a retention window).
+• guide: read the full user guide at any time.
+
+If model setup is incomplete, rerun the installer on your computer and choose Configure model.`:`使用说明 · 快速上手
+
+• 直接发需求，或发送图片、文件并说明要做什么。
+• 发“日常”：回到日常助手。
+• 发“新建”：按提示创建项目会话。
+• 发“切换”：查看会话列表，再回复序号。
+• 发“进度”：查看当前任务；发“停止”：停止当前任务。
+• 发“结果”：重新获取上次结果（附件有保留期限）。
+• 发“使用说明”：随时查看完整手册。
+
+若尚未完成模型配置，请在安装电脑重新运行安装命令，选择“配置模型”。`
+}

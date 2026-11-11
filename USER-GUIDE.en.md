@@ -5,7 +5,7 @@ Send English commands as plain text, without a slash. Commands are case insensit
 1. First-time setup
 
 1. Follow the installation steps in README.en.md on your computer. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
-2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message after login.
+2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message and a short getting-started guide after your first login.
 3. If you skipped or did not complete model setup, rerun the installer and choose **Configure model** from the menu.
 
 - `setup`: Show how to start the setup wizard on your computer.
@@ -34,7 +34,9 @@ Service and help
 - `guide`: Show this guide again.
 - `service-status`: Check whether the service is running.
 - `restart`: Restart this account's service when it is idle.
-- `upgrade`: Upgrade a standard installation when it is idle. Custom deployments may not support this command.
+- `check-updates`: Show the current version, latest stable release, and update availability without installing. Explicit checks are independent of automatic notification deduplication. Unverified source/custom installations are reported as such.
+- `skip-update`: Skip the last notified release across restarts without suppressing newer releases. Explicit check-updates and upgrade remain available. You can also reply cancel to an update notice; an active conversation prompt takes priority for cancel. This does not cancel an already scheduled upgrade.
+- `upgrade`: Upgrade a standard installation when it is idle. Custom deployments may not support this command. New-version and completed-upgrade notices include up to five maintained highlights and a link to the full release notes; missing highlights are stated explicitly.
 
 You can also ask for a reminder in ordinary language, such as “Remind me about the meeting tomorrow at 9 AM.” A reminder can send a message or start a scheduled task. It runs on the computer and does not read your phone calendar.
 

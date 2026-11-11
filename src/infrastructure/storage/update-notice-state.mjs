@@ -14,8 +14,10 @@ export function createUpdateNoticeStateStore(stateDir) {
       return JSON.parse(await readFile(file, 'utf8'))
     },
     async write(owner, value) {
+      const text=JSON.stringify(value)+'\n'
+      if(Buffer.byteLength(text)>4096)throw Error('UPDATE_NOTICE_STATE_INVALID')
       const file = path(owner), temp = file + '.' + randomUUID() + '.tmp'
-      try {await writeFile(temp, JSON.stringify(value) + '\n', {flag: 'wx', mode: 0o600}); await rename(temp, file)}
+      try {await writeFile(temp, text, {flag: 'wx', mode: 0o600}); await rename(temp, file)}
       finally {await unlink(temp).catch(error => {if (error.code !== 'ENOENT') throw error})}
     },
   }

@@ -1,3 +1,4 @@
+import {quickStartGuide} from '../../src/setup/user-guide.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises'
@@ -17,7 +18,8 @@ async function fixture(t,{welcomePending=false,commit=a}={}){
 }
 test('fresh install sends one welcome immediately without waiting for inbound',async t=>{
  const f=await fixture(t,{welcomePending:true});await f.notice.start()
- assert.deepEqual(f.sent,[['owner',WELCOME_MESSAGE]])
+ assert.deepEqual(f.sent,[['owner',WELCOME_MESSAGE+'\n\n'+quickStartGuide('zh')]])
+ assert.match(f.sent[0][1],/使用说明 · 快速上手/)
  assert.equal(await f.notice.onInbound('owner'),null);assert.equal(f.sent.length,1);assert.equal((await f.saved()).status,'accepted')
 })
 test('English lifecycle copy covers connection and upgrade notices',()=>{
@@ -27,7 +29,7 @@ test('English lifecycle copy covers connection and upgrade notices',()=>{
 test('first welcome can report terminal verification without opening a chat wizard',async t=>{
  const f=await fixture(t,{welcomePending:true})
  f.notice.welcomeText=async()=> '微信助手已连接，模型已通过安装终端的真实推理测试。'
- await f.notice.start();assert.match(f.sent[0][1],/安装终端的真实推理测试/)
+ await f.notice.start();assert.match(f.sent[0][1],/安装终端的真实推理测试/);assert.match(f.sent[0][1],/使用说明 · 快速上手/)
  await f.notice.start();assert.equal(f.sent.length,1)
 })
 test('unknown first-welcome delivery is not resent automatically',async t=>{
@@ -63,4 +65,29 @@ test('definitive context rejection defers until a fresh inbound, unknown is not 
  f.state.result='accepted';await f.notice.onInbound('owner');assert.equal((await f.saved()).status,'accepted');assert.equal(f.sent.length,2)
  await f.release(b);f.state.result=Error('timeout');await f.notice.start();assert.equal((await f.saved()).status,'unknown')
  await f.notice.onInbound('owner');assert.equal(f.sent.length,3)
+})
+
+test('English first login includes a short guide once and restart or upgrade does not repeat it',async t=>{
+ const f=await fixture(t,{welcomePending:true});f.notice.language='en';f.notice.welcomeText=async()=>welcomeMessage('en')
+ await f.notice.start();assert.match(f.sent[0][1],/Getting started/);assert.match(f.sent[0][1],/guide: read the full user guide/)
+ assert.ok(Array.from(f.sent[0][1]).length<1800)
+ const restarted=new LifecycleNotice({stateDir:f.notice.stateDir,sourceDir:f.notice.sourceDir,owners:['owner'],welcomePending:true,language:'en',send:async(_owner,text)=>{f.sent.push(['owner',text]);return {status:'accepted'}}})
+ await restarted.start();assert.equal(f.sent.length,1)
+ await f.release(b);await restarted.start();assert.equal(f.sent.length,2);assert.doesNotMatch(f.sent[1][1],/Getting started/)
+});
+
+test('tagged release upgrade reports its own changelog once, without a network dependency',async t=>{
+ const f=await fixture(t);await f.notice.start()
+ await writeFile(join(f.notice.sourceDir,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'v1.2.0',commit:b}))
+ await writeFile(join(f.notice.sourceDir,'CHANGELOG.md'),'# Changelog\n## 1.3.0\n- Future change\n## 1.2.0\n- Correct installed highlight\n## 1.1.0\n- Old change')
+ await f.notice.start()
+ assert.equal(f.sent.length,2);assert.match(f.sent[1][1],/已升级到 v1.2.0/)
+ assert.match(f.sent[1][1],/Correct installed highlight/);assert.doesNotMatch(f.sent[1][1],/Future change|Old change/)
+ assert.match(f.sent[1][1],/releases\/tag\/v1.2.0/)
+ await f.notice.start();await f.notice.onInbound('owner');assert.equal(f.sent.length,2)
+})
+test('tagged release without changelog explicitly reports absent highlights',async t=>{
+ const f=await fixture(t)
+ await writeFile(join(f.notice.sourceDir,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'v1.2.0',commit:b}))
+ await f.notice.start();assert.match(f.sent[0][1],/暂未提供核心更新摘要/);assert.match(f.sent[0][1],/releases\/tag\/v1.2.0/)
 })

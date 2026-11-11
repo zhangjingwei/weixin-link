@@ -113,6 +113,8 @@ See the [English user guide](USER-GUIDE.en.md) for branch or commit reviews, sav
 
 ## Installation and upgrades
 
+Send **check-updates** in WeChat to view the current and latest stable versions without installing. Send **upgrade** separately when you want to install an available update. Reply **skip-update** or **cancel** to a new-release notice to skip that release; newer releases can still notify you.
+
 To upgrade, rerun the installation command in [Quick start](#quick-start) and choose **Upgrade**. Standard installations also prompt you when a stable update is available and upgrade only after you confirm. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments and recovery.
 
 The installer guides you through the first WeChat login. To log in again later, rerun the same installation command and choose **Log in to WeChat again** from the menu. You do not need to find the installation directory.

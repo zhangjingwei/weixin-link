@@ -1,6 +1,6 @@
 /** Unknown or accepted delivery is never replayed automatically. */
 export function shouldPromptForUpdate(previous, tag) {
-  return previous?.tag !== tag || previous.status === 'deferred'
+  return !previous?.skippedTags?.includes(tag)&&(previous?.tag !== tag || previous.status === 'deferred')
 }
 
 /** A known, rejected text final may be offered one bounded resend. */
