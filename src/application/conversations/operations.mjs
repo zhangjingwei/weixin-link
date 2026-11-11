@@ -1,4 +1,4 @@
-import {bindNewWorkspace,workspaceText} from './workspace.mjs'
+import {bindNewWorkspace} from './workspace.mjs'
 import {conversationHasUnfinishedWork} from '../../domain/conversations/eligibility.mjs'
 
 function hasUnfinishedWork(context, key) {
@@ -37,7 +37,10 @@ export async function selectConversation(context,message,reply){
    await context.manager.save();confirmed=true;
    if((cmd.action==='new'||cmd.action==='daily')&&cmd.name)await context.rename(current,cmd.name,reply);
    else if(context.backendPort.capabilities.catalog&&official.name)await context.titleUpdated(tid,official.name);
-   await reply(cmd.action==='daily'&&context.backendPort.capabilities.catalog?`已返回日常（会话${current.id}）。新项目发“新建”并按提示输入名称，返回时发“日常”。`:context.backendPort.capabilities.catalog?`Codex已确认${cmd.action==='new'?'新建':'连接'}会话${current.id}：${current.name}。目录：${workspaceText(context,current.key)}。后续消息进入此会话。`:`已切换到 ${context.manager.agentName??'当前底座'} 会话${current.id}：${current.name}。目录：${workspaceText(context,current.key)}。`);if(context.sendOutput)await context.replay(current.key,context.sendOutput);
+   const directory=typeof official.cwd==='string'&&official.cwd.trim()?official.cwd:'未获底座确认';
+   const name=context.displayName(owner,current);
+   await reply(cmd.action==='new'?`已新建${name}。\n工作目录：${directory}`:`已切换到${name}。\n工作目录：${directory}`);
+   if(context.sendOutput)await context.replay(current.key,context.sendOutput);
   }finally{
    if(!confirmed&&r.selectionVersion===message._conversationSelectionVersion&&message._conversationPriorActive&&context.find(owner,message._conversationPriorActive)&&!context.find(owner,message._conversationPriorActive).archived){r.active=message._conversationPriorActive;await context.manager.save();}
   }

@@ -51,7 +51,8 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
           this.calls.push({ method, params })
           if (method === 'thread/start' || method === 'thread/resume') {
             assert.equal(params.sandbox, 'danger-full-access')
-            assert.equal(params.developerInstructions, ASSISTANT_INSTRUCTIONS)
+            assert.ok(params.developerInstructions.startsWith(ASSISTANT_INSTRUCTIONS))
+            assert.ok(params.developerInstructions.includes('本会话临时交付目录：'))
             return { thread: { id: params.threadId ?? `thread-${++threadCount}` }, sandbox: { type: 'dangerFullAccess' }, approvalPolicy: 'never' }
           }
           if (method === 'turn/start') {

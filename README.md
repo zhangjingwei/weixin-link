@@ -138,6 +138,16 @@ Windows x64（PowerShell）：
 
 需要审查指定分支或提交、恢复会话、管理附件或排查问题时，见[使用指南](USER-GUIDE.md)。
 
+## 常见问题
+
+### Codex 订阅登录提示未开启 Device code authorization
+
+安装器使用设备码登录。先在 ChatGPT 的「设置 → 安全」中开启 **Device code authorization**（设备码授权／设备码登录，名称可能随界面变化），再按安装终端显示的官方链接和设备码完成授权。受管理的工作区需由管理员在工作区权限中允许设备码登录。
+
+如果刚才已被拒绝或设备码已过期，开启后重新运行安装命令，选择「配置模型 → 订阅登录」，使用本次新显示的设备码。此设置只与 Codex 订阅的设备码登录有关；第三方模型的 API Key 配置不需要它。其他登录失败仍需按实际错误检查网络或账号权限。
+
+参见 [OpenAI 官方设备码登录说明](https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta)。
+
 ## 更多能力与文档
 
 - [使用指南](USER-GUIDE.md)：会话、模型、记忆、附件与结果。
@@ -146,6 +156,8 @@ Windows x64（PowerShell）：
 - [可选集成](src/integrations/README.md)：HA 只读查询、SSH 远端操作和 RSSHub 新闻源，按账号显式启用；备份统一接入仍待迁移。
 - [配置示例](config-templates/)：部署配置参考。
 - [参与贡献](CONTRIBUTING.md)：问题反馈与代码贡献。
+
+文件交付的存放位置、失败状态、原件清理和 7 天重发保留期见[文件交付与临时文件生命周期](docs/artifact-delivery.md)。
 
 ## 安全与许可
 

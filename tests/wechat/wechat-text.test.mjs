@@ -11,7 +11,7 @@ test('URLs, inline code and fenced programs preserve literal syntax',()=>{
  assert.equal(wechatText('`a ** b` 和 https://example.com/a_b?q=x*y\n```js\nconst x = "**bold**";\n```'),'a ** b 和 https://example.com/a_b?q=x*y\n```js\nconst x = "**bold**";\n```')
 })
 test('web links expose usable URL; local delivery labels hide transport paths',()=>{
- assert.equal(wechatText('[官网](https://example.com/a_b)\n![状态图](/tmp/status.png)\n[下载文件](</tmp/a b.csv>)'), '官网：https://example.com/a_b\n状态图\n下载文件')
+ assert.equal(wechatText('[官网](https://example.com/a_b)\n![状态图](/tmp/status.png)\n[下载文件](</tmp/a b.csv>)'), '官网：https://example.com/a_b\n状态图〔附件〕\n下载文件〔附件〕')
 })
 test('table output retains the approved record layout while cleaning cell styles',()=>{
  assert.equal(wechatText('| 设备 | 状态 |\n| --- | --- |\n| **NAS** | `Up` |'), 'NAS\n状态：Up\n')

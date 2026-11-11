@@ -1,3 +1,5 @@
+import {deliveryDirectory,prepareDeliveryDirectory,completeArtifacts,pruneArtifacts,assertArtifactFresh} from './artifact-lifecycle.mjs'
+import {deliveryLinks} from './delivery-links.mjs'
 import {ffmpegBinary} from './media-binary.mjs'
 import {deliveryError,deliveryFailureState} from '../wechat/delivery-error.mjs'
 import {wechatParts} from '../wechat/text-format.mjs'
@@ -12,39 +14,44 @@ const exec=promisify(execFile),MAX=50*1024*1024
 const extensions=new Set(['.png','.jpg','.jpeg','.webp','.gif','.mp4','.pdf','.html','.htm','.zip','.txt','.md','.csv','.json','.docx','.xlsx','.pptx','.wav','.mp3','.silk'])
 const inside=(root,path)=>{const rel=relative(root,path);return !/^\.\.[\\/]/.test(rel)&&rel!=='..'&&!isAbsolute(rel)}
 const digest=data=>createHash('sha256').update(data).digest('hex')
-export function outputLinks(text){
- const paths=[]
- for(const match of text.replace(/```[\s\S]*?```/g,'').replace(/`[^`\n]*`/g,'').matchAll(/!?\[[^\]\n]*\]\((?:<([^>\n]+)>|([^\s)]+))\)/g)){
-  let path=match[1]??match[2];if(path.startsWith('sandbox:'))path=path.slice(8)
-  if(isAbsolute(path)&&extensions.has(extname(path).toLowerCase()))paths.push(path)
- }
- return paths
-}
+export function outputLinks(text,cwd=process.cwd()){return deliveryLinks(text,cwd).map(item=>item.path)}
 export class OutputStore {
  constructor({stateDir,cwd,generatedRoot=join(stateDir,'codex-home','generated_images'),roots=[resolve(cwd),resolve(cwd,'..'),generatedRoot],fileReader,voiceMode='file'}={}){Object.assign(this,{stateDir,cwd,generatedRoot,roots,fileReader,voiceMode})}
+ deliveryPath(userId){return deliveryDirectory(this.stateDir,userId)}
+ async deliveryDirectory(userId){return prepareDeliveryDirectory(this.stateDir,userId)}
+ async prune(userId){return pruneArtifacts(this,userId)}
+ async complete(userId,packet){return completeArtifacts(this,userId,packet)}
  async package(userId,text,generated=[],signal){
-  const candidates=[...generated,...outputLinks(text).map(path=>({path}))]
+  await this.prune?.(userId)
+  const candidates=[...generated,...deliveryLinks(text,this.cwd)]
   if(!candidates.length)return text
   const packet={kind:'bundle',id:randomUUID(),text,attachments:[],errors:[],textParts:[]}
   const user=createHash('sha256').update(userId).digest('hex').slice(0,24),dir=join(this.stateDir,'outgoing',user,packet.id);await mkdir(dir,{recursive:true,mode:0o700})
   const seen=new Set();let total=0
   for(const candidate of candidates.slice(0,8)){
    signal?.throwIfAborted()
-   const name=basename(candidate.path??'generated.png');let data,kind,fileName=name
+   const name=basename(candidate.path??'generated.png');let data,kind,fileName=name,sourcePath,sourceHash
    try{
+    if(candidate.error)throw Error(candidate.error)
+    if(candidate.path&&!extensions.has(extname(candidate.path).toLowerCase()))throw Error('UNSUPPORTED_FILE')
     if(candidate.path&&this.fileReader){data=await this.fileReader(candidate.path,signal)}else if(candidate.path){
      const path=await realpath(candidate.path)
-     const roots=await Promise.all(this.roots.map(async root=>{try{return {declared:resolve(root),actual:await realpath(root)}}catch(error){if(error.code==='ENOENT')return null;throw error}}))
+     const privateBase=await realpath(resolve(this.stateDir,'deliverables')).catch(()=>null),ownPrivate=await realpath(deliveryDirectory(this.stateDir,userId)).catch(()=>null)
+     if(privateBase&&inside(privateBase,path)&&!(ownPrivate&&inside(ownPrivate,path)))throw Error('EXPORT_PATH_REFUSED')
+     const roots=await Promise.all([...this.roots,deliveryDirectory(this.stateDir,userId)].map(async root=>{try{return {declared:resolve(root),actual:await realpath(root)}}catch(error){if(error.code==='ENOENT')return null;throw error}}))
      const root=roots.find(root=>root&&inside(root.actual,path)&&(inside(root.declared,resolve(candidate.path))||inside(root.actual,resolve(candidate.path))))
      if(!root)throw Error('EXPORT_PATH_REFUSED')
      const start=inside(root.declared,resolve(candidate.path))?root.declared:root.actual
      let checked=start
      for(const part of relative(start,resolve(candidate.path)).split(/[\\/]/).filter(Boolean)){checked=join(checked,part);if((await lstat(checked)).isSymbolicLink())throw Error('EXPORT_PATH_REFUSED')}
      const actualGenerated=await realpath(this.generatedRoot).catch(()=>null)
-     if((path.split(/[\\/]/).some(part=>part.startsWith('.'))&&!(actualGenerated&&inside(actualGenerated,path)))||/^(?:credentials|secrets?|tokens?|private[-_]key)/i.test(basename(path)))throw Error('EXPORT_PATH_REFUSED')
+     const privateRoot=await realpath(deliveryDirectory(this.stateDir,userId)).catch(()=>null)
+     const managed=privateRoot&&inside(privateRoot,path)
+     if((path.split(/[\\/]/).some(part=>part.startsWith('.'))&&!(actualGenerated&&inside(actualGenerated,path))&&!managed)||/^(?:credentials|secrets?|tokens?|private[-_]key)/i.test(basename(path)))throw Error('EXPORT_PATH_REFUSED')
      // Codex's image output directory is hidden by convention; explicitly allow only that root.
      const info=await stat(path);if(!info.isFile()||info.size>MAX||info.size<1)throw Error('FILE_SIZE_LIMIT')
      data=await readFile(path)
+     if(managed){sourcePath=path;sourceHash=digest(data)}
     }else if(typeof candidate.data==='string'){
      const value=candidate.data.replace(/^data:image\/(?:png|jpeg|webp);base64,/, '')
      if(value.length>MAX*1.4||!value||!/^[A-Za-z0-9+/]*={0,2}$/.test(value))throw Error('INVALID_IMAGE')
@@ -67,8 +74,8 @@ export class OutputStore {
     if(data.length>MAX||total+data.length>MAX)throw Error('OUTPUT_SIZE_LIMIT')
     const hash=digest(data);if(seen.has(hash))continue;seen.add(hash);total+=data.length
     const path=join(dir,hash+(kind==='image'?extname(fileName):ext));await writeFile(path,data,{mode:0o600,flag:'wx'})
-    packet.attachments.push({id:hash,kind,path,fileName,bytes:data.length,sha256:hash,status:'pending'})
-   }catch(error){if(signal?.aborted)throw error;packet.errors.push({fileName:name,code:['EXPORT_PATH_REFUSED','FILE_SIZE_LIMIT','IMAGE_SIZE_LIMIT','MP4_REQUIRES_H264','OUTPUT_SIZE_LIMIT','INVALID_MP4','UNSUPPORTED_FILE'].includes(error.message)?error.message:error.code==='ENOENT'?'FILE_NOT_FOUND':'ARTIFACT_PREPARE_FAILED'})}
+    packet.attachments.push({id:hash,kind,path,fileName,bytes:data.length,sha256:hash,status:'pending',...(sourcePath?{sourcePath,sourceHash}:{})})
+   }catch(error){if(signal?.aborted)throw error;packet.errors.push({fileName:name,code:['EXPORT_PATH_REFUSED','FILE_SIZE_LIMIT','IMAGE_SIZE_LIMIT','MP4_REQUIRES_H264','OUTPUT_SIZE_LIMIT','INVALID_MP4','UNSUPPORTED_FILE','INVALID_DELIVERY_LINK'].includes(error.message)?error.message:error.code==='ENOENT'?'FILE_NOT_FOUND':'ARTIFACT_PREPARE_FAILED'})}
   }
   if(candidates.length>8)packet.errors.push({code:'OUTPUT_COUNT_LIMIT'})
   if(packet.errors.length)packet.text+='\n部分附件未能准备发送：'+packet.errors.map(e=>`${e.fileName??'附件'}（${e.code}）`).join('；')
@@ -77,6 +84,7 @@ export class OutputStore {
  async bytes(userId,item){
   const root=await realpath(join(this.stateDir,'outgoing',createHash('sha256').update(userId).digest('hex').slice(0,24))),path=await realpath(item.path)
   if(!inside(root,path))throw Error('ARTIFACT_OWNER_MISMATCH')
+  await assertArtifactFresh(path)
   const info=await stat(path);if(info.size>MAX||info.size!==item.bytes)throw Error('ARTIFACT_CHANGED')
   const data=await readFile(path);if(digest(data)!==item.sha256)throw Error('ARTIFACT_CHANGED');return data
  }
@@ -124,7 +132,7 @@ export class OutputTransport {
   for(const item of value.attachments){
    if(item.status!=='pending')continue
    if(!current()){item.status='cancelled';await checkpoint();continue}
-   let data;try{data=await this.store.bytes(userId,item)}catch{item.status='failed';item.reason='ARTIFACT_UNAVAILABLE';this.log('outbound.media_failed',{userId,trace_id:traceId,kind:item.kind,reason:item.reason});await checkpoint();continue}
+   let data;try{data=await this.store.bytes(userId,item)}catch(error){item.status='failed';item.reason=error.message==='ARTIFACT_EXPIRED'?'ARTIFACT_EXPIRED':'ARTIFACT_UNAVAILABLE';this.log('outbound.media_failed',{userId,trace_id:traceId,kind:item.kind,reason:item.reason});await checkpoint();continue}
    if(!current()){item.status='cancelled';await checkpoint();continue}
    item.status='sending';await checkpoint()
    if(!current()){item.status='cancelled';await checkpoint();continue}
@@ -136,8 +144,12 @@ export class OutputTransport {
   const failed=value.attachments.filter(a=>['unknown','failed'].includes(a.status)).length+(value.errors?.length??0)
   if(failed&&current()&&!value.failureNotice){
    value.failureNotice='sending';await checkpoint()
-   try{await this.sendWithRetry(userId,`有 ${failed} 个附件未能确认送达。可发“结果”主动重发整组结果（含已发送附件）。`,{event:'outbound.failure_notice_failed',kind:'failure_notice',parts:1,current,traceId});value.failureNotice='accepted'}catch(error){value.failureNotice=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);value.failureNoticeError=deliveryError(error)}
+   const failureText=value.attachments.some(a=>a.reason==='ARTIFACT_EXPIRED')?'附件快照已超过7天保留期，请重新生成。':value.attachments.some(a=>a.reason==='ARTIFACT_UNAVAILABLE')?'附件交付副本不可用（可能已被清理），请重新生成。':`有 ${failed} 个附件未能确认送达。可发“结果”主动重发整组结果（含已发送附件）。`
+   try{await this.sendWithRetry(userId,failureText,{event:'outbound.failure_notice_failed',kind:'failure_notice',parts:1,current,traceId});value.failureNotice='accepted'}catch(error){value.failureNotice=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);value.failureNoticeError=deliveryError(error)}
    await checkpoint()
+  }
+  if(current()&&!failed&&!textFailed&&this.store.complete){
+   try{await this.store.complete(userId,value)}catch{this.log('outbound.cleanup_failed',{userId,trace_id:traceId,code:'ARTIFACT_CLEANUP_FAILED'})}
   }
   return {status:!current()?'cancelled':failed||textFailed?'partial':'accepted'}
  }

@@ -22,7 +22,9 @@ test('device login delivers the code, opens the page, and succeeds if opening fa
  await writeFile(binary,`#!${process.execPath}\nconst fs=require('node:fs');const args=process.argv.slice(2).join(' ');const marker=${JSON.stringify(marker)};if(args==='login status')process.exit(fs.existsSync(marker)?0:1);if(args==='login --help'){console.log('--device-auth');process.exit(0)}if(args==='login --device-auth'){console.log('https://auth.openai.com/codex/device\\nABCD-EFGHI');fs.writeFileSync(marker,'yes');process.exit(0)}process.exit(1)\n`)
  await chmod(binary,0o755)
  const events=[]
- const result=await deviceLogin({binary,home,send:async message=>{assert(message.includes(url));events.push('sent');return {status:'accepted'}},openPage:async opened=>{assert.equal(opened,url);events.push('opened');throw Error('browser unavailable')}})
+ const result=await deviceLogin({binary,home,send:async message=>{if(message.includes(url)){events.push('sent')}else{assert.match(message,/ChatGPT.*Device code authorization/);events.push('guidance')}return {status:'accepted'}},openPage:async opened=>{assert.equal(opened,url);events.push('opened');throw Error('browser unavailable')}})
  assert.equal(result.status,'logged_in')
- assert.deepEqual(events,['sent','opened'])
+ assert.deepEqual(events,['guidance','sent','opened'])
+ const already=await deviceLogin({binary,home,send:async()=>{throw Error('No prompt expected for an existing login')}})
+ assert.equal(already.status,'already_logged_in')
 })

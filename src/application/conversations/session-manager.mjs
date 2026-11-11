@@ -45,6 +45,7 @@ export class SessionManager {
       if (data.version !== 1 || !data.users) throw new Error('Invalid assistant session state')
       this.state = data
     } catch (error) { if (error.code !== 'ENOENT') throw error }
+    for(const userId of Object.keys(this.state.users))await this.outputStoreFor(userId).prune?.(userId).catch(()=>this.log('artifact.cleanup_failed',{code:'ARTIFACT_CLEANUP_FAILED'}))
     return this
   }
   save() {
@@ -165,7 +166,10 @@ export class SessionManager {
   async sessionInstructions(userId) {
     const guidance=this.backend && this.backend.kind !== 'host' ? '' : await this.ports.integrationGuidance({stateDir:this.stateDir})
     const workspaceRules=await this.protocol.workspaceRules(this.workspaceFor(userId))
-    return this.instructions+(this.backend?.kind === 'host' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules
+    const store=this.outputStoreFor(userId)
+    const deliveryDir=typeof userId==='string'?store.deliveryPath?.(userId):undefined
+    const deliveryRules=deliveryDir?'\n\n本会话临时交付目录：'+JSON.stringify(deliveryDir)+'。先按需创建此目录并设为仅当前用户可访问（0700）。新生成的报告、压缩包、图片等交付副本必须优先写在此私有目录，避免进入项目仓库；最终用绝对路径链接交付。不得把项目源文件当作临时文件删除。临时原件在整组投递获接口确认后清理，重发快照保留7天；失败或结果未知时保留。':''
+    return this.instructions+(this.backend?.kind === 'host' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules+deliveryRules
   }
   async startProvider(session) {
     const provider='configured',attempt=this.attachRpc(session)
@@ -516,11 +520,11 @@ export class SessionManager {
         reply+='\n\n'+localCompletion(marker,session.localTask)
       }
       let output=reply
-      if((session.workToken?.current()??true)&&(session.generatedOutputs?.length||this.ports.outputLinks(reply).length)){
+      if((session.workToken?.current()??true)&&(session.generatedOutputs?.length||this.ports.outputLinks(reply,this.workspaceFor(session.userId)).length)){
         try{output=await this.outputStoreFor(session.userId).package(session.userId,reply,session.generatedOutputs??[],session.workToken?.signal)}catch(error){
           if(session.workToken&&!session.workToken.current())reply+='\n附件发送已取消。'
           else{this.diagnostic(session,'outbound.prepare_failed',this.ports.errorFields(error));reply+='\n附件准备失败，可稍后重试。'}
-          output=reply
+          output={kind:'bundle',id:randomBytes(16).toString('hex'),text:reply,attachments:[],errors:[{code:'ARTIFACT_PREPARE_FAILED'}],textParts:[]}
         }
       }
       session.generatedOutputs=[]
