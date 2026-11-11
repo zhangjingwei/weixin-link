@@ -6,17 +6,18 @@ import {readProviderProfile} from './provider-profile.mjs'
 import {readTerminalSetupStatus,terminalSetupFingerprint} from './terminal-setup-status.mjs'
 import {installerCommand} from './setup-locale.mjs'
 
-export function setupCommand(text){const commands={'使用说明':'manual',guide:'manualEn','安装向导':'wizardInfo',setup:'wizardInfoEn','安装状态':'status','setup-status':'statusEn','安装智能体':'install','install-agent':'installEn','登录智能体':'login','login-agent':'loginEn','验收智能体':'check','check-agent':'checkEn','安装帮助':'help','install-help':'helpEn'};return typeof text==='string'?commands[text.trim().toLowerCase()]??null:null}
+export function setupCommand(text){const commands={'检查更新':'updates','check-updates':'updatesEn','使用说明':'manual',guide:'manualEn','安装向导':'wizardInfo',setup:'wizardInfoEn','安装状态':'status','setup-status':'statusEn','安装智能体':'install','install-agent':'installEn','登录智能体':'login','login-agent':'loginEn','验收智能体':'check','check-agent':'checkEn','安装帮助':'help','install-help':'helpEn'};return typeof text==='string'?commands[text.trim().toLowerCase()]??null:null}
 
 export class SetupController{
- constructor({stateDir,accountId,home=(process.env.HOME||platformHome()),runDoctor=doctor,runInstall=installCodex,runCheck=checkCodex,runModelTest}={}){
-  Object.assign(this,{stateDir,accountId,home,runDoctor,runInstall,runCheck,runModelTest});this.busy=false
+ constructor({stateDir,accountId,home=(process.env.HOME||platformHome()),runDoctor=doctor,runInstall=installCodex,runCheck=checkCodex,runModelTest,checkUpdates}={}){
+  Object.assign(this,{stateDir,accountId,home,runDoctor,runInstall,runCheck,runModelTest,checkUpdates});this.busy=false
  }
  async init(){return this}
  command(text){return setupCommand(text)}
  async handle(command,reply,{signal,scope=this.accountId??'owner',executionKey}={}){
   const english=command.endsWith('En');if(english)command=command.slice(0,-2)
   const setupAtHome=installerCommand('setup',{accountId:this.accountId??'default',language:english?'en':'zh'})
+  if(command==='updates'){await reply(this.checkUpdates?await this.checkUpdates(english?'en':'zh'):english?'Update checking is unavailable in this installation. No upgrade was scheduled.':'当前安装未接入版本检查，未安排升级。');return}
   if(command==='manual'){await reply(english?USER_GUIDE_EN:USER_GUIDE);return}
   if(command==='wizardInfo'){await reply(english?'Run '+setupAtHome+' on your computer and choose 2 (Configure model). Then choose subscription sign-in, DeepSeek, Qwen, or Kimi and complete a model test. Enter API keys only in your terminal.':'首次模型配置请在安装电脑运行 '+setupAtHome+'，并在菜单中选择 2。终端会引导选择订阅登录、DeepSeek、Qwen 或 Kimi，并完成模型测试。请勿把 API Key 发到微信。');return}
   if(command==='help'){await reply(english?'Complete model setup on your computer: '+setupAtHome+'.\nsetup-status: check this account and its model access\ninstall-agent: check the bundled Codex CLI\nlogin-agent: see subscription sign-in instructions\ncheck-agent: test the Codex protocol and model\nEnter third-party API keys only in your local terminal.':'安装配置在电脑终端完成，运行以下命令后选择 2：'+setupAtHome+'。\n安装状态（setup-status）：查看当前账号环境与模型接入状态\n安装智能体（install-agent）：检查项目自带的 Codex CLI\n登录智能体（login-agent）：查看订阅登录方法\n验收智能体（check-agent）：检查 Codex 协议并发起一次模型测试\n第三方模型密钥只在本机终端输入。');return}

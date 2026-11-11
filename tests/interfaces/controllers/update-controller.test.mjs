@@ -23,3 +23,16 @@ test('update controller sends a newer release through the presenter once', async
   assert.match(notices[0][1], /不会自动升级/)
   controller.close()
 })
+
+test('explicit checks run while busy, repeat on request and do not consume automatic notice state',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'explicit-update-'));t.after(()=>rm(root,{recursive:true,force:true}))
+ await writeFile(join(root,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'v1.0.0',commit:'a'.repeat(40)}))
+ let ready=false,requests=0,sends=0
+ const controller=createUpdateController({stateDir:root,sourceDir:root,owners:['alice'],ready:()=>ready,fetchLatest:async()=>{requests++;return {tag:'v1.1.0',commit:'b'.repeat(40)}},view:{notice:async()=>{sends++;return {status:'accepted'}}},log:()=>{}})
+ assert.match(await controller.check(),/有可用更新/);assert.match(await controller.check('en'),/An update is available/)
+ assert.equal(requests,2);assert.equal(sends,0)
+ ready=true;await controller.tick();assert.equal(sends,1)
+ assert.match(await controller.check(),/有可用更新/)
+ await controller.tick();assert.equal(sends,1)
+ controller.close()
+})

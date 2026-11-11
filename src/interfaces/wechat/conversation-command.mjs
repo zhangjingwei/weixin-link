@@ -7,7 +7,7 @@ const english={
 
 // Information requests can be answered without consuming the text prompt.
 const promptInfoCommands=new Set([
- '使用说明','guide','安装状态','setup-status','安装帮助','install-help',
+ '检查更新','check-updates','使用说明','guide','安装状态','setup-status','安装帮助','install-help',
  '诊断','diagnose','服务状态','service-status','查看最近错误','recent-errors',
 ])
 const promptInfoActions=new Set(['help','status','progress','result','agentStatus','models'])

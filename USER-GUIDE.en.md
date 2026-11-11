@@ -34,6 +34,7 @@ Service and help
 - `guide`: Show this guide again.
 - `service-status`: Check whether the service is running.
 - `restart`: Restart this account's service when it is idle.
+- `check-updates`: Show the current version, latest stable release, and update availability without installing. Explicit checks are independent of automatic notification deduplication. Unverified source/custom installations are reported as such.
 - `upgrade`: Upgrade a standard installation when it is idle. Custom deployments may not support this command.
 
 You can also ask for a reminder in ordinary language, such as “Remind me about the meeting tomorrow at 9 AM.” A reminder can send a message or start a scheduled task. It runs on the computer and does not read your phone calendar.
