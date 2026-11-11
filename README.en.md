@@ -133,6 +133,16 @@ To add another WeChat account, choose **Add WeChat account**. See [WeChat login 
 
 To uninstall, rerun the same command, choose **Uninstall**, and confirm. Account data and the workspace are kept.
 
+## Troubleshooting
+
+### Codex subscription sign-in says device code authorization is disabled
+
+The installer uses device-code sign-in. In ChatGPT **Settings → Security**, enable **Device code authorization** (also called device code sign-in; wording may vary), then follow the official link and code shown in the installation terminal. For a managed workspace, an admin must allow device code login in workspace permissions.
+
+If authorization was rejected or the code expired, enable the setting, rerun the installer, choose **Configure model → Subscription sign-in**, and use the newly displayed code. This setting applies to Codex subscription device-code login; third-party API key setup does not need it. For other failures, check the reported error, network, or account permissions.
+
+See the [official OpenAI device-code login guide](https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta).
+
 ## More capabilities and documentation
 
 - [User guide](USER-GUIDE.en.md): conversations, models, memory, attachments and results.
