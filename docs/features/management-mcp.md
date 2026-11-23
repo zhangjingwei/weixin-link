@@ -12,7 +12,7 @@
 
 同名项目会询问用户选择，无匹配不会扫描整个磁盘或创建项目。候选只来自当前账号下该用户已登记的会话，不是智能全文搜索；“知识库做到哪了”里的业务别称未命中时需澄清。查询不是执行授权，模型理解仍可能出错；精确的“切换”“补充”“停止”等原命令继续可用。
 
-## 工具边界（共31项）
+## 工具边界（共32项）
 
 | 工具 | 输入要点 | 结果/边界 |
 | --- | --- | --- |
@@ -20,6 +20,7 @@
 | list_projects | 无 | 当前用户已登记项目和日常会话 |
 | get_project_status | projectId | 本地执行、队列、恢复状态、管理操作；不是项目完成度 |
 | get_session_history | projectId、可选 cursor | 文本分块和绑定目标的续页，不重发附件 |
+| request_model_switch | projectId, model, requestId | 保存指定项目的模型选择，后续新任务生效；不改供应商、不打断当前任务 |
 | list_models | 无 | 底座结构化模型列表；不切模型 |
 | submit_project_task | projectId、text、requestId | 新任务持久排队，不切换入口；项目结果直接回传 |
 | request_project_switch | projectId、requestId | pending；完成后独立通知 |
@@ -85,7 +86,7 @@ node --test tests/management/*.test.mjs
 node src/tools/verify-management-native.mjs
 ```
 
-第二条在临时 HOME/CODEX_HOME 中运行项目固定版本的真实 Codex，只创建空线程并检查 Skill 和 31 个 MCP 工具加载，不登录、不启动模型轮次、不访问生产账号状态。自动测试验证协议、身份、歧义、长历史、陈旧任务、去重和安装保护；不等于真实微信或跨平台人工验收。
+第二条在临时 HOME/CODEX_HOME 中运行项目固定版本的真实 Codex，只创建空线程并检查 Skill 和 32 个 MCP 工具加载，不登录、不启动模型轮次、不访问生产账号状态。自动测试验证协议、身份、歧义、长历史、陈旧任务、去重和安装保护；不等于真实微信或跨平台人工验收。
 
 ## 第二批能力的约束
 
@@ -120,3 +121,5 @@ node src/tools/verify-management-native.mjs
 重启和升级先保存意图、返回 MCP 回执，再安排原 AgentSwitcher/ChatUpgrader 工作进程；不在模型工具调用内停止服务。重启绑定当前账号；升级绑定共享安装并复用等待空闲、备份、切换、回滚和健康检查。升级凭据同时绑定版本和提交，最新 Release 发生变化则不改装另一个版本。查询维护状态区分工作进程 waiting_idle/running/complete/failed 与管理操作 pending/scheduled/unknown；安排成功不是完成。
 
 日常指南及首次连接提示以自然语言示例为主；精确命令完整保留于 docs/reference/commands.md 与 commands.en.md，并由原解析器在模型不可用时处理。计划、代码审查、普通文件工作等通过底座与已有跨项目任务入口处理，不添加通用 shell/RPC 工具。永久删除、原生会话重置/迁移、扫码、密钥输入及用户审批不由这批维护工具代办；人工恢复入口仍保留。
+
+模型选择按项目保存于既有会话状态，普通消息及规划轮次从下一次提交生效，并在重新连接时应用。configured 仅表示偏好持久化，不代表实际推理验收成功。原生 review/start 不提供逐次模型参数，不保证独立审查同步切换。项目状态区分 configuredModel（保存的选择）与 connectedModel（最近建连时底座回执），后者不是每轮实际模型。

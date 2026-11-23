@@ -9,6 +9,7 @@ export const managementTools=[
  define('get_project_status','读取本地任务、队列、待审批和管理操作状态；不是项目完成度。',project,['projectId']),
  define('get_session_history','只读历史文本分块分页；下一页为剩余文本或更早轮次，不重发附件。',{...project,cursor:string(4096)},['projectId']),
  define('get_management_operation','按操作编号查询当前用户的管理请求回执，不重放操作。',{operationId:string()},['operationId']),
+ define('request_model_switch','明确要求切换时，为指定项目保存后续新任务的模型；不中断当前轮次，不更换供应商。先 list_models 核对模型标识。',{...project,model:string(),...write},['projectId','model','requestId']),
  define('list_models','只查询底座模型，不切换。'),
  define('submit_project_task','明确执行请求才向其他项目提交新的文字任务，不切换当前入口。queued 只表示持久排队，不代表完成；当前项目直接执行，补充原任务用 supplement_task。',{...project,text:string(8000),...write},['projectId','text','requestId']),
  define('request_project_switch','明确要求切换时调用。异步请求，pending 不是已切换。',{...project,...write},['projectId','requestId']),

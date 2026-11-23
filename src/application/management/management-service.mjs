@@ -1,3 +1,4 @@
+import {requestModelSwitch} from './model-management.mjs'
 import {requestProjectArchive,executeProjectArchive} from './project-archive-management.mjs'
 import {maintenanceRead,requestMaintenance,executeMaintenance} from './maintenance-management.mjs'
 import {submitProjectTask} from './project-task-management.mjs'
@@ -26,11 +27,12 @@ export class ManagementService{
  target(owner,id){const e=this.entries(owner).find(e=>e.id===id);if(!e)throw Error('MANAGEMENT_TARGET_NOT_FOUND');return e}
  snapshot(owner,e){
   const saved=this.manager.state.users[e.key]??{},s=this.manager.sessions.get(e.key)
-  return {projectId:e.id,name:this.conversations.displayName(owner,e),active:this.conversations.root[owner].active===e.id,daily:this.conversations.root[owner].dailyId===e.id,archived:!!e.archived,workspace:saved.workspace??null,workspaceSource:'local_configuration',threadId:saved.threadId??null,state:s?.state??'disconnected',task:s?.busy&&s.traceId&&s.turnId?{id:s.traceId,turnId:s.turnId,jobId:s.taskId??null}:null,queued:(s?.queue?.length??0)+(this.manager.submissions?.pending?.()??[]).filter(j=>j.owner===e.key).length,uncertain:this.manager.submissions?.uncertainCount?.(e.key)??0,recovery:saved.recovery??null,lastProgress:s?.lastProgress?.turnId===s?.turnId?s?.lastProgress?.text?.slice(0,2000)??null:null,progressTruncated:(s?.lastProgress?.text?.length??0)>2000,pendingApprovals:[...this.manager.questions.values()].filter(q=>q.session.userId===e.key).length,latestResult:saved.resultIdentity??null,evidence:'local_runtime',observedAt:new Date(this.now()).toISOString()}
+  return {projectId:e.id,name:this.conversations.displayName(owner,e),active:this.conversations.root[owner].active===e.id,daily:this.conversations.root[owner].dailyId===e.id,archived:!!e.archived,workspace:saved.workspace??null,workspaceSource:'local_configuration',threadId:saved.threadId??null,configuredModel:saved.modelOverride??null,connectedModel:s?.model??null,state:s?.state??'disconnected',task:s?.busy&&s.traceId&&s.turnId?{id:s.traceId,turnId:s.turnId,jobId:s.taskId??null}:null,queued:(s?.queue?.length??0)+(this.manager.submissions?.pending?.()??[]).filter(j=>j.owner===e.key).length,uncertain:this.manager.submissions?.uncertainCount?.(e.key)??0,recovery:saved.recovery??null,lastProgress:s?.lastProgress?.turnId===s?.turnId?s?.lastProgress?.text?.slice(0,2000)??null:null,progressTruncated:(s?.lastProgress?.text?.length??0)>2000,pendingApprovals:[...this.manager.questions.values()].filter(q=>q.session.userId===e.key).length,latestResult:saved.resultIdentity??null,evidence:'local_runtime',observedAt:new Date(this.now()).toISOString()}
  }
  exact(e,args){const s=this.manager.sessions.get(e.key);if(!s||!s.busy||s.traceId!==args.taskId||s.turnId!==args.turnId||s.rpc?.closed)throw Error('MANAGEMENT_STALE_TASK');return s}
  async call(caller,name,args){
   validateManagementCall(name,args);const owner=this.owner(caller)
+  if(name==='request_model_switch')return requestModelSwitch(this,owner,caller,args)
   if(name==='request_project_archive')return requestProjectArchive(this,owner,caller,args)
   if(['get_service_status','get_installation_status','get_diagnostics','get_usage_guide','get_maintenance_status'].includes(name))return maintenanceRead(this,owner,name,args)
   if(['request_service_restart','request_upgrade'].includes(name))return requestMaintenance(this,owner,caller,name,args)

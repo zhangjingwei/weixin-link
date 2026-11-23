@@ -45,3 +45,5 @@ Exact commands remain handled by the bridge:
 - **service-status**, **guide**, **help**: service status, this guide and the full manual command entry.
 
 See the [exact command reference](docs/reference/commands.en.md) for recovery procedures. Natural-language management requires the enabled MCP and Skill; exact commands remain available if those are unavailable.
+
+Model selection: ask to use an available model for a project’s future tasks. The assistant validates the exact model ID and saves a project-scoped preference without interrupting the current turn. Fixed third-party providers remain managed through installation configuration.
