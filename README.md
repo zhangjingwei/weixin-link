@@ -150,6 +150,10 @@ Windows x64（PowerShell）：
 
 参见 [OpenAI 官方设备码登录说明](https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta)。
 
+### 已完成订阅授权，但模型测试超时
+
+登录授权、Codex 原生接口检查和真实模型测试是不同阶段。模型测试最多等待约 3 分钟，在独立临时目录执行，不读取项目工作目录的规则。出现 `MODEL_PROBE_TIMEOUT` 表示本次推理未验证，不等于订阅登录失败；可在当前安装向导选择「仅重试模型测试」，保留已有授权，无需再次进行设备码登录。也可选择稍后配置；只有本轮随机校验码完全匹配才记录为通过。
+
 ## 更多能力与文档
 
 - [使用指南](USER-GUIDE.md)：会话、模型、记忆、附件与结果。

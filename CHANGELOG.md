@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reduce false model-setup timeouts with isolated probes, a three-minute limit, exact final-answer recovery after shutdown timeouts, and inference-only retries that preserve authorization.
+
 - Prune expired management receipts with per-user quotas and discard redelivery payloads when execution is ruled out, retaining unknown delivery evidence.
 
 - Extend management MCP to 22 tools covering directory-bound project creation, renaming, bounded history search, result queries/redelivery, targeted reconciliation, schedules and version-specific update dismissal.
