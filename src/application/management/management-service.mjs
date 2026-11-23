@@ -1,0 +1,153 @@
+import {pruneManagementOperations,discardUnexecutedPayload} from './management-writes.mjs'
+import {workspaceChoices,createProject,renameProject} from './project-management.mjs'
+import {listProjectTasks,getTaskResult,requestResultRedelivery,executeRedelivery,requestTaskReconciliation,executeReconciliation} from './result-management.mjs'
+import {searchHistory} from './history-search.mjs'
+import {createSchedule,listSchedules,cancelSchedule} from './schedule-management.mjs'
+import {checkUpdates,skipUpdate} from './update-management.mjs'
+import {randomUUID,createHmac,timingSafeEqual} from 'node:crypto'
+import {historyInputText,historyText} from '../conversations/history.mjs'
+import {validateManagementCall} from './tools.mjs'
+
+const signatureFor=(name,args)=>createHmac('sha256','zerolink-operation-v1').update(JSON.stringify([name,Object.keys(args).sort().map(key=>[key,args[key]])])).digest('hex')
+
+// A management facade over the existing conversation/task state, not another queue.
+export class ManagementService{
+ constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
+  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
+  manager.state.managementOperations??=[];this.operations=manager.state.managementOperations
+  for(const op of this.operations)if(['pending','executing'].includes(op.status))op.status=op.status==='pending'?'not_executed':'unknown'
+  pruneManagementOperations(this.operations,this.now())
+ }
+ owner(caller){const entry=this.conversations.entry(caller);if(!entry||!this.conversations.realOwners.has(entry.owner))throw Error('MANAGEMENT_FORBIDDEN');return entry.owner}
+ entries(owner){return (this.conversations.root[owner]?.entries??[]).filter(e=>!e.deleted&&!e.deleteIntent)}
+ target(owner,id){const e=this.entries(owner).find(e=>e.id===id);if(!e)throw Error('MANAGEMENT_TARGET_NOT_FOUND');return e}
+ snapshot(owner,e){
+  const saved=this.manager.state.users[e.key]??{},s=this.manager.sessions.get(e.key)
+  return {projectId:e.id,name:this.conversations.displayName(owner,e),active:this.conversations.root[owner].active===e.id,daily:this.conversations.root[owner].dailyId===e.id,archived:!!e.archived,workspace:saved.workspace??null,workspaceSource:'local_configuration',threadId:saved.threadId??null,state:s?.state??'disconnected',task:s?.busy&&s.traceId&&s.turnId?{id:s.traceId,turnId:s.turnId,jobId:s.taskId??null}:null,queued:(s?.queue?.length??0)+(this.manager.submissions?.pending?.()??[]).filter(j=>j.owner===e.key).length,uncertain:this.manager.submissions?.uncertainCount?.(e.key)??0,recovery:saved.recovery??null,lastProgress:s?.lastProgress?.turnId===s?.turnId?s?.lastProgress?.text?.slice(0,2000)??null:null,progressTruncated:(s?.lastProgress?.text?.length??0)>2000,pendingApprovals:[...this.manager.questions.values()].filter(q=>q.session.userId===e.key).length,latestResult:saved.resultIdentity??null,evidence:'local_runtime',observedAt:new Date(this.now()).toISOString()}
+ }
+ exact(e,args){const s=this.manager.sessions.get(e.key);if(!s||!s.busy||s.traceId!==args.taskId||s.turnId!==args.turnId||s.rpc?.closed)throw Error('MANAGEMENT_STALE_TASK');return s}
+ async call(caller,name,args){
+  validateManagementCall(name,args);const owner=this.owner(caller)
+  const extended={list_workspace_choices:()=>workspaceChoices(this,owner,args),create_project:()=>createProject(this,owner,caller,args),rename_project:()=>renameProject(this,owner,caller,args),search_session_history:()=>searchHistory(this,owner,args),list_project_tasks:()=>listProjectTasks(this,owner,args),get_task_result:()=>getTaskResult(this,owner,args),request_result_redelivery:()=>requestResultRedelivery(this,owner,caller,args),request_task_reconciliation:()=>requestTaskReconciliation(this,owner,caller,args),check_updates:()=>checkUpdates(this,owner),skip_update:()=>skipUpdate(this,owner,caller,args),create_schedule:()=>createSchedule(this,owner,caller,args),list_schedules:()=>listSchedules(this,owner,args),cancel_schedule:()=>cancelSchedule(this,owner,caller,args)}
+  if(extended[name])return extended[name]()
+  if(name==='get_management_operation'){const op=this.operations.find(op=>op.id===args.operationId&&op.owner===owner);if(!op)throw Error('MANAGEMENT_OPERATION_NOT_FOUND');return this.result(op)}
+  if(name==='list_projects')return {projects:this.entries(owner).map(e=>this.snapshot(owner,e))}
+  if(name==='resolve_target'){
+   const q=args.query.normalize('NFKC').trim().toLowerCase(),entries=this.entries(owner)
+   const daily=['daily','日常','日常助手'].includes(q)?entries.filter(e=>e.id===this.conversations.root[owner].dailyId):[]
+   const exact=daily.length?daily:entries.filter(e=>[e.id,e.name,this.conversations.displayName(owner,e)].some(v=>String(v).normalize('NFKC').toLowerCase()===q))
+   const found=exact.length?exact:entries.filter(e=>[e.name,this.conversations.displayName(owner,e),this.manager.state.users[e.key]?.workspace].some(v=>v&&String(v).normalize('NFKC').toLowerCase().includes(q)))
+   return {resolution:found.length===1?'unique':found.length?'ambiguous':'not_found',candidates:found.map(e=>this.snapshot(owner,e)),changed:false}
+  }
+  if(name==='list_models')return this.conversations.withBackend(owner,rpc=>this.manager.protocol.listModels(rpc))
+  const e=this.target(owner,args.projectId)
+  if(name==='get_project_status')return {...this.snapshot(owner,e),operationsTotal:this.operations.filter(o=>o.owner===owner&&o.projectId===e.id).length,operations:this.operations.filter(o=>o.owner===owner&&o.projectId===e.id).slice(-20).map(op=>({...this.result(op),name:op.name,requestId:op.requestId,createdAt:op.createdAt}))}
+  if(name==='get_session_history')return this.history(owner,e,args.cursor)
+  // Serialize duplicate writes until their uncertain intent has reached durable storage.
+  const key=JSON.stringify([owner,args.requestId]),running=this.inflight.get(key)
+  const signature=signatureFor(name,args)
+  if(running){if(running.signature!==signature)throw Error('MANAGEMENT_REQUEST_CONFLICT');return running.work}
+  const work=this.mutate(owner,caller,e,name,args);this.inflight.set(key,{signature,work})
+  try{return await work}finally{this.inflight.delete(key)}
+ }
+ async mutate(owner,caller,e,name,args){
+  const signature=signatureFor(name,args)
+  const previous=this.operations.find(o=>o.owner===owner&&o.requestId===args.requestId)
+  if(previous){if(previous.signature!==signature)throw Error('MANAGEMENT_REQUEST_CONFLICT');return this.result(previous)}
+  if(e.archived||e.archiveIntent!==undefined||e.archiveSync==='missing')throw Error('MANAGEMENT_TARGET_UNAVAILABLE')
+  if(this.operations.some(o=>o.owner===owner&&['pending','executing'].includes(o.status)))throw Error('MANAGEMENT_OPERATION_PENDING')
+  pruneManagementOperations(this.operations,this.now())
+  if(this.operations.filter(o=>o.owner===owner).length>=10000)throw Error('MANAGEMENT_OPERATION_LIMIT')
+  if(name!=='request_project_switch')this.exact(e,args)
+  const root=this.conversations.root[owner]
+  const op={id:randomUUID(),owner,caller,projectId:e.id,name,requestId:args.requestId,signature,status:name==='supplement_task'?'executing':'pending',createdAt:this.now(),threadId:this.manager.state.users[e.key]?.threadId??null,taskId:args.taskId,turnId:args.turnId,callerTask:this.manager.sessions.get(caller)?.traceId,selectionVersion:root.selectionVersion??0}
+  this.operations.push(op)
+  try{await this.manager.save()}catch(error){op.status='not_executed';throw error}
+  if(op.status==='pending')this.expire(op)
+  if(name==='supplement_task'){
+   const notices=[]
+   try{this.exact(e,args);const result=await this.manager.steer(e.key,args.text,t=>notices.push(t),this.manager.lifecycle.capture(e.key),{traceId:args.taskId,turnId:args.turnId});op.status=result?.status??'unknown';op.detail=notices.join('\n')}catch(error){op.status=error.message==='MANAGEMENT_STALE_TASK'?'not_sent':'unknown'}
+   await this.manager.save()
+  }
+  return this.result(op)
+ }
+ result(op){return {operationId:op.id,status:op.status,projectId:op.projectId,detail:op.detail??null,...op.data?{data:op.data}:{}}}
+ expire(op){const timer=setTimeout(()=>{this.expirations.delete(op.id);if(op.status==='pending'){op.status='not_executed';op.detail='MANAGEMENT_RECEIPT_EXPIRED';discardUnexecutedPayload(op);void this.manager.save().catch(()=>{})}},300000);timer.unref?.();this.expirations.set(op.id,timer)}
+ credential(token,kind,owner){const value=this.decode(token);if(value.kind!==kind||value.owner!==owner||!Number.isFinite(value.expires)||value.expires<=this.now())throw Error('MANAGEMENT_CREDENTIAL_INVALID');return value}
+ // Armed only after the MCP transport has written its tool response. A lost receipt
+ // stays pending and is never blindly replayed after a service restart.
+ async activate(caller,id){
+  const owner=this.owner(caller),op=this.operations.find(o=>o.id===id&&o.owner===owner&&o.caller===caller)
+  if(!op||op.status!=='pending'||this.timers.has(id))return
+  const poll=()=>{this.timers.delete(id);void this.execute(op).catch(()=>{})}
+  const timer=setTimeout(poll,50);timer.unref?.();this.timers.set(id,timer)
+ }
+ async execute(op){return this.track(()=>this.run(op))}
+ async run(op){
+  if(op.status!=='pending')return
+  if(['request_result_redelivery','request_task_reconciliation'].includes(op.name))return this.runExtended(op)
+  const {manager,conversations}=this,root=conversations.root[op.owner]
+  try{
+   if(this.closed||!this.ready())throw Error('MANAGEMENT_UNAVAILABLE')
+   const e=this.target(op.owner,op.projectId)
+   if((manager.state.users[e.key]?.threadId??null)!==op.threadId)throw Error('MANAGEMENT_STALE_TARGET')
+   if(op.name==='request_project_switch'){
+    const caller=manager.sessions.get(op.caller)
+    if((root.selectionVersion??0)!==op.selectionVersion||caller?.traceId!==op.callerTask)throw Error('MANAGEMENT_SUPERSEDED')
+    if(this.now()-op.createdAt>300000)throw Error('MANAGEMENT_SWITCH_EXPIRED')
+    if(caller?.busy||caller?.finishing||caller?.connecting){await this.activate(op.caller,op.id);return}
+   }else this.exact(e,op)
+   op.status='executing';await manager.save()
+   if(this.closed)throw Error('MANAGEMENT_UNAVAILABLE')
+   if(op.name==='request_project_switch'){
+    if((root.selectionVersion??0)!==op.selectionVersion||manager.sessions.get(op.caller)?.traceId!==op.callerTask)throw Error('MANAGEMENT_SUPERSEDED')
+    const version=root.selectionVersion=(root.selectionVersion??0)+1
+    let confirmation
+    await conversations.selectConversation({_conversationOwner:op.owner,userId:e.key,_conversationCommand:{action:'switch',id:e.id},_conversationSelectionVersion:version,_conversationPriorActive:root.active},text=>{confirmation=text})
+    op.status=root.active===e.id&&root.selectionVersion===version?'confirmed':'superseded';op.detail=confirmation
+   }else{
+    const result=await manager.handle(e.key,'',()=>{},undefined,manager.lifecycle.capture(e.key),{action:'stop',expected:{traceId:op.taskId,turnId:op.turnId},preserveReply:true})
+    op.status=result?.status??'unknown'
+   }
+  }catch(error){op.status=op.status==='executing'?'unknown':'not_executed';op.detail=/^MANAGEMENT_[A-Z_]+$/.test(error.message)?error.message:'MANAGEMENT_OPERATION_UNCONFIRMED'}
+  clearTimeout(this.expirations.get(op.id));this.expirations.delete(op.id)
+  await manager.save()
+  const label=op.name==='request_project_switch'?'切换':'停止'
+  const notice=op.status==='confirmed'?op.detail:op.status==='requested'?'已请求停止原任务，并清空其排队消息。停止结果以原会话最终状态为准。':op.detail==='MANAGEMENT_SUPERSEDED'?'切换请求已被后续操作替代，未执行。':op.status==='not_executed'?`${label}请求未执行；原目标已变化或当前无法操作。`:`${label}结果尚未确认，未自动重试；可查询项目状态核对。`
+  await this.notice(op.owner,notice).catch(()=>{})
+ }
+ async runExtended(op){
+  try{
+   if(this.closed||!this.ready())throw Error('MANAGEMENT_UNAVAILABLE')
+   const done=op.name==='request_result_redelivery'?await executeRedelivery(this,op):await executeReconciliation(this,op)
+   if(done===false)return
+  }catch(error){op.status=op.status==='executing'?'unknown':'not_executed';op.detail=/^(?:MANAGEMENT|SCHEDULE|UPDATE)_[A-Z_]+$/.test(error.message)?error.message:'MANAGEMENT_OPERATION_UNCONFIRMED'}
+  clearTimeout(this.expirations.get(op.id));this.expirations.delete(op.id)
+  discardUnexecutedPayload(op)
+  await this.manager.save()
+  const notice=op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'指定结果已提交发送接口。':op.status==='deferred'?'指定结果已进入原投递队列。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
+  await this.notice(op.owner,notice).catch(()=>{})
+ }
+ sign(value){const data=Buffer.from(JSON.stringify(value)).toString('base64url');return data+'.'+createHmac('sha256',this.cursorKey).update(data).digest('base64url')}
+ decode(cursor){try{const [data,sig,...rest]=cursor.split('.'),expected=createHmac('sha256',this.cursorKey).update(data).digest(),actual=Buffer.from(sig,'base64url');if(rest.length||actual.length!==expected.length||!timingSafeEqual(actual,expected))throw Error();return JSON.parse(Buffer.from(data,'base64url'))}catch{throw Error('MANAGEMENT_INVALID_CURSOR')}}
+ async history(owner,e,cursor){
+  if(!this.conversations.backendPort?.capabilities.history)throw Error('MANAGEMENT_UNSUPPORTED')
+  const threadId=this.manager.state.users[e.key]?.threadId
+  if(!threadId)return {messages:[],nextCursor:null}
+  const position=cursor?this.decode(cursor):{owner,projectId:e.id,threadId,index:0,offset:0}
+  if(position.owner!==owner||position.projectId!==e.id||position.threadId!==threadId)throw Error('MANAGEMENT_INVALID_CURSOR')
+  const page=await this.conversations.withBackend(owner,rpc=>this.conversations.backendPort.listTurns(rpc,threadId,{limit:1,cursor:position.backendCursor}))
+  const items=(page.data??[]).flatMap(turn=>(turn.items??[]).flatMap(item=>{
+   const text=item.type==='userMessage'?(item.content??[]).filter(c=>c.type==='text').map(c=>historyInputText(c.text??'')).join('\n'):item.type==='agentMessage'?item.text:null
+   return text?[{role:item.type==='userMessage'?'user':'assistant',turnId:turn.id,startedAt:turn.startedAt??null,text:historyText(text)}]:[]
+  }))
+  const digest=createHmac('sha256',this.cursorKey).update(JSON.stringify(items)).digest('hex')
+  if(position.digest&&position.digest!==digest)throw Error('MANAGEMENT_HISTORY_CHANGED')
+  if(position.turnId&&items[0]?.turnId!==position.turnId)throw Error('MANAGEMENT_HISTORY_CHANGED')
+  let index=position.index,offset=position.offset,budget=10000;const messages=[]
+  while(index<items.length&&budget){const item=items[index],characters=Array.from(item.text.slice(offset)),text=characters.slice(0,budget).join('');messages.push({...item,text,offset,continued:offset>0,hasMore:offset+text.length<item.text.length});offset+=text.length;budget-=Math.min(characters.length,budget);if(offset>=item.text.length){index++;offset=0}}
+  const next=index<items.length?{...position,turnId:items[0]?.turnId,digest,index,offset}:page.nextCursor?{owner,projectId:e.id,threadId,backendCursor:page.nextCursor,index:0,offset:0}:null
+  return {messages,turns:(page.data??[]).map(turn=>({id:turn.id,startedAt:turn.startedAt??null,status:turn.status??null})),nextCursor:next?this.sign(next):null,order:'oldest_first_within_turn; next_cursor_is_older_turn_or_remaining_text',attachmentsResent:false}
+ }
+ close(){this.closed=true;for(const timer of [...this.timers.values(),...this.expirations.values()])clearTimeout(timer);this.timers.clear();this.expirations.clear()}
+}

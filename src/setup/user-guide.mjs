@@ -83,6 +83,12 @@ export const USER_GUIDE=`微信助手使用说明
 - “分叉会话”：复制当前会话并切换过去。
 - “旁支会话”：创建旁支，保留当前会话；以后可切换到旁支。
 
+【自然语言管理】
+
+还支持新建/命名项目、搜索历史、只读查看结果、明确重发原附件、核对指定未确认任务、创建/查看/取消计划及跳过指定更新。新建不自动切换，查询结果不重发文件，取消计划不停止已提交任务。
+
+也可以说“知识库做到哪了”“切换到知识库”“给知识库当前任务补充……”或“停止知识库当前任务”。通过配套 MCP + Skill 只定位你的已登记项目；同名会询问。查询不会切换，切换与停止请求以最终系统确认和原任务状态为准。原命令继续可用。
+
 【模型与记忆】
 
 - “模型”：查看模型列表。
@@ -149,6 +155,12 @@ Send English commands as plain text, without a slash. Commands are case insensit
 Send a message, image, or file and explain what you need. When you reply to a quoted message, the assistant tries to read its text and tells you if it cannot.
 Commands that need a name, search term, or request work in two steps: send the command, then reply to its prompt with a separate text message. Images, files, and voice attachments cannot supply that input.
 While a prompt is waiting, you can check guide or status and then continue with your original answer.
+
+Natural-language management
+
+Create or rename projects, search bounded history, read results without sending files, explicitly resend a retained snapshot, reconcile one uncertain task, manage schedules, and skip a specific release. Creating does not switch projects; cancelling a schedule does not stop a submitted task.
+
+Ask for progress in a named project, switch to it, supplement its running task, or stop that task. The management MCP and Skill only access your registered conversations. Ambiguous names require clarification. Queries do not switch projects; pending/requested does not confirm completion. Existing commands remain available.
 
 Conversations and tasks
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Reduce false model-setup timeouts with isolated probes, a three-minute limit, exact final-answer recovery after shutdown timeouts, and inference-only retries that preserve authorization.
+
+- Prune expired management receipts with per-user quotas and discard redelivery payloads when execution is ruled out, retaining unknown delivery evidence.
+
+- Extend management MCP to 22 tools covering directory-bound project creation, renaming, bounded history search, result queries/redelivery, targeted reconciliation, schedules and version-specific update dismissal.
+- Keep project creation separate from switching, pin result snapshots before redelivery, persist schedule request deduplication, and distinguish future schedule cancellation from stopping submitted tasks.
+
+- Add account-scoped natural-language project management through eight MCP tools and a bundled Skill, preserving existing command controls.
+- Bind supplements and stop requests to exact tasks, distinguish pending requests from confirmed outcomes, and retain long history across signed continuation cursors.
+- Manage private Skill installation and removal without changing global Codex settings or overwriting user files.
+
 ## 1.5.0 — 2026-11-11
 
 - Preserve complete conversation history with readable pagination, and make daily conversation selection and switching notices clearer.

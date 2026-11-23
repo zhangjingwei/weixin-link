@@ -16,6 +16,7 @@
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@napi-rs/canvas": "1.0.11",
     "@openai/codex": "0.163.0",
     "pdfjs-dist": "6.4.299",

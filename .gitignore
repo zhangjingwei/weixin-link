@@ -89,3 +89,8 @@
 
 # Local prerelease upgrade helper.
 /upgrade-main.sh
+
+# Bundled management plugin source; runtime secrets remain excluded above.
+!/plugins/
+/plugins/*
+!/plugins/zerolink-management/

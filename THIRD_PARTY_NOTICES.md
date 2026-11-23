@@ -35,3 +35,8 @@ FFmpeg 平台包的许可声明并不一致：当前锁文件中 Linux arm64/x64
 ## 第三方内容与服务
 
 用户附件、聊天记录、RSS 正文、网站内容、图片和字体不因项目采用 MIT 而获得转载授权。凭据、SSH 密钥、HA 令牌和账号配置不属于源码发布内容。微信与 OpenAI 等名称属于各自权利人，项目不作官方关联声明。
+
+## MCP 管理工具
+
+- `@modelcontextprotocol/sdk` 1.32.2：MIT，来源 https://github.com/modelcontextprotocol/typescript-sdk 。使用维护中的 v1 协议线以匹配随项目固定的 Codex CLI；通过标准 stdio 暴露窄工具，不复制 SDK 代码。
+- 新增传递依赖及其版本、来源、完整性见 `package-lock.json`；许可证保留在依赖包中（包括 Zod MIT、Ajv MIT、Express MIT）。

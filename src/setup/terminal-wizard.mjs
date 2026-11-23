@@ -13,8 +13,8 @@ import {setupLanguage,installerCommand} from './setup-locale.mjs'
 
 const providers={1:'subscription',2:'deepseek',3:'qwen',4:'kimi'}
 const messages={
- zh:{names:{subscription:'订阅登录',deepseek:'DeepSeek',qwen:'Qwen',kimi:'Kimi'},menu:'\nCodex 模型接入',current:'（当前：',choice:'\n1. 订阅登录（OpenAI/ChatGPT）\n2. DeepSeek\n3. Qwen（百炼按量付费）\n4. Kimi（国际平台）\n0. 稍后配置\n请选择：',deferred:command=>'模型接入尚未验证。微信连接后会提示如何继续；稍后可重新运行 '+command+' 并选择“配置模型”。',invalid:'请输入 0、1、2、3 或 4。',login:'正在打开 Codex 订阅授权；请按终端显示的官方链接和设备码完成登录。',key:name=>'请在本机输入 '+name+' 的 API Key；密钥不会显示或发送到微信。',check:'正在检查 Codex 连接和原生接口…',probe:'正在测试模型回复，最多等待约 1 分钟…',done:(name,restarted)=>'✓ '+name+' 已配置并通过模型测试。'+(restarted?'已安排本账号空闲后重启。':'请继续完成微信登录。'),failed:(code,kind)=>code==='MODEL_PROBE_TIMEOUT'?'模型 1 分钟内没有回复（MODEL_PROBE_TIMEOUT）。'+(kind==='subscription'?'请检查本机能否连接 OpenAI 服务，网络恢复后重试。':'请检查模型服务地址和网络，恢复后重试。'):code==='MODEL_PROBE_RESPONSE_MISMATCH'||code==='MODEL_PROBE_NO_RESPONSE'?'模型回复没有通过校验（'+code+'）。请重试或改选模型。':'配置或验收未完成（'+code+'）。可重试、改选提供商或稍后配置。'},
- en:{names:{subscription:'Subscription sign-in',deepseek:'DeepSeek',qwen:'Qwen',kimi:'Kimi'},menu:'\nCodex model setup',current:' (current: ',choice:'\n1. Subscription sign-in (OpenAI/ChatGPT)\n2. DeepSeek\n3. Qwen (Alibaba Cloud pay as you go)\n4. Kimi (international platform)\n0. Configure later\nChoose: ',deferred:command=>'Model access has not been verified. After WeChat login, rerun '+command+' and choose Configure model to continue.',invalid:'Enter 0, 1, 2, 3, or 4.',login:'Open the official Codex device sign-in link shown in this terminal and enter its code.',key:name=>'Enter the '+name+' API key on this computer. It will not be displayed or sent to WeChat.',check:'Checking the Codex connection and native API…',probe:'Testing the model response; this may take up to 1 minute…',done:(name,restarted)=>'✓ '+name+' is configured and passed the model test. '+(restarted?'This account will restart when idle.':'Continue with WeChat login.'),failed:(code,kind)=>code==='MODEL_PROBE_TIMEOUT'?'The model did not respond within 1 minute (MODEL_PROBE_TIMEOUT). '+(kind==='subscription'?'Check this computer\'s connection to OpenAI services and retry.':'Check the model service URL and network, then retry.'):code==='MODEL_PROBE_RESPONSE_MISMATCH'||code==='MODEL_PROBE_NO_RESPONSE'?'The model response did not pass verification ('+code+'). Retry or choose another model.':'Setup or verification did not finish ('+code+'). Retry, choose another provider, or configure later.'},
+ zh:{names:{subscription:'订阅登录',deepseek:'DeepSeek',qwen:'Qwen',kimi:'Kimi'},menu:'\nCodex 模型接入',current:'（当前：',choice:'\n1. 订阅登录（OpenAI/ChatGPT）\n2. DeepSeek\n3. Qwen（百炼按量付费）\n4. Kimi（国际平台）\n0. 稍后配置\n请选择：',deferred:command=>'模型接入尚未验证。微信连接后会提示如何继续；稍后可重新运行 '+command+' 并选择“配置模型”。',invalid:'请输入 0、1、2、3 或 4。',login:'正在打开 Codex 订阅授权；请按终端显示的官方链接和设备码完成登录。',key:name=>'请在本机输入 '+name+' 的 API Key；密钥不会显示或发送到微信。',retry:'模型测试尚未验证，当前授权与配置保留。\n1. 仅重试模型测试\n2. 返回模型选择\n0. 稍后配置\n请选择：',check:'正在检查 Codex 连接和原生接口…',probe:'正在测试模型回复，最多等待约 3 分钟…',done:(name,restarted)=>'✓ '+name+' 已配置并通过模型测试。'+(restarted?'已安排本账号空闲后重启。':'请继续完成微信登录。'),failed:(code,kind)=>code==='MODEL_PROBE_TIMEOUT'?'模型测试在 3 分钟内未完成（MODEL_PROBE_TIMEOUT）。原生接口检查已通过；'+(kind==='subscription'?'这不代表 OpenAI 订阅登录失败。可保留授权，仅重试模型测试。':'这不代表 API 配置无效。可保留配置，仅重试模型测试。'):code==='MODEL_PROBE_RESPONSE_MISMATCH'||code==='MODEL_PROBE_NO_RESPONSE'?'模型回复没有通过校验（'+code+'）。请重试或改选模型。':'配置或验收未完成（'+code+'）。可重试、改选提供商或稍后配置。'},
+ en:{names:{subscription:'Subscription sign-in',deepseek:'DeepSeek',qwen:'Qwen',kimi:'Kimi'},menu:'\nCodex model setup',current:' (current: ',choice:'\n1. Subscription sign-in (OpenAI/ChatGPT)\n2. DeepSeek\n3. Qwen (Alibaba Cloud pay as you go)\n4. Kimi (international platform)\n0. Configure later\nChoose: ',deferred:command=>'Model access has not been verified. After WeChat login, rerun '+command+' and choose Configure model to continue.',invalid:'Enter 0, 1, 2, 3, or 4.',login:'Open the official Codex device sign-in link shown in this terminal and enter its code.',key:name=>'Enter the '+name+' API key on this computer. It will not be displayed or sent to WeChat.',retry:'Model inference is unverified; authorization and configuration are retained.\n1. Retry only the model test\n2. Return to provider selection\n0. Configure later\nChoose: ',check:'Checking the Codex connection and native API…',probe:'Testing the model response; this may take up to 3 minutes…',done:(name,restarted)=>'✓ '+name+' is configured and passed the model test. '+(restarted?'This account will restart when idle.':'Continue with WeChat login.'),failed:(code,kind)=>code==='MODEL_PROBE_TIMEOUT'?'The model test did not finish within 3 minutes (MODEL_PROBE_TIMEOUT). The native protocol check passed. '+(kind==='subscription'?'This does not establish an OpenAI subscription sign-in failure. Retry the model test with the existing authorization.':'This does not establish invalid API configuration. Retry the model test with the existing configuration.'):code==='MODEL_PROBE_RESPONSE_MISMATCH'||code==='MODEL_PROBE_NO_RESPONSE'?'The model response did not pass verification ('+code+'). Retry or choose another model.':'Setup or verification did not finish ('+code+'). Retry, choose another provider, or configure later.'},
 }
 
 export async function terminalChoice(prompt){
@@ -65,7 +65,7 @@ export async function runTerminalWizard({accountId='default',home=process.env.HO
  const m=messages[language]
  if(!m)throw Error('INVALID_SETUP_LANGUAGE')
  const account=await assertAccount(accountId,home)
- while(true){
+ setup: while(true){
   const existing=await accountProviderProfile(accountId,home)
   const choice=await choose(m.menu+(existing?m.current+m.names[existing.kind]+(language==='zh'?'）':')'):'')+m.choice)
   if(choice==='0'){write(m.deferred(installerCommand('setup',{accountId,language})));return {verified:false,deferred:true}}
@@ -83,8 +83,18 @@ export async function runTerminalWizard({accountId='default',home=process.env.HO
    }
    write(m.check)
    await check({accountId,home})
-   write(m.probe)
-   const result=await probe({accountId,home})
+   let result
+   for(;;){
+    write(m.probe)
+    try{result=await probe({accountId,home});break}catch(error){
+     if(error.message!=='MODEL_PROBE_TIMEOUT')throw error
+     write(m.failed(error.message,kind))
+     let retry
+     do{retry=await choose(m.retry)}while(!['0','1','2'].includes(retry))
+     if(retry==='2')continue setup
+     if(retry==='0'){write(m.deferred(installerCommand('setup',{accountId,language})));return {verified:false,deferred:true}}
+    }
+   }
    if(result.verified!==true||result.provider!==kind)throw Error('MODEL_PROBE_FAILED')
    await writeTerminalSetupStatus(account.stateDir,{...result,language,fingerprint:terminalSetupFingerprint(await accountProviderProfile(accountId,home))})
    const restarted=await applyService(account,home)

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "zerolink-management": {
+      "command": "node",
+      "args": ["${CODEX_PLUGIN_ROOT}/scripts/mcp.mjs"]
+    }
+  }
+}

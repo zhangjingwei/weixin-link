@@ -145,6 +145,10 @@ If authorization was rejected or the code expired, enable the setting, rerun the
 
 See the [official OpenAI device-code login guide](https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta).
 
+### Subscription authorization succeeded, but the model test timed out
+
+Authorization, the native Codex protocol check, and model inference are separate stages. The model test waits up to about 3 minutes and runs in a private temporary directory outside your project rules. `MODEL_PROBE_TIMEOUT` means this inference attempt remains unverified; it does not establish a subscription sign-in failure. Choose **Retry only the model test** in the current wizard to keep existing authorization without repeating device sign-in, or configure later. Verification is recorded only when this attempt’s random nonce matches exactly.
+
 ## More capabilities and documentation
 
 - [User guide](USER-GUIDE.en.md): conversations, models, memory, attachments and results.
@@ -162,3 +166,9 @@ See [artifact delivery and retention](docs/artifact-delivery.md) (Chinese) for p
 Confirm login with your own WeChat account. Do not share login addresses or device authorization codes. For subscription sign-in, use the official OpenAI authorization page. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
 
 Licensed under the [MIT License](LICENSE). Third-party dependencies and external services have their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Weixin Link is an independent project, not an official product of, or endorsed by, WeChat, OpenAI or other service providers.
+
+### Natural-language project management
+
+Ask for project progress, request a project switch, supplement a specific running task, or request a stop. The bundled management MCP and Skill only access the current user's registered conversations. Ambiguous targets require clarification; progress queries never switch projects. Pending/requested is not completion. Existing commands remain available. Reliable voice transcripts follow the same workflow. See the [management guide](docs/features/management-mcp.md) for installation, removal and limitations.
+
+Management also supports project creation and renaming, bounded history search, read-only results, explicit snapshot redelivery, targeted reconciliation, schedules, and version-specific update dismissal. Creating a project does not switch to it. Reading a result does not resend files. Cancelling a schedule does not stop a submitted task. See the [management guide](docs/features/management-mcp.md).

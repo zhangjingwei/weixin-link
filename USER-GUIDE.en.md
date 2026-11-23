@@ -130,3 +130,9 @@ If WeChat says it cannot connect or the assistant does not respond as expected, 
 - `stop`: Stop only the current conversation's task.
 
 Projects can share a folder. If they edit the same file at the same time, their changes may conflict; check whether another task is still running. A voice message with a complete text transcript can also contain a command.
+
+## Natural-language management
+
+Ask for progress in a named project, switch to it, supplement its running task, or stop that task. The management MCP and Skill only access your registered conversations and clarify ambiguous names. Queries never switch projects. Pending/requested does not confirm completion; check system confirmation and the original task state. Existing commands remain available. Reliable voice transcripts follow the same workflow. See the [management guide](docs/features/management-mcp.md).
+
+Management also supports project creation and renaming, bounded history search, read-only results, explicit snapshot redelivery, targeted reconciliation, schedules, and version-specific update dismissal. Creating a project does not switch to it. Reading a result does not resend files. Cancelling a schedule does not stop a submitted task. See the [management guide](docs/features/management-mcp.md).

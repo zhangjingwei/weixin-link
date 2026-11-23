@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {runTerminalWizard} from '../../src/setup/terminal-wizard.mjs'
-import {probeTerminalModel,runModelProbeCommand} from '../../src/setup/terminal-model-probe.mjs'
+import {probeTerminalModel,runModelProbeCommand,MODEL_PROBE_TIMEOUT_MS} from '../../src/setup/terminal-model-probe.mjs'
 import {readTerminalSetupStatus} from '../../src/setup/terminal-setup-status.mjs'
 import {saveProviderProfile,readProviderProfile} from '../../src/setup/provider-profile.mjs'
 import {accountPaths} from '../../src/infrastructure/accounts/account-store.mjs'
@@ -59,6 +59,8 @@ test('terminal probe passes Responses configuration and checks the model output'
  let captured
  const result=await probeTerminalModel({home:f.home,execute:async(binary,args,options)=>{captured={binary,args,options};const path=args[args.indexOf('--output-last-message')+1],nonce=args.at(-1).split('：').at(-1);await writeFile(path,nonce+'\n')}})
  assert.equal(result.provider,'kimi');assert.equal(result.verified,true)
+ assert.equal(captured.options.timeout,180000)
+ assert.equal(captured.options.cwd,join(captured.args[captured.args.indexOf('--output-last-message')+1],'..'))
  assert(captured.args.includes('--ephemeral'));assert(captured.args.join(' ').includes('wire_api="responses"'))
  assert(captured.args.join(' ').includes('model_context_window=1048576'))
  assert(!captured.args.join(' ').includes('sk-private-test-key'))
@@ -73,7 +75,7 @@ test('terminal probe closes unused stdin before waiting for Codex',async()=>{
 test('terminal probe reports a timed-out inference without marking setup verified',async t=>{
  const f=await fixture(t),choices=['1','0'],messages=[]
  const probe=options=>probeTerminalModel({...options,execute:async(_binary,_args,runOptions)=>{
-  assert.equal(runOptions.timeout,60000)
+  assert.equal(runOptions.timeout,MODEL_PROBE_TIMEOUT_MS)
   throw Object.assign(Error('private upstream details'),{killed:true,signal:'SIGTERM'})
  }})
  const result=await runTerminalWizard({home:f.home,choose:async()=>choices.shift(),login:async()=>{},check:async()=>{},probe,write:text=>messages.push(text)})
@@ -88,4 +90,52 @@ test('terminal probe distinguishes a wrong model answer from a connection timeou
  await assert.rejects(probeTerminalModel({home:f.home,execute:async(_binary,args)=>{
   await writeFile(args[args.indexOf('--output-last-message')+1],'wrong answer')
  }}),/MODEL_PROBE_RESPONSE_MISMATCH/)
+})
+
+test('a verified nonce survives CLI shutdown timeout, but missing or invalid answers remain unverified',async t=>{
+ const f=await fixture(t)
+ for(const answer of ['valid','wrong',null]){
+  const probe=()=>probeTerminalModel({home:f.home,execute:async(_binary,args)=>{
+   if(answer!==null)await writeFile(args[args.indexOf('--output-last-message')+1],answer==='valid'?args.at(-1).split('：').at(-1):'wrong')
+   throw Object.assign(Error('private details'),{killed:true,signal:'SIGTERM',code:null})
+  }})
+  if(answer==='valid')assert.equal((await probe()).verified,true)
+  else await assert.rejects(probe(),/MODEL_PROBE_TIMEOUT/)
+ }
+})
+
+test('a non-timeout process failure cannot pass verification merely because a nonce file exists',async t=>{
+ const f=await fixture(t)
+ for(const error of [Object.assign(Error('upstream failed'),{code:1}),Object.assign(Error('buffer overflow'),{killed:true,signal:'SIGTERM',code:'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'})]){
+  await assert.rejects(probeTerminalModel({home:f.home,execute:async(_binary,args)=>{
+   await writeFile(args[args.indexOf('--output-last-message')+1],args.at(-1).split('：').at(-1))
+   throw error
+  }}),/MODEL_PROBE_FAILED/)
+ }
+})
+
+test('retrying a timed-out subscription test preserves authorization and performs no second login',async t=>{
+ const f=await fixture(t),choices=['1','1'],calls=[],messages=[];let probes=0
+ const result=await runTerminalWizard({home:f.home,choose:async prompt=>{messages.push(prompt);return choices.shift()},login:async()=>calls.push('login'),check:async()=>calls.push('protocol'),probe:async()=>{
+  calls.push('probe');if(++probes===1){assert.equal(await readTerminalSetupStatus(f.stateDir),null);throw Error('MODEL_PROBE_TIMEOUT')}
+  return {verified:true,provider:'subscription',model:null}
+ },applyService:async()=>false,write:text=>messages.push(text)})
+ assert.equal(result.verified,true);assert.deepEqual(calls,['login','protocol','probe','probe'])
+ assert.equal((await readTerminalSetupStatus(f.stateDir)).verified,true)
+ assert(messages.some(text=>text.includes('不代表 OpenAI 订阅登录失败')))
+ assert(messages.some(text=>text.includes('仅重试模型测试')))
+})
+
+test('English timeout can be deferred without misreporting a login failure',async t=>{
+ const f=await fixture(t),choices=['1','0'],messages=[]
+ const result=await runTerminalWizard({home:f.home,language:'en',choose:async prompt=>{messages.push(prompt);return choices.shift()},login:async()=>{},check:async()=>{},probe:async()=>{throw Error('MODEL_PROBE_TIMEOUT')},write:text=>messages.push(text)})
+ assert.equal(result.deferred,true);assert.equal(await readTerminalSetupStatus(f.stateDir),null)
+ assert(messages.some(text=>text.includes('does not establish an OpenAI subscription sign-in failure')))
+ assert(messages.some(text=>text.includes('Retry only the model test')))
+})
+
+test('real subprocess can finish its answer before timing out during shutdown',async t=>{
+ const f=await fixture(t)
+ const result=await probeTerminalModel({home:f.home,timeoutMs:1000,execute:(_binary,args,options)=>runModelProbeCommand(process.execPath,['-e',"require('node:fs').writeFileSync(process.argv[1],process.argv[2]);setInterval(()=>{},1000)",args[args.indexOf('--output-last-message')+1],args.at(-1).split('：').at(-1)],options)})
+ assert.equal(result.verified,true)
 })

@@ -43,3 +43,5 @@ subprocess output is not persisted. Upgrade subprocesses prepend the active Node
 directory to PATH, and npm is resolved beside that Node rather than via a login
 shell. A completed chat reply only confirms scheduling; the upgrade record and
 installed release marker establish the deployment result.
+
+管理 MCP 的 ManagementService 复用会话/任务用例，在 assistant-sessions.json 保存请求去重与回执；不新建业务数据库。
