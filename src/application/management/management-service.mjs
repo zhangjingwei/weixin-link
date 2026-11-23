@@ -1,3 +1,4 @@
+import {pruneManagementOperations,discardUnexecutedPayload} from './management-writes.mjs'
 import {workspaceChoices,createProject,renameProject} from './project-management.mjs'
 import {listProjectTasks,getTaskResult,requestResultRedelivery,executeRedelivery,requestTaskReconciliation,executeReconciliation} from './result-management.mjs'
 import {searchHistory} from './history-search.mjs'
@@ -15,6 +16,7 @@ export class ManagementService{
   Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
   manager.state.managementOperations??=[];this.operations=manager.state.managementOperations
   for(const op of this.operations)if(['pending','executing'].includes(op.status))op.status=op.status==='pending'?'not_executed':'unknown'
+  pruneManagementOperations(this.operations,this.now())
  }
  owner(caller){const entry=this.conversations.entry(caller);if(!entry||!this.conversations.realOwners.has(entry.owner))throw Error('MANAGEMENT_FORBIDDEN');return entry.owner}
  entries(owner){return (this.conversations.root[owner]?.entries??[]).filter(e=>!e.deleted&&!e.deleteIntent)}
@@ -54,7 +56,7 @@ export class ManagementService{
   if(previous){if(previous.signature!==signature)throw Error('MANAGEMENT_REQUEST_CONFLICT');return this.result(previous)}
   if(e.archived||e.archiveIntent!==undefined||e.archiveSync==='missing')throw Error('MANAGEMENT_TARGET_UNAVAILABLE')
   if(this.operations.some(o=>o.owner===owner&&['pending','executing'].includes(o.status)))throw Error('MANAGEMENT_OPERATION_PENDING')
-  for(let i=this.operations.length-1;i>=0;i--)if(!['pending','executing','unknown'].includes(this.operations[i].status)&&this.operations[i].createdAt<this.now()-7*86400000)this.operations.splice(i,1)
+  pruneManagementOperations(this.operations,this.now())
   if(this.operations.filter(o=>o.owner===owner).length>=10000)throw Error('MANAGEMENT_OPERATION_LIMIT')
   if(name!=='request_project_switch')this.exact(e,args)
   const root=this.conversations.root[owner]
@@ -70,7 +72,7 @@ export class ManagementService{
   return this.result(op)
  }
  result(op){return {operationId:op.id,status:op.status,projectId:op.projectId,detail:op.detail??null,...op.data?{data:op.data}:{}}}
- expire(op){const timer=setTimeout(()=>{this.expirations.delete(op.id);if(op.status==='pending'){op.status='not_executed';op.detail='MANAGEMENT_RECEIPT_EXPIRED';void this.manager.save().catch(()=>{})}},300000);timer.unref?.();this.expirations.set(op.id,timer)}
+ expire(op){const timer=setTimeout(()=>{this.expirations.delete(op.id);if(op.status==='pending'){op.status='not_executed';op.detail='MANAGEMENT_RECEIPT_EXPIRED';discardUnexecutedPayload(op);void this.manager.save().catch(()=>{})}},300000);timer.unref?.();this.expirations.set(op.id,timer)}
  credential(token,kind,owner){const value=this.decode(token);if(value.kind!==kind||value.owner!==owner||!Number.isFinite(value.expires)||value.expires<=this.now())throw Error('MANAGEMENT_CREDENTIAL_INVALID');return value}
  // Armed only after the MCP transport has written its tool response. A lost receipt
  // stays pending and is never blindly replayed after a service restart.
@@ -121,6 +123,7 @@ export class ManagementService{
    if(done===false)return
   }catch(error){op.status=op.status==='executing'?'unknown':'not_executed';op.detail=/^(?:MANAGEMENT|SCHEDULE|UPDATE)_[A-Z_]+$/.test(error.message)?error.message:'MANAGEMENT_OPERATION_UNCONFIRMED'}
   clearTimeout(this.expirations.get(op.id));this.expirations.delete(op.id)
+  discardUnexecutedPayload(op)
   await this.manager.save()
   const notice=op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'指定结果已提交发送接口。':op.status==='deferred'?'指定结果已进入原投递队列。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
   await this.notice(op.owner,notice).catch(()=>{})

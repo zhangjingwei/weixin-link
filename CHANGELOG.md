@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Prune expired management receipts with per-user quotas and discard redelivery payloads when execution is ruled out, retaining unknown delivery evidence.
+
 - Extend management MCP to 22 tools covering directory-bound project creation, renaming, bounded history search, result queries/redelivery, targeted reconciliation, schedules and version-specific update dismissal.
 - Keep project creation separate from switching, pin result snapshots before redelivery, persist schedule request deduplication, and distinguish future schedule cancellation from stopping submitted tasks.
 

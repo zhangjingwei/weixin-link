@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,mkdir,rename,symlink,rm,writeFile} from 'node:fs/promises'
+import {mkdtemp,mkdir,rename,symlink,rm,writeFile,readFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {ManagementService} from '../../src/application/management/management-service.mjs'
@@ -192,4 +192,64 @@ test('historical attachment-waiting turns remain waiting rather than claiming th
  const {service,manager,jobs}=await fixture(t),id=jobs.add('alice','needs file');jobs.bind(id,'a');jobs.submitted(id,'waiting-turn');jobs.mark(id,'done');jobs.context(id,{flowNonce:'known-nonce'})
  manager.protocol.recoverTurn=async()=>({id:'waiting-turn',status:'completed',items:[{type:'agentMessage',text:'等待材料。<wechat-task:known-nonce>waiting_attachment</wechat-task:known-nonce>'}]})
  const result=await service.call('alice','get_task_result',{projectId:'1',taskId:id});assert.equal(result.execution,'waiting_attachment');assert(!result.text.includes('wechat-task:'))
+})
+
+test('extended writes prune expired receipts, preserve uncertain work and isolate owner quotas',async t=>{
+ const {service,manager}=await fixture(t),now=service.now()
+ const old=Array.from({length:10000},(_,i)=>({id:'old-'+i,owner:'alice',status:'confirmed',createdAt:now-8*86400000}))
+ service.operations.push(...old,{id:'uncertain',owner:'alice',status:'unknown',createdAt:now-8*86400000})
+ const created=await service.call('alice','rename_project',{projectId:'1',name:'renamed',requestId:'pruned'})
+ assert.equal(created.status,'confirmed');assert.equal(service.operations.length,2);assert(service.operations.some(op=>op.id==='uncertain'))
+ service.operations.splice(0,service.operations.length,...Array.from({length:10000},(_,i)=>({id:'full-'+i,owner:'alice',status:'confirmed',createdAt:now})))
+ await assert.rejects(service.call('alice','rename_project',{projectId:'1',name:'over quota',requestId:'full'}),/MANAGEMENT_OPERATION_LIMIT/)
+ const other=await service.call('bob','rename_project',{projectId:'1',name:'independent',requestId:'other'})
+ assert.equal(other.status,'confirmed')
+ // Legacy writes use exactly the same cleanup and per-owner quota.
+ await assert.rejects(service.call('alice','request_project_switch',{projectId:'1',requestId:'legacy-full'}),/MANAGEMENT_OPERATION_LIMIT/)
+ for(const op of service.operations)if(op.owner==='alice')op.createdAt=now-8*86400000
+ const switched=await service.call('alice','request_project_switch',{projectId:'1',requestId:'legacy-pruned'})
+ assert.equal(switched.status,'pending');assert.equal(service.operations.length,2)
+ assert.equal(manager.state.managementOperations,service.operations)
+})
+
+test('unexecuted redelivery clears private payload before persistence and retains its deduplication receipt',async t=>{
+ const {service,manager}=await fixture(t);resultFixture(manager)
+ manager.outputStoreFor=()=>({replay:p=>structuredClone(p),bytes:async()=>{throw Error('ARTIFACT_EXPIRED')}})
+ const read=await service.call('alice','get_task_result',{projectId:'1'}),args={projectId:'1',resultToken:read.resultToken,requestId:'expired-payload'}
+ const requested=await service.call('alice','request_result_redelivery',args),op=service.operations.find(op=>op.id===requested.operationId)
+ let persisted;manager.save=async()=>{persisted=structuredClone(service.operations)}
+ await service.execute(op)
+ assert.equal(op.status,'not_executed');assert.equal(op.detail,'MANAGEMENT_ARTIFACT_UNAVAILABLE')
+ for(const key of ['snapshot','packet','resultToken']){assert.equal(Object.hasOwn(op,key),false);assert.equal(Object.hasOwn(persisted.at(-1),key),false)}
+ const duplicate=await service.call('alice','request_result_redelivery',args)
+ assert.equal(duplicate.operationId,op.id);assert.equal(duplicate.status,'not_executed')
+})
+
+test('receipt expiry clears redelivery payload without sending',async t=>{
+ const {service,manager,deliveries}=await fixture(t);resultFixture(manager)
+ manager.outputStoreFor=()=>({replay:p=>structuredClone(p)})
+ t.mock.timers.enable({apis:['setTimeout']})
+ const read=await service.call('alice','get_task_result',{projectId:'1'})
+ const requested=await service.call('alice','request_result_redelivery',{projectId:'1',resultToken:read.resultToken,requestId:'no-receipt'})
+ const op=service.operations.find(op=>op.id===requested.operationId)
+ let persisted;manager.save=async()=>{persisted=structuredClone(service.operations)}
+ t.mock.timers.tick(300000)
+ assert.equal(op.status,'not_executed');assert.equal(op.detail,'MANAGEMENT_RECEIPT_EXPIRED');assert.equal(deliveries.length,0)
+ for(const key of ['snapshot','packet','resultToken'])assert.equal(Object.hasOwn(persisted.at(-1),key),false)
+})
+
+test('restart removes pending and previously unexecuted payloads but keeps unknown delivery evidence',async t=>{
+ const {manager,conversations}=await fixture(t),now=Date.now()
+ manager.state.managementOperations=['pending','executing','not_executed'].map((status,i)=>({id:String(i),owner:'alice',status,createdAt:now,snapshot:{packet:'private'},packet:'private',resultToken:'credential'}))
+ manager.state.managementOperations.push({id:'old',owner:'alice',status:'confirmed',createdAt:now-8*86400000})
+ const restored=new ManagementService({manager,conversations});t.after(()=>restored.close())
+ assert.equal(restored.operations.length,3)
+ for(const op of restored.operations){
+  if(op.id==='1'){assert.equal(op.status,'unknown');assert.equal(op.packet,'private');assert(op.snapshot)}
+  else{assert.equal(op.status,'not_executed');for(const key of ['snapshot','packet','resultToken'])assert.equal(Object.hasOwn(op,key),false)}
+ }
+ await mkdir(manager.stateDir,{recursive:true})
+ await SessionManager.prototype.save.call(manager)
+ const persisted=JSON.parse(await readFile(join(manager.stateDir,'assistant-sessions.json'),'utf8')).managementOperations
+ assert.equal(Object.hasOwn(persisted[0],'snapshot'),false);assert.equal(persisted[1].packet,'private')
 })
