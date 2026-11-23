@@ -1,3 +1,7 @@
+import {managementPlugin} from '../setup/management-plugin.mjs'
+import {ManagementService} from '../application/management/management-service.mjs'
+import {createManagementMcpController} from '../interfaces/controllers/management-mcp-controller.mjs'
+import {managementConfiguration,managementGuidance} from '../infrastructure/agents/management-plugin.mjs'
 import {voiceCommandInput} from './voice-command-input.mjs'
 import {trackLoginValidity} from './login-validity.mjs'
 import {LifecycleNotice,welcomeMessage} from './lifecycle-notice.mjs'
@@ -100,8 +104,10 @@ const replayMaintenance=()=>{
 }
 // 私有控制端点可在微信登录前启动，用于状态检查和维护控制。
 const runtime=new RuntimeControl({
+ controlTokenFile:join(stateDir,'control-token'),
  backend:{id:backend.id,kind:backend.kind,agentKind:agent.kind,memoryMode:backend.memoryMode??'wechat'},
  features:{daily_assistant:true,setup_commands:true,native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,update_notice:true},
+ onManagement:request=>management.onRequest(request),
  onSchedule:request=>{if(!schedules)throw Error('SCHEDULE_STATE_UNAVAILABLE');return schedules.onRequest(request)},
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
   startup:()=>startupPhase,
@@ -123,6 +129,13 @@ let schedules
 try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,
  track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
+const managementInstallation=await managementPlugin({accountId:account.id,codexHome:agent.sessionOptions.codexHome,stateDir})
+const managementService=new ManagementService({manager,conversations,notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
+const management=createManagementMcpController({manager,service:managementService,configuration:capability=>managementConfiguration({socket:account.socket,capability,controlToken:runtime.token})})
+if(managementInstallation.enabled){
+ manager.managementBinding=(...args)=>management.bind(...args)
+ manager.managementGuidance=managementGuidance
+}
 await runtime.listen(account.socket)
 // 先打开持久收件库并接好入站处理链；登录成功后才恢复未完成工作。
 const jobs=await infrastructure.storage.accountInbox(stateDir);manager.submissions=jobs
@@ -164,7 +177,7 @@ intakeHandler=nonBlockingHandler(async message => {
 bot.onMessage(inbound.onMessage)
 
 // 退出时停止新工作，等待微信上下文与会话状态落盘，再关闭控制端点。
-async function shutdown(signal){if(stopping)return;stopping=true;updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
+async function shutdown(signal){if(stopping)return;stopping=true;management.close();updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})
 
 // 登录并核查账号身份后恢复积压消息，最后才启动微信轮询。

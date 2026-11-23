@@ -27,9 +27,9 @@ async function removeStaleSocket(path){
 
 /** Private, live control plane. Logs never participate in restart decisions. */
 export class RuntimeControl {
- constructor({snapshot,ready=()=>false,startup=()=>undefined,onSeal,onResume,onDrainRelease=()=>{},onSchedule=async()=>{throw Error('Unavailable')},features={},backend=null,now=Date.now}={}){
+ constructor({snapshot,ready=()=>false,startup=()=>undefined,onSeal,onResume,onDrainRelease=()=>{},onSchedule=async()=>{throw Error('Unavailable')},onManagement=async()=>{throw Error('MANAGEMENT_UNAVAILABLE')},features={},backend=null,controlTokenFile,now=Date.now}={}){
   this.canSeal=typeof snapshot==='function'&&typeof onSeal==='function'&&typeof onResume==='function'
-  Object.assign(this,{snapshot:snapshot??(()=>({})),ready,startup,onSeal:onSeal??(()=>{}),onResume:onResume??(()=>{}),onDrainRelease,onSchedule,features,backend,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
+  Object.assign(this,{snapshot:snapshot??(()=>({})),ready,startup,onSeal:onSeal??(()=>{}),onResume:onResume??(()=>{}),onDrainRelease,onSchedule,onManagement,features,backend,controlTokenFile,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
  }
  get draining(){
   if(this.lease&&!this.sealed&&this.lease.expires<=this.now()){this.lease=null;queueMicrotask(()=>{if(!this.lease)this.onDrainRelease()})}
@@ -59,7 +59,7 @@ export class RuntimeControl {
  }
  async listen(path){
   this.path=path
-  if(isPipe(path)){this.token=randomUUID();await writeFile(accountPaths().stateDir+'/control-token',this.token,{mode:0o600})}
+  if(isPipe(path)){this.token=randomUUID();await writeFile(this.controlTokenFile??accountPaths().stateDir+'/control-token',this.token,{mode:0o600})}
   else{
    const {default:lockfile}=await import('proper-lockfile')
    this.releaseSocketLock=await lockfile.lock(dirname(path),{lockfilePath:path+'.instance-lock',stale:30000,update:10000,retries:0}).catch(error=>{if(error.code==='ELOCKED')throw Error('RUNTIME_ALREADY_RUNNING');throw error})
@@ -70,6 +70,11 @@ export class RuntimeControl {
     if(this.token&&req.headers['x-control-token']!==this.token)throw Object.assign(Error('Unauthorized'),{statusCode:403})
     let result
     if(req.method==='GET'&&req.url==='/status')result=this.status()
+    else if(req.method==='POST'&&req.url==='/management'){
+     if(this.sealed||this.draining)throw Error('MANAGEMENT_UNAVAILABLE')
+     let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>16384)throw Object.assign(Error('MANAGEMENT_INVALID_ARGUMENTS'),{statusCode:413})}
+     result=await this.track('management',()=>this.onManagement(JSON.parse(body)))
+    }
     else if(req.method==='POST'&&req.url==='/schedules'){
      if(this.sealed||this.draining)throw Object.assign(Error('Unavailable'),{statusCode:409})
      let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>4096)throw Object.assign(Error('Too large'),{statusCode:413})}
@@ -80,7 +85,7 @@ export class RuntimeControl {
      result=this.command(req.url.slice(1),JSON.parse(body).lease)
     }else throw Object.assign(Error('Not found'),{statusCode:404})
     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(result))
-   }catch(error){res.writeHead(error.statusCode??400,{'content-type':'application/json'});res.end(JSON.stringify({error:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'CONTROL_REQUEST_REJECTED'}))}
+   }catch(error){res.writeHead(error.statusCode??400,{'content-type':'application/json'});res.end(JSON.stringify({error:/^(?:SCHEDULE|MANAGEMENT)_[A-Z_]+$/.test(error.message)?error.message:'CONTROL_REQUEST_REJECTED'}))}
   })
   this.server.requestTimeout=3000;this.server.headersTimeout=3000
   try{
@@ -98,12 +103,12 @@ export class RuntimeControl {
  }
 }
 async function tokenFile(socket){for(const p of await listAccounts())if(p.socket===socket)return p.stateDir+'/control-token';throw Error('UNKNOWN_CONTROL_ENDPOINT')}
-export async function controlRequest(socketPath,method,path,body,timeoutMs=2500){
- const headers=isPipe(socketPath)?{'x-control-token':await readFile(await tokenFile(socketPath),'utf8')}:{}
+export async function controlRequest(socketPath,method,path,body,timeoutMs=2500,{token:providedToken}={}){
+ const headers=isPipe(socketPath)?{'x-control-token':providedToken??await readFile(await tokenFile(socketPath),'utf8')}:{}
  return new Promise((resolve,reject)=>{
   const req=http.request({socketPath,method,path,headers,timeout:timeoutMs},res=>{
-   let text='';res.on('data',chunk=>{text+=chunk;if(Buffer.byteLength(text)>65536)res.destroy(Error('Oversized control response'))});res.on('error',reject)
-   res.on('end',()=>{if(res.statusCode!==200){let safe='CONTROL_REJECTED';try{const parsed=JSON.parse(text);if(/^SCHEDULE_[A-Z_]+$/.test(parsed.error))safe=parsed.error}catch{}reject(Object.assign(Error(safe),{code:safe,statusCode:res.statusCode}));return}try{resolve(JSON.parse(text))}catch(error){reject(error)}})
+   let text='';res.on('data',chunk=>{text+=chunk;if(Buffer.byteLength(text)>1048576)res.destroy(Error('Oversized control response'))});res.on('error',reject)
+   res.on('end',()=>{if(res.statusCode!==200){let safe='CONTROL_REJECTED';try{const parsed=JSON.parse(text);if(/^(?:SCHEDULE|MANAGEMENT)_[A-Z_]+$/.test(parsed.error))safe=parsed.error}catch{}reject(Object.assign(Error(safe),{code:safe,statusCode:res.statusCode}));return}try{resolve(JSON.parse(text))}catch(error){reject(error)}})
   });req.on('error',reject);req.on('timeout',()=>req.destroy(Object.assign(Error('Control timeout'),{code:'ETIMEDOUT'})));req.end(body?JSON.stringify(body):undefined)
  })
 }

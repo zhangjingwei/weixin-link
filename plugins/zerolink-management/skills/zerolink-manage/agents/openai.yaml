@@ -1,0 +1,11 @@
+interface:
+  display_name: "ZeroLink 会话管理"
+  short_description: "通过自然语言定位项目、查询任务历史，并准确切换、补充或停止指定会话"
+  default_prompt: "使用 $zerolink-manage 查看知识库项目目前的进展。"
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "zerolink-management"
+      description: "ZeroLink 绑定当前微信用户的本地会话管理服务"
+policy:
+  allow_implicit_invocation: true

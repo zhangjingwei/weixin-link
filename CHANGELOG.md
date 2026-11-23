@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add account-scoped natural-language project management through eight MCP tools and a bundled Skill, preserving existing command controls.
+- Bind supplements and stop requests to exact tasks, distinguish pending requests from confirmed outcomes, and retain long history across signed continuation cursors.
+- Manage private Skill installation and removal without changing global Codex settings or overwriting user files.
+
 ## 1.5.0 — 2026-11-11
 
 - Preserve complete conversation history with readable pagination, and make daily conversation selection and switching notices clearer.

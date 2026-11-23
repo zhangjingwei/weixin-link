@@ -1,3 +1,4 @@
+import {detachManagementSkill} from './management-plugin.mjs'
 import {fileURLToPath} from 'node:url'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
@@ -41,6 +42,7 @@ export async function uninstallInstallation({home=process.env.HOME||homedir(),ro
  const packageFile=JSON.parse(await readFile(join(root,'package.json'),'utf8'))
  if(!['weixin-link','wechat-ping-bot'].includes(packageFile.name))throw Error('INSTALLATION_NOT_FOUND')
  const ids=await accounts(home)
+ const finish=async servicesRemoved=>{for(const accountId of ids)await detachManagementSkill({accountId,home});return {servicesRemoved,accountDataPreserved:true,workspacePreserved:true}}
  const units=ids.map(id=>id==='default'?'wechat-ping-bot.service':`wechat-ping-bot@${id}.service`)
  if(platform==='linux'){
   const directory=join(home,'.config/systemd/user')
@@ -49,7 +51,7 @@ export async function uninstallInstallation({home=process.env.HOME||homedir(),ro
   if(!present.some(Boolean)){
    const result=await run('systemctl',['--user','list-units','--all','--plain','--no-legend','wechat-ping-bot*.service','wechat-pair-*.service']).catch(()=>({stdout:''}))
    if(result.stdout.trim())throw Error('UNINSTALL_SERVICE_REQUIRES_REVIEW')
-   return {servicesRemoved:false,accountDataPreserved:true,workspacePreserved:true}
+   return finish(false)
   }
   for(const id of ids){
    const unit=`wechat-pair-${id}.service`
@@ -73,7 +75,7 @@ export async function uninstallInstallation({home=process.env.HOME||homedir(),ro
   if(!files.length){
    const result=await run('launchctl',['list']).catch(()=>({stdout:''}))
    if(/com\.wechat-assistant\.(wechat-ping-bot|wechat-pair-)/.test(result.stdout))throw Error('UNINSTALL_SERVICE_REQUIRES_REVIEW')
-   return {servicesRemoved:false,accountDataPreserved:true,workspacePreserved:true}
+   return finish(false)
   }
   for(const name of files){
    const path=join(directory,name)
@@ -90,7 +92,7 @@ export async function uninstallInstallation({home=process.env.HOME||homedir(),ro
   for(const id of ids)await manager.windows('remove',`wechat-pair-${id}.service`)
   for(const unit of units)await manager.windows('remove',unit)
  }else throw Error('UNSUPPORTED_PLATFORM')
- return {servicesRemoved:true,accountDataPreserved:true,workspacePreserved:true}
+ return finish(true)
 }
 
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){

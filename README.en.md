@@ -162,3 +162,7 @@ See [artifact delivery and retention](docs/artifact-delivery.md) (Chinese) for p
 Confirm login with your own WeChat account. Do not share login addresses or device authorization codes. For subscription sign-in, use the official OpenAI authorization page. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
 
 Licensed under the [MIT License](LICENSE). Third-party dependencies and external services have their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Weixin Link is an independent project, not an official product of, or endorsed by, WeChat, OpenAI or other service providers.
+
+### Natural-language project management
+
+Ask for project progress, request a project switch, supplement a specific running task, or request a stop. The bundled management MCP and Skill only access the current user's registered conversations. Ambiguous targets require clarification; progress queries never switch projects. Pending/requested is not completion. Existing commands remain available. Reliable voice transcripts follow the same workflow. See the [management guide](docs/features/management-mcp.md) for installation, removal and limitations.
