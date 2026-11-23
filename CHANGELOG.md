@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Lead daily and first-login help with natural-language examples while retaining exact commands as an emergency reference; add version-pinned upgrades, account restarts, maintenance status, sanitized diagnostics and project archive/restore through management MCP.
+
+- Submit text tasks to another project from one WeChat entry through a 23rd management MCP tool, preserving project queues, ownership, deduplication and task-scoped progress/result delivery across restart.
+
 ## 1.6.0 — 2026-11-23
 
 - Add 22 account-scoped management MCP tools and a bundled Skill for natural-language project and conversation management, with managed installation and removal.

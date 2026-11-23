@@ -1,3 +1,4 @@
+import {projectTaskRoute} from '../tasks/project-dispatch.mjs'
 
 export function label(context,key,value){const e=context.entry(key);if(!e||context.root[e.owner].entries.length<2||context.find(e.owner)?.key===key)return value;const prefix=`【会话${e.id} · ${e.name}】\n`;return typeof value==='string'?prefix+value:{...value,text:prefix+value.text};}
 
@@ -9,7 +10,13 @@ export async function flush(context,key,send){const e=context.entry(key);if(!e)r
 
 export function deliver(context,key,value,options,send){return context.serialize(context.recipient(key),async()=>{
  if(options?.current&&!options.current())return {status:'cancelled'};
- const e=context.entry(key);if(!e)return send(key,value,options);
+ const e=context.entry(key);if(!e){if(options?.projectTaskId)throw Error('PROJECT_TASK_ROUTE_INVALID');return send(key,value,options);}
+ if(options?.projectTaskId){
+  const job=context.manager.submissions?.get(options.projectTaskId)
+  if(!job||job.owner!==key||!projectTaskRoute({manager:context.manager,conversations:context},job))throw Error('PROJECT_TASK_ROUTE_INVALID')
+  const name=context.displayName(e.owner,e),prefix=`【项目${e.id} · ${name} · 任务 ${job.id.slice(0,8)}】\n`
+  return send(key,typeof value==='string'?prefix+value:{...value,text:prefix+value.text},options)
+ }
  if(options?.conversationControl)return send(key,context.label(key,value),options);
  if(e.deleted)return {status:'cancelled'};
  if(context.find(e.owner)?.key===key){await context.flush(key,send);const saved=context.root[e.owner].entries.find(x=>x.key===key);if(!saved.unread?.length)return send(key,context.label(key,value),options);}

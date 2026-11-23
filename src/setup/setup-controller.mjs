@@ -14,6 +14,11 @@ export class SetupController{
  }
  async init(){return this}
  command(text){return setupCommand(text)}
+ async status({includeActions=false}={}){
+  const r=await this.runDoctor({home:this.home,accountId:this.accountId}),profile=await readProviderProfile(this.stateDir),verified=await readTerminalSetupStatus(this.stateDir)
+  const inferenceVerified=verified?.provider===(profile?.kind??'subscription')&&verified.fingerprint===terminalSetupFingerprint(profile)
+  return {checks:r.checks.map(c=>({name:c.name,ok:!!c.ok,...includeActions?{action:c.action}:{}})),ready:!!r.ready,inferenceVerified:!!inferenceVerified}
+ }
  async handle(command,reply,{signal,scope=this.accountId??'owner',executionKey}={}){
   const english=command.endsWith('En');if(english)command=command.slice(0,-2)
   const setupAtHome=installerCommand('setup',{accountId:this.accountId??'default',language:english?'en':'zh'})
@@ -31,9 +36,8 @@ export class SetupController{
   this.busy=true
   try{
    if(command==='status'){
-    const r=await this.runDoctor({home:this.home,accountId:this.accountId}),profile=await readProviderProfile(this.stateDir),verified=await readTerminalSetupStatus(this.stateDir)
-    const passed=verified?.provider===(profile?.kind??'subscription')&&verified.fingerprint===terminalSetupFingerprint(profile)
-    await reply(english?'Installation checks:\n'+r.checks.map(c=>(c.ok?'✓ ':'Needs attention: ')+c.name).join('\n')+'\nModel inference verification: '+(passed?'passed':'unconfirmed')+'.':'安装检查：\n'+r.checks.map(c=>(c.ok?'✓ ':'待完成：')+c.name+(c.action?'；'+c.action:'')).join('\n')+'\n模型推理验收：'+(passed?'已通过':'未确认')+'。')
+    const {checks,inferenceVerified:passed}=await this.status({includeActions:true})
+    await reply(english?'Installation checks:\n'+checks.map(c=>(c.ok?'✓ ':'Needs attention: ')+c.name).join('\n')+'\nModel inference verification: '+(passed?'passed':'unconfirmed')+'.':'安装检查：\n'+checks.map(c=>(c.ok?'✓ ':'待完成：')+c.name+(c.action?'；'+c.action:'')).join('\n')+'\n模型推理验收：'+(passed?'已通过':'未确认')+'。')
     return
    }
    const root=this.stateDir.includes('/accounts/')?this.stateDir.slice(0,this.stateDir.indexOf('/accounts/')):this.stateDir

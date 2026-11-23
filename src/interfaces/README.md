@@ -13,4 +13,6 @@
 
 `src/wechat/bot.mjs` 仍是每账号服务的组合根；`src/setup/setup.mjs` 仍是安装 CLI 入口。底层微信协议、计划状态机、更新比较和配置存储留在原模块，由接口层调用。
 
-`mcp/management-server.mjs` 提供22个封闭工具；`controllers/management-mcp-controller.mjs` 将活跃 RPC capability 映射为可信调用方，调用应用用例，不接受模型传入 owner。
+`mcp/management-server.mjs` 提供31个封闭工具；`controllers/management-mcp-controller.mjs` 将活跃 RPC capability 映射为可信调用方，调用应用用例，不接受模型传入 owner。
+
+management-maintenance-controller 将账号绑定的服务/安装/诊断查询及升级、重启请求适配到原有维护流程，应用层不反向依赖 setup。

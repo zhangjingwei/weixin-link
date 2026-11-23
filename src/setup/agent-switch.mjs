@@ -61,20 +61,21 @@ export class AgentSwitcher{
  async handle(command,reply){
   if(command.action!=='restart')throw Error('AGENT_SWITCH_UNSUPPORTED')
   const pending=await readAgentSwitch(this.account)
-  if(pending&&['waiting_idle','committing'].includes(pending.status)){await reply('已有维护任务进行中，未重复安排。');return}
+  if(pending&&['waiting_idle','committing'].includes(pending.status)){await reply('已有维护任务进行中，未重复安排。');return {status:'already_scheduled',maintenanceId:pending.id}}
   const upgrade=await readChatUpgrade(this.home)
-  if(upgrade&&['waiting_idle','running'].includes(upgrade.status)){await reply('升级正在等待或执行，暂不安排重启。');return}
+  if(upgrade&&['waiting_idle','running'].includes(upgrade.status)){await reply('升级正在等待或执行，暂不安排重启。');return {status:'blocked',reason:'UPGRADE_PENDING'}}
   const deployment=await this.deployment({target:this.targetRoot,home:this.home})
   if(!deployment.services.some(service=>service.id===this.account.id&&service.active))throw Error('AGENT_SWITCH_SERVICE_UNAVAILABLE')
   const outcome=await this.lock(async()=>{
    const latest=await readAgentSwitch(this.account)
-   if(latest&&['waiting_idle','committing'].includes(latest.status))return {pending:latest.target}
+   if(latest&&['waiting_idle','committing'].includes(latest.status))return {pending:latest.target,id:latest.id}
    const request={id:randomUUID(),target:'codex',previous:'codex',status:'waiting_idle'}
    await saveAgentSwitch(this.account,request)
    try{await this.schedule(this.account,request,{home:this.home})}catch(error){await saveAgentSwitch(this.account,{...request,status:'failed'});throw error}
-   return {scheduled:true}
+   return {scheduled:true,id:request.id}
   })
-  if(outcome.pending){await reply('已有维护任务进行中，未重复安排。');return}
+  if(outcome.pending){await reply('已有维护任务进行中，未重复安排。');return {status:'already_scheduled',maintenanceId:outcome.id}}
   await reply('已安排本账号空闲后重启。完成后发“服务状态”核对。')
+  return {status:'scheduled',maintenanceId:outcome.id}
  }
 }

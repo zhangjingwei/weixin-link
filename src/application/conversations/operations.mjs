@@ -47,33 +47,33 @@ export async function selectConversation(context,message,reply){
  }
 
 export async function archive(context,owner,entry,archived,reply){
-  if(!entry){await reply('会话不存在，请先发“列表”。');return;}
-  if(entry.deleted||entry.deleteIntent){await reply(entry.deleted?'该会话已永久删除，不能归档或还原。':'该会话的删除结果尚未确认，先用“列表”核对。');return;}
+  if(!entry){await reply('会话不存在，请先发“列表”。');return {status:'not_executed',reason:'TARGET_NOT_FOUND'};}
+  if(entry.deleted||entry.deleteIntent){await reply(entry.deleted?'该会话已永久删除，不能归档或还原。':'该会话的删除结果尚未确认，先用“列表”核对。');return {status:'not_executed',reason:'TARGET_DELETED'};}
   const r=context.ensure(owner),session=context.manager.sessions.get(entry.key),saved=context.manager.state.users[entry.key];
   const blocked=()=>hasUnfinishedWork(context,entry.key);
-  if(blocked()){await reply('该会话仍有执行、排队或未确认任务，暂不能更改归档。');return;}
-  if(context.archiveLocks?.has(entry.key)){await reply('该会话的归档状态正在核对。');return;}
+  if(blocked()){await reply('该会话仍有执行、排队或未确认任务，暂不能更改归档。');return {status:'not_executed',reason:'TARGET_BUSY'};}
+  if(context.archiveLocks?.has(entry.key)){await reply('该会话的归档状态正在核对。');return {status:'not_executed',reason:'TARGET_LOCKED'};}
   context.archiveLocks??=new Set();context.archiveLocks.add(entry.key);
   let locked=false;
   try{
    if(session){session.selecting=true;locked=true}
-   await context.withBackend(owner,async reader=>{
+   return await context.withBackend(owner,async reader=>{
     const writer=context.backendPort.connectionFor(session,reader);
     const before=await context.officialCatalog(reader,owner);context.applyCatalog(owner,before);
     const tid=saved?.threadId;
-    if(tid&&!before.has(tid)){await context.manager.save();await reply('Codex中找不到该会话，未更改归档；请先核对历史记录。');return;}
+    if(tid&&!before.has(tid)){await context.manager.save();await reply('Codex中找不到该会话，未更改归档；请先核对历史记录。');return {status:'not_executed',reason:'THREAD_MISSING'};}
     const next=r.entries.find(e=>e.id!==entry.id&&!e.archived&&e.archiveSync!=='missing');
-    if(archived&&r.active===entry.id&&!next){await reply('请先新建一个会话，再归档最后一个会话。');return;}
-    if(tid&&before.get(tid).thread.status?.type==='active'){await reply('Codex会话仍在执行，暂不能归档。');return;}
+    if(archived&&r.active===entry.id&&!next){await reply('请先新建一个会话，再归档最后一个会话。');return {status:'not_executed',reason:'LAST_ACTIVE_PROJECT'};}
+    if(tid&&before.get(tid).thread.status?.type==='active'){await reply('Codex会话仍在执行，暂不能归档。');return {status:'not_executed',reason:'BACKEND_BUSY'};}
     // Empty slots have no Codex thread yet, so only their local navigation record exists.
     if(tid&&before.get(tid).archived!==archived){
      entry.archiveIntent=archived;await context.manager.save();
      let failure;try{await context.backendPort.setArchived(writer,tid,archived)}catch(error){failure=error}
-     let after;try{after=await context.officialCatalog(reader,owner)}catch{entry.archiveSync='unknown';await context.manager.save();await reply('Codex归档结果暂未确认；未报告成功，稍后用“列表”核对，不自动重发操作。');return;}
+     let after;try{after=await context.officialCatalog(reader,owner)}catch{entry.archiveSync='unknown';await context.manager.save();await reply('Codex归档结果暂未确认；未报告成功，稍后用“列表”核对，不自动重发操作。');return {status:'unknown'};}
      context.applyCatalog(owner,after);
      if(after.get(tid)?.archived!==archived){
       if(failure?.definitiveRpcError)delete entry.archiveIntent;
-      await context.manager.save();await reply(failure?.definitiveRpcError?'Codex未接受归档变更，微信已按官方状态核对；会话可能仍被其他连接占用。':'Codex归档结果尚未确认，未报告成功；用“列表”继续核对。');return;
+      await context.manager.save();await reply(failure?.definitiveRpcError?'Codex未接受归档变更，微信已按官方状态核对；会话可能仍被其他连接占用。':'Codex归档结果尚未确认，未报告成功；用“列表”继续核对。');return {status:failure?.definitiveRpcError?'rejected':'unknown'};
      }
     }
     entry.archived=archived;entry.archiveSync='confirmed';delete entry.archiveIntent;
@@ -81,6 +81,7 @@ export async function archive(context,owner,entry,archived,reply){
     if(archived&&r.active===entry.id)r.active=next.id;
     await context.manager.save();
     await reply(archived?`已归档会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致，':'空白会话已隐藏，'}历史保留；发送“还原”并选择该会话可恢复。当前会话${r.active}。`:`已还原会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致。':''}发送“切换”并选择该会话进入。`);
+    return {status:'confirmed',archived,projectId:entry.id};
    });
   }finally{if(locked)session.selecting=false;context.archiveLocks.delete(entry.key)}
  }

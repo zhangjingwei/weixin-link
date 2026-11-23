@@ -1,6 +1,6 @@
 interface:
   display_name: "ZeroLink 会话管理"
-  short_description: "通过自然语言定位项目、查询任务历史，并准确切换、补充或停止指定会话"
+  short_description: "在统一入口定位项目、提交跨项目任务、查询历史，并准确补充或停止原任务"
   default_prompt: "使用 $zerolink-manage 查看知识库项目目前的进展。"
 dependencies:
   tools:
