@@ -15,6 +15,9 @@ export async function createScheduleController({stateDir, owners, ready, track, 
     submitTask: createScheduledTaskSubmission({conversations, enqueueTask}),
   }).init()
   return {
+    createForOwner: (...args)=>service.create(...args),
+    listForOwner: (...args)=>service.list(...args),
+    cancelForOwner: (...args)=>service.cancel(...args),
     onRequest: request => scheduleCommand(request, {manager, conversations, service}),
     start: () => service.start(),
     close: () => service.close(),

@@ -1,4 +1,4 @@
-import {checkUpdates} from '../../application/notifications/check-updates.mjs'
+import {checkUpdates,readUpdateStatus} from '../../application/notifications/check-updates.mjs'
 import {UpdateNotifier} from '../../application/notifications/update-notifier.mjs'
 import {createUpdateNoticeStateStore} from '../../infrastructure/storage/update-notice-state.mjs'
 import {readInstalledRelease, fetchLatestRelease} from '../../infrastructure/updates/release-source.mjs'
@@ -13,6 +13,8 @@ export function createUpdateController({stateDir, sourceDir, owners, ready, view
     send: (owner, text) => view.notice(owner, text, {current: ready}),
   })
   return {
+    query: ()=>readUpdateStatus({readInstalled:()=>readInstalledRelease(sourceDir),fetchLatest:fetchLatest??fetchLatestRelease}),
+    skipVersion: (owner,version)=>notifier.skip(owner,'zh',version),
     start: () => notifier.start(),
     tick: () => notifier.tick(),
     check: (language='zh') => checkUpdates({readInstalled:()=>readInstalledRelease(sourceDir),fetchLatest:fetchLatest??fetchLatestRelease,language}),

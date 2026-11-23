@@ -31,14 +31,16 @@ export class UpdateNotifier{
   this.ownerLocks.set(owner,next)
   return next.finally(()=>{if(this.ownerLocks.get(owner)===next)this.ownerLocks.delete(owner)})
  }
- async skip(owner,language='zh'){
+ async skip(owner,language='zh',version){
   if(!this.owners.includes(owner))throw Error('UPDATE_NOTICE_OWNER_INVALID')
   return this.withOwner(owner,async()=>{
    const previous=await this.readState(owner)
-   if(!releaseTag(previous?.tag))return language==='en'?'There is no notified release to skip. No preference was changed.':'当前没有可跳过的新版本提示，未更改设置。'
-   const skippedTags=[...new Set([...(previous.skippedTags??[]),previous.tag])]
-   await this.writeState(owner,previous.tag,'dismissed',skippedTags)
-   return language==='en'?`Skipped ${previous.tag}. This release will not be suggested again; newer releases can still notify you. You can still use check-updates or upgrade explicitly.`:`已跳过 ${previous.tag}，不再提示这个版本；后续新版本仍会提醒。仍可主动“检查更新”或“升级”。`
+   if(version!==undefined&&!releaseTag(version))throw Error('UPDATE_CHECK_RESPONSE_INVALID')
+   const target=version??previous?.tag
+   if(!releaseTag(target))return language==='en'?'There is no notified release to skip. No preference was changed.':'当前没有可跳过的新版本提示，未更改设置。'
+   const skippedTags=[...new Set([...(previous?.skippedTags??[]),target])]
+   await this.writeState(owner,previous?.tag??target,previous&&previous.tag!==target?previous.status:'dismissed',skippedTags)
+   return language==='en'?`Skipped ${target}. This release will not be suggested again; newer releases can still notify you. You can still use check-updates or upgrade explicitly.`:`已跳过 ${target}，不再提示这个版本；后续新版本仍会提醒。仍可主动“检查更新”或“升级”。`
   })
  }
  async check(){

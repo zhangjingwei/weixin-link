@@ -1,4 +1,5 @@
-import {randomUUID} from 'node:crypto'
+import {scheduleInstant} from '../../domain/schedules/instant.mjs'
+import {randomUUID,createHash} from 'node:crypto'
 import {deliveryFailureState} from '../../infrastructure/wechat/delivery-error.mjs'
 import {validateRepeat, nextOccurrence, localDateAt} from '../../domain/schedules/recurrence.mjs'
 
@@ -9,6 +10,9 @@ const MAX_TIMER_MS = 30_000
 const code = value => Object.assign(Error(value), {code: value})
 function validJob(id, job) {
   if (id !== job?.id || typeof job.owner !== 'string' || !job.owner || !['reminder', 'task'].includes(job.kind ?? 'reminder') || job.kind === 'task' && (typeof job.conversationKey !== 'string' || !job.conversationKey) || !['pending', 'sending', 'accepted', 'failed', 'unknown', 'cancelled'].includes(job.status) || typeof job.at !== 'string' || !Number.isFinite(Date.parse(job.at)) || typeof job.text !== 'string' || !job.text || job.text.length > MAX_TEXT) return false
+  if(job.requestId!==undefined&&(typeof job.requestId!=='string'||!job.requestId.trim()||job.requestId.length>160||! /^[a-f0-9]{64}$/.test(job.requestSignature??'')))return false
+  if(job.timeZone!==undefined)try{new Intl.DateTimeFormat('en-US',{timeZone:job.timeZone})}catch{return false}
+  if(job.conversationKey!==undefined&&(typeof job.conversationKey!=='string'||!job.conversationKey))return false
   if (job.repeat !== undefined) try {validateRepeat(job.repeat)} catch {return false}
   return true
 }
@@ -40,31 +44,36 @@ export class ScheduleService {
   }
   async save() {await this.stateStore.save(this.state)}
   checkOwner(owner) {if (!this.owners.has(owner)) throw code('SCHEDULE_OWNER_DENIED')}
-  async create(owner, request, conversationKey) {
+  async create(owner, request, conversationKey, {requestId,timeZone}={}) {
     this.checkOwner(owner)
     if (!request || typeof request !== 'object' || Array.isArray(request) || Object.keys(request).some(key => !['at', 'text', 'repeat', 'kind'].includes(key)) || !['reminder', 'task'].includes(request.kind ?? 'reminder') || request.kind === 'task' && (typeof conversationKey !== 'string' || !conversationKey) || typeof request.text !== 'string' || !request.text.trim() || request.text.length > MAX_TEXT || (request.at === undefined) === (request.repeat === undefined)) throw code('SCHEDULE_ARGUMENTS_INVALID')
-    let repeat, at, now = this.now()
-    if (request.repeat !== undefined) {
-      repeat = validateRepeat(request.repeat)
-      at = Date.parse(nextOccurrence(repeat, now))
-    } else {
-      if (typeof request.at !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/.test(request.at)) throw code('SCHEDULE_ARGUMENTS_INVALID')
-      at = Date.parse(request.at)
-      if (!Number.isFinite(at) || at <= now || at - now > MAX_FUTURE_MS) throw code('SCHEDULE_TIME_INVALID')
-    }
+    if(requestId!==undefined&&(typeof requestId!=='string'||!requestId.trim()||requestId.length>160))throw code('SCHEDULE_ARGUMENTS_INVALID')
+    const normalized=request.repeat?validateRepeat(request.repeat):null
+    let displayZone;try{displayZone=new Intl.DateTimeFormat('en-US',{timeZone:timeZone??normalized?.timeZone??Intl.DateTimeFormat().resolvedOptions().timeZone}).resolvedOptions().timeZone}catch{throw code('SCHEDULE_ARGUMENTS_INVALID')}
+    const canonical={kind:request.kind??'reminder',text:request.text.trim(),at:request.at??null,repeat:normalized?{frequency:normalized.frequency,time:normalized.time,timeZone:normalized.timeZone,...normalized.weekdays?{weekdays:[...normalized.weekdays].sort((a,b)=>a-b)}:{}}:null,conversationKey:conversationKey??null,timeZone:displayZone}
+    const signature=createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
     return this.serialize(async () => {
       if (this.closed) throw code('SCHEDULE_CLOSED')
+      if(requestId){const prior=Object.values(this.state.jobs).find(job=>job.owner===owner&&job.requestId===requestId);if(prior){if(prior.requestSignature!==signature)throw code('SCHEDULE_REQUEST_CONFLICT');return this.public(prior)}}
+      let repeat, at, now = this.now()
+      if (request.repeat !== undefined) {
+        repeat = validateRepeat(request.repeat)
+        at = Date.parse(nextOccurrence(repeat, now))
+      } else {
+        at = scheduleInstant(request.at)
+        if (!Number.isFinite(at) || at <= now || at - now > MAX_FUTURE_MS) throw code('SCHEDULE_TIME_INVALID')
+      }
       const old = this.state.jobs
       const retained = Object.fromEntries(Object.entries(old).filter(([, job]) => !(['accepted', 'cancelled'].includes(job.status) && Date.parse(job.triggeredAt ?? job.at) < this.now() - 30 * 24 * 60 * 60 * 1000)))
       if (Object.keys(retained).length >= MAX_JOBS) throw code('SCHEDULE_LIMIT')
       this.state.jobs = retained
-      const job = {id: randomUUID(), owner, kind: request.kind ?? 'reminder', ...(request.kind === 'task' ? {conversationKey} : {}), at: new Date(at).toISOString(), text: request.text.trim(), ...(repeat ? {repeat} : {}), status: 'pending', createdAt: new Date(now).toISOString()}
+      const job = {id: randomUUID(), owner, kind: request.kind ?? 'reminder', ...(conversationKey ? {conversationKey} : {}),...(requestId?{requestId,requestSignature:signature}:{}), at: new Date(at).toISOString(), text: request.text.trim(), ...(repeat ? {repeat} : {}), status: 'pending', timeZone:displayZone, createdAt: new Date(now).toISOString()}
       this.state.jobs[job.id] = job
       try {await this.save()} catch (error) {this.state.jobs = old; throw error}
       return this.public(job)
     })
   }
-  public(job) {return {id: job.id, kind: job.kind ?? 'reminder', at: job.at, text: job.text, status: job.status, ...(job.repeat ? {repeat: job.repeat} : {}), ...(job.triggeredAt ? {triggeredAt: job.triggeredAt} : {}), ...(job.submissionId ? {submissionId: job.submissionId} : {}), ...(job.lastTrigger ? {lastTrigger: job.lastTrigger} : {})}}
+  public(job) {return {id: job.id, kind: job.kind ?? 'reminder', at: job.at, text: job.text, status: job.status, ...(job.timeZone?{timeZone:job.timeZone}:{}), ...(job.conversationKey?{conversationKey:job.conversationKey}:{}), ...(job.repeat ? {repeat: job.repeat} : {}), ...(job.triggeredAt ? {triggeredAt: job.triggeredAt} : {}), ...(job.submissionId ? {submissionId: job.submissionId} : {}), ...(job.lastTrigger ? {lastTrigger: job.lastTrigger} : {})}}
   list(owner, {offset = 0, limit = 10} = {}) {
     this.checkOwner(owner)
     if (!Number.isInteger(offset) || offset < 0 || offset > MAX_JOBS || !Number.isInteger(limit) || limit < 1 || limit > 10) throw code('SCHEDULE_ARGUMENTS_INVALID')

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Extend management MCP to 22 tools covering directory-bound project creation, renaming, bounded history search, result queries/redelivery, targeted reconciliation, schedules and version-specific update dismissal.
+- Keep project creation separate from switching, pin result snapshots before redelivery, persist schedule request deduplication, and distinguish future schedule cancellation from stopping submitted tasks.
+
 - Add account-scoped natural-language project management through eight MCP tools and a bundled Skill, preserving existing command controls.
 - Bind supplements and stop requests to exact tasks, distinguish pending requests from confirmed outcomes, and retain long history across signed continuation cursors.
 - Manage private Skill installation and removal without changing global Codex settings or overwriting user files.

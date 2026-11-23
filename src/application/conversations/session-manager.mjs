@@ -1,3 +1,4 @@
+import {recordTaskResult,archiveTaskResult} from '../tasks/task-result.mjs'
 import {homedir as platformHome} from 'node:os'
 import {emptyContinuationNotice} from '../../domain/delivery/notification-policy.mjs'
 import {currentMaterials,hasAttachments} from '../../domain/messages/material-association.mjs'
@@ -314,6 +315,7 @@ export class SessionManager {
     session.contextRejected=false
     session.workToken=token
     session.traceId = typeof text==='object'&&/^[a-zA-Z0-9_-]{8,64}$/.test(text.traceId??'')?text.traceId:randomBytes(8).toString('hex')
+    session.taskId=typeof text==='object'&&text.deliveryId?text.deliveryId:session.traceId
     const waiting=this.state.users[session.userId]?.waitingAttachment
     session.attachmentContinuation=hasAttachments(text)&&waiting?waiting:null
     session.localTask=session.attachmentContinuation?.task??localTaskLabel(text,typeof text==='object'&&text.deliveryId?text.deliveryId:session.traceId)
@@ -531,8 +533,10 @@ export class SessionManager {
       }
       session.generatedOutputs=[]
       if(this.sessions.has(session.userId)&&this.sessions.get(session.userId)!==session)return
+      archiveTaskResult(this.state.users[session.userId])
       this.state.users[session.userId].lastOutput=typeof output==='string'?undefined:output
       this.state.users[session.userId].recovery={task:session.localTask,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending',updated:new Date().toISOString()}
+      recordTaskResult(this.state.users[session.userId],{taskId:session.taskId??session.traceId,threadId:session.threadId,turnId:session.turnId,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending'})
       this.state.users[session.userId].lastTask=session.localTask
       this.state.users[session.userId].lastReply = reply
       try { await this.save() } catch(error) { this.diagnostic(session,'state.save_failed',this.ports.errorFields(error));reply+='\n（微信会话状态保存失败，本轮回复可能无法在重启后恢复。）';this.state.users[session.userId].lastReply=reply }
@@ -547,6 +551,7 @@ export class SessionManager {
       const currentRecovery=this.sessions.get(session.userId)===session||!this.sessions.has(session.userId)
       if(currentRecovery&&this.state.users[session.userId].recovery===recovery){
         this.setRecoveryDelivery(recovery,session)
+        if(this.state.users[session.userId].resultIdentity?.turnId===session.turnId)this.state.users[session.userId].resultIdentity.delivery=recovery.delivery
         this.diagnostic(session,'delivery.state_changed',{delivery_state:recovery.delivery,status:p.turn.status})
         try{await this.save()}catch(error){this.diagnostic(session,'recovery.save_failed',this.ports.errorFields(error))}
       }

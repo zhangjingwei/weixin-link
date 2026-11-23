@@ -166,3 +166,5 @@ Licensed under the [MIT License](LICENSE). Third-party dependencies and external
 ### Natural-language project management
 
 Ask for project progress, request a project switch, supplement a specific running task, or request a stop. The bundled management MCP and Skill only access the current user's registered conversations. Ambiguous targets require clarification; progress queries never switch projects. Pending/requested is not completion. Existing commands remain available. Reliable voice transcripts follow the same workflow. See the [management guide](docs/features/management-mcp.md) for installation, removal and limitations.
+
+Management also supports project creation and renaming, bounded history search, read-only results, explicit snapshot redelivery, targeted reconciliation, schedules, and version-specific update dismissal. Creating a project does not switch to it. Reading a result does not resend files. Cancelling a schedule does not stop a submitted task. See the [management guide](docs/features/management-mcp.md).

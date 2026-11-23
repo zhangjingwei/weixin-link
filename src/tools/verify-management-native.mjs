@@ -9,6 +9,7 @@ const root=fileURLToPath(new URL('../..',import.meta.url)),dir=await mkdtemp(joi
 try{
  const code=`
  import {CodexRpc} from './src/base/codex/codex-rpc.mjs';
+ import {managementTools} from './src/application/management/tools.mjs';
  import {createSessionProtocol} from './src/infrastructure/agents/session-protocol.mjs';
  import {managementPlugin} from './src/setup/management-plugin.mjs';
  import {managementConfiguration} from './src/infrastructure/agents/management-plugin.mjs';
@@ -23,7 +24,7 @@ try{
   const skill=skills.data?.flatMap(d=>d.skills??[]).find(s=>s.name==='zerolink-manage');
   const status=await rpc.request('mcpServerStatus/list',{}),server=status.data?.find(s=>s.name==='zerolink-management');
   const report={threadStarted:!!result.thread?.id,skillDiscovered:!!skill,skillEnabled:skill?.enabled===true,managementToolCount:Object.keys(server?.tools??{}).length};
-  console.log(JSON.stringify(report));if(!report.threadStarted||!report.skillEnabled||report.managementToolCount!==8)process.exitCode=1;
+  console.log(JSON.stringify(report));if(!report.threadStarted||!report.skillEnabled||report.managementToolCount!==managementTools.length)process.exitCode=1;
  }finally{rpc.close()}
  `
  const {stdout}=await promisify(execFile)(process.execPath,['--input-type=module','-e',code],{cwd:root,env:{PATH:process.env.PATH,HOME:dir,CODEX_HOME:join(dir,'codex'),...(process.platform==='win32'?{SystemRoot:process.env.SystemRoot,USERPROFILE:dir}:{})},timeout:30000,maxBuffer:65536})
