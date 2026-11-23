@@ -1,140 +1,47 @@
-Weixin Link User Guide
+# WeChat assistant user guide
 
-Send English commands as plain text, without a slash. Commands are case insensitive. Names, requests, and answers can be in any language.
+Describe what you need in natural language. You do not need to memorize commands or switch projects first. The assistant clarifies ambiguous project names and targets before acting.
 
-1. First-time setup
+## First connection
 
-1. Follow the installation steps in README.en.md on your computer. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
-2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message and a short getting-started guide after your first login.
-3. If you skipped or did not complete model setup, rerun the installer and choose **Configure model** from the menu.
+Complete model authorization and WeChat sign-in on the installation computer as described in README. Enter API keys only in that terminal. Device authorization and QR confirmation remain user actions. A short guide appears after login.
 
-- `setup`: Show how to start the setup wizard on your computer.
+## One entry, multiple projects
 
-2. Everyday use
+- “What projects do I have?”
+- “How far has the knowledge project progressed?” — reads status without switching or creating work.
+- “Have the toolbox project improve its search page, keeping the current colors.” — submits a new text task to that project.
+- “Add PDF support to the knowledge project's running task.” — supplements the exact original task.
+- “Stop the toolbox project's current task.” — verifies the target without stopping other projects.
+- “Show the knowledge project's previous result.” — reads it; files are resent only on an explicit request.
 
-Send a message, image, or file and explain what you need. When you reply to a quoted message, the assistant tries to read its text and tells you if it cannot.
-Commands that need a name, search term, or request work in two steps: send the command, then reply to its prompt with a separate text message. Images, files, and voice attachments cannot supply that input.
-While a prompt is waiting, you can check `guide` or `status` and then continue with your original answer.
+Projects retain their own directories, context and queues. Labelled progress, approval prompts and results return to the same WeChat entry. Queued does not mean completed. Background results are not automatically inserted into the current model context; the assistant queries task results when asked to summarize. Reliable voice transcripts work as text. Cross-project submissions currently accept text only; attachments are not implicitly transferred.
 
-Conversations and tasks
+## Projects, history and schedules
 
-- `daily`: Return to your everyday conversation.
-- `supplement`: Reply to the prompt with more instructions for the current task.
-- `status`: Check the task and message status.
-- `progress`: Check the current progress.
-- `result`: See the latest result. Attached files may be sent again when you request it again.
-- `stop`: Stop the current task and clear queued messages.
-- `exit`: Stop and disconnect the current conversation while keeping its history.
-- `recover`: Check a submitted task whose result is still uncertain.
-- `cancel`: Cancel a command that is waiting for your input.
+Ask to create or rename a project, search its discussions, archive a finished project or restore an archived project. Creation first confirms an existing directory and does not switch. Archiving preserves history rather than permanently deleting it. Archiving the current project moves navigation to another available project under the existing rules.
 
-Service and help
+Ask for a reminder tomorrow, a recurring project task, your schedule list or cancellation of a specific reminder. Ambiguous times, time zones and targets are clarified. Cancellation stops future triggers, not tasks already submitted.
 
-- `help`: List available commands.
-- `guide`: Show this guide again.
-- `service-status`: Check whether the service is running.
-- `restart`: Restart this account's service when it is idle.
-- `check-updates`: Show the current version, latest stable release, and update availability without installing. Explicit checks are independent of automatic notification deduplication. Unverified source/custom installations are reported as such.
-- `skip-update`: Skip the last notified release across restarts without suppressing newer releases. Explicit check-updates and upgrade remain available. You can also reply cancel to an update notice; an active conversation prompt takes priority for cancel. This does not cancel an already scheduled upgrade.
-- `upgrade`: Upgrade a standard installation when it is idle. Custom deployments may not support this command. New-version and completed-upgrade notices include up to five maintained highlights and a link to the full release notes; missing highlights are stated explicitly.
+## Updates and maintenance
 
-You can also ask for a reminder in ordinary language, such as “Remind me about the meeting tomorrow at 9 AM.” A reminder can send a message or start a scheduled task. It runs on the computer and does not read your phone calendar.
+Ask whether a release is available to check without installing. Ask to skip that particular version to retain notifications for later releases. Explicitly requesting an upgrade binds the checked version and commit. After the tool receipt, the existing worker waits for the shared installation to become idle, then backs up, upgrades and checks health. Accounts sharing that installation are affected; a later release is not silently substituted.
 
-3. Projects and the everyday conversation
+Ask to restart the current account to schedule an idle restart after the tool receipt. Running work is not forcefully interrupted. Ask whether maintenance finished to inspect the worker's actual record; scheduled does not mean completed.
 
-Projects and the everyday conversation share one WeChat chat. For `archive`, `restore`, `delete`, and `switch`, send the command first, then reply with a number from its list. The number applies only to that selection.
+## Troubleshooting and other work
 
-- `list`: List projects.
-- `daily`: Return to the everyday conversation.
-- `new`: Enter a name for a new project when prompted.
-- `rename`: Enter a new name when prompted.
-- `switch`: Show conversations, then reply with the number of the one to use.
-- `history`: Show conversations, including archived ones, then reply with a number to read its history.
-- `older`: See earlier history.
-- `search`: Enter a term to search the latest 50 turns of the current conversation.
-- `archive`: List conversations you can archive, then reply with a number. History is kept.
-- `restore`: List archived conversations, then reply with a number to restore one.
-- `delete`: List conversations you can delete, then reply with a number to permanently delete one and its derived conversations. This cannot be undone.
+Ask whether the service is healthy, what is missing from installation, for recent errors, or how to use the assistant. Diagnostics expose only sanitized current-account information. Installation checks are not proof of a new successful inference.
 
-4. Tasks, reviews, and conversations
+Describe plans, code reviews and other work directly for the configured agent to handle. Management MCP exposes no arbitrary RPC, recipient or generic command execution interface. User approvals, API key input and interactive sign-in remain explicit user actions.
 
-Long-running goals and plans
+## When the model is unavailable
 
-- `goal`: Enter a long-running goal when prompted. Send specific tasks separately.
-- `goal-status`: Check the goal's status.
-- `goal-pause`: Pause the goal.
-- `goal-resume`: Resume the goal.
-- `goal-complete`: Mark the goal complete.
-- `goal-clear`: Remove the goal record.
-- `plan`: Enter a request to make a plan first. After reviewing it, send a separate request to carry it out.
+Exact commands remain handled by the bridge:
 
-Code reviews
+- **stop**: stop the current conversation and clear its queue; identify other projects explicitly.
+- **status**: inspect current conversation and task status.
+- **install-help**: installation and authorization guidance.
+- **service-status**, **guide**, **help**: service status, this guide and the full manual command entry.
 
-- `review`: Review uncommitted changes in the current workspace.
-- `compare`: Enter a branch name, such as `main`, to review changes against that branch.
-- `commit-review`: Show recent commits, then reply with the number of the commit to review.
-
-Conversation management
-
-- `session-status`: Check the current conversation and goal status.
-- `resume-session`: Show saved conversations, then reply with a number to switch to one.
-- `reset-session`: Start a new conversation for the current project.
-- `compact`: Condense the current conversation context.
-- `fork`: Copy the current conversation and switch to the copy.
-- `branch`: Create a branch while keeping the current conversation active. You can switch to the branch later.
-
-Models and memory
-
-- `models`: List models.
-- `fast-on`: Use fast mode for later tasks.
-- `fast-off`: Turn off fast mode.
-- `memory`: Check memory status.
-- `memory-on`: Enable memory for the current conversation.
-- `memory-off`: Disable memory for the current conversation.
-
-Approvals and answers
-
-When the assistant asks for approval or more information, choose an item from the list:
-
-- `approve`: Show pending approvals, then reply with a number to approve one.
-- `reject`: Show pending approvals, then reply with a number to reject one.
-- `answer`: Show pending questions, reply with a number, then enter your answer.
-
-5. Images and files
-
-Send images, files, PDFs, or videos and explain what you want done. The assistant will tell you if it cannot read the content in full.
-The assistant can send up to 8 files at once, with a combined size of 50 MB. Follow its prompt if a file is too large or cannot be received.
-MP3 and WAV audio is shown as files. Use a private WeChat chat; ordinary group chats are not supported.
-
-6. Other computers and backups
-
-To connect another computer or home device, or to set up backups, describe what you want and follow the assistant's reply. Do not send passwords or API keys through WeChat.
-
-7. Troubleshooting
-
-If WeChat says it cannot connect or the assistant does not respond as expected, use the relevant command:
-
-- `service-status`: Check whether the service is online.
-- `diagnose`: Check diagnostics for the current account.
-- `recent-errors`: See recent error messages.
-- `export-diagnostics`: Create a report to share for troubleshooting.
-- `setup-status`: Check setup and sign-in if messages arrive but tasks do not run.
-- `status`: Check whether a task is running.
-- `result`: Check the latest result before sending a task again.
-- `install-help`: Show installation help.
-
-8. Working in a chosen folder
-
-- `folder`: See which folder the assistant is using.
-- `new-project`: Enter a project name, then choose the current folder or one of its subfolders from a list.
-- `stop`: Stop only the current conversation's task.
-
-Projects can share a folder. If they edit the same file at the same time, their changes may conflict; check whether another task is still running. A voice message with a complete text transcript can also contain a command.
-
-## Natural-language management
-
-Submit a text task to a named project from the current entry without switching. Labelled progress, approval prompts and results return directly. Queued means accepted by the queue, not completed. Explicitly name the target for supplements and stops; attachments are not forwarded implicitly.
-
-Ask for progress in a named project, switch to it, supplement its running task, or stop that task. The management MCP and Skill only access your registered conversations and clarify ambiguous names. Queries never switch projects. Pending/requested does not confirm completion; check system confirmation and the original task state. Existing commands remain available. Reliable voice transcripts follow the same workflow. See the [management guide](docs/features/management-mcp.md).
-
-Management also supports project creation and renaming, bounded history search, read-only results, explicit snapshot redelivery, targeted reconciliation, schedules, and version-specific update dismissal. Creating a project does not switch to it. Reading a result does not resend files. Cancelling a schedule does not stop a submitted task. See the [management guide](docs/features/management-mcp.md).
+See the [exact command reference](docs/reference/commands.en.md) for recovery procedures. Natural-language management requires the enabled MCP and Skill; exact commands remain available if those are unavailable.

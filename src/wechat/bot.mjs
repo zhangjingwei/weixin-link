@@ -1,3 +1,4 @@
+import {createManagementMaintenanceController} from '../interfaces/controllers/management-maintenance-controller.mjs'
 import {managementPlugin} from '../setup/management-plugin.mjs'
 import {ManagementService} from '../application/management/management-service.mjs'
 import {createManagementMcpController} from '../interfaces/controllers/management-mcp-controller.mjs'
@@ -130,7 +131,7 @@ try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime
  track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 const managementInstallation=await managementPlugin({accountId:account.id,codexHome:agent.sessionOptions.codexHome,stateDir})
-const managementService=new ManagementService({manager,conversations,enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
+const managementService=new ManagementService({manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
 // Persist restart reconciliation and private-payload cleanup before accepting MCP calls.
 await manager.save()
 const management=createManagementMcpController({manager,service:managementService,configuration:capability=>managementConfiguration({socket:account.socket,capability,controlToken:runtime.token})})

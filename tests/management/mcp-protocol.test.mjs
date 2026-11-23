@@ -14,7 +14,7 @@ import {managementConfiguration} from '../../src/infrastructure/agents/managemen
 
 test('real MCP stdio handshake, tools/list, tools/call and post-response activation use private socket',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'zlm-')),socket=controlEndpoint(dir),calls=[]
- const runtime=new RuntimeControl({controlTokenFile:join(dir,'control-token'),onManagement:async req=>{assert.equal(req.capability,'test-private-capability');calls.push(req);if(req.activate)return {accepted:true};if(req.tool==='get_management_operation')return {operationId:'read-only-pending',status:'pending'};if(req.tool==='submit_project_task')return {operationId:'queued-test',status:'queued',data:{taskId:'durable-test'}};if(req.tool==='request_task_stop')return {operationId:'operation-test',status:'pending'};return {projects:[{projectId:'1',name:'Demo'}]}}})
+ const runtime=new RuntimeControl({controlTokenFile:join(dir,'control-token'),onManagement:async req=>{assert.equal(req.capability,'test-private-capability');calls.push(req);if(req.activate)return {accepted:true};if(req.tool==='get_management_operation')return {operationId:'read-only-pending',status:'pending'};if(req.tool==='submit_project_task')return {operationId:'queued-test',status:'queued',data:{taskId:'durable-test'}};if(req.tool==='request_service_restart')return {operationId:'restart-test',status:'pending'};if(req.tool==='request_task_stop')return {operationId:'operation-test',status:'pending'};return {projects:[{projectId:'1',name:'Demo'}]}}})
  await runtime.listen(socket);t.after(async()=>{await runtime.close();await rm(dir,{recursive:true,force:true})})
  if(!isPipe(socket))assert.equal((await stat(socket)).mode&0o777,0o600)
  const transport=new StdioClientTransport({command:process.execPath,args:[fileURLToPath(new URL('../../src/interfaces/cli/management-mcp.mjs',import.meta.url))],env:{ZEROLINK_MANAGEMENT_SOCKET:socket,ZEROLINK_MANAGEMENT_CAPABILITY:'test-private-capability',...runtime.token?{ZEROLINK_MANAGEMENT_PIPE_TOKEN:runtime.token}:{}},stderr:'pipe'})
@@ -29,6 +29,8 @@ test('real MCP stdio handshake, tools/list, tools/call and post-response activat
  const stopped=await client.callTool({name:'request_task_stop',arguments:{projectId:'1',taskId:'task',turnId:'turn',requestId:'request'}});assert.equal(stopped.structuredContent.status,'pending')
  await new Promise(resolve=>setTimeout(resolve,100))
  assert.equal(calls.filter(c=>c.activate==='operation-test').length,1)
+ const restart=await client.callTool({name:'request_service_restart',arguments:{requestId:'restart-request'}});assert.equal(restart.structuredContent.status,'pending')
+ await new Promise(resolve=>setTimeout(resolve,100));assert.equal(calls.filter(c=>c.activate==='restart-test').length,1)
  await client.callTool({name:'get_management_operation',arguments:{operationId:'read-only-pending'}})
  await new Promise(resolve=>setTimeout(resolve,100))
  assert.equal(calls.filter(c=>c.activate==='read-only-pending').length,0)

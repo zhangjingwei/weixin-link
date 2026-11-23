@@ -1,6 +1,6 @@
 ---
 name: zerolink-manage
-description: 管理 ZeroLink 微信项目和会话：定位、新建和命名项目，向指定项目提交任务，查询进展、历史和结果，切换、补充、停止或核对任务，管理提醒和版本跳过偏好。用户要求管理微信项目、结果或计划时使用。
+description: 管理 ZeroLink 微信项目和会话：定位、新建和命名项目，向指定项目提交任务，查询进展、历史和结果，切换、补充、停止或核对任务，管理提醒、诊断、版本升级与重启。用户要求管理微信项目、结果或计划时使用。
 ---
 
 通过本会话注入的 `zerolink-management` MCP 调用管理能力；不要绕过它读全局 Codex 会话库、修改运行 JSON 或拼接 thread/resume。MCP 不可用时如实说明，可提示仍支持原有精确命令。
@@ -56,4 +56,15 @@ description: 管理 ZeroLink 微信项目和会话：定位、新建和命名项
 
 查看与取消用 `list_schedules`、`cancel_schedule`。取消只影响未来触发，runningTaskStopped 始终为 false；已提交任务可能仍在执行，需要用户明确要求后再走原任务停止流程。
 
-检查版本用 `check_updates`，不会安装；用户明确说跳过某版时使用对应 updateToken 调 `skip_update`。凭据绑定具体版本，即使随后出现新版也不会一并跳过。本期不提供升级、重启、永久删除或代用户审批工具。
+检查版本用 `check_updates`，不会安装；用户明确说跳过某版时使用对应 updateToken 调 `skip_update`。凭据绑定具体版本，即使随后出现新版也不会一并跳过。升级与重启见下方维护流程；不提供永久删除或代用户审批工具。
+
+## 自然语言维护与帮助
+
+日常说明优先展示自然语言请求，不要求用户先记命令、切换项目或去终端执行日常操作。模型不可用时仍保留“停止、状态、安装帮助、服务状态、命令列表”等精确入口；扫码与密钥输入仍由用户在安装电脑完成。
+
+- “服务正常吗”“安装有什么问题”“最近为什么失败”：分别用 get_service_status、get_installation_status、get_diagnostics。诊断是脱敏记录，安装验收记录不等于本次模型推理成功；不要从日志里没有错误推断一切正常。
+- “怎么用”：get_usage_guide(language)；计划、代码审查等底座已有能力直接按用户需求处理，不包装成任意命令执行工具。
+- “重启当前账号”：明确执行意图后 request_service_restart(requestId)。仅当前账号；不要让用户重复输入精确命令。返回 pending/scheduled 时说明等待空闲，结束本轮让原工作进程处理；不要同轮轮询或声称完成。
+- “升级”：先 check_updates 核对具体版本，明确用户升级意图后，将返回的 updateToken 原样传 request_upgrade。升级范围是共享安装，可能重启其中多个账号，不能描述为只影响本会话。用户只问版本时不调用写工具，不跳过来源、维护互斥、备份、忙闲及健康检查。
+- 凭据绑定版本和提交。版本变化时重新核对；不自动改装后来发布的版本。unknown 不换请求编号重试；用 get_maintenance_status 核对真实工作进程记录和 requests 中本次操作；按 maintenanceId、版本关联，不把旧工作进程的 complete 当作新请求完成。操作回执 scheduled/already_scheduled 只说明已有请求，completed:false 不是升级/重启完成。
+- 项目归档或还原用 request_project_archive(projectId, archived, requestId)。先明确目标；归档保留历史，当前项目需等待原轮次结束，导航可能按原规则选择其他项目。pending 不是完成；不以此替代永久删除或停止运行任务。

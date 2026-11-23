@@ -1,3 +1,5 @@
+import {requestProjectArchive,executeProjectArchive} from './project-archive-management.mjs'
+import {maintenanceRead,requestMaintenance,executeMaintenance} from './maintenance-management.mjs'
 import {submitProjectTask} from './project-task-management.mjs'
 import {pruneManagementOperations,discardUnexecutedPayload} from './management-writes.mjs'
 import {workspaceChoices,createProject,renameProject} from './project-management.mjs'
@@ -13,8 +15,8 @@ const signatureFor=(name,args)=>createHmac('sha256','zerolink-operation-v1').upd
 
 // A management facade over the existing conversation/task state, not another queue.
 export class ManagementService{
- constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
-  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
+ constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,maintenance,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
+  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,maintenance,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
   manager.state.managementOperations??=[];this.operations=manager.state.managementOperations
   for(const op of this.operations)if(['pending','executing'].includes(op.status))op.status=op.status==='pending'?'not_executed':'unknown'
   pruneManagementOperations(this.operations,this.now())
@@ -29,6 +31,9 @@ export class ManagementService{
  exact(e,args){const s=this.manager.sessions.get(e.key);if(!s||!s.busy||s.traceId!==args.taskId||s.turnId!==args.turnId||s.rpc?.closed)throw Error('MANAGEMENT_STALE_TASK');return s}
  async call(caller,name,args){
   validateManagementCall(name,args);const owner=this.owner(caller)
+  if(name==='request_project_archive')return requestProjectArchive(this,owner,caller,args)
+  if(['get_service_status','get_installation_status','get_diagnostics','get_usage_guide','get_maintenance_status'].includes(name))return maintenanceRead(this,owner,name,args)
+  if(['request_service_restart','request_upgrade'].includes(name))return requestMaintenance(this,owner,caller,name,args)
   const extended={submit_project_task:()=>submitProjectTask(this,owner,caller,args),list_workspace_choices:()=>workspaceChoices(this,owner,args),create_project:()=>createProject(this,owner,caller,args),rename_project:()=>renameProject(this,owner,caller,args),search_session_history:()=>searchHistory(this,owner,args),list_project_tasks:()=>listProjectTasks(this,owner,args),get_task_result:()=>getTaskResult(this,owner,args),request_result_redelivery:()=>requestResultRedelivery(this,owner,caller,args),request_task_reconciliation:()=>requestTaskReconciliation(this,owner,caller,args),check_updates:()=>checkUpdates(this,owner),skip_update:()=>skipUpdate(this,owner,caller,args),create_schedule:()=>createSchedule(this,owner,caller,args),list_schedules:()=>listSchedules(this,owner,args),cancel_schedule:()=>cancelSchedule(this,owner,caller,args)}
   if(extended[name])return extended[name]()
   if(name==='get_management_operation'){const op=this.operations.find(op=>op.id===args.operationId&&op.owner===owner);if(!op)throw Error('MANAGEMENT_OPERATION_NOT_FOUND');return this.result(op)}
@@ -86,7 +91,7 @@ export class ManagementService{
  async execute(op){return this.track(()=>this.run(op))}
  async run(op){
   if(op.status!=='pending')return
-  if(['request_result_redelivery','request_task_reconciliation'].includes(op.name))return this.runExtended(op)
+  if(['request_result_redelivery','request_task_reconciliation','request_service_restart','request_upgrade','request_project_archive'].includes(op.name))return this.runExtended(op)
   const {manager,conversations}=this,root=conversations.root[op.owner]
   try{
    if(this.closed||!this.ready())throw Error('MANAGEMENT_UNAVAILABLE')
@@ -120,13 +125,13 @@ export class ManagementService{
  async runExtended(op){
   try{
    if(this.closed||!this.ready())throw Error('MANAGEMENT_UNAVAILABLE')
-   const done=op.name==='request_result_redelivery'?await executeRedelivery(this,op):await executeReconciliation(this,op)
+   const done=op.name==='request_project_archive'?await executeProjectArchive(this,op):['request_service_restart','request_upgrade'].includes(op.name)?await executeMaintenance(this,op):op.name==='request_result_redelivery'?await executeRedelivery(this,op):await executeReconciliation(this,op)
    if(done===false)return
   }catch(error){op.status=op.status==='executing'?'unknown':'not_executed';op.detail=/^(?:MANAGEMENT|SCHEDULE|UPDATE)_[A-Z_]+$/.test(error.message)?error.message:'MANAGEMENT_OPERATION_UNCONFIRMED'}
   clearTimeout(this.expirations.get(op.id));this.expirations.delete(op.id)
   discardUnexecutedPayload(op)
   await this.manager.save()
-  const notice=op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'指定结果已提交发送接口。':op.status==='deferred'?'指定结果已进入原投递队列。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
+  const notice=op.name==='request_project_archive'&&op.status==='confirmed'?'项目归档状态已核对。': ['scheduled','already_scheduled'].includes(op.status)?'维护请求已安排，等待原有工作进程在空闲后处理；尚未确认完成。':op.status==='up_to_date'?'当前版本无需升级，未安排维护。':op.status==='blocked'?'已有维护请求，未重复安排。':op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'指定结果已提交发送接口。':op.status==='deferred'?'指定结果已进入原投递队列。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
   await this.notice(op.owner,notice).catch(()=>{})
  }
  sign(value){const data=Buffer.from(JSON.stringify(value)).toString('base64url');return data+'.'+createHmac('sha256',this.cursorKey).update(data).digest('base64url')}

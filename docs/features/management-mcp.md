@@ -12,7 +12,7 @@
 
 同名项目会询问用户选择，无匹配不会扫描整个磁盘或创建项目。候选只来自当前账号下该用户已登记的会话，不是智能全文搜索；“知识库做到哪了”里的业务别称未命中时需澄清。查询不是执行授权，模型理解仍可能出错；精确的“切换”“补充”“停止”等原命令继续可用。
 
-## 工具边界（共23项）
+## 工具边界（共31项）
 
 | 工具 | 输入要点 | 结果/边界 |
 | --- | --- | --- |
@@ -35,6 +35,14 @@
 | get_task_result | projectId、可选 taskId、cursor | 只读文本分页和附件摘要；不发文件 |
 | request_result_redelivery | projectId、resultToken、requestId | 绑定原快照，检查完整性/有效期后投递 |
 | request_task_reconciliation | projectId、完整 taskId、requestId | 指定原任务核对，不重新执行 |
+| get_service_status | 无 | 当前账号服务就绪与忙闲状态 |
+| get_installation_status | 无 | 安装检查和已有推理验收记录，不发起新推理 |
+| get_diagnostics | 无 | 当前账号脱敏诊断与最近错误 |
+| get_usage_guide | 可选 language | 自然语言指南与应急命令 |
+| get_maintenance_status | 无 | 原维护工作进程的真实状态 |
+| request_service_restart | requestId | 回执后安排当前账号空闲重启 |
+| request_upgrade | updateToken、requestId | 回执后安排确切版本的共享安装升级 |
+| request_project_archive | projectId、archived、requestId | 归档/还原请求，复用原核对流程 |
 | check_updates | 无 | 只读版本信息、摘要及绑定版本的凭据 |
 | skip_update | updateToken、requestId | 跳过确切版本，保留后来版本提示 |
 | create_schedule | projectId、kind、text、at 或 repeat、requestId；可选 timeZone | 原计划服务保存，回传计划ID、时区和下次时间 |
@@ -77,7 +85,7 @@ node --test tests/management/*.test.mjs
 node src/tools/verify-management-native.mjs
 ```
 
-第二条在临时 HOME/CODEX_HOME 中运行项目固定版本的真实 Codex，只创建空线程并检查 Skill 和 23 个 MCP 工具加载，不登录、不启动模型轮次、不访问生产账号状态。自动测试验证协议、身份、歧义、长历史、陈旧任务、去重和安装保护；不等于真实微信或跨平台人工验收。
+第二条在临时 HOME/CODEX_HOME 中运行项目固定版本的真实 Codex，只创建空线程并检查 Skill 和 31 个 MCP 工具加载，不登录、不启动模型轮次、不访问生产账号状态。自动测试验证协议、身份、歧义、长历史、陈旧任务、去重和安装保护；不等于真实微信或跨平台人工验收。
 
 ## 第二批能力的约束
 
@@ -103,4 +111,12 @@ node src/tools/verify-management-native.mjs
 
 路由元数据与原队列任务一起保存，去重回执清理不改变已排队任务。排队期间目标变为不可用，或既有线程/目录变化时，执行前取消并说明未执行。插入结果未知时保留原 taskId 核对，不另起任务或自动重放；重启只恢复原队列记录和原轮次。停止当前入口不等于停止其他项目，必须明确目标后使用原停止流程。
 
-本期不跨项目隐式转交用户附件；可靠语音转写可作为文字提交，文件原件与审批动作仍需明确归属。升级、重启没有随本工具开放。
+本期不跨项目隐式转交用户附件；可靠语音转写可作为文字提交，文件原件与审批动作仍需明确归属。升级、重启由独立维护工具处理，不通过项目任务递归调用。
+
+## 自然语言维护与命令覆盖
+
+新增 get_service_status、get_installation_status、get_diagnostics、get_usage_guide、get_maintenance_status、request_service_restart、request_upgrade 和 request_project_archive。服务、安装验收与诊断都是只读且按当前账号装配；诊断不返回原始日志。归档/还原复用原 TextConversations 核对流程，忙碌、陈旧线程、最后一个可用项目及未知上游结果保持原保护。
+
+重启和升级先保存意图、返回 MCP 回执，再安排原 AgentSwitcher/ChatUpgrader 工作进程；不在模型工具调用内停止服务。重启绑定当前账号；升级绑定共享安装并复用等待空闲、备份、切换、回滚和健康检查。升级凭据同时绑定版本和提交，最新 Release 发生变化则不改装另一个版本。查询维护状态区分工作进程 waiting_idle/running/complete/failed 与管理操作 pending/scheduled/unknown；安排成功不是完成。
+
+日常指南及首次连接提示以自然语言示例为主；精确命令完整保留于 docs/reference/commands.md 与 commands.en.md，并由原解析器在模型不可用时处理。计划、代码审查、普通文件工作等通过底座与已有跨项目任务入口处理，不添加通用 shell/RPC 工具。永久删除、原生会话重置/迁移、扫码、密钥输入及用户审批不由这批维护工具代办；人工恢复入口仍保留。

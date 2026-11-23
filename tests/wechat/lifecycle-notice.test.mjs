@@ -69,7 +69,7 @@ test('definitive context rejection defers until a fresh inbound, unknown is not 
 
 test('English first login includes a short guide once and restart or upgrade does not repeat it',async t=>{
  const f=await fixture(t,{welcomePending:true});f.notice.language='en';f.notice.welcomeText=async()=>welcomeMessage('en')
- await f.notice.start();assert.match(f.sent[0][1],/Getting started/);assert.match(f.sent[0][1],/guide: read the full user guide/)
+ await f.notice.start();assert.match(f.sent[0][1],/Getting started/);assert.match(f.sent[0][1],/stop, status and install-help remain available/)
  assert.ok(Array.from(f.sent[0][1]).length<1800)
  const restarted=new LifecycleNotice({stateDir:f.notice.stateDir,sourceDir:f.notice.sourceDir,owners:['owner'],welcomePending:true,language:'en',send:async(_owner,text)=>{f.sent.push(['owner',text]);return {status:'accepted'}}})
  await restarted.start();assert.equal(f.sent.length,1)

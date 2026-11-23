@@ -1,308 +1,102 @@
 export const USER_GUIDE=`微信助手使用说明
 
-本说明使用中文命令。输入名称、需求和答案时可使用任意语言。
+直接说需求即可，不需要先记命令、选择菜单或切换项目。助手理解意图后调用管理工具；同名项目或目标不明确时，会先核对。
 
-一、首次设置
+## 首次连接
 
-1. 按 README 的步骤在电脑上运行安装命令。安装器会提示选择订阅登录、DeepSeek、Qwen 或 Kimi，并完成授权、连接检查和真实模型测试。第三方密钥只在终端输入，不要发到微信。
-2. 安装器显示微信登录地址，并尝试打开浏览器。请在手机微信确认登录；若要求输入 PIN，请按同一终端的提示操作。登录后微信 Link 会主动推送连接结果和简明使用说明。
-3. 若跳过或未完成模型配置，重新运行安装命令，在菜单中选择“配置模型”。
+按 README 在安装电脑完成模型授权和微信登录。API 密钥只在本机终端输入，扫码与设备授权需由你本人完成。登录后会主动显示简明使用说明。
 
-- “安装向导”：返回本机终端向导的启动方法。
+## 一个入口处理多个项目
 
-二、日常使用
+- “现在有哪些项目？”
+- “知识库项目做到哪一步了？”——查询进度，不切换、不创建任务。
+- “让工具箱优化搜索页面，保持现有配色。”——明确的新任务进入目标项目队列。
+- “给知识库正在执行的任务补充：需要支持 PDF。”——只补充指定原任务，不另起任务。
+- “停止工具箱当前任务。”——核对项目和任务后请求停止，不影响其他项目。
+- “查一下知识库上次的结果。”——只读结果；只有明确说“把原文件再发一次”才重发。
 
-直接发送文字、图片或文件，并说明需要助手做什么。引用一条消息提问时，助手会尝试读取被引用的文字；找不到时会提示。
-需要输入名称、关键词或需求的命令分两步：先发送命令，收到提示后再用下一条纯文字回复。图片、文件和语音附件不能作为命令内容。
-等待输入时，可以先发“使用说明”“状态”等查询命令；看完后继续回复原来的提示。
+各项目保留自己的目录、上下文和队列。进度、审批提示和结果带项目与任务标识返回。排队表示已接受任务，不表示已经完成。后台结果不会自动写入当前模型上下文，需要汇总时助手会查询对应任务。语音有可靠文字转写时也可这样表达；跨项目提交目前仅支持文字，附件原件不会隐式转交。
 
-【对话与任务】
+## 项目、历史与计划
 
-- “日常”：进入固定的日常会话。
-- “补充”：按提示回复要补充的信息；任务结束后不能继续补充。
-- “状态”：查看任务和发送状态。
-- “进度”：查看当前处理进展。
-- “结果”：查看最近一次结果；再次查看时，附件也可能重新发送。
-- “停止”：停止当前任务并清空排队消息。
-- “退出”：停止并断开当前会话，保留历史。
-- “恢复”：核对已提交但结果未确认的任务。
-- “取消”：放弃正在等待输入的命令。
+可以说“新建一个资料整理项目”“把知识库改名为资料库”“搜索知识库里关于搜索优化的讨论”“归档已结束的项目”或“还原知识库项目”。新建先确认已有目录，不自动切换；归档保留历史，不等于永久删除。归档当前项目时，导航会按原规则选择其他可用项目。
 
-【服务与说明】
+可以说“明天上午九点提醒我开会”“每天九点让知识库整理日报”“看看我的计划”“取消明天那个提醒”。时间、时区或项目不清楚时会先询问。取消计划只取消未来触发，不停止已经开始的任务。
 
-- “命令列表”：查看可用命令。
-- “使用说明”：重新查看本说明。
-- “服务状态”：查看服务是否运行。
-- “重启”：在当前账号空闲后重启服务。
-- “检查更新”（check-updates）：主动查看当前版本、最新正式版和是否有更新；不会安装，不受自动通知去重限制。源码或自定义安装无法核实当前版本时会明确提示。
-- “不升级”（skip-update）：跳过最近一次更新提示的版本，重启后仍不再提示该版本，后续新版本照常提醒；主动“检查更新”和“升级”仍可使用。收到更新提示后也可回复“取消”；若正在新建、切换等交互中，“取消”优先取消当前交互。此选择不撤销已经安排的升级任务。
-- “升级”：在空闲后升级标准安装的版本；自定义部署可能无法使用。发现新版本和升级完成的通知会附上该版本维护的核心变化（最多 5 条）及完整说明链接；未提供摘要时会明确提示。
+## 版本与维护
 
-也可以直接用自然语言安排提醒，例如“明天上午九点提醒我开会”。提醒可以只发送文字，也可以到点后执行指定任务。当前不读取手机日历；定时任务只在本机执行。
+- “看看有没有新版本。”——只检查，不安装。
+- “这一个版本先不升级。”——仅跳过已核对的具体版本，后续版本仍可提醒。
+- “升级到刚才查到的新版本。”——绑定该版本和提交，回执返回后交给原升级工作进程，等待共享安装中的服务空闲，再备份、升级和健康检查。共享安装中的账号会受影响；不会自动改装后来出现的版本。
+- “重启当前账号的助手。”——回执返回后安排当前账号空闲重启，不停止正在运行的任务。
+- “升级完成了吗？”——核对真实维护记录；已安排不等于已完成。
 
-三、项目与日常
+## 排查与其他工作
 
-项目和日常会话都在同一个微信聊天窗口中使用。归档、还原、删除和切换时，先发送命令，再从回复的列表中选择序号。序号只用于这次选择。
+可以说“助手服务正常吗”“安装配置有什么问题”“看看最近的错误”“再介绍一下怎么用”。诊断仅返回当前账号脱敏信息，不展示原始日志、聊天正文或密钥；安装检查不等于本次模型推理成功。
 
-- “列表”：查看项目列表。
-- “日常”：切回日常会话。
-- “新建”：按提示输入项目名。
-- “命名”：按提示输入新名称。
-- “切换”：显示日常和项目列表，回复前面的序号。日常会话显示为“日常助手”，已有标题时显示“日常助手 · 标题”。序号每次从 1 开始，只用于这次选择。切换成功后显示会话名称和底座确认的工作目录；无法确认时明确提示，不用默认目录代替。
-- “历史”：先显示可查看的会话列表，再回复序号查看最近5轮；页内从早到晚，最新在下。长消息自动分段完整展示，已归档会话也会列出。
-- “翻页”：查看更早的历史。
-- “搜索”：按提示输入关键词，搜索当前会话最近 50 轮。
-- “归档”：列出可归档的会话，回复序号后归档并保留历史。
-- “还原”：列出已归档的会话，回复序号后还原。
-- “删除”：列出可删除的会话，回复序号后永久删除该会话及其派生会话，无法还原。
+写方案、代码审查、解释代码及其他工作直接说明目标与约束，由当前底座处理。管理 MCP 不提供任意 RPC、任意收件人或通用命令执行接口；也不代替用户批准敏感操作、输入密钥或扫码登录。
 
-四、任务、审查与会话
+## 模型不可用时
 
-【任务与计划】
+精确命令仍由接入层处理，不依赖模型理解：
 
-- “长任务”：按提示输入目标；之后仍需发送具体任务。
-- “长任务状态”：查看目标状态。
-- “暂停长任务”：暂停目标。
-- “继续长任务”：继续目标。
-- “完成长任务”：标记目标完成。
-- “清除长任务”：移除目标记录。
-- “计划”：按提示输入需求，先生成计划；看完后可另发明确的实施要求。
+- **停止**：停止当前会话任务并清空其队列；其他项目需明确核对目标。
+- **状态**：查看当前会话与任务状态。
+- **安装帮助**：查看安装、授权与配置指引。
+- **服务状态**、**使用说明**、**命令列表**：查询服务与完整人工操作入口。
 
-【代码审查】
-
-- “代码审查”：检查当前工作区的未提交变更。
-- “对比审查”：按提示回复分支名称，例如 main，检查与该分支相比的变更。
-- “审查提交”：先显示最近的提交，再回复编号选择要审查的那次。
-
-【会话管理】
-
-- “会话状态”：查看当前会话和长任务状态。
-- “恢复会话”：先显示会话列表，再回复编号切换。
-- “重置会话”：为当前项目建立新会话。
-- “压缩上下文”：整理当前会话。
-- “分叉会话”：复制当前会话并切换过去。
-- “旁支会话”：创建旁支，保留当前会话；以后可切换到旁支。
-
-【自然语言管理】
-
-还支持新建/命名项目、搜索历史、只读查看结果、明确重发原附件、核对指定未确认任务、创建/查看/取消计划及跳过指定更新。新建不自动切换，查询结果不重发文件，取消计划不停止已提交任务。
-
-也可以说“知识库做到哪了”“切换到知识库”“给知识库当前任务补充……”或“停止知识库当前任务”。通过配套 MCP + Skill 只定位你的已登记项目；同名会询问。查询不会切换，切换与停止请求以最终系统确认和原任务状态为准。原命令继续可用。
-
-【模型与记忆】
-
-- “模型”：查看模型列表。
-- “开启快速模式”：让后续任务使用快速模式。
-- “关闭快速模式”：关闭快速模式。
-- “记忆”：查看记忆状态。
-- “开启记忆”：开启当前会话的记忆模式。
-- “关闭记忆”：关闭当前会话的记忆模式。
-
-【交互答复】
-
-助手要求审批或补充信息时，按提示使用对应编号：
-
-- “批准”：显示待审批操作，回复编号同意其中一项。
-- “拒绝”：显示待审批操作，回复编号拒绝其中一项。
-- “回答”：显示待回答的问题，回复编号后再输入答案。
-
-五、图片和文件
-
-可以发送图片、文件、PDF 或视频，并告诉助手希望它做什么。如果内容无法完整读取，助手会在回复中说明。
-助手也可以发送文件，每次最多 8 个，总大小不超过 50 兆。文件过大或无法接收时，请按提示处理。
-发送的 MP3、WAV 音频会作为文件显示。请在微信私聊中使用，暂不支持普通微信群。
-
-六、连接设备与备份
-
-想连接其他电脑、家中设备或设置备份，直接告诉助手要做什么，再按回复中的提示操作。密码和密钥不要发到微信里。
-
-统一入口：可说“让工具箱优化搜索页面”，文字任务进入目标项目，进度和结果带项目标识直接返回，无需切换。查询不创建任务，附件不隐式转交。
-
-七、遇到问题时
-
-微信显示“无法连接”或助手没有按预期回复时，可以按情况发送：
-
-- “服务状态”：查看服务是否在线。
-- “诊断”：查看当前账号的诊断信息。
-- “查看最近错误”：查看最近的错误提示。
-- “导出诊断报告”：生成报告，便于请别人排查。
-- “安装状态”：能收到消息但无法处理任务时，检查安装和登录设置。
-- “状态”：不确定任务是否执行时，先查看状态。
-- “结果”：核对最近一次结果，避免重复发送任务。
-- “安装帮助”：查看安装方法。
-
-八、在指定文件夹中工作
-
-- “当前目录”：查看助手正在使用哪个文件夹。
-- “新建项目”：先回复项目名，再从当前文件夹及其子文件夹列表中选一个。
-- “停止”：只停止当前会话的任务。
-
-多个项目可以使用同一个文件夹。如果同时修改同一个文件，内容可能冲突；请先确认其他任务是否还在处理。微信语音如果附带完整文字，也可以直接说命令。
+其他人工恢复操作可发送“命令列表”查看。自然语言管理需要启用配套 MCP 与 Skill；被禁用或模型无法调用时，仍可使用精确命令。
 `
 
-export const USER_GUIDE_EN=`Weixin Link User Guide
+export const USER_GUIDE_EN=`WeChat assistant user guide
 
-Send English commands as plain text, without a slash. Commands are case insensitive. Names, requests, and answers can be in any language.
+Describe what you need in natural language. You do not need to memorize commands or switch projects first. The assistant clarifies ambiguous project names and targets before acting.
 
-1. First-time setup
+## First connection
 
-1. Follow the installation steps in README.en.md on your computer. In the terminal, choose subscription sign-in, DeepSeek, Qwen, or Kimi. The installer checks the connection and runs a model test. Enter third-party API keys only in the terminal.
-2. The installer shows a WeChat login address and tries to open it in your browser. Confirm the login in WeChat on your phone. If asked for a PIN, follow the prompt in the same terminal. The assistant will send a connection message and a short getting-started guide after your first login.
-3. If you skipped or did not complete model setup, rerun the installer and choose Configure model from the menu.
+Complete model authorization and WeChat sign-in on the installation computer as described in README. Enter API keys only in that terminal. Device authorization and QR confirmation remain user actions. A short guide appears after login.
 
-- setup: Show how to start the setup wizard on your computer.
+## One entry, multiple projects
 
-2. Everyday use
+- “What projects do I have?”
+- “How far has the knowledge project progressed?” — reads status without switching or creating work.
+- “Have the toolbox project improve its search page, keeping the current colors.” — submits a new text task to that project.
+- “Add PDF support to the knowledge project's running task.” — supplements the exact original task.
+- “Stop the toolbox project's current task.” — verifies the target without stopping other projects.
+- “Show the knowledge project's previous result.” — reads it; files are resent only on an explicit request.
 
-Send a message, image, or file and explain what you need. When you reply to a quoted message, the assistant tries to read its text and tells you if it cannot.
-Commands that need a name, search term, or request work in two steps: send the command, then reply to its prompt with a separate text message. Images, files, and voice attachments cannot supply that input.
-While a prompt is waiting, you can check guide or status and then continue with your original answer.
+Projects retain their own directories, context and queues. Labelled progress, approval prompts and results return to the same WeChat entry. Queued does not mean completed. Background results are not automatically inserted into the current model context; the assistant queries task results when asked to summarize. Reliable voice transcripts work as text. Cross-project submissions currently accept text only; attachments are not implicitly transferred.
 
-Natural-language management
+## Projects, history and schedules
 
-Create or rename projects, search bounded history, read results without sending files, explicitly resend a retained snapshot, reconcile one uncertain task, manage schedules, and skip a specific release. Creating does not switch projects; cancelling a schedule does not stop a submitted task.
+Ask to create or rename a project, search its discussions, archive a finished project or restore an archived project. Creation first confirms an existing directory and does not switch. Archiving preserves history rather than permanently deleting it. Archiving the current project moves navigation to another available project under the existing rules.
 
-Ask for progress in a named project, switch to it, supplement its running task, or stop that task. The management MCP and Skill only access your registered conversations. Ambiguous names require clarification. Queries do not switch projects; pending/requested does not confirm completion. Existing commands remain available.
+Ask for a reminder tomorrow, a recurring project task, your schedule list or cancellation of a specific reminder. Ambiguous times, time zones and targets are clarified. Cancellation stops future triggers, not tasks already submitted.
 
-Conversations and tasks
+## Updates and maintenance
 
-- daily: Return to your everyday conversation.
-- supplement: Reply to the prompt with more instructions for the current task.
-- status: Check the task and message status.
-- progress: Check the current progress.
-- result: See the latest result. Attached files may be sent again when you request it again.
-- stop: Stop the current task and clear queued messages.
-- exit: Stop and disconnect the current conversation while keeping its history.
-- recover: Check a submitted task whose result is still uncertain.
-- cancel: Cancel a command that is waiting for your input.
+Ask whether a release is available to check without installing. Ask to skip that particular version to retain notifications for later releases. Explicitly requesting an upgrade binds the checked version and commit. After the tool receipt, the existing worker waits for the shared installation to become idle, then backs up, upgrades and checks health. Accounts sharing that installation are affected; a later release is not silently substituted.
 
-Service and help
+Ask to restart the current account to schedule an idle restart after the tool receipt. Running work is not forcefully interrupted. Ask whether maintenance finished to inspect the worker's actual record; scheduled does not mean completed.
 
-- help: List available commands.
-- guide: Show this guide again.
-- service-status: Check whether the service is running.
-- restart: Restart this account's service when it is idle.
-- check-updates: Show the current version, latest stable release, and update availability without installing. Explicit checks are independent of automatic notification deduplication. Unverified source/custom installations are reported as such.
-- skip-update: Skip the last notified release across restarts without suppressing newer releases. Explicit check-updates and upgrade remain available. You can also reply cancel to an update notice; an active conversation prompt takes priority for cancel. This does not cancel an already scheduled upgrade.
-- upgrade: Upgrade a standard installation when it is idle. Custom deployments may not support this command. New-version and completed-upgrade notices include up to five maintained highlights and a link to the full release notes; missing highlights are stated explicitly.
+## Troubleshooting and other work
 
-You can also ask for a reminder in ordinary language, such as “Remind me about the meeting tomorrow at 9 AM.” A reminder can send a message or start a scheduled task. It runs on the computer and does not read your phone calendar.
+Ask whether the service is healthy, what is missing from installation, for recent errors, or how to use the assistant. Diagnostics expose only sanitized current-account information. Installation checks are not proof of a new successful inference.
 
-3. Projects and the everyday conversation
+Describe plans, code reviews and other work directly for the configured agent to handle. Management MCP exposes no arbitrary RPC, recipient or generic command execution interface. User approvals, API key input and interactive sign-in remain explicit user actions.
 
-Projects and the everyday conversation share one WeChat chat. For archive, restore, delete, and switch, send the command first, then reply with a number from its list. The number applies only to that selection.
+## When the model is unavailable
 
-- list: List projects.
-- daily: Return to the everyday conversation.
-- new: Enter a name for a new project when prompted.
-- rename: Enter a new name when prompted.
-- switch: Show conversations, then reply with the number of the one to use. The daily conversation is labeled 日常助手, with its title appended when available.
-- history: Show conversations, including archived ones, then reply with a number to read its latest 5 turns, oldest first within the page. Long messages are delivered in full across numbered parts.
-- older: See earlier history.
-- search: Enter a term to search the latest 50 turns of the current conversation.
-- archive: List conversations you can archive, then reply with a number. History is kept.
-- restore: List archived conversations, then reply with a number to restore one.
-- delete: List conversations you can delete, then reply with a number to permanently delete one and its derived conversations. This cannot be undone.
+Exact commands remain handled by the bridge:
 
-4. Tasks, reviews, and conversations
+- **stop**: stop the current conversation and clear its queue; identify other projects explicitly.
+- **status**: inspect current conversation and task status.
+- **install-help**: installation and authorization guidance.
+- **service-status**, **guide**, **help**: service status, this guide and the full manual command entry.
 
-Long-running goals and plans
-
-- goal: Enter a long-running goal when prompted. Send specific tasks separately.
-- goal-status: Check the goal's status.
-- goal-pause: Pause the goal.
-- goal-resume: Resume the goal.
-- goal-complete: Mark the goal complete.
-- goal-clear: Remove the goal record.
-- plan: Enter a request to make a plan first. After reviewing it, send a separate request to carry it out.
-
-Code reviews
-
-- review: Review uncommitted changes in the current workspace.
-- compare: Enter a branch name, such as main, to review changes against that branch.
-- commit-review: Show recent commits, then reply with the number of the commit to review.
-
-Conversation management
-
-- session-status: Check the current conversation and goal status.
-- resume-session: Show saved conversations, then reply with a number to switch to one.
-- reset-session: Start a new conversation for the current project.
-- compact: Condense the current conversation context.
-- fork: Copy the current conversation and switch to the copy.
-- branch: Create a branch while keeping the current conversation active. You can switch to the branch later.
-
-Models and memory
-
-- models: List models.
-- fast-on: Use fast mode for later tasks.
-- fast-off: Turn off fast mode.
-- memory: Check memory status.
-- memory-on: Enable memory for the current conversation.
-- memory-off: Disable memory for the current conversation.
-
-Approvals and answers
-
-When the assistant asks for approval or more information, choose an item from the list:
-
-- approve: Show pending approvals, then reply with a number to approve one.
-- reject: Show pending approvals, then reply with a number to reject one.
-- answer: Show pending questions, reply with a number, then enter your answer.
-
-5. Images and files
-
-Send images, files, PDFs, or videos and explain what you want done. The assistant will tell you if it cannot read the content in full.
-The assistant can send up to 8 files at once, with a combined size of 50 MB. Follow its prompt if a file is too large or cannot be received.
-MP3 and WAV audio is shown as files. Use a private WeChat chat; ordinary group chats are not supported.
-
-6. Other computers and backups
-
-To connect another computer or home device, or to set up backups, describe what you want and follow the assistant's reply. Do not send passwords or API keys through WeChat.
-
-Unified entry: ask a named project to do a text task without switching. Labelled progress and results return directly. Queries do not create tasks; attachments are not forwarded implicitly.
-
-7. Troubleshooting
-
-If WeChat says it cannot connect or the assistant does not respond as expected, use the relevant command:
-
-- service-status: Check whether the service is online.
-- diagnose: Check diagnostics for the current account.
-- recent-errors: See recent error messages.
-- export-diagnostics: Create a report to share for troubleshooting.
-- setup-status: Check setup and sign-in if messages arrive but tasks do not run.
-- status: Check whether a task is running.
-- result: Check the latest result before sending a task again.
-- install-help: Show installation help.
-
-8. Working in a chosen folder
-
-- folder: See which folder the assistant is using.
-- new-project: Enter a project name, then choose the current folder or one of its subfolders from a list.
-- stop: Stop only the current conversation's task.
-
-Projects can share a folder. If they edit the same file at the same time, their changes may conflict; check whether another task is still running. A voice message with a complete text transcript can also contain a command.
+Send help for the full manual command entry. Natural-language management requires the enabled MCP and Skill; exact commands remain available if those are unavailable.
 `
 
-// Keep the first-login notice short enough for a single proactive message.
-export function quickStartGuide(language='zh'){
- return language==='en'?`Getting started
-
-• Send a task directly, or attach an image/file and say what you need.
-• daily: return to your daily conversation.
-• new: create a project conversation by following the prompts.
-• switch: list conversations, then reply with a number.
-• progress: check the current task; stop: stop the current task.
-• result: request the last result again (attachments have a retention window).
-• guide: read the full user guide at any time.
-
-If model setup is incomplete, rerun the installer on your computer and choose Configure model.`:`使用说明 · 快速上手
-
-• 直接发需求，或发送图片、文件并说明要做什么。
-• 发“日常”：回到日常助手。
-• 发“新建”：按提示创建项目会话。
-• 发“切换”：查看会话列表，再回复序号。
-• 发“进度”：查看当前任务；发“停止”：停止当前任务。
-• 发“结果”：重新获取上次结果（附件有保留期限）。
-• 发“使用说明”：随时查看完整手册。
-
-若尚未完成模型配置，请在安装电脑重新运行安装命令，选择“配置模型”。`
-}
+// First-login guidance emphasizes natural language; exact commands remain a fallback.
+export function quickStartGuide(language='zh'){return language==='en'?"Getting started\n\n• Describe your task: ask for project progress or ask a named project to improve search.\n• No project switching is needed; labelled progress and results return here. Cross-project submission currently accepts text only.\n• Ask to check updates, upgrade to the checked release, or restart this account. Scheduled does not mean completed.\n• If the model is unavailable, stop, status and install-help remain available.\n• Ask how to use the assistant whenever needed.\n\nIf model setup is incomplete, rerun the installer on your computer and choose Configure model.":"使用说明 · 快速上手\n\n• 直接说需求，例如“知识库做到哪了”“让工具箱优化搜索页面”。\n• 无需切换项目；进度和结果带项目标识返回。跨项目提交目前仅支持文字。\n• 可以说“看看有没有更新”“升级到刚才的新版本”或“重启当前账号”。已安排不等于完成。\n• 模型不可用时仍可发送“停止”“状态”“安装帮助”。\n• 需要帮助时说“再介绍一下怎么用”。\n\n若尚未配置模型，请在安装电脑运行安装程序，选择“配置模型”。"}

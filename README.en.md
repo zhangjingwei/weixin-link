@@ -8,7 +8,7 @@ Research, plan, and get results.
 
 [简体中文](README.md) | [English](README.en.md)
 
-[Quick start](#quick-start) · [Use cases](#use-cases) · [Common commands](#common-commands) · [Installation and upgrades](#installation-and-upgrades)
+[Quick start](#quick-start) · [Use cases](#use-cases) · [Natural-language use](#natural-language-use) · [Installation and upgrades](#installation-and-upgrades)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 ![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-417E38)
@@ -91,29 +91,17 @@ These are example requests. Execution depends on your configured workspace, tool
 - **Send more than text:** Images, PDFs and Office documents as input; text, images and generated files as output.
 - **Stay in control:** Check progress, add instructions or stop tasks from WeChat.
 
-## Common commands
+## Natural-language use
 
-Send ordinary tasks directly. For commands such as `new`, reply to the assistant's follow-up prompt. Send `cancel` to cancel a pending prompt. English commands do not need a slash.
+Stay in one entry and describe your intent: ask for knowledge-project progress, ask the toolbox project to improve search, supplement a named running task, stop that task, or query its result. Ask to check updates, upgrade to the checked release, or restart this account.
 
-| Command | Purpose |
-| --- | --- |
-| `daily` | Return to the fixed everyday conversation |
-| `status` | Check the current task and queue |
-| `progress` | See what the assistant is working on now |
-| `supplement` | Add instructions to the current task |
-| `stop` | Stop the current task |
-| `result` | See the latest result |
-| `new` | Create a project |
-| `list` | List projects |
-| `plan` | Ask the assistant to make a plan first |
-| `review` | Review current project changes |
-| `guide` | See the full English guide and more commands |
+The assistant verifies the target before acting. Queries do not create tasks; queued or scheduled does not mean completed. Labelled progress and results return without switching. Cross-project submissions currently accept text only; attachments are not implicitly transferred.
 
-See the [English user guide](USER-GUIDE.en.md) for branch or commit reviews, saved sessions, attachments and troubleshooting.
+If the model is unavailable, stop, status and install-help remain available. See the [exact command reference](docs/reference/commands.en.md) for recovery and the [user guide](USER-GUIDE.en.md) for daily workflows.
 
 ## Installation and upgrades
 
-Send **check-updates** in WeChat to view the current and latest stable versions without installing. Send **upgrade** separately when you want to install an available update. Reply **skip-update** or **cancel** to a new-release notice to skip that release; newer releases can still notify you.
+Ask whether a new release is available, then explicitly ask to upgrade to that checked release. The worker waits for idle, backs up, upgrades and checks health. Ask to skip just that release to keep future notifications. Exact check-updates, upgrade and restart commands remain available when the model cannot be used.
 
 To upgrade, rerun the installation command in [Quick start](#quick-start) and choose **Upgrade**. Standard installations also prompt you when a stable update is available and upgrade only after you confirm. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments and recovery.
 
