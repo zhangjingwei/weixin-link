@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Add a project-scoped model selection MCP tool for future turns, with model validation, durable preferences and isolated request deduplication.
+## 1.8.0 — 2026-11-23
+
+- 新增模型切换 MCP 工具：用自然语言为指定项目选择可用模型，普通消息和规划任务从后续轮次生效，不中断当前任务。
+- 模型选择按项目持久保存，重新连接后仍生效；核对可用模型并保留请求去重，不改变其他项目或固定第三方供应商。
+- 同步 Skill 和中英文使用文档；项目状态区分已配置模型与建连时确认的模型，明确独立原生代码审查的切换限制。
 
 ## 1.7.0 — 2026-11-23
 
