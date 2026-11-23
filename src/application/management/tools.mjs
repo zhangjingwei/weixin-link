@@ -2,7 +2,7 @@ const string=(maxLength=160)=>({type:'string',minLength:1,maxLength})
 const integer=(minimum,maximum)=>({type:'integer',minimum,maximum})
 const project={projectId:string()},task={...project,taskId:string(),turnId:string()},write={requestId:string()}
 const repeat={type:'object',properties:{frequency:{...string(),enum:['daily','weekly']},time:string(5),timeZone:string(100),weekdays:{type:'array',items:integer(1,7),minItems:1,maxItems:7,uniqueItems:true}},required:['frequency','time','timeZone'],additionalProperties:false}
-const define=(name,description,properties={},required=[])=>{const mutation=/^(?:request_|create_|rename_|skip_|cancel_|supplement_)/.test(name);return {name,description,inputSchema:{type:'object',properties,required,additionalProperties:false},annotations:{readOnlyHint:!mutation,destructiveHint:name==='request_task_stop',idempotentHint:!mutation||required.includes('requestId'),openWorldHint:false}}}
+const define=(name,description,properties={},required=[])=>{const mutation=/^(?:request_|create_|rename_|skip_|cancel_|submit_|supplement_)/.test(name);return {name,description,inputSchema:{type:'object',properties,required,additionalProperties:false},annotations:{readOnlyHint:!mutation,destructiveHint:name==='request_task_stop',idempotentHint:!mutation||required.includes('requestId'),openWorldHint:false}}}
 export const managementTools=[
  define('resolve_target','查找当前用户已登记的项目/会话；日常按 daily 身份定位。候选不是授权，歧义时询问。',{query:string(300)},['query']),
  define('list_projects','只读列出当前用户已登记的项目/会话，包含 daily 标识。'),
@@ -10,6 +10,7 @@ export const managementTools=[
  define('get_session_history','只读历史文本分块分页；下一页为剩余文本或更早轮次，不重发附件。',{...project,cursor:string(4096)},['projectId']),
  define('get_management_operation','按操作编号查询当前用户的管理请求回执，不重放操作。',{operationId:string()},['operationId']),
  define('list_models','只查询底座模型，不切换。'),
+ define('submit_project_task','明确执行请求才向其他项目提交新的文字任务，不切换当前入口。queued 只表示持久排队，不代表完成；当前项目直接执行，补充原任务用 supplement_task。',{...project,text:string(8000),...write},['projectId','text','requestId']),
  define('request_project_switch','明确要求切换时调用。异步请求，pending 不是已切换。',{...project,...write},['projectId','requestId']),
  define('supplement_task','补充指定原任务；任务过期则拒绝，绝不排队到下一轮。',{...task,text:string(8000),...write},['projectId','taskId','turnId','text','requestId']),
  define('request_task_stop','停止指定原任务并清空其队列；requested 不代表已确认停止。',{...task,...write},['projectId','taskId','turnId','requestId']),

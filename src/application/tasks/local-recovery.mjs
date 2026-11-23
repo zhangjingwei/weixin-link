@@ -6,6 +6,7 @@ import {transition} from '../../domain/tasks/lifecycle.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 export async function recover(context,job,reply,token){
   const session=await context.manager.connect(job.owner,reply)
+  session.taskId=job.id
   session.localTask=(job.context?.task??localTaskLabel(job.input,job.id))
   session.requestText=job.context?.request??(typeof job.input==='string'?job.input:job.input.text)
   session.attachmentContinuation=job.context?.continuation??null

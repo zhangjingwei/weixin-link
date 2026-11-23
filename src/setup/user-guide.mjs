@@ -116,6 +116,8 @@ export const USER_GUIDE=`微信助手使用说明
 
 想连接其他电脑、家中设备或设置备份，直接告诉助手要做什么，再按回复中的提示操作。密码和密钥不要发到微信里。
 
+统一入口：可说“让工具箱优化搜索页面”，文字任务进入目标项目，进度和结果带项目标识直接返回，无需切换。查询不创建任务，附件不隐式转交。
+
 七、遇到问题时
 
 微信显示“无法连接”或助手没有按预期回复时，可以按情况发送：
@@ -255,6 +257,8 @@ MP3 and WAV audio is shown as files. Use a private WeChat chat; ordinary group c
 6. Other computers and backups
 
 To connect another computer or home device, or to set up backups, describe what you want and follow the assistant's reply. Do not send passwords or API keys through WeChat.
+
+Unified entry: ask a named project to do a text task without switching. Labelled progress and results return directly. Queries do not create tasks; attachments are not forwarded implicitly.
 
 7. Troubleshooting
 

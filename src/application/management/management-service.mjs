@@ -1,3 +1,4 @@
+import {submitProjectTask} from './project-task-management.mjs'
 import {pruneManagementOperations,discardUnexecutedPayload} from './management-writes.mjs'
 import {workspaceChoices,createProject,renameProject} from './project-management.mjs'
 import {listProjectTasks,getTaskResult,requestResultRedelivery,executeRedelivery,requestTaskReconciliation,executeReconciliation} from './result-management.mjs'
@@ -12,8 +13,8 @@ const signatureFor=(name,args)=>createHmac('sha256','zerolink-operation-v1').upd
 
 // A management facade over the existing conversation/task state, not another queue.
 export class ManagementService{
- constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
-  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
+ constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
+  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
   manager.state.managementOperations??=[];this.operations=manager.state.managementOperations
   for(const op of this.operations)if(['pending','executing'].includes(op.status))op.status=op.status==='pending'?'not_executed':'unknown'
   pruneManagementOperations(this.operations,this.now())
@@ -28,10 +29,10 @@ export class ManagementService{
  exact(e,args){const s=this.manager.sessions.get(e.key);if(!s||!s.busy||s.traceId!==args.taskId||s.turnId!==args.turnId||s.rpc?.closed)throw Error('MANAGEMENT_STALE_TASK');return s}
  async call(caller,name,args){
   validateManagementCall(name,args);const owner=this.owner(caller)
-  const extended={list_workspace_choices:()=>workspaceChoices(this,owner,args),create_project:()=>createProject(this,owner,caller,args),rename_project:()=>renameProject(this,owner,caller,args),search_session_history:()=>searchHistory(this,owner,args),list_project_tasks:()=>listProjectTasks(this,owner,args),get_task_result:()=>getTaskResult(this,owner,args),request_result_redelivery:()=>requestResultRedelivery(this,owner,caller,args),request_task_reconciliation:()=>requestTaskReconciliation(this,owner,caller,args),check_updates:()=>checkUpdates(this,owner),skip_update:()=>skipUpdate(this,owner,caller,args),create_schedule:()=>createSchedule(this,owner,caller,args),list_schedules:()=>listSchedules(this,owner,args),cancel_schedule:()=>cancelSchedule(this,owner,caller,args)}
+  const extended={submit_project_task:()=>submitProjectTask(this,owner,caller,args),list_workspace_choices:()=>workspaceChoices(this,owner,args),create_project:()=>createProject(this,owner,caller,args),rename_project:()=>renameProject(this,owner,caller,args),search_session_history:()=>searchHistory(this,owner,args),list_project_tasks:()=>listProjectTasks(this,owner,args),get_task_result:()=>getTaskResult(this,owner,args),request_result_redelivery:()=>requestResultRedelivery(this,owner,caller,args),request_task_reconciliation:()=>requestTaskReconciliation(this,owner,caller,args),check_updates:()=>checkUpdates(this,owner),skip_update:()=>skipUpdate(this,owner,caller,args),create_schedule:()=>createSchedule(this,owner,caller,args),list_schedules:()=>listSchedules(this,owner,args),cancel_schedule:()=>cancelSchedule(this,owner,caller,args)}
   if(extended[name])return extended[name]()
   if(name==='get_management_operation'){const op=this.operations.find(op=>op.id===args.operationId&&op.owner===owner);if(!op)throw Error('MANAGEMENT_OPERATION_NOT_FOUND');return this.result(op)}
-  if(name==='list_projects')return {projects:this.entries(owner).map(e=>this.snapshot(owner,e))}
+  if(name==='list_projects')return {callerProjectId:this.conversations.entry(caller).id,projects:this.entries(owner).map(e=>this.snapshot(owner,e))}
   if(name==='resolve_target'){
    const q=args.query.normalize('NFKC').trim().toLowerCase(),entries=this.entries(owner)
    const daily=['daily','日常','日常助手'].includes(q)?entries.filter(e=>e.id===this.conversations.root[owner].dailyId):[]

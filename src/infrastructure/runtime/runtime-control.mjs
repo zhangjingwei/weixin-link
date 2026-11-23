@@ -72,7 +72,8 @@ export class RuntimeControl {
     if(req.method==='GET'&&req.url==='/status')result=this.status()
     else if(req.method==='POST'&&req.url==='/management'){
      if(this.sealed||this.draining)throw Error('MANAGEMENT_UNAVAILABLE')
-     let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>16384)throw Object.assign(Error('MANAGEMENT_INVALID_ARGUMENTS'),{statusCode:413})}
+     req.setEncoding('utf8')
+     let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>65536)throw Object.assign(Error('MANAGEMENT_INVALID_ARGUMENTS'),{statusCode:413})}
      result=await this.track('management',()=>this.onManagement(JSON.parse(body)))
     }
     else if(req.method==='POST'&&req.url==='/schedules'){
@@ -107,6 +108,7 @@ export async function controlRequest(socketPath,method,path,body,timeoutMs=2500,
  const headers=isPipe(socketPath)?{'x-control-token':providedToken??await readFile(await tokenFile(socketPath),'utf8')}:{}
  return new Promise((resolve,reject)=>{
   const req=http.request({socketPath,method,path,headers,timeout:timeoutMs},res=>{
+   res.setEncoding('utf8')
    let text='';res.on('data',chunk=>{text+=chunk;if(Buffer.byteLength(text)>1048576)res.destroy(Error('Oversized control response'))});res.on('error',reject)
    res.on('end',()=>{if(res.statusCode!==200){let safe='CONTROL_REJECTED';try{const parsed=JSON.parse(text);if(/^(?:SCHEDULE|MANAGEMENT)_[A-Z_]+$/.test(parsed.error))safe=parsed.error}catch{}reject(Object.assign(Error(safe),{code:safe,statusCode:res.statusCode}));return}try{resolve(JSON.parse(text))}catch(error){reject(error)}})
   });req.on('error',reject);req.on('timeout',()=>req.destroy(Object.assign(Error('Control timeout'),{code:'ETIMEDOUT'})));req.end(body?JSON.stringify(body):undefined)
