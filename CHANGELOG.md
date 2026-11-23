@@ -2,9 +2,12 @@
 
 ## Unreleased
 
-- Lead daily and first-login help with natural-language examples while retaining exact commands as an emergency reference; add version-pinned upgrades, account restarts, maintenance status, sanitized diagnostics and project archive/restore through management MCP.
+## 1.7.0 — 2026-11-23
 
-- Submit text tasks to another project from one WeChat entry through a 23rd management MCP tool, preserving project queues, ownership, deduplication and task-scoped progress/result delivery across restart.
+- 在一个微信入口向不同项目提交任务，保留各项目独立队列，并按项目和任务标注进展与结果。
+- 扩展至 31 个管理 MCP 工具，支持自然语言查询服务、安装状态、诊断和使用帮助，以及归档项目。
+- 通过自然语言安排账号重启和指定版本升级，沿用空闲检查与原有维护流程，并可查询维护状态。
+- 日常说明与首次使用引导改为自然语言示例，保留停止、状态、安装帮助等应急命令参考。
 
 ## 1.6.0 — 2026-11-23
 
