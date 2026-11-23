@@ -2,16 +2,15 @@
 
 ## Unreleased
 
-- Reduce false model-setup timeouts with isolated probes, a three-minute limit, exact final-answer recovery after shutdown timeouts, and inference-only retries that preserve authorization.
+## 1.6.0 — 2026-11-23
 
-- Prune expired management receipts with per-user quotas and discard redelivery payloads when execution is ruled out, retaining unknown delivery evidence.
+- Add 22 account-scoped management MCP tools and a bundled Skill for natural-language project and conversation management, with managed installation and removal.
+- Preserve complete history through pagination and bounded search; bind task supplements, stops and reconciliation to the exact original task without replaying execution.
+- Query results without resending files, and explicitly redeliver the original verified snapshot; isolate management quotas by user and clear private payloads when a request was not executed.
+- Manage project-bound reminders and scheduled tasks, check releases and skip a specific version; cancelling a schedule does not stop tasks already submitted.
+- Reduce false installation model-test timeouts with isolated probes, a three-minute limit and retries that preserve sign-in authorization; accept only an exact verified response.
 
-- Extend management MCP to 22 tools covering directory-bound project creation, renaming, bounded history search, result queries/redelivery, targeted reconciliation, schedules and version-specific update dismissal.
-- Keep project creation separate from switching, pin result snapshots before redelivery, persist schedule request deduplication, and distinguish future schedule cancellation from stopping submitted tasks.
-
-- Add account-scoped natural-language project management through eight MCP tools and a bundled Skill, preserving existing command controls.
-- Bind supplements and stop requests to exact tasks, distinguish pending requests from confirmed outcomes, and retain long history across signed continuation cursors.
-- Manage private Skill installation and removal without changing global Codex settings or overwriting user files.
+Automated release, platform, and unit checks passed. Live WeChat messaging and other platforms were not verified for this release.
 
 ## 1.5.0 — 2026-11-11
 
