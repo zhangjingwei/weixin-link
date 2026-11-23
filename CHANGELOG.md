@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a project-scoped model selection MCP tool for future turns, with model validation, durable preferences and isolated request deduplication.
+
 ## 1.7.0 — 2026-11-23
 
 - 在一个微信入口向不同项目提交任务，保留各项目独立队列，并按项目和任务标注进展与结果。

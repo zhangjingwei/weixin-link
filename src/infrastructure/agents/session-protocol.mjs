@@ -40,6 +40,7 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   async workspaceRules(){return ''},
   async initialize(rpc){await initializeCodex(rpc,clientInfo)},
   async open(rpc,{saved,cwd,instructions,provider}){
+   if(saved.modelOverride&&!provider.provider)provider={...provider,thread:{...provider.thread,model:saved.modelOverride}}
    let result
    if(saved.threadId){
     try{result=await resume(rpc,{threadId:saved.threadId,cwd,instructions,provider})}
