@@ -109,8 +109,12 @@ export class OutputTransport {
    if(!current())throw Object.assign(Error('Delivery cancelled'),{code:'DELIVERY_CANCELLED'})
    try{const response=await this.send(userId,content);return {attempt,messageIds:(Array.isArray(response)?response:[response]).filter(Boolean).map(r=>r.message_id).filter(id=>id!==undefined).map(String)}}
    catch(error){
-    const state=deliveryFailureState(error),finalAttempt=state!=='failed'||attempt===attempts
-    this.log(event,{userId,trace_id:traceId,kind,part,parts,attempt,final_attempt:finalAttempt,...deliveryError(error),delivery_state:state})
+    const state=deliveryFailureState(error),detail=deliveryError(error)
+    // The upstream explicitly rejected this request. The observed immediate
+    // repeat gets the same prepare_failed response; retain the failed result
+    // for recovery after a later user message instead of sending it again now.
+    const finalAttempt=state!=='failed'||detail.api_reason==='prepare_failed'||attempt===attempts
+    this.log(event,{userId,trace_id:traceId,kind,part,parts,attempt,final_attempt:finalAttempt,...detail,delivery_state:state})
     if(finalAttempt)throw error
     if(this.retryDelayMs>0)await new Promise(resolve=>setTimeout(resolve,this.retryDelayMs))
    }

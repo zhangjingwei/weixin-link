@@ -856,10 +856,14 @@ export class SessionManager {
       }
       // An exceptional transport failure cannot be predicted in an already-sent footer.
       // Keep a separate warning only for failure, never a second normal completion.
-      if(mergedCompletion&&currentRecovery&&!['accepted','deferred','not_required'].includes(recovery.delivery)){
+      // A prepare_failed rejection is not repaired by immediately sending a
+      // second message through the same upstream context. The saved result
+      // remains available to the explicit recovery flow on a later input.
+      const prepareRejected=session.lastDelivery?.error?.api_reason==='prepare_failed'
+      if(mergedCompletion&&currentRecovery&&!prepareRejected&&!['accepted','deferred','not_required'].includes(recovery.delivery)){
         const warning=recovery.delivery==='failed'?'⚠️ 最终结果发送失败，已保存。你可以说“把刚才的结果再发一次”。':'⚠️ 部分内容未确认送达，已保存。你可以说“看看刚才任务的结果”，核对后再决定是否重发。'
         await this.notify(session,localCompletion(warning,session.localTask),()=>!session.exited&&(session.workToken?.current()??true))
-      }
+      }else if(prepareRejected)this.diagnostic(session,'notification.suppressed',{reason:'upstream_prepare_rejected'})
       if(session.nativeQueueTurn){
         this.submissions.markOutcome(session.taskId,p.turn.status==='completed'&&!awaitingAttachment?'completed':'not_confirmed')
         this.submissions.mark(session.taskId,p.turn.status==='interrupted'?'cancelled':'done')

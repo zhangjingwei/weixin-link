@@ -46,6 +46,15 @@ test('explicit API rejection retries only the failed text part and records attem
  const failed=logs.find(x=>x.event==='outbound.text_failed');assert.equal(failed.trace_id,'message-trace-123');assert.equal(logs.find(x=>x.event==='outbound.text_accepted').trace_id,'message-trace-123');assert.equal(failed.attempt,1);assert.equal(failed.final_attempt,false);assert.equal(failed.delivery_state,'failed');assert.equal(failed.http_status,409);assert.equal(failed.api_code,19001);assert.ok(!JSON.stringify(logs).includes('secret'))
 })
 
+test('prepare_failed is recorded as rejected without an immediate duplicate submission',async()=>{
+ const logs=[];let calls=0
+ const error=Object.assign(Error('prepare failed'),{name:'ApiError',code:'API_ERROR',httpStatus:200,errcode:-2,payload:{errmsg:'prepare failed'}})
+ const transport=new OutputTransport({retryDelayMs:0,log:(event,fields)=>logs.push({event,...fields}),send:async()=>{calls++;throw error}})
+ await assert.rejects(transport.deliver('owner','final answer'),error)
+ assert.equal(calls,1)
+ assert.deepEqual(logs.filter(x=>x.event==='outbound.text_failed').map(x=>[x.attempt,x.final_attempt,x.delivery_state,x.api_reason]),[[1,true,'failed','prepare_failed']])
+})
+
 test('ambiguous transport errors are never automatically replayed',async()=>{
  let calls=0;const error=Object.assign(Error('private network failure'),{name:'TransportError',code:'TRANSPORT_ERROR'})
  const transport=new OutputTransport({retryDelayMs:0,send:async()=>{calls++;throw error}})

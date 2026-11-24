@@ -10,6 +10,8 @@ const record = (event, fields = {}) => JSON.stringify({timestamp:'2026-01-01T00:
 test('显示阶段、耗时和不确定的投递结果，过滤正文和轮询', () => {
   assert.match(formatEvent(record('turn.completed', {status:'completed', duration_ms:1234, text:'private'})), /^\d\d:\d\d:\d\d  本轮处理完成（耗时 1.2 秒）$/)
   assert.match(formatEvent(record('delivery.failed', {status:'unknown'})), /结果待确认$/)
+  assert.match(formatEvent(record('delivery.failed', {status:'failed',delivery_state:'failed',api_reason:'prepare_failed'})), /微信接口拒绝发送（消息准备失败），结果已保留$/)
+  assert.match(formatEvent(record('session.idle_released')), /已释放空闲的 Codex 连接.*微信收件仍在运行/)
   assert.equal(formatEvent(record('poll.started')), undefined)
   assert.equal(formatEvent('broken'), undefined)
 })

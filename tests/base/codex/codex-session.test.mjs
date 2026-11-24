@@ -420,6 +420,38 @@ test('confirmed routed source turn replaces model completion with one queued sta
   assert.doesNotMatch(output[3],/本轮已停止|本轮回答结束/)
  }finally{manager.close()}
 })
+test('prepare_failed final stays recoverable without a second failing notice',async()=>{
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],completionMarkers:true})
+ manager.save=async()=>{}
+ manager.state.users.owner={}
+ const calls=[],error=Object.assign(Error('prepare failed'),{name:'ApiError',code:'API_ERROR',httpStatus:200,errcode:-2,payload:{errmsg:'prepare failed'}})
+ const s={userId:'owner',taskId:'task',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async value=>{calls.push(value);throw error}}
+ try{
+  await manager.event(s,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'answer',type:'agentMessage',phase:'final_answer',text:'Saved result.'}}})
+  await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
+  assert.equal(calls.length,1)
+  assert.match(manager.state.users.owner.lastReply,/Saved result/)
+  assert.equal(manager.state.users.owner.recovery.delivery,'failed')
+ }finally{manager.close()}
+})
+test('idle release waits for an active model turn and only closes the idle Codex session',async()=>{
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']})
+ const s={userId:'owner',state:'active',rpc:{closed:false},queue:[],lastUserInputAt:Date.now()-600_001}
+ manager.sessions.set('owner',s)
+ let releases=0
+ manager.releaseConnection=async()=>{releases++}
+ try{
+  manager.scheduleIdleRelease(s)
+  await new Promise(resolve=>setTimeout(resolve,20))
+  assert.equal(releases,0)
+  assert.equal(manager.sessions.get('owner'),s)
+  s.state='idle'
+  manager.scheduleIdleRelease(s)
+  await new Promise(resolve=>setTimeout(resolve,20))
+  assert.equal(releases,1)
+  assert.equal(manager.sessions.has('owner'),false)
+ }finally{clearTimeout(s.idleReleaseTimer);manager.close()}
+})
 test('connection close drains a queued completion before declaring the result unknown',async()=>{
  const output=[],events=[],callbacks={}
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],completionMarkers:true,log:event=>events.push(event),rpcFactory:options=>{callbacks.event=options.onEvent;callbacks.close=options.onClose;return {closed:false,close(){this.closed=true}}}})

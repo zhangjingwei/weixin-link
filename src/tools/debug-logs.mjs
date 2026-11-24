@@ -4,7 +4,7 @@ import {setTimeout as sleep} from 'node:timers/promises'
 import {accountPaths} from '../infrastructure/accounts/account-store.mjs'
 
 const stages = new Map(Object.entries({
-  'session.idle_released': '已释放微信会话连接（空闲满 10 分钟）',
+  'session.idle_released': '当前会话无运行中的模型任务，已释放空闲的 Codex 连接（距上次输入满 10 分钟；微信收件仍在运行）',
   'service.stopping': '微信后台服务正在停止',
   'service.stopped': '微信后台服务已停止',
   'service.started': '微信服务进程正在初始化',
@@ -140,6 +140,7 @@ export function formatEvent(line) {
   if (row.event === 'rpc.request' && row.method === 'turn/start') label = '正在向模型提交请求'
   if (row.event === 'delivery.completed' || row.event === 'delivery.failed') {
     label = deliveries.get(row.delivery_state ?? row.status) ?? '发送结果待确认'
+    if(row.event==='delivery.failed'&&row.delivery_state==='failed'&&row.api_reason==='prepare_failed')label='微信接口拒绝发送（消息准备失败），结果已保留'
     // Individual accepted parts already have their own event.
     if (row.event === 'delivery.completed' && row.status === 'accepted') return
   }
