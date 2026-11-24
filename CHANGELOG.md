@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Show readable intent-derived task titles in project progress, results and queue receipts instead of internal hash labels; preserve internal task identities for reconciliation.
+## 1.9.1 — 2026-11-23
 
-- Use fast service tier for intent classification while retaining low reasoning, budget Luna selection and the original-queue fallback.
+- 任务进度、结果与排队回执显示“项目名 · 中文任务标题”，用简短意图代替难懂的哈希编号。
+- 标题随任务保存，重启后沿用；旧任务从原始请求生成简短名称，内部编号继续用于去重、取消与核对。
+- 意图识别改为 fast 快速档，保留低成本 Luna 模型、低推理及不可用时回退原队列的策略；快速档可能增加用量消耗。
 
 ## 1.9.0 — 2026-11-23
 
