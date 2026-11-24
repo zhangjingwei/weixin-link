@@ -5,7 +5,9 @@ import {historyInputText} from './history.mjs'
 export function macCompanion({access,owner,conversations,manager,jobs,stateDir,submit,notice,ready}){
  const stale=()=>{throw Object.assign(Error('COMPANION_STALE'),{statusCode:409})}
  return async request=>{
-  const entry=conversations.find(owner)
+  const catalog=conversations.ensure(owner),entries=catalog.entries.filter(item=>!item.archived&&!item.deleted)
+  const viewing=request.action==='view',selected=viewing&&request.project!==undefined?request.project:catalog.active
+  const entry=entries.find(item=>item.id===selected)
   if(!entry||entry.deleted||entry.archived)throw Error('COMPANION_NO_CONVERSATION')
   const key=entry.key,record=manager.state.users[key]??{},session=manager.sessions.get(key),state=access.read()
   const thread=record.threadId??'',turn=session?.state==='running'&&!session.finalReceived?session.turnId??'':''
@@ -22,7 +24,7 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
     if(!result.lastReply||result.identity?.threadId!==thread)continue
     messages.push({role:'助手',text:result.lastReply.slice(0,16000),time:Date.parse(result.identity.createdAt)});addFiles(result.lastOutput?.attachments,'outgoing')
    }
-   return {...identity,...state,name:entry.name,messages:messages.sort((left,right)=>left.time-right.time).slice(-40),files:files.slice(-40)}
+   return {...identity,...state,name:entry.name,activeProject:catalog.active,conversations:entries.map(({id,name})=>({id,name})),messages:messages.sort((left,right)=>left.time-right.time).slice(-40),files:files.slice(-40)}
   }
   if(!ready()||manager.state.desktopHandoff||manager.desktopTransition)throw Error('COMPANION_UNAVAILABLE')
   if(request.project!==entry.id||request.thread!==thread||state.revision!==request.revision)stale()

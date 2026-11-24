@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm,readFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {randomUUID} from 'node:crypto'
+import {createHash,randomUUID} from 'node:crypto'
 import {CompanionAccess} from '../../src/infrastructure/storage/companion-access.mjs'
 import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
 import {macCompanion} from '../../src/application/conversations/mac-companion.mjs'
@@ -11,6 +11,18 @@ import {SessionManager} from '../../src/wechat/session-manager.mjs'
 import {createWeChatController} from '../../src/interfaces/controllers/wechat-controller.mjs'
 import {prepareMedia,hasMedia} from '../../src/infrastructure/media/media-input.mjs'
 import {controlRequest,RuntimeControl} from '../../src/infrastructure/runtime/runtime-control.mjs'
+
+test('Mac sidebar reads only the selected owned conversation; browsing cannot retarget a write',async()=>{
+ const catalog={active:'1',entries:[{id:'1',key:'alpha',name:'同名'},{id:'2',key:'beta',name:'同名'},{id:'3',archived:true},{id:'4',deleted:true}]}
+ const state={writer:'mac',revision:3},record=key=>({threadId:key,lastReply:key+' result',resultIdentity:{threadId:key,createdAt:'2026-01-05T12:00:00Z'}})
+ const run=macCompanion({access:{read:()=>state,take:()=>assert.fail('unexpected takeover')},owner:'owner',conversations:{ensure:owner=>{assert.equal(owner,'owner');return catalog}},manager:{state:{users:{alpha:record('alpha'),beta:record('beta')}},sessions:new Map()},jobs:{companionMessages:(key,thread)=>{assert.equal(key,thread);return [{created:1,text:key+' question',files:JSON.stringify([{name:key+'.txt',path:'/data/attachments/'+createHash('sha256').update(key).digest('hex').slice(0,24)+'/'+key+'.txt'}])}]}},stateDir:'/data',ready:()=>true,submit:()=>assert.fail('unexpected submission')})
+ const current=await run({action:'view'}),other=await run({action:'view',project:'2'})
+ assert.deepEqual(other.conversations.map(row=>row.id),['1','2']);assert.equal(other.activeProject,'1');assert.equal(catalog.active,'1');assert.equal(state.revision,3)
+ assert.deepEqual(other.messages.map(item=>item.text),['beta question','beta result']);assert.deepEqual(other.files.map(item=>item.name),['beta.txt']);assert.equal(current.files[0].name,'alpha.txt')
+ for(const id of ['3','4','foreign',''])await assert.rejects(run({action:'view',project:id}),/NO_CONVERSATION/)
+ for(const action of ['take','send','steer'])await assert.rejects(run({...other,action}),/STALE/)
+ catalog.active='2';await assert.rejects(run({...current,action:'send'}),/STALE/)
+})
 
 test('phone file, passive Mac view, contested takeover, same-turn supplement and phone return', {skip:process.platform==='win32'},async context=>{
  const dir=await mkdtemp(join(tmpdir(),'companion-')),socket=join(dir,'runtime.sock'),jobs=new DurableJobs(join(dir,'inbox.db')),access=new CompanionAccess(jobs.db)
@@ -22,7 +34,7 @@ test('phone file, passive Mac view, contested takeover, same-turn supplement and
   if(method==='turn/steer'){submitted.push({thread:params.threadId,turn:params.expectedTurnId,text:params.input[0].text});return {turnId:'turn'}}
   return {}
  }})}).init()
- const conversations={find:()=>entry,realOwners:new Set([owner]),bind:message=>({...message,_conversationOwner:owner})}
+ const conversations={ensure:()=>({active:'1',entries:[entry]}),realOwners:new Set([owner]),bind:message=>({...message,_conversationOwner:owner})}
  const service=new RuntimeControl(),bot={parser:{parse:wire=>wire}},received=[]
  service.onCompanion=macCompanion({access,owner,conversations,manager,jobs,stateDir:dir,ready:()=>true,submit:()=>assert.fail('must not start a second task'),notice:async(peer,text)=>notices.push(text)})
  await service.listen(socket);context.after(async()=>{manager.close();await manager.saving;await service.close();jobs.close();await rm(dir,{recursive:true,force:true})})
