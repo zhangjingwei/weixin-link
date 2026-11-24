@@ -2,9 +2,12 @@
 
 ## Unreleased
 
-- Use verified low-cost Luna candidates for intent classification with low reasoning and standard speed; never silently fall back to a premium model.
+## 1.9.0 — 2026-11-23
 
-- Route plain-text intent independently of project execution: query project state/history/results while busy, submit cross-project tasks without switching, and bind supplements to the exact original task. Preserve per-project FIFO, ingress recovery, decision deduplication and safe queue fallback.
+- 新增独立的纯文本意图识别入口：当前项目执行任务时，仍可识别请求并向其他项目提交任务，无需切换会话。
+- 状态、历史和结果查询绕过项目执行队列；同项目执行任务保持顺序，补充绑定原任务，目标不明时询问并保留原始请求。
+- 意图识别优先使用可用的 gpt-6-luna，备选 gpt-5.6-luna，采用低推理和普通速度；低成本候选不可用时回退原队列，不自动使用更贵模型。
+- 保留入站持久化、请求去重及中断恢复；附件、引用和交互提示沿用原链路，同步中英文使用说明及架构文档。
 
 ## 1.8.0 — 2026-11-23
 
