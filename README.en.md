@@ -8,7 +8,7 @@ Research, plan, and get results.
 
 [简体中文](README.md) | [English](README.en.md)
 
-[Quick start](#quick-start) · [Use cases](#use-cases) · [Natural-language use](#natural-language-use) · [Installation and upgrades](#installation-and-upgrades)
+[Quick start](#quick-start) · [Use cases](#use-cases) · [Natural-language use](#natural-language-use) · [Built-in workflows](#built-in-workflows) · [Installation and upgrades](#installation-and-upgrades)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 ![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-417E38)
@@ -39,7 +39,7 @@ Research, plan, and get results.
 
 ## Quick start
 
-**Run the installer → choose and verify a model in the terminal → open the WeChat login address and confirm → receive the connection result.** You need your own WeChat account and a Codex subscription or supported model service. The installer prepares Node.js 24+ if needed.
+**Run the installer → configure model access and choose a working model → open the WeChat login address and confirm.** You need your own WeChat account and a Codex subscription or supported model service. The installer prepares Node.js 24+ if needed.
 
 **Linux / macOS** — run in a terminal:
 
@@ -53,13 +53,15 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-The installer first prompts you to choose subscription sign-in, DeepSeek, Qwen or Kimi. After the model test, the installer shows a WeChat login address and tries to open it in your browser; the assistant then reports the installation result. Enter third-party API keys only in the terminal. Installation steps, WeChat login prompts, and setup commands support Chinese and English. Some advanced maintenance and diagnostic messages remain in Chinese.
+The installer offers subscription sign-in, DeepSeek, Qwen or Kimi. After Codex subscription authorization, choose from the models actually available to your account; the wizard identifies the current/default options and reads back the saved setting. This changes your personal Codex default, shared with desktop and CLI. Existing conversations and explicit project overrides retain priority. A real inference test is optional; setup checks the account's Codex protocol by default.
+
+The installer shows a WeChat login address and tries to open it in your browser. Enter third-party API keys only in the terminal. Setup supports Chinese and English; some advanced diagnostics remain in Chinese.
 
 **For users in mainland China:** [Codex subscription sign-in](https://learn.chatgpt.com/docs/auth) requires your own account and a connection to OpenAI services. If OpenAI is unavailable from your location or network, this option will not work. DeepSeek, Qwen and Kimi use keys from their own platforms instead of Codex subscription sign-in. Confirm your choice with the setup wizard's model test.
 
 The setup wizard automatically uses Chinese or English.
 
-> Pairing confirms only the WeChat connection. The terminal model test confirms whether the assistant can handle tasks. If setup needs attention, send **setup-status**.
+> Pairing confirms only the WeChat connection. The optional inference test checks a real model reply. If setup needs attention, send **setup-status**.
 
 <details>
 <summary>Platform support and requirements</summary>
@@ -88,7 +90,7 @@ These are example requests. Execution depends on your configured workspace, tool
 | **Receive a usable file** | “Turn the results into a CSV file and send it to me.” |
 
 - **Continue the same work:** Check progress, follow up, or assign work to different projects in the same WeChat conversation.
-- **Send more than text:** Images, PDFs and Office documents as input; text, images and generated files as output.
+- **Send more than text:** Images, PDFs and Office documents as input; text, images, videos and generated files as output. Images and videos arrive as separate messages.
 - **Stay in control:** Check progress, add instructions or stop tasks from WeChat.
 
 ## Natural-language use
@@ -101,7 +103,25 @@ You can ask two projects to work in one message, or say “First do …, then �
 
 To send material to a project, attach it and name the project. Generated reports, JSON and HTML deliverables come back as WeChat file attachments; download HTML and open it in a browser. Old files from other conversations are not forwarded automatically. Keep the installation computer running and connected to use the assistant.
 
+The assistant uses context and management tools to find, create or resume conversations. Ordinary questions and design discussions stay in the current conversation by default; a topic change alone does not create a new one. You can explicitly request a new conversation or resume a previous one. Grouping related conversations requires verification of their actual Git repository and preserves each working directory and history.
+
 If the model is unavailable, stop, service-status and install-help remain available. See the [exact command reference](docs/reference/commands.en.md) for recovery and the [user guide](USER-GUIDE.en.md) for daily workflows.
+
+## Built-in workflows
+
+Three bundled skills work together for coding and other tasks:
+
+- **Design discussion:** Compare options and clarify choices that affect the outcome, with ❓ questions, 💡 recommendations and 📋 agreed plans.
+- **Delivery assistant:** Locate the target project, implement a clear request, verify it and deliver usable results. 🛠️ indicates work in progress, 📦 delivery and ⚠️ an action needed from you. Blueprint approval or step-by-step pauses apply when explicitly requested.
+- **Message layout:** Short paragraphs and lists for reading; standalone text blocks for meeting notes and copy-ready drafts; language-tagged code blocks preserve indentation and blank lines. Delivery links stay outside code blocks.
+
+For example: “Compare offline inspection designs first,” “Implement the agreed approach,” or “Format these meeting notes so I can copy them.” Simple questions receive direct answers.
+
+Code-block copy controls, image viewing/saving and short MP4 playback have been tested in the current client. Explanatory text arrives before separate media messages, rather than inline media. Other clients and media encodings require validation. Tables become readable text records; do not rely on complex Markdown styling or LaTeX rendering.
+
+### Same-Mac desktop handoff (experimental)
+
+An opt-in macOS feature opens the original WeChat conversation on the desktop and resumes it in WeChat after return. It is disabled by default and supports Codex subscription sign-in only. Tasks for that WeChat account pause during handoff and resume after the desktop closes and the original thread is verified idle. Desktop list visibility and UI behavior still require real validation. See [desktop handoff details](docs/features/codex-desktop-handoff.md) (Chinese).
 
 ## Installation and upgrades
 
@@ -128,6 +148,10 @@ Weixin Link is a single-user installation and uses your personal Codex home. See
 To uninstall, rerun the same command, choose **Uninstall**, and confirm. Account data and the workspace are kept.
 
 ## Troubleshooting
+
+### Trace a message through the service
+
+Run `npm run logs` in the source directory, then send a WeChat message. The terminal shows new intake, model-processing and delivery events in Chinese, with local timestamps and recorded step durations. Press Ctrl+C to stop viewing logs; the service keeps running.
 
 ### Codex subscription sign-in says device code authorization is disabled
 
