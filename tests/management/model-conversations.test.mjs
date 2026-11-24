@@ -1,4 +1,5 @@
 import {codexInput} from '../../src/base/codex/codex-input.mjs'
+import {handoffReply} from '../../src/application/conversations/handoff-reply.mjs'
 import {createHash} from 'node:crypto'
 import {attachmentHandoffs} from '../../src/infrastructure/media/attachment-handoff.mjs'
 import test from 'node:test'
@@ -82,6 +83,7 @@ test('original request, references and only current materials are handed off onc
  const args={projectId:opened.data.projectId,threadId:'old',sourceTaskId:id,agreedPlan:'保留筛选条件，在搜索模块验证空结果。',requestId:'handoff'}
  const routed=await f.service.call('alice','route_conversation_request',args)
  assert.equal(routed.status,'queued')
+ assert.match(handoffReply(f.manager.state,f.jobs,{userId:'alice',taskId:id}),/排队中；结果将在目标会话返回/)
  const target=f.jobs.get(routed.data.taskId)
  assert.equal(target.input.text,original.text);assert.deepEqual(target.input.references,original.references);assert.equal(target.input.attachments[0].path,'/private/target/current.pdf')
  assert.equal(target.input.agreedPlan,args.agreedPlan)

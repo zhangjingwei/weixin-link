@@ -389,6 +389,37 @@ test('completion marker follows final delivery once and never marks an active pa
  const s={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>{output.push(text);return {status:'accepted'}}}
  try{await manager.event(s,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'partial',type:'agentMessage',phase:'partial_answer',text:'仍在处理。'}}});assert.equal(output.length,0);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.deepEqual(output,['仍在处理。\n\n✅ 本轮回答结束。']);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.equal(output.length,1);assert.equal(manager.state.users.owner.lastReply,'仍在处理。\n\n✅ 本轮回答结束。')}finally{manager.close();await rm(dir,{recursive:true,force:true})}
 })
+test('confirmed routed source turn replaces model completion with one queued status',async()=>{
+ const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],completionMarkers:true})
+ manager.save=async()=>{}
+ manager.state.users.owner={}
+ manager.state.managementOperations=[{id:'route',name:'route_conversation_request',caller:'owner',sourceTaskId:'source-task',status:'queued',data:{taskId:'target-task',name:'知识库'}}]
+ manager.submissions={get:()=>({id:'target-task',state:'pending',input:{projectDispatch:{operationId:'route'}}})}
+ const s={userId:'owner',taskId:'source-task',threadId:'source-thread',turnId:'source-turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>{output.push(text);return {status:'accepted'}}}
+ try{
+  await manager.event(s,{method:'item/completed',params:{threadId:'source-thread',turnId:'source-turn',item:{id:'answer',type:'agentMessage',phase:'final_answer',text:'任务已经全部完成。'}}})
+  await manager.event(s,{method:'turn/completed',params:{threadId:'source-thread',turn:{id:'source-turn',status:'completed'}}})
+  assert.deepEqual(output,['已交给知识库会话，目前排队中；结果将在目标会话返回。'])
+  assert.equal(manager.state.users.owner.lastReply,output[0])
+  assert.doesNotMatch(output[0],/本轮回答结束|全部完成/)
+  manager.state.managementOperations[0].status='unknown'
+  const uncertain={...s,turnId:'uncertain-turn',busy:true,finals:[],displayFinals:[],items:new Map()}
+  await manager.event(uncertain,{method:'item/completed',params:{threadId:'source-thread',turnId:'uncertain-turn',item:{id:'answer-2',type:'agentMessage',phase:'final_answer',text:'已成功转交。'}}})
+  await manager.event(uncertain,{method:'turn/completed',params:{threadId:'source-thread',turn:{id:'uncertain-turn',status:'completed'}}})
+  assert.match(output[1],/转交结果尚未确认/)
+  assert.doesNotMatch(output[1],/已成功转交|本轮回答结束/)
+  manager.state.managementOperations[0].status='queued'
+  const failed={...s,turnId:'failed-turn',busy:true,finals:[],displayFinals:[],items:new Map()}
+  await manager.event(failed,{method:'turn/completed',params:{threadId:'source-thread',turn:{id:'failed-turn',status:'failed',error:{message:'source error'}}}})
+  assert.match(output[2],/排队中；结果将在目标会话返回/)
+  assert.match(output[2],/源会话本轮处理失败/)
+  assert.doesNotMatch(output[2],/本轮回答结束|任务已经全部完成/)
+  const interrupted={...s,turnId:'interrupted-turn',busy:true,finals:[],displayFinals:[],items:new Map()}
+  await manager.event(interrupted,{method:'turn/completed',params:{threadId:'source-thread',turn:{id:'interrupted-turn',status:'interrupted'}}})
+  assert.match(output[3],/排队中；结果将在目标会话返回/)
+  assert.doesNotMatch(output[3],/本轮已停止|本轮回答结束/)
+ }finally{manager.close()}
+})
 test('connection close drains a queued completion before declaring the result unknown',async()=>{
  const output=[],events=[],callbacks={}
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],completionMarkers:true,log:event=>events.push(event),rpcFactory:options=>{callbacks.event=options.onEvent;callbacks.close=options.onClose;return {closed:false,close(){this.closed=true}}}})
