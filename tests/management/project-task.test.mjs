@@ -10,6 +10,7 @@ import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
 import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
 import {createWeChatPresenter} from '../../src/interfaces/views/wechat-presenter.mjs'
 import {managementTools} from '../../src/application/management/tools.mjs'
+import {taskDisplayTitle} from '../../src/domain/tasks/task-label.mjs'
 
 async function fixture(t){
  const dir=await mkdtemp(join(tmpdir(),'project-dispatch-'));t.after(()=>rm(dir,{recursive:true,force:true}))
@@ -79,7 +80,7 @@ test('routed progress, approval prompts and result bundles return immediately wi
  for(const output of f.sent){
   const text=typeof output.value==='string'?output.value:output.value.text
   assert.equal(output.key,'knowledge')
-  assert.match(text,/^【知识库 · 检查知识库搜索功能】\n模型：gpt-6\.1-sol\n\n\S/)
+  assert.match(text,/^【检查知识库搜索功能】\n知识库（会话2） · 模型 gpt-6\.1-sol\n\n\S/)
   assert(!JSON.stringify(output.value).includes('old hidden result'))
   assert(!JSON.stringify(output.value).includes(response.data.taskId.slice(0,8)))
  }
@@ -145,7 +146,7 @@ test('multiple projects execute independently while each project preserves FIFO 
  assert.deepEqual(started,[a.data.taskId,c.data.taskId]);assert.equal(f.jobs.get(b.data.taskId).state,'pending')
  release.first();await knowledge
  assert.deepEqual(started,[a.data.taskId,c.data.taskId,b.data.taskId]);assert.equal(f.sent.length,3)
- assert(f.sent.some(out=>String(out.value).includes('【工具箱 · ')));assert.equal(f.conversations.root.alice.active,'1')
+ assert(f.sent.some(out=>String(out.value).includes('工具箱（会话3）\n')));assert.equal(f.conversations.root.alice.active,'1')
 })
 
 test('routing survives a database reopen and expired management receipts without replaying completed tasks',async t=>{
@@ -155,7 +156,7 @@ test('routing survives a database reopen and expired management receipts without
  const queue=new DurableIntake({jobs:reopened,manager:f.manager,conversations:f.conversations,reply:(...args)=>f.view.deliver(...args)});t.after(()=>queue.close())
  let calls=0;f.manager.ask=async(key,input,reply)=>{calls++;assert.equal(key,'knowledge');await reply('重启后完成任务')}
  queue.resume();await queue.users.get('knowledge')
- assert.equal(calls,1);assert.equal(reopened.get(result.data.taskId).state,'done');assert.match(f.sent[0].value,/^【知识库 · [^\n]+】\n/)
+ assert.equal(calls,1);assert.equal(reopened.get(result.data.taskId).state,'done');assert.match(f.sent[0].value,/^【检查知识库搜索功能】\n知识库（会话2）\n/)
  queue.resume();assert.equal(queue.users.size,0);assert.equal(calls,1)
 })
 
@@ -168,7 +169,7 @@ test('bound task recovery retains its routed completion notice and only reads th
  f.manager.ask=async()=>assert.fail('recovery must not start another execution')
  await f.queue.pump('knowledge')
  assert.equal(session.taskId,id);assert.equal(f.jobs.get(id).state,'done');assert.equal(f.manager.state.users.knowledge.lastReply,'原任务结果')
- assert.equal(f.manager.state.users.knowledge.resultIdentity.taskId,id);assert.equal(f.sent.length,1);assert.match(f.sent[0].value,/^【知识库 · [^\n]+】\n模型：未确认\n\n已找回/)
+ assert.equal(f.manager.state.users.knowledge.resultIdentity.taskId,id);assert.equal(f.sent.length,1);assert.match(f.sent[0].value,/^【检查知识库搜索功能】\n知识库（会话2）\n\n已找回/)
 })
 
 test('queue persistence failure never acknowledges a completed submission or switches selection',async t=>{
@@ -186,7 +187,7 @@ test('routing errors after model execution begins remain uncertain rather than c
  assert.match(f.sent[0].value,/结果尚未确认/);assert(!f.sent[0].value.includes('任务未执行'))
 })
 
-test('same-conversation replies have a compact title without repeating the original request',async t=>{
+test('same-conversation replies identify the current task without repeating an old conversation title',async t=>{
  const f=await fixture(t)
  const result=await f.service.call('alice','submit_project_task',task())
  const original=f.jobs.get(result.data.taskId)
@@ -195,6 +196,28 @@ test('same-conversation replies have a compact title without repeating the origi
  const entry=f.conversations.root.alice.entries.find(e=>e.key==='knowledge')
  entry.name='微信聊天（尚未命名）';entry.titleSource='placeholder'
  await f.view.deliver('knowledge','已完成排版调整。',{projectTaskId:job.id})
- assert.equal(f.sent[0].value,'【当前会话】\n模型：gpt-6.1-sol\n\n已完成排版调整。')
- assert(!f.sent[0].value.includes('检查知识库搜索功能'))
+ assert.equal(f.sent[0].value,'【检查知识库搜索功能】\n会话2 · 模型 gpt-6.1-sol\n\n已完成排版调整。')
+ assert(!f.sent[0].value.includes('微信聊天（尚未命名）'))
+})
+
+test('routed headings use the current task, keep a stable conversation identity, and fit a phone line',async t=>{
+ const f=await fixture(t),result=await f.service.call('alice','submit_project_task',task())
+ const original=f.jobs.get(result.data.taskId),entry=f.conversations.root.alice.entries.find(e=>e.key==='knowledge')
+ const cases=[
+  {old:'清理落后主干的分支目录',text:'wexinlink 项目 想开发的代码推送到开发分支，然后用开发分支更新本地实例，我先来测试验证。',expected:/^【开发的代码推送到开发分支/},
+  {old:'知识库项目，为什么最近的那个搜索微信那个是什么没',text:'我同意你刚才的知识库的设计方案',expected:/^【我同意你刚才的知识库的设计方案】/},
+  {old:'旧会话标题仍然很长',text:'请对知识库中的历史搜索逐项核对并优化微信展示',summary:'优化微信搜索展示',expected:/^【优化微信搜索展示】/},
+  {old:'此前的长会话标题不会再显示',text:'😀'.repeat(50),expected:/^【😀{18}…】/u},
+ ]
+ for(const [index,{old,text,summary,expected}] of cases.entries()){
+  entry.name=old
+  const job={...original,input:{...original.input,text,projectDispatch:{...original.input.projectDispatch,title:summary??taskDisplayTitle(text)}},context:{executionModel:'gpt-6-sol'}}
+  f.manager.submissions={get:()=>job}
+  await f.view.deliver('knowledge','回复 '+index,{projectTaskId:job.id})
+  const output=f.sent.at(-1).value
+  assert.match(output,expected)
+  assert.match(output,/\n会话2 · 模型 gpt-6-sol\n\n/)
+  assert(!output.includes(old))
+  assert(Array.from(output.split('\n',1)[0]).length<=21)
+ }
 })
