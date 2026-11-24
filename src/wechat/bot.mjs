@@ -37,6 +37,7 @@ import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from '../
 import {DurableIntake} from '../application/tasks/durable-intake.mjs'
 import {RuntimeControl} from '../infrastructure/runtime/runtime-control.mjs'
 import {nonBlockingHandler} from './message-handler.mjs'
+import {createPollingLifecycle} from './polling-lifecycle.mjs'
 import {MessageDispatch} from './message-dispatch.mjs'
 import {createDiagnosticLog,errorFields,createSdkLogger} from '../infrastructure/diagnostics/diagnostic-log.mjs'
 import {browserLoginUrl} from '../infrastructure/wechat/pairing-state.mjs'
@@ -64,6 +65,7 @@ const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:testing?'test':'live'})
 const systemTimeZone=Intl.DateTimeFormat().resolvedOptions().timeZone
 const scheduleGuidance=`服务当前系统时区为 ${systemTimeZone}。用户未指定时区时，按此时区理解本地时间；单次计划的 at 须使用目标日期对应偏移的 ISO 8601 时间。以下 +08:00 仅用于说明格式。定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../interfaces/cli/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2027-01-01T09:00:00+08:00","text":"开会"}。定时提交任务：{"action":"create","kind":"task","at":"2027-01-01T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":${JSON.stringify(systemTimeZone)}} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向原会话的持久任务队列提交原样文字，由该会话对应的任务执行链路处理；不预先声称任务完成。命令从环境读取当前会话标识，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
+
 // 会话编排由应用层负责；底座协议由所选 agent.sessionOptions 注入。
 const manager = await new SessionManager({log, completionMarkers:true, scheduleGuidance, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, ...agent.sessionOptions }).init()
 const agentSwitcher=new AgentSwitcher({account})
@@ -89,6 +91,7 @@ bot.api.notifyStart=async(...args)=>{try{const result=await notifyStart(...args)
 const loginValidity=trackLoginValidity(bot)
 const typingStatus=new TypingStatus({start:userId=>bot.sendTyping(conversations.recipient(userId)),stop:userId=>bot.stopTyping(conversations.recipient(userId)),log})
 const typingTimer=setInterval(()=>typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key)))),1000);typingTimer.unref()
+
 // Device-code polling may take longer than the SDK's default GET timeout.
 const apiGet = bot.http.apiGet.bind(bot.http)
 bot.http.apiGet = async (baseUrl, path, headers) => {
@@ -106,6 +109,7 @@ let intakeHandler,durable
 const replayMaintenance=()=>{
  for(const [id,message] of maintenancePending){maintenancePending.delete(id);if(jobs.rawCurrent(id))intakeHandler(message)}
 }
+
 // 私有控制端点可在微信登录前启动，用于状态检查和维护控制。
 const runtime=new RuntimeControl({
  controlTokenFile:join(stateDir,'control-token'),
@@ -116,9 +120,23 @@ const runtime=new RuntimeControl({
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
   startup:()=>startupPhase,
  snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+(durable?.users.size??0),saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
- onSeal:()=>bot.stop(),onResume:()=>{void (async()=>{if(bot.runPromise)await bot.runPromise.catch(()=>{});if(!stopping){await bot.start();replayMaintenance()}})().catch(e=>log('service.resume_failed',errorFields(e)))},
- onDrainRelease:replayMaintenance,
+ onSeal:()=>polling.seal(),
+ onResume:resumePolling,
+ onDrainRelease:resumePolling,
 })
+const polling=createPollingLifecycle({
+ bot,runtime,canRun:()=>loggedIn&&!stopping,
+ recover:()=>{
+   schedules?.start()
+   updates.start()
+   for(const message of jobs.rawPending())if(!maintenancePending.has(message._ingressId))intakeHandler(message)
+   durable.resume()
+ },
+ replay:replayMaintenance,
+})
+async function resumePolling(){
+ try{await polling.release()}catch(error){log('service.resume_failed',errorFields(error))}
+}
 const mediaDependencies={
  log,
  prepare:async(message,token)=>{const start=Date.now(),messageId=message.raw?.message_id??message.raw?.client_id,trace_id=message._traceId;log('attachments.download_started',{trace_id,messageId});try{const r=await runtime.track('media',()=>infrastructure.media.prepare(message,stateDir,undefined,token?.signal));log('attachments.download_completed',{trace_id,messageId,duration_ms:Date.now()-start,count:r.attachments.length,bytes:r.attachments.reduce((n,a)=>n+(a.bytes??0),0),status:r.errors.length?'partial':'ok'});return r}catch(e){log('attachments.download_failed',{trace_id,messageId,duration_ms:Date.now()-start,...errorFields(e)});throw e}},
@@ -191,13 +209,13 @@ bot.onMessage(inbound.onMessage)
 async function shutdown(signal){if(stopping)return;stopping=true;clearInterval(handoffCleanup);await entryRouting.close();management.close();updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})
 
-// 登录并核查账号身份后恢复积压消息，最后才启动微信轮询。
+// 登录并核查账号身份，待 SDK 加载微信上下文后恢复积压消息。
 startupPhase='login_in_progress'
 await bot.login({ callbacks: {
   onQrUrl: url => { startupPhase='login_in_progress';loginQrReady=!!browserLoginUrl(url);loginPollReady=false;markAwaitingLogin();log(loginQrReady?'wechat.login_url_ready':'wechat.login_url_invalid') },
   onScanned: () => log('wechat.qr_scanned'),
 } })
 const loginCheck=await assertUniqueLogin(account.id,bot.getCredentials());for(const issue of loginCheck.issues)log('account.other_profile_unreadable',{code:issue.code});await rememberIdentity(account,bot.getCredentials())
-loggedIn=true;startupPhase='login_complete';schedules?.start();updates.start();for(const message of jobs.rawPending())intakeHandler(message);durable.resume();log('wechat.login_completed');console.log('LOGIN_OK CODEX_DEFAULT')
+loggedIn=true;startupPhase='login_complete';log('wechat.login_completed');console.log('LOGIN_OK CODEX_DEFAULT')
 bot.on('poll:start',()=>{const timer=setTimeout(()=>{if(!stopping)void lifecycleNotice.start()},100);timer.unref()})
-await bot.start()
+await polling.start()
