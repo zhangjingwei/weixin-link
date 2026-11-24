@@ -164,3 +164,7 @@ Ask for project progress, request a project switch, supplement a specific runnin
 Management also supports project creation and renaming, bounded history search, read-only results, explicit snapshot redelivery, targeted reconciliation, schedules, and version-specific update dismissal. Creating a project does not switch to it. Reading a result does not resend files. Cancelling a schedule does not stop a submitted task. See the [management guide](docs/features/management-mcp.md).
 
 Model selection: ask to use an available model for a project’s future tasks. The assistant validates the exact model ID and saves a project-scoped preference without interrupting the current turn. Fixed third-party providers remain managed through installation configuration.
+
+Independent entry routing classifies plain-text requests before project execution. Status/history/result reads bypass busy project queues; tasks for different projects can run separately, while each project remains sequential. Supplements bind to the original task and ambiguous targets require clarification. Attachments, quotes and interactive prompts retain their original flow. Classification adds a model call and falls back to the original queue when unavailable.
+
+Intent classification prefers available gpt-6-luna, then gpt-5.6-luna, with low reasoning and standard speed. It does not inherit the project execution model. If no budget candidate is available, or a fixed third-party provider is configured, it falls back to the original queue instead of selecting a premium model.

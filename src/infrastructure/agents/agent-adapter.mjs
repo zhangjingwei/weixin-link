@@ -1,3 +1,5 @@
+import {codexProviderOptions} from '../../base/codex/provider-options.mjs'
+import {createEntryClassifier} from './entry-router.mjs'
 import {createSessionProtocol} from './session-protocol.mjs'
 import {ensureAccountCodexHome} from '../accounts/codex-home.mjs'
 import {readProviderProfile,providerEnvironment} from '../accounts/provider-profile.mjs'
@@ -9,5 +11,5 @@ export async function loadAgentAdapter(account,workspace,installation){
  const codexHome=await ensureAccountCodexHome(account.id)
  const profile=await readProviderProfile(account.stateDir)
  const provider=providerEnvironment(profile)
- return {kind,name:'Codex',backend,sessionOptions:{codexHome,sessionProtocol:createSessionProtocol({rpcFactory:backend.rpcFactory,providerEnv:provider.options,providerSecrets:provider.secrets,codexBinary:()=>installation.codexBinary,codexHome})},catalog:'official',providerKind:profile?.kind??'subscription'}
+ return {kind,name:'Codex',backend,classifyEntry:createEntryClassifier({binary:installation.codexBinary,codexHome,providerOptions:()=>codexProviderOptions(provider.options),providerSecrets:provider.secrets}),sessionOptions:{codexHome,sessionProtocol:createSessionProtocol({rpcFactory:backend.rpcFactory,providerEnv:provider.options,providerSecrets:provider.secrets,codexBinary:()=>installation.codexBinary,codexHome})},catalog:'official',providerKind:profile?.kind??'subscription'}
 }

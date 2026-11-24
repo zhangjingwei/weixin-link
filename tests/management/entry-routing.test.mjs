@@ -1,0 +1,92 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {mkdtemp,rm} from 'node:fs/promises'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
+import {EntryRouting} from '../../src/application/intake/entry-routing.mjs'
+import {ManagementService} from '../../src/application/management/management-service.mjs'
+import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
+
+async function fixture(t,decision){
+ const dir=await mkdtemp(join(tmpdir(),'entry-route-')),jobs=new DurableJobs(join(dir,'inbox.sqlite'));t.after(()=>{jobs.close();return rm(dir,{recursive:true,force:true})})
+ const entries=[{id:'1',key:'alice',name:'Current'},{id:'2',key:'project',name:'Project'}],root={alice:{active:'1',entries}},token={current:()=>true},sent=[]
+ const manager={owners:new Set(['alice','project']),state:{users:{alice:{threadId:'a'},project:{threadId:'p'}}},sessions:new Map([['alice',{busy:true,state:'running',traceId:'trace',turnId:'turn',taskId:'job'}]]),questions:new Map(),submissions:jobs,workspaceFor:()=>dir,save:async()=>{},protocol:{},lifecycle:{capture:()=>token}}
+ const conversations={root,realOwners:new Set(['alice']),ensure:o=>root[o],entry:key=>{const e=entries.find(e=>e.key===key);return e?{...e,owner:'alice'}:null},displayName:(_,e)=>e.name}
+ const service=new ManagementService({manager,conversations,enqueueTask:(...args)=>jobs.add(...args)});t.after(()=>service.close())
+ let count=0
+ const router=new EntryRouting({manager,conversations,jobs,service,classify:async()=>{count++;return decision},deliver:async(_,text)=>{sent.push(text);return {status:'accepted'}}});t.after(()=>router.close())
+ const message={userId:'alice',_conversationOwner:'alice',text:'User original request',raw:{message_id:'one'}};message._ingressId=jobs.capture(message)
+ return {router,manager,service,jobs,root,entries,token,sent,message,count:()=>count}
+}
+test('busy project does not block cross-project dispatch; replay cannot insert a second job',async t=>{
+ const f=await fixture(t,{action:'task',projectId:'2',question:null})
+ assert.equal(await f.router.process(f.message,f.token),true)
+ assert.equal(f.jobs.pending()[0].owner,'project');assert.equal(f.jobs.pending()[0].input.text,f.message.text)
+ assert.equal(f.manager.sessions.get('alice').busy,true)
+ await f.router.process(f.message,f.token);assert.equal(f.jobs.pending().length,1);assert.equal(f.count(),1)
+})
+test('current project tasks use its existing queue while independent queries bypass it',async t=>{
+ const f=await fixture(t,{action:'task',projectId:'1',question:null});await f.router.process(f.message,f.token)
+ assert.equal(f.jobs.pending()[0].owner,'alice')
+ const q=await fixture(t,{action:'status',projectId:'1',question:null});await q.router.process(q.message,q.token)
+ assert.equal(q.jobs.pending().length,0);assert.match(q.sent[0],/任务执行中/)
+})
+test('foreign and invalid decisions fall back without dispatch; ambiguity only asks a question',async t=>{
+ const f=await fixture(t,{action:'task',projectId:'foreign',question:null});assert.equal(await f.router.process(f.message,f.token),false);assert.equal(f.jobs.pending().length,0)
+ const q=await fixture(t,{action:'clarify',projectId:null,question:'Which project?'});await q.router.process(q.message,q.token);assert.equal(q.sent[0],'Which project?');assert.equal(q.jobs.pending().length,0)
+})
+test('supplements bind the original task snapshot; stale tasks never turn into new work',async t=>{
+ const f=await fixture(t,{action:'supplement',projectId:'1',question:null});let received
+ f.manager.steer=async(_,text,reply,token,expected)=>{received=expected;return {status:'accepted'}}
+ await f.router.process(f.message,f.token);assert.deepEqual(received,{traceId:'trace',turnId:'turn'});assert.equal(f.jobs.pending().length,0)
+ const q=await fixture(t,{action:'supplement',projectId:'1',question:null});q.router.classify=async()=>{q.manager.sessions.get('alice').turnId='new-turn';return {action:'supplement',projectId:'1',question:null}}
+ await q.router.process(q.message,q.token);assert.equal(q.jobs.pending().length,0);assert.match(q.sent[0],/未确认执行/)
+})
+test('cancellation during classification cannot enqueue a task',async t=>{
+ const f=await fixture(t,{action:'task',projectId:'2',question:null});let current=true
+ f.router.classify=async()=>{current=false;return {action:'task',projectId:'2',question:null}}
+ await f.router.process(f.message,{current:()=>current});assert.equal(f.jobs.pending().length,0)
+})
+test('uncertain notification is not sent again on recovery',async t=>{
+ const f=await fixture(t,{action:'status',projectId:'1',question:null});let sends=0;f.router.deliver=async()=>{sends++;throw Error('unknown delivery')}
+ await assert.rejects(f.router.process(f.message,f.token));await f.router.process(f.message,f.token);assert.equal(sends,1)
+})
+test('clarification answers retain the original request and do not execute the answer as a new task',async t=>{
+ const f=await fixture(t,{action:'clarify',projectId:null,question:'Which project?'})
+ await f.router.process(f.message,f.token)
+ const answer={...f.message,text:'Project',raw:{message_id:'answer'}};answer._ingressId=f.jobs.capture(answer)
+ f.router.classify=async input=>{assert.equal(input.pendingClarification.text,f.message.text);return {action:'task',projectId:'2',question:null,useClarification:true}}
+ await f.router.process(answer,f.token)
+ assert.match(f.jobs.pending()[0].input.text,/User original request/);assert.match(f.jobs.pending()[0].input.text,/Project/);assert.equal(f.root.alice.entryClarification,undefined)
+})
+test('the original durable pump starts another project while the entry project remains busy',async t=>{
+ const {DurableIntake}=await import('../../src/application/tasks/durable-intake.mjs')
+ const f=await fixture(t,{action:'task',projectId:'2',question:null});let resolve,started=false
+ const gate=new Promise(done=>{resolve=done})
+ f.manager.ask=async owner=>{assert.equal(owner,'project');started=true;await gate}
+ const durable=new DurableIntake({manager:f.manager,jobs:f.jobs,conversations:f.service.conversations,reply:async()=>{}});t.after(()=>{resolve();durable.close()})
+ f.service.enqueueTask=(...args)=>durable.submit(...args)
+ await f.router.process(f.message,f.token)
+ assert.equal(started,true);assert.equal(f.manager.sessions.get('alice').busy,true);resolve()
+})
+test('history queries never deliver historical attachment links',async t=>{
+ const f=await fixture(t,{action:'history',projectId:'1',question:null})
+ f.service.call=async()=>({messages:[{role:'assistant',text:'[private report](/private/file.md)'}],nextCursor:'older'})
+ await f.router.process(f.message,f.token);assert(!f.sent[0].includes('/private/file.md'));assert.match(f.sent[0],/尚未读取完整历史/)
+})
+test('original entry tasks retain management rights without permitting nested project dispatches',async t=>{
+ const f=await fixture(t,{action:'task',projectId:'1',question:null});await f.router.process(f.message,f.token)
+ const job=f.jobs.pending()[0];assert.equal(job.input.projectDispatch.entryOrigin,true)
+ f.manager.sessions.get('alice').taskId=job.id
+ f.service.maintenance={restart:async()=>({status:'scheduled'})}
+ const result=await f.service.call('alice','request_service_restart',{requestId:'maintenance'})
+ assert.equal(result.status,'pending')
+})
+test('a crash after enqueue reuses the persisted operation and queue identity',async t=>{
+ const f=await fixture(t,{action:'task',projectId:'2',question:null});let snapshot,saves=0
+ f.manager.save=async()=>{saves++;if(saves===6)throw Error('crash before notice');snapshot=structuredClone({state:f.manager.state,root:f.root})}
+ await assert.rejects(f.router.process(f.message,f.token));assert.equal(f.jobs.pending().length,1)
+ f.manager.state=snapshot.state;Object.assign(f.root,snapshot.root);f.manager.save=async()=>{}
+ const restored=new ManagementService({manager:f.manager,conversations:f.service.conversations,enqueueTask:(...args)=>f.jobs.add(...args)});t.after(()=>restored.close());f.router.service=restored
+ await f.router.process(f.message,f.token);assert.equal(f.jobs.pending().length,1);assert.equal(f.count(),1)
+})
