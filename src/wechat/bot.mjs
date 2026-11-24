@@ -132,6 +132,7 @@ const runtime=new RuntimeControl({
 })
 const polling=createPollingLifecycle({
  bot,runtime,canRun:()=>loggedIn&&!stopping,
+ onReady:()=>{if(runtime.ready())log('service.ready',{status:'ready'})},
  recover:()=>{
    schedules?.start()
    updates.start()

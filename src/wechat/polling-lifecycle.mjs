@@ -1,6 +1,6 @@
 // poll:start follows SDK context loading. The start() promise covers the entire
 // poll loop, including its final offline notification.
-export function createPollingLifecycle({bot, runtime, canRun, recover, replay}) {
+export function createPollingLifecycle({bot, runtime, canRun, recover, replay, onReady=()=>{}}) {
   let active, retiring
   let contextReady = false
   let recovered = false
@@ -27,6 +27,7 @@ export function createPollingLifecycle({bot, runtime, canRun, recover, replay}) 
       await Promise.race([ready.promise, run])
       if (active === run && bot.isRunning) {
         contextReady = true
+        onReady()
         release()
       }
       leave()

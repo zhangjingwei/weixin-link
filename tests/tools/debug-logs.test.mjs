@@ -36,6 +36,25 @@ test('跳过历史，读取完整的新行，日志轮换后继续', async t => 
   assert.deepEqual(lines.map(line => line.slice(10)), ['开始处理微信消息', '微信接口已接受文字发送请求'])
 })
 
+test('重启展示进程启动、登录和实际就绪，不把初始化保留为最后阶段',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'weixin-start-log-'))
+ t.after(()=>rm(dir,{recursive:true,force:true}))
+ const file=join(dir,'events.jsonl'),lines=[]
+ const read=createLogReader(file,line=>lines.push(line.slice(10)))
+ await writeFile(file,record('service.stopped')+'\n')
+ await read()
+ await appendFile(file,['service.stopping','service.stopped','service.started','wechat.login_completed','service.ready'].map(event=>record(event)).join('\n')+'\n')
+ await read()
+ assert.deepEqual(lines,[
+  '微信后台服务正在停止','微信后台服务已停止','微信服务进程已启动，正在初始化',
+  '微信登录完成，正在启动收件','微信服务已就绪，可以接收消息',
+ ])
+ assert.equal(formatEvent(record('wechat.login_url_ready')).slice(10),'等待微信扫码登录，服务尚未就绪')
+ assert.equal(formatEvent(record('wechat.login_url_invalid')).slice(10),'微信登录链接无效，服务尚未就绪')
+ assert.equal(formatEvent(record('wechat.qr_scanned')).slice(10),'微信已扫码，正在确认登录')
+ assert.equal(formatEvent(record('service.started')).slice(10),'微信服务进程已启动，正在初始化')
+})
+
 test('工具、交互和查询显示可读细节，只展示允许的元数据', () => {
   for (const [event, fields, expected] of [
     ['turn.started', {model:'gpt-test'}, '模型开始处理（gpt-test）'],

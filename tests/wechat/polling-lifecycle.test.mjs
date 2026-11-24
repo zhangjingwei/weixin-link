@@ -21,7 +21,8 @@ function fixture() {
     onDrainRelease:()=>polling.release(),
   })
   const polling = createPollingLifecycle({bot, runtime, canRun:()=>loggedIn,
-    recover:()=>events.push('recover'), replay:()=>events.push('replay')})
+    recover:()=>events.push('recover'), replay:()=>events.push('replay'),
+    onReady:()=>{assert.equal(bot.isRunning,true);events.push('ready')}})
   return {bot, runtime, polling, events, context, login:()=>{loggedIn=true}}
 }
 
@@ -40,11 +41,11 @@ test('login while sealed waits for resume and loaded context; replay runs while 
   f.context.resolve()
   await tick()
   assert.equal(f.bot.isRunning,true)
-  assert.deepEqual(f.events,['loaded','recover','replay'])
+  assert.deepEqual(f.events,['loaded','ready','recover','replay'])
   command('drain'); command('seal'); command('resume')
   await tick()
   assert.equal(f.bot.isRunning,true)
-  assert.deepEqual(f.events,['loaded','recover','replay','loaded','replay'])
+  assert.deepEqual(f.events,['loaded','ready','recover','replay','loaded','ready','replay'])
   command('drain'); command('seal')
 })
 

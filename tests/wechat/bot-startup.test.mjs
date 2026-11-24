@@ -16,6 +16,8 @@ test('normal bot startup opens the inbox and answers the upgrade readiness probe
   await writeFile(join(stateDir, 'codex-owners.json'), JSON.stringify(['test-owner']))
   const script = `
     import assert from 'node:assert/strict'
+    import {readFile} from 'node:fs/promises'
+    import {join} from 'node:path'
     import {WeChatBot} from 'wechatbot-zerolink'
     import {accountPaths} from './src/infrastructure/accounts/account-store.mjs'
     import {controlRequest} from './src/infrastructure/runtime/runtime-control.mjs'
@@ -28,6 +30,14 @@ test('normal bot startup opens the inbox and answers the upgrade readiness probe
       const status = await controlRequest(accountPaths().socket, 'GET', '/status')
       assert.equal(status.ready, true)
       assert.equal(status.startup, 'login_complete')
+      const eventsFile=join(accountPaths().stateDir,'logs','events.jsonl')
+      await new Promise(resolve=>setTimeout(resolve,30))
+      const before=await readFile(eventsFile,'utf8')
+      assert.doesNotMatch(before, /"event":"service.ready"/)
+      this.emit('poll:start')
+      await new Promise(resolve=>setTimeout(resolve,30))
+      const after=await readFile(eventsFile,'utf8')
+      assert.match(after, /"event":"service.ready"/)
       console.log('startup probe passed')
       process.exit(0)
     }
