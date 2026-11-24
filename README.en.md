@@ -72,7 +72,7 @@ The setup wizard automatically uses Chinese or English.
 
 Linux/macOS require curl and tar. Windows ARM64 is not supported.
 
-[v1.4.0](https://github.com/zhangjingwei/weixin-link/releases/tag/v1.4.0) is released, with no long-term version compatibility guarantee yet. See [configuration and maintenance](CONFIGURATION.md) for details.
+See the [latest release](https://github.com/zhangjingwei/weixin-link/releases/latest). Long-term version compatibility is not yet guaranteed. See [configuration and maintenance](CONFIGURATION.md) for details.
 
 </details>
 
@@ -83,11 +83,11 @@ These are example requests. Execution depends on your configured workspace, tool
 | What you need | What to send in WeChat |
 | --- | --- |
 | **Keep working on code away from your desk** | “Find the failing tests in this project, fix them, and explain what changed.” |
-| **Add requirements while a task runs** | Send `supplement`, then reply: “Keep the existing interface and add a compatible implementation first.” |
+| **Add requirements while a task runs** | “Add this to the current task: keep the existing interface and add a compatible implementation first.” |
 | **Send material from your phone** | Attach a PDF: “Extract the key dates, amounts and action items.” |
 | **Receive a usable file** | “Turn the results into a CSV file and send it to me.” |
 
-- **Continue the same work:** Persistent conversations and task state, with switching between conversations.
+- **Continue the same work:** Check progress, follow up, or assign work to different projects in the same WeChat conversation.
 - **Send more than text:** Images, PDFs and Office documents as input; text, images and generated files as output.
 - **Stay in control:** Check progress, add instructions or stop tasks from WeChat.
 
@@ -95,7 +95,11 @@ These are example requests. Execution depends on your configured workspace, tool
 
 Stay in one entry and describe your intent: ask for knowledge-project progress, ask the toolbox project to improve search, supplement a named running task, stop that task, or query its result. Ask to check updates, upgrade to the checked release, or restart this account.
 
-The assistant verifies the target before acting. Queries do not create tasks; queued or scheduled does not mean completed. Labelled progress and results return without switching. Current-message attachments can be explicitly handed to a named project through private snapshots; historical attachments are not implicitly forwarded.
+The assistant checks which project you mean and asks if the name is unclear. Progress and results show a project name and readable task title. Different projects can work separately; tasks within one project run in order. Queued work is not finished work.
+
+You can ask two projects to work in one message, or say “First do …, then …” when one task depends on another. You can cancel work that has not started or move it earlier in the queue. Reordering does not interrupt a running task.
+
+To send material to a project, attach it and name the project. Generated reports, JSON and HTML deliverables come back as WeChat file attachments; download HTML and open it in a browser. Old files from other conversations are not forwarded automatically. Keep the installation computer running and connected to use the assistant.
 
 If the model is unavailable, stop, status and install-help remain available. See the [exact command reference](docs/reference/commands.en.md) for recovery and the [user guide](USER-GUIDE.en.md) for daily workflows.
 
@@ -135,7 +139,7 @@ See the [official OpenAI device-code login guide](https://learn.chatgpt.com/docs
 
 ### Subscription authorization succeeded, but the model test timed out
 
-Authorization, the native Codex protocol check, and model inference are separate stages. The model test waits up to about 3 minutes and runs in a private temporary directory outside your project rules. `MODEL_PROBE_TIMEOUT` means this inference attempt remains unverified; it does not establish a subscription sign-in failure. Choose **Retry only the model test** in the current wizard to keep existing authorization without repeating device sign-in, or configure later. Verification is recorded only when this attempt’s random nonce matches exactly.
+After sign-in, the installer checks whether the model can answer, waiting up to about 3 minutes. `MODEL_PROBE_TIMEOUT` means the test did not receive a result in time; it does not mean sign-in failed. Choose **Retry only the model test** to keep your existing sign-in, or finish configuration later.
 
 ## More capabilities and documentation
 
@@ -156,19 +160,3 @@ See [artifact delivery and retention](docs/artifact-delivery.md) (Chinese) for p
 Confirm login with your own WeChat account. Do not share login addresses or device authorization codes. For subscription sign-in, use the official OpenAI authorization page. Grant access only to the workspaces and services you intend to use. See the [security policy](SECURITY.md) for reporting issues.
 
 Licensed under the [MIT License](LICENSE). Third-party dependencies and external services have their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Weixin Link is an independent project, not an official product of, or endorsed by, WeChat, OpenAI or other service providers.
-
-### Natural-language project management
-
-Ask for project progress, request a project switch, supplement a specific running task, or request a stop. The bundled management MCP and Skill only access the current user's registered conversations. Ambiguous targets require clarification; progress queries never switch projects. Pending/requested is not completion. Existing commands remain available. Reliable voice transcripts follow the same workflow. See the [management guide](docs/features/management-mcp.md) for installation, removal and limitations.
-
-Management also supports project creation and renaming, bounded history search, read-only results, explicit snapshot redelivery, targeted reconciliation, schedules, and version-specific update dismissal. Creating a project does not switch to it. Reading a result does not resend files. Cancelling a schedule does not stop a submitted task. See the [management guide](docs/features/management-mcp.md).
-
-Model selection: ask to use an available model for a project’s future tasks. The assistant validates the exact model ID and saves a project-scoped preference without interrupting the current turn. Fixed third-party providers remain managed through installation configuration.
-
-Independent entry routing classifies plain-text requests before project execution. Status/history/result reads bypass busy project queues; tasks for different projects can run separately, while each project remains sequential. Supplements bind to the original task and ambiguous targets require clarification. Current attachments and quotes can be explicitly handed off; interactive prompts and attachment continuations retain their original flow. Classification adds a model call and falls back to the original queue when unavailable.
-
-Intent classification uses available gpt-6.1-terra with medium reasoning and Standard speed, independently of the project execution model. If Terra is unavailable or a fixed third-party provider is configured, it falls back to the original queue without silently selecting another model. Classification receives compact project and task metadata; the execution path retains the complete original request.
-
-Task messages show the project name and a readable task title rather than an internal ID. Intent classification supplies a concise Chinese title; existing tasks fall back to a short excerpt of the original request. Progress and results retain the same title, while internal IDs remain available for reconciliation.
-
-The unified entry also supports evidence-backed progress, exact stop and pending-queue controls, bounded dependent project plans, and explicit current-attachment handoffs. See [unified entry details](docs/features/unified-entry.md) for recovery, privacy and validation boundaries.

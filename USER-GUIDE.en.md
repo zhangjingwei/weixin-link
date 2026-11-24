@@ -1,59 +1,62 @@
 # WeChat assistant user guide
 
-Describe what you need in natural language. You do not need to memorize commands or switch projects first. The assistant clarifies ambiguous project names and targets before acting.
+Describe what you want to do. You do not need to memorize commands or switch conversations to work on another project. Replace the example names below with your own projects.
 
-## First connection
+## Getting started
 
-Complete model authorization and WeChat sign-in on the installation computer as described in README. Enter API keys only in that terminal. Device authorization and QR confirmation remain user actions. A short guide appears after login.
+Follow the [README](README.en.md#quick-start) on the installation computer. Complete model authorization and WeChat sign-in yourself; enter API keys only there. A short guide appears after login. Keep that computer running and connected.
 
-## One entry, multiple projects
+## Assign work and check progress
 
 - “What projects do I have?”
-- “How far has the knowledge project progressed?” — reads status without switching or creating work.
-- “Have the toolbox project improve its search page, keeping the current colors.” — submits a new text task to that project.
-- “Add PDF support to the knowledge project's running task.” — supplements the exact original task.
-- “Stop the toolbox project's current task.” — verifies the target without stopping other projects.
-- “Show the knowledge project's previous result.” — reads it; files are resent only on an explicit request.
+- “How far has the knowledge project progressed?” — see recent results, current work, recorded blockers and waiting tasks. Missing information is stated rather than turned into a made-up completion percentage.
+- “Have the toolbox improve search, keeping the current colors.”
+- “Have the knowledge project check search and the toolbox improve its page.” — up to 5 tasks per request.
+- “First have the knowledge project prepare requirements, then have the toolbox implement them.” — later tasks wait if earlier work fails or has an uncertain result.
 
-Projects retain their own directories, context and queues. Labelled progress, approval prompts and results return to the same WeChat entry. Queued does not mean completed. Background results are not automatically inserted into the current model context; the assistant queries task results when asked to summarize. Reliable voice transcripts work as text. Current-message attachments can be explicitly handed to a named project through private snapshots; historical attachments are not implicitly forwarded.
+Results return with the project name and a readable task title. Different projects can work separately; each project's tasks run in order. Unclear targets are clarified. Queued or scheduled does not mean finished.
 
-## Projects, history and schedules
+## Add instructions, stop or reorder work
 
-Ask to create or rename a project, search its discussions, archive a finished project or restore an archived project. Creation first confirms an existing directory and does not switch. Archiving preserves history rather than permanently deleting it. Archiving the current project moves navigation to another available project under the existing rules.
+- “Add PDF support to the knowledge project's running task.” — adds to that task rather than starting another.
+- “Stop the toolbox's current task.” — stops that task and clears that project's waiting queue, not other projects. Wait for the final stop result.
+- “Cancel the knowledge project's search repair task that has not started.”
+- “Cancel all waiting tasks in the knowledge project.” — affects the waiting tasks present before this request was classified, not later additions. If one has started, the batch cancellation is refused.
+- “Move search repair to the front.” — reorders waiting work without interrupting running work or bypassing dependencies.
 
-Ask for a reminder tomorrow, a recurring project task, your schedule list or cancellation of a specific reminder. Ambiguous times, time zones and targets are clarified. Cancellation stops future triggers, not tasks already submitted.
+## Send material and receive files
 
-## Updates and maintenance
+Attach a supported image, PDF or document and name the project that should analyze it. If the assistant asks which project you mean, your answer continues that request with its original attachment. Older attachments are not reused automatically; identify them explicitly.
 
-Ask whether a release is available to check without installing. Ask to skip that particular version to retain notifications for later releases. Explicitly requesting an upgrade binds the checked version and commit. After the tool receipt, the existing worker waits for the shared installation to become idle, then backs up, upgrades and checks health. Accounts sharing that installation are affected; a later release is not silently substituted.
+User-facing reports, JSON and HTML files are returned as WeChat attachments. Download HTML and open it in a browser; open JSON in a text editor. Mentioning a source-code location does not send that file, and the assistant does not automatically bundle a whole repository or account configuration.
 
-Ask to restart the current account to schedule an idle restart after the tool receipt. Running work is not forcefully interrupted. Ask whether maintenance finished to inspect the worker's actual record; scheduled does not mean completed.
+Ask to see a previous result to read it, or explicitly ask to resend its original files. Temporary delivery files use private storage. Once the complete delivery is accepted by the messaging API, temporary originals are cleaned and resend copies remain for 7 days. Failed or uncertain deliveries are retained for checking. API acceptance does not prove that you downloaded a file; expired files may no longer be available. See [file delivery details](docs/artifact-delivery.md) (Chinese).
 
-## Troubleshooting and other work
+## Projects, history and reminders
 
-Ask whether the service is healthy, what is missing from installation, for recent errors, or how to use the assistant. Diagnostics expose only sanitized current-account information. Installation checks are not proof of a new successful inference.
+Ask to create or rename a project or search its past discussions. Creation confirms an existing working directory and does not switch conversations. Archiving a project keeps its history and can be undone.
 
-Describe plans, code reviews and other work directly for the configured agent to handle. Management MCP exposes no arbitrary RPC, recipient or generic command execution interface. User approvals, API key input and interactive sign-in remain explicit user actions.
+Ask for a reminder tomorrow, a daily project task, a list of plans or cancellation of a reminder. Unclear times and targets are clarified. Cancelling a plan removes future runs, not tasks already submitted. Scheduled work needs the service to remain running.
 
-## When the model is unavailable
+## Choose a model
 
-Exact commands remain handled by the bridge:
+Ask which models are available, then name the model for a project's future tasks. The change does not interrupt current work or change other projects. Similar model names require clarification. Configure third-party model services through the installer.
 
-- **stop**: stop the current conversation and clear its queue; identify other projects explicitly.
-- **status**: inspect current conversation and task status.
+The model that identifies the target project is separate from the model doing the work. Target identification currently uses Terra with medium reasoning and Standard speed. Changing a project's execution model does not change it. If identification is unavailable, requests return to the original conversation queue and may wait. Identification adds a model call.
+
+## Updates and troubleshooting
+
+- Ask whether a new release is available to see its main changes without installing.
+- Ask to skip that version to keep notifications for future versions.
+- Ask to upgrade to the checked version. The service waits for idle, backs up, upgrades and checks health. Other accounts sharing the installation are affected too. Scheduled is not completed: wait for the result.
+- Ask to restart the current account; it waits for idle.
+- Ask whether the upgrade finished, whether the service is ready, or what recent errors occurred.
+
+If the model cannot answer, use these emergency commands:
+
+- **stop**: stop the current conversation's task and clear its waiting queue.
+- **status**: check the current conversation and task.
 - **install-help**: installation and authorization guidance.
-- **service-status**, **guide**, **help**: service status, this guide and the full manual command entry.
+- **service-status**, **guide**, **help**: service status and usage information.
 
-See the [exact command reference](docs/reference/commands.en.md) for recovery procedures. Natural-language management requires the enabled MCP and Skill; exact commands remain available if those are unavailable.
-
-Model selection: ask to use an available model for a project’s future tasks. The assistant validates the exact model ID and saves a project-scoped preference without interrupting the current turn. Fixed third-party providers remain managed through installation configuration.
-
-Independent entry routing classifies plain-text requests before project execution. Status/history/result reads bypass busy project queues; tasks for different projects can run separately, while each project remains sequential. Supplements bind to the original task and ambiguous targets require clarification. Current attachments and quotes can be explicitly handed off; interactive prompts and attachment continuations retain their original flow. Classification adds a model call and falls back to the original queue when unavailable.
-
-Intent classification uses available gpt-6.1-terra with medium reasoning and Standard speed, independently of the project execution model. If Terra is unavailable or a fixed third-party provider is configured, it falls back to the original queue without silently selecting another model. Classification receives compact project and task metadata; the execution path retains the complete original request.
-
-Task messages show the project name and a readable task title rather than an internal ID. Intent classification supplies a concise Chinese title; existing tasks fall back to a short excerpt of the original request. Progress and results retain the same title, while internal IDs remain available for reconciliation.
-
-The unified entry also supports evidence-backed progress, exact stop and pending-queue controls, bounded dependent project plans, and explicit current-attachment handoffs. See [unified entry details](docs/features/unified-entry.md) for recovery, privacy and validation boundaries.
-
-When a task produces user-facing JSON, HTML, reports or similar deliverables, the assistant proactively sends actual WeChat file attachments. HTML is sent unchanged for opening in a browser after download. Project source, configuration and credentials are not automatically bundled. Delivery copies use private storage: temporary originals are cleaned after the entire delivery is confirmed, replay snapshots remain for 7 days, and failed or unknown deliveries are retained for reconciliation.
+See the [exact command reference](docs/reference/commands.en.md) for recovery. Natural-language management needs the bundled management plugin enabled; manual commands remain available without it. Diagnostics and automated tests do not replace real-device validation. See [unified entry details](docs/features/unified-entry.md) for technical limits.
