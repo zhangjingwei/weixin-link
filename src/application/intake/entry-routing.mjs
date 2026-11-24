@@ -61,7 +61,8 @@ export class EntryRouting{
    try{outputs.push(await entryAction(this,message,record,record.steps[index],index));await this.manager.save()}
    catch{outputs.push('这条请求未确认执行；目标或任务可能已变化，未转交其他项目或新建替代任务。请明确项目及要执行的操作。');break}
   }
-  const output=outputs.join('\n\n').replace(/!?\[([^\]]*)\]\([^\n]*?\)/g,'$1')
+  const output=outputs.filter(Boolean).join('\n\n').replace(/!?\[([^\]]*)\]\([^\n]*?\)/g,'$1')
+  if(!output){record.status='done';await this.manager.save();this.jobs.acknowledge([id]);return true}
   record.status='sending';await this.manager.save()
   if(!current())return true
   const delivery=await this.deliver(caller,output,{conversationControl:true,traceId:message._traceId,current})

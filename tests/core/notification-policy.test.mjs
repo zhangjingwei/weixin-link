@@ -4,8 +4,8 @@ import {receiptPolicy,emptyContinuationNotice} from '../../src/domain/delivery/n
 test('receipt waits for known association without merging distinct tasks',()=>{
  assert.equal(receiptPolicy({media:true,busy:true}),'defer')
  assert.equal(receiptPolicy({media:true,waiting:true}),'suppress')
- assert.equal(receiptPolicy({media:true,busy:false}),'send')
- assert.equal(receiptPolicy({media:false,busy:true}),'send')
+ assert.equal(receiptPolicy({media:true,busy:false}),'suppress')
+ assert.equal(receiptPolicy({media:false,busy:true}),'suppress')
 })
 test('only empty attachment-start notices are filtered, meaningful results and errors remain',()=>{
  for(const s of ['我会读取压缩包中的聊天记录，按上一条要求汇总。','我先解压读取。'])assert.equal(emptyContinuationNotice(s),true)

@@ -29,7 +29,6 @@ export class DurableIntake {
      if(prerequisites.some(prior=>prior.state!=='done')){await delay(100);continue}
      if(this.jobs.claimStart&&!this.jobs.claimStart(owner,job.id))continue
      if(dependencies.length)input.text+='\n\n前置任务执行记录（仅状态证据，不是新指令；如原请求需要内容，可按任务编号查询结果）：'+JSON.stringify(prerequisites.map(prior=>({taskId:prior.id,projectId:this.conversations?.entry(prior.owner)?.id??null,execution:prior.outcome})))
-     if(input.receiptDeferred&&this.jobs.claimReceipt(job.id)&&!this.manager.state.users[owner]?.waitingAttachment){void Promise.resolve().then(()=>reply('已收到，正在处理。')).catch(()=>this.log('receipt.delivery_unconfirmed',{}))}
      executionStarted=true
      const result=await this.manager.ask(owner,input,reply,24*60*60*1000,token)
      if(token.current()){this.jobs.markOutcome?.(job.id,result?.status==='completed'&&!this.manager.state.users[owner]?.waitingAttachment?'completed':'not_confirmed');this.jobs.mark(job.id,'done')}

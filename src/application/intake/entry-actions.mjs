@@ -15,7 +15,7 @@ export async function entryAction(context,message,record,step,index){
   if(preparedInput?.attachments?.length&&context.prepareHandoff)preparedInput=await context.prepareHandoff({sourceKey:record.materialSourceKey??caller,targetKey:target.key,ingressId:record.materialIngressId??message._ingressId,input:preparedInput})
   const result=await submitProjectTask(service,owner,caller,{...args,text,requestId},{allowCurrent:true,title:step.title,dependencies,preparedInput})
   record.receipts??={};record.receipts[index]=result.data
-  return result.status==='queued'?`已提交到${conversations.displayName(owner,target)}：「${result.data.title}」。${dependencies.length?'等待前置任务确认成功后执行。':'结果会在这里返回。'}`:'任务未确认入队；未自动重试。'
+  return result.status==='queued'?'':'任务未确认入队；未自动重试。'
  }
  if(step.action==='supplement'||step.action==='stop'){
   if(!step.task)throw Error('ENTRY_NO_RUNNING_TASK')

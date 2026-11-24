@@ -21,7 +21,7 @@ Results return with the project name and a readable task title. Different projec
 - “Add PDF support to the knowledge project's running task.” — adds to that task rather than starting another.
 - “Stop the toolbox's current task.” — stops that task and clears that project's waiting queue, not other projects. Wait for the final stop result.
 - “Cancel the knowledge project's search repair task that has not started.”
-- “Cancel all waiting tasks in the knowledge project.” — affects the waiting tasks present before this request was classified, not later additions. If one has started, the batch cancellation is refused.
+- “Cancel all waiting tasks in the knowledge project.” — cancels waiting work without stopping running tasks. The assistant tells you if a task has already started.
 - “Move search repair to the front.” — reorders waiting work without interrupting running work or bypassing dependencies.
 
 ## Send material and receive files
@@ -30,7 +30,7 @@ Attach a supported image, PDF or document and name the project that should analy
 
 User-facing reports, JSON and HTML files are returned as WeChat attachments. Download HTML and open it in a browser; open JSON in a text editor. Mentioning a source-code location does not send that file, and the assistant does not automatically bundle a whole repository or account configuration.
 
-Ask to see a previous result to read it, or explicitly ask to resend its original files. Temporary delivery files use private storage. Once the complete delivery is accepted by the messaging API, temporary originals are cleaned and resend copies remain for 7 days. Failed or uncertain deliveries are retained for checking. API acceptance does not prove that you downloaded a file; expired files may no longer be available. See [file delivery details](docs/artifact-delivery.md) (Chinese).
+Ask to see a previous result to read it, or explicitly ask to resend its original files. Temporary delivery files use private storage. After successful sending, temporary copies remain available for resending for up to 7 days. Expired files may no longer be available. See [file delivery details](docs/artifact-delivery.md) (Chinese).
 
 ## Projects, history and reminders
 
@@ -42,7 +42,6 @@ Ask for a reminder tomorrow, a daily project task, a list of plans or cancellati
 
 Ask which models are available, then name the model for a project's future tasks. The change does not interrupt current work or change other projects. Similar model names require clarification. Configure third-party model services through the installer.
 
-The model that identifies the target project is separate from the model doing the work. Target identification currently uses Terra with medium reasoning and Standard speed. Changing a project's execution model does not change it. If identification is unavailable, requests return to the original conversation queue and may wait. Identification adds a model call.
 
 ## Updates and troubleshooting
 
@@ -59,4 +58,4 @@ If the model cannot answer, use these emergency commands:
 - **install-help**: installation and authorization guidance.
 - **service-status**, **guide**, **help**: service status and usage information.
 
-See the [exact command reference](docs/reference/commands.en.md) for recovery. Natural-language management needs the bundled management plugin enabled; manual commands remain available without it. Diagnostics and automated tests do not replace real-device validation. See [unified entry details](docs/features/unified-entry.md) for technical limits.
+See the [exact command reference](docs/reference/commands.en.md) for recovery. If natural-language controls are unavailable, use the manual commands. See [unified entry details](docs/features/unified-entry.md) for technical limits.

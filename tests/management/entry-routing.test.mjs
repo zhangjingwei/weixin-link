@@ -91,11 +91,11 @@ test('a crash after enqueue reuses the persisted operation and queue identity',a
  await f.router.process(f.message,f.token);assert.equal(f.jobs.pending().length,1);assert.equal(f.count(),1)
 })
 
-test('the intent title is persisted and used instead of the task hash in user notifications',async t=>{
+test('successful task dispatch persists its title without sending a repetitive notification',async t=>{
  const f=await fixture(t,{action:'task',projectId:'2',question:null,title:'修复搜索功能'})
  await f.router.process(f.message,f.token)
  const job=f.jobs.pending()[0]
- assert.equal(job.input.projectDispatch.title,'修复搜索功能');assert.match(f.sent[0],/修复搜索功能/);assert(!f.sent[0].includes(job.id.slice(0,8)))
+ assert.equal(job.input.projectDispatch.title,'修复搜索功能');assert.deepEqual(f.sent,[]);assert.equal(f.root.alice.entryRoutes[f.message._ingressId].status,'done')
 })
 
 test('clarification retains original material identity and prepared attachments',async t=>{

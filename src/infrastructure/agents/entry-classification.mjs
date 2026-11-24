@@ -7,7 +7,7 @@ export const entryInstructions=`只做微信入口分类，禁止执行或调用
 action: task=新工作或普通对话；status=项目进展；history=聊天历史；result=上次结果；routing_status=入口识别状态/耗时；stop=停止正在运行任务；supplement=补充正在运行任务；cancel=取消指定排队任务；cancel_all=取消某项目全部排队任务（不停止运行）；prioritize=指定排队任务提前；clarify=提出一个必要澄清问题。
 逐项核对projects.name与projectId，只选唯一匹配项。对需要路由的操作，requestedProjectName逐字提取本条点名的项目名，未点名才null；未知项目或同名、指代不明必须clarify，不得改成当前项目。未点名用currentProjectId。“刚才那个”缺依据须澄清。无pendingClarification时，单独“是的”仅作当前项目普通对话task，不猜授权或跨项目目标。
 pendingClarification存在且本条回答该问题时，useClarification=true，按原请求分类；本条只回复唯一项目名即已澄清，不重复确认。否则false，按新请求。
-stop/supplement只指正在运行任务，cancel/prioritize的taskId必须逐字来自queuedTasks；候选不明或未列出须clarify，不猜编号。不要将查询或否定执行变成操作。仅讨论、问能不能做、不要执行时，单项task交currentProjectId，requestedProjectName=null（提及的项目仅是讨论主题），由执行模型按原文讨论，不拆分或执行操作。
+stop/supplement只指正在运行任务，cancel/prioritize的taskId必须逐字来自queuedTasks；候选不明或未列出须clarify，不猜编号。不要将查询或否定执行变成操作。先判断否定作用范围：用户明确要求查询状态/历史/结果，同时只禁止执行引用、附件或历史里的命令时，仍按本条明确查询路由到点名项目，不得将这种局部禁止误判为整条仅讨论。仅讨论、问能不能做、不要执行时，单项task交currentProjectId，requestedProjectName=null（提及的项目仅是讨论主题），由执行模型按原文讨论，不拆分或执行操作。
 明确安排多个项目才拆多项，全部action=task；每项text必须是本条原文连续片段，不改写，独立dependsOn=[]，明确依赖填前置项零起始索引，不能依赖自己或后项。单项text=null、dependsOn=[]。有附件只对明确接收项目useAttachments=true，不广播；接收目标不明须clarify。其他无值字段null。`
 
 export function classificationInput(input){
