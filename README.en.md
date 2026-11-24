@@ -133,7 +133,7 @@ An opt-in macOS feature opens the original WeChat conversation on the desktop an
 
 ## Installation and upgrades
 
-Ask whether a new release is available, then explicitly ask to upgrade to that checked release. The worker waits for idle, backs up, upgrades and checks health. Ask to skip just that release to keep future notifications. Exact check-updates, upgrade and restart commands remain available when the model cannot be used.
+Ask whether a new release is available, then explicitly ask to upgrade to that checked release. The worker waits for idle, prepares temporary rollback data, upgrades and checks health, then removes temporary data after success. Ask to skip just that release to keep future notifications. Exact check-updates, upgrade and restart commands remain available when the model cannot be used.
 
 To upgrade, rerun the installation command in [Quick start](#quick-start) and choose **Upgrade**. Standard installations also prompt you when a stable update is available and upgrade only after you confirm. See [configuration and maintenance](CONFIGURATION.md#已有安装与升级) for custom deployments and recovery.
 

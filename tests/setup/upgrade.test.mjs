@@ -52,17 +52,16 @@ async function fixture(t){
  const options={home,source,target,adapter,prepare:async()=>calls.push('prepare'),log:()=>{},healthAttempts:1,wait:async()=>{}}
  return {home,source,target,state,calls,adapter,options}
 }
-test('upgrade stages first, retains old code and private state, and restarts only active services',async t=>{
+test('upgrade stages first, removes rollback copies after success, and restarts only active services',async t=>{
  const f=await fixture(t)
  f.adapter.services.push({id:'other',active:false})
  const result=await upgradeInstallation(f.options)
  assert.equal(result.status,'complete')
  assert.equal(await readFile(join(f.target,'version'),'utf8'),'new')
- assert.equal(await readFile(join(result.backup,'version'),'utf8'),'old')
- assert.equal(await readFile(join(result.recovery,'state/credentials.json'),'utf8'),'original-credentials')
+ assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,0)
+ assert.deepEqual(await readdir(join(f.home,'.local/share/weixin-link/upgrades')),[])
  assert.equal(await readFile(join(f.state,'credentials.json'),'utf8'),'original-credentials')
  assert.deepEqual(f.calls,['prepare','drain','seal','stop','stop','start'])
- assert(!(await readdir(join(result.recovery,'state'))).includes('tools'))
 })
 test('running account without a WeChat login upgrades and remains unlogged',async t=>{
  const f=await fixture(t)
@@ -115,7 +114,7 @@ test('unlogged upgrade rolls back when startup only responds briefly',async t=>{
  assert.equal(await readFile(join(f.target,'version'),'utf8'),'old')
  assert.deepEqual(f.calls,['prepare','drain','seal','stop','start','stop','start'])
 })
-test('repeating the same upgrade skips backup, prepare and service restart',async t=>{
+test('repeating the same upgrade skips prepare and service restart',async t=>{
  const f=await fixture(t)
  await upgradeInstallation(f.options)
  const before=await readdir(join(f.home,'.local/share/weixin-link/upgrades'))
@@ -126,7 +125,7 @@ test('repeating the same upgrade skips backup, prepare and service restart',asyn
  assert.equal(result.status,'up_to_date')
  assert.deepEqual(f.calls,calls)
  assert.deepEqual(await readdir(join(f.home,'.local/share/weixin-link/upgrades')),before)
- assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,1)
+ assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,0)
  assert(!(await readdir(join(f.home,'.local/share/weixin-link'))).includes('upgrade.lock'))
 })
 test('matching source still refuses an unmanaged target',async t=>{
@@ -143,7 +142,7 @@ test('changed installed content still runs the upgrade even with the same packag
  const result=await upgradeInstallation(f.options)
  assert.equal(result.status,'complete')
  assert.equal(await readFile(join(f.target,'version'),'utf8'),'new')
- assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,2)
+ assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,0)
 })
 test('failed health check restores old source and database contents before restarting',async t=>{
  const f=await fixture(t)
@@ -160,6 +159,8 @@ test('failed health check restores old source and database contents before resta
  assert.equal(await readFile(join(f.state,'credentials.json'),'utf8'),'original-credentials')
  assert(!(await readdir(f.state)).includes('new-schema.db'))
  assert.equal(await readFile(join(f.state,'tools/node'),'utf8'),'runtime')
+ assert.deepEqual(await readdir(join(f.home,'.local/share/weixin-link/upgrades')),[])
+ assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,0)
  assert.deepEqual(f.calls,['prepare','drain','seal','stop','start','stop','start'])
 })
 test('dependency failure leaves live service and installed files unchanged',async t=>{
@@ -181,6 +182,7 @@ test('rollback stop failure retains recovery data and never restores a live data
  await assert.rejects(upgradeInstallation(f.options),/UPGRADE_ROLLBACK_FAILED/)
  assert.equal(await readFile(join(f.target,'version'),'utf8'),'new')
  assert((await readdir(join(f.home,'.local/share/weixin-link'))).includes('upgrade.lock'))
+ assert.equal((await readdir(join(f.home,'.local/share/weixin-link/upgrades'))).length,1)
 })
 test('a different release selected by a service override is not treated as the requested source',async t=>{
  const f=await fixture(t),unit=join(f.home,'legacy.service')

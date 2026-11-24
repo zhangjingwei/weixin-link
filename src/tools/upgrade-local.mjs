@@ -45,13 +45,13 @@ export async function previewLocal({root, target, checkOnly=false, details=false
         pending=true
       }
     }
-    const action=pending?'先备份未完成的安装，用本地快照中的向导继续配置和扫码':'更新时，正在运行的微信助手会短暂重启。'
+    const action=pending?'先临时保留未完成的安装，用本地快照中的向导继续配置和扫码':'更新时，正在运行的微信助手会短暂重启。'
     console.log(action)
     if (!checkOnly && (!confirm || await confirm())) {
       if (pending) await resume(root,target,archive)
       else {
         await writeFile(join(source,localUpgradeMarker),JSON.stringify({version:1,tree})+'\n',{flag:'wx',mode:0o600})
-        await upgrade({source,target,localUpdate:true,showBackupPaths:details})
+        await upgrade({source,target,localUpdate:true})
       }
     }
     return tree

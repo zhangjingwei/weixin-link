@@ -51,7 +51,7 @@ Ask which models are available, then name the model for a project's future tasks
 
 - Ask whether a new release is available to see its main changes without installing.
 - Ask to skip that version to keep notifications for future versions.
-- Ask to upgrade to the checked version. The service waits for idle, backs up, upgrades and checks health. Other accounts sharing the installation are affected too. Scheduled is not completed: wait for the result.
+- Ask to upgrade to the checked version. The service waits for idle, prepares temporary rollback data, upgrades and checks health, then removes temporary data after success. Other accounts sharing the installation are affected too. Scheduled is not completed: wait for the result.
 - Ask to restart the current account; it waits for idle.
 - Ask whether the upgrade finished, whether the service is ready, or what recent errors occurred.
 

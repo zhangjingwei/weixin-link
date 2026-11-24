@@ -88,7 +88,7 @@ export async function standardDeployment({target,home=userHome(),platform=proces
  }
 }
 
-export async function upgradeInstallation({source,target,home=userHome(),adapter,prepare,localUpdate=false,showBackupPaths=true,log=console.log,healthAttempts=30,wait=delay}){
+export async function upgradeInstallation({source,target,home=userHome(),adapter,prepare,localUpdate=false,log=console.log,healthAttempts=30,wait=delay}){
  source=resolve(source);target=resolve(target)
  if(source===target||source.startsWith(target+sep)||target.startsWith(source+sep))throw Error('UPGRADE_SOURCE_OVERLAP')
  for(const path of [source,target]){
@@ -110,7 +110,7 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
  try{alreadyInstalled=await sameSourceTree(source,target)}catch(error){await rm(lock,{recursive:true,force:true});throw error}
  if(alreadyInstalled){
   await rm(lock,{recursive:true,force:true})
-  log('源码已是目标版本，未备份或重启服务。')
+  log('源码已是目标版本，未重启服务。')
   return {status:'up_to_date'}
  }
  const id=randomUUID(),stage=join(dirname(target),'.weixin-upgrade-'+id),backup=target+'.backup-'+id
@@ -161,7 +161,7 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
    await exec(process.execPath,['--check',join(stage,'src/wechat/bot.mjs')],{timeout:10000})
   }
   phase='drain'
-  log('正在检查任务并备份数据…')
+  log('正在检查任务并准备临时回滚数据…')
   for(const account of active){
    const current=await adapter.status(account)
    initialStatus.set(account.id,current)
@@ -187,9 +187,8 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
   await journal('complete')
   if(localUpdate)await rename(join(target,localUpgradeMarker+'.tmp-'+id),join(target,localUpgradeMarker))
   finished=true
-  log('✓ 更新完成。旧版本和数据已备份。')
-  if(showBackupPaths){log('数据备份：'+recovery);log('旧版程序：'+backup)}
-  return {status:'complete',backup,recovery}
+  log('✓ 更新完成。临时回滚数据将清理。')
+  return {status:'complete'}
  }catch(error){
   failureCode=['ENOENT','EACCES','ETIMEDOUT','NPM_CLI_NOT_FOUND'].includes(error.code)?error.code:/^UPGRADE_[A-Z_]+$/.test(error.message)?error.message:'UPGRADE_FAILED'
   if(oldMoved){
@@ -197,10 +196,12 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
    try{
     // Never restore databases until every potentially started process is stopped.
     for(const account of adapter.services)await adapter.stop(account)
-    if(swapped)await rename(target,join(dirname(target),'.weixin-failed-'+id))
+    const failed=join(dirname(target),'.weixin-failed-'+id)
+    if(swapped)await rename(target,failed)
     await rename(backup,target);oldMoved=false
     if(saved){for(const name of await stateEntries())await rm(join(state,name),{recursive:true,force:true});await copyState(snapshot,state)}
     for(const account of active){await adapter.start(account);await healthy(account,{restoring:true})}
+    if(swapped)await rm(failed,{recursive:true,force:true})
     await journal('rolled_back');finished=true
    }catch{await journal('rollback_failed');throw Object.assign(Error('UPGRADE_ROLLBACK_FAILED'),{recovery})}
   }else{
@@ -214,8 +215,12 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
   throw error
  }finally{
   await rm(stage,{recursive:true,force:true}).catch(()=>{})
-  // Retain the recovery record and lock when automatic rollback cannot be verified.
-  if(finished)await rm(lock,{recursive:true,force:true})
+  // Keep the recovery record and lock only when automatic rollback is unconfirmed.
+  if(finished){
+   await rm(backup,{recursive:true,force:true})
+   await rm(recovery,{recursive:true,force:true})
+   await rm(lock,{recursive:true,force:true})
+  }
  }
 }
 
@@ -225,21 +230,19 @@ const errors={
  UPGRADE_CUSTOM_SOURCE:'源码目录包含 Git 工作区或自定义 .env。请使用原部署流程升级；未覆盖本地修改。',
  UPGRADE_BUSY:'当前有任务执行中，未切换版本。请等任务结束后重试。',
  UPGRADE_ALREADY_RUNNING:'已有升级锁。请先确认之前的升级是否完成，并检查 upgrades 下的恢复记录。',
- UPGRADE_ROLLBACK_FAILED:'自动回滚未能确认完成。备份与恢复记录已保留，请检查服务状态后按恢复记录处理。',
+ UPGRADE_ROLLBACK_FAILED:'自动回滚未能确认完成。临时回滚数据与恢复记录已保留，请检查服务状态后按恢复记录处理。',
 }
 function upgradeTextEnglish(message){
- if(message==='源码已是目标版本，未备份或重启服务。')return 'The installed source is already up to date. No backup or service restart was needed.'
+ if(message==='源码已是目标版本，未重启服务。')return 'The installed source is already up to date. No service restart was needed.'
  if(message==='正在准备新版程序…')return 'Preparing the new source and dependencies while the existing service keeps running…'
- if(message==='正在检查任务并备份数据…')return 'Waiting for current tasks to finish and backing up runtime data…'
+ if(message==='正在检查任务并准备临时回滚数据…')return 'Waiting for current tasks to finish and preparing temporary rollback data…'
  if(message==='正在切换到新版…')return 'Runtime data is backed up. Switching to the new source…'
  if(message.startsWith('正在确认后台服务启动'))return message.replace('正在确认后台服务启动','Checking background service startup')
- if(message==='✓ 更新完成。旧版本和数据已备份。')return '✓ Update complete. The previous version and data have been backed up.'
- if(message.startsWith('数据备份：'))return message.replace('数据备份：','Data backup: ')
- if(message.startsWith('旧版程序：'))return message.replace('旧版程序：','Previous program: ')
+ if(message==='✓ 更新完成。临时回滚数据将清理。')return '✓ Update complete. Temporary rollback data will be removed.'
  if(message==='升级未通过，正在恢复旧版本和运行数据…')return 'Upgrade failed. Restoring the previous source and runtime data…'
  return message
 }
-const errorsEn={UPGRADE_ACTIVE_LEGACY_ACCOUNT:'Stop the running legacy named service before upgrading to the single-user version.',UPGRADE_CUSTOM_DEPLOYMENT:'An unmanaged service or custom source was found. The existing deployment was left unchanged.',UPGRADE_CUSTOM_SOURCE:'The source contains a Git workspace or custom .env. Use its original upgrade process.',UPGRADE_BUSY:'A task is still running. Retry after it finishes.',UPGRADE_ALREADY_RUNNING:'Another upgrade is in progress. Check its recovery record before retrying.',UPGRADE_ROLLBACK_FAILED:'Automatic rollback could not be confirmed. Preserve the backup and recovery record.'}
+const errorsEn={UPGRADE_ACTIVE_LEGACY_ACCOUNT:'Stop the running legacy named service before upgrading to the single-user version.',UPGRADE_CUSTOM_DEPLOYMENT:'An unmanaged service or custom source was found. The existing deployment was left unchanged.',UPGRADE_CUSTOM_SOURCE:'The source contains a Git workspace or custom .env. Use its original upgrade process.',UPGRADE_BUSY:'A task is still running. Retry after it finishes.',UPGRADE_ALREADY_RUNNING:'Another upgrade is in progress. Check its recovery record before retrying.',UPGRADE_ROLLBACK_FAILED:'Automatic rollback could not be confirmed. Preserve the temporary rollback data and recovery record.'}
 if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
  const target=process.argv[2]
  const english=setupLanguage()==='en'

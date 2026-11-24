@@ -118,7 +118,7 @@ node src/tools/verify-management-native.mjs
 
 新增 get_service_status、get_installation_status、get_diagnostics、get_usage_guide、get_maintenance_status、request_service_restart、request_upgrade 和 request_project_archive。服务、安装验收与诊断都是只读且按当前账号装配；诊断不返回原始日志。归档/还原复用原 TextConversations 核对流程，忙碌、陈旧线程、最后一个可用项目及未知上游结果保持原保护。
 
-重启和升级先保存意图、返回 MCP 回执，再安排原 AgentSwitcher/ChatUpgrader 工作进程；不在模型工具调用内停止服务。重启绑定当前账号；升级绑定共享安装并复用等待空闲、备份、切换、回滚和健康检查。升级凭据同时绑定版本和提交，最新 Release 发生变化则不改装另一个版本。查询维护状态区分工作进程 waiting_idle/running/complete/failed 与管理操作 pending/scheduled/unknown；安排成功不是完成。
+重启和升级先保存意图、返回 MCP 回执，再安排原 AgentSwitcher/ChatUpgrader 工作进程；不在模型工具调用内停止服务。重启绑定当前账号；升级绑定共享安装并复用等待空闲、临时回滚数据、切换、回滚和健康检查；成功后删除临时数据。升级凭据同时绑定版本和提交，最新 Release 发生变化则不改装另一个版本。查询维护状态区分工作进程 waiting_idle/running/complete/failed 与管理操作 pending/scheduled/unknown；安排成功不是完成。
 
 日常指南及首次连接提示以自然语言示例为主；精确命令完整保留于 docs/reference/commands.md 与 commands.en.md，并由原解析器在模型不可用时处理。计划、代码审查、普通文件工作等通过底座与已有跨项目任务入口处理，不添加通用 shell/RPC 工具。永久删除、原生会话重置/迁移、扫码、密钥输入及用户审批不由这批维护工具代办；人工恢复入口仍保留。
 
