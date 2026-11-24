@@ -444,6 +444,7 @@ export class SessionManager {
 
     session.waitingAttachment=false
     session.requestText=typeof text==='string'?text:text.text
+    session.workflowMode=native?.action
 
     this.state.users[session.userId]??={}
     this.state.users[session.userId].recovery={task:session.localTask,execution:'running',delivery:null,updated:new Date().toISOString()}
@@ -806,6 +807,9 @@ export class SessionManager {
       if (p.turn.status === 'failed') reply += `\n${this.agentName} 任务失败：${p.turn.error?.message ?? '未返回错误详情。'}`
       else if (p.turn.status === 'interrupted') reply += '\n当前任务已停止。'
       else if (!reply) reply = '本轮任务已结束，但未返回文字回复。'
+      const discussionPrefix=p.turn.status==='completed'&&!awaitingAttachment&&!receivedWhileWaiting&&session.finals.length
+        ?this.ports.discussionReplyPrefix?.(session.requestText,reply,session.workflowMode)??'':''
+      reply=discussionPrefix+reply
       // The footer describes execution completion, not delivery acceptance.
       const mergedCompletion=this.completionMarkers&&!awaitingAttachment&&(session.workToken?.current()??true)
       if(mergedCompletion){
@@ -832,7 +836,7 @@ export class SessionManager {
       this.diagnostic(session,'turn.completed',{status:p.turn.status,provider:session.provider,model:session.executionModel,model_provider:session.modelProvider,duration_ms:Date.now()-(session.startedAt??Date.now()),chars:Array.from(reply).length})
       if (session.exited) return
       if (session.exiting) { await this.finishExit(session, p.turn.status === 'interrupted' ? '当前任务已停止。' : '本轮任务已结束。', p.turn.status); return }
-      const display=receivedWhileWaiting?reply:(session.displayFinals??session.finals).join('\n\n')+reply.slice(session.finals.join('\n\n').length)
+      const display=receivedWhileWaiting?reply:discussionPrefix+(session.displayFinals??session.finals).join('\n\n')+reply.slice(discussionPrefix.length+session.finals.join('\n\n').length)
       if(session.nativeQueueTurn&&!this.submissions.claimReceipt('native-final:'+session.taskId)){
         session.lastDelivery={status:'unknown',updated:new Date().toISOString()}
       }else if(receivedWhileWaiting){this.diagnostic(session,'notification.suppressed',{reason:'attachment_already_pending'})}

@@ -145,6 +145,22 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
   } finally { manager.close(); await manager.saving; await rm(dir, { recursive: true, force: true }) }
 })
 
+test('design advice gets one visible marker in the saved and delivered final',async()=>{
+ const output=[]
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']})
+ manager.save=async()=>{}
+ manager.state.users.owner={}
+ const session={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,requestText:'你觉得我们是否需要单独做一个桌面版？',finals:[],displayFinals:[],items:new Map(),queue:[],rpc:{closed:false,close(){}},reply:async text=>{output.push(text);return {status:'accepted'}}}
+ manager.sessions.set('owner',session)
+ try{
+  await manager.event(session,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'answer',type:'agentMessage',phase:'final_answer',text:'建议先验证移动端网页需求。'}}})
+  await manager.event(session,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
+  assert.match(output[0],/^💡 Zero · 方案讨论\n建议先验证移动端网页需求。/)
+  assert.match(manager.state.users.owner.lastReply,/^💡 Zero · 方案讨论\n建议先验证移动端网页需求。/)
+  assert.equal((output[0].match(/💡 Zero · 方案讨论/g)??[]).length,1)
+ }finally{manager.close()}
+})
+
 test('late tool/commentary events cannot follow final output or contaminate the next turn', async () => {
   const output = []
   const manager = new SessionManager({ stateDir: '/unused', cwd: '/unused', owners: ['owner'] })

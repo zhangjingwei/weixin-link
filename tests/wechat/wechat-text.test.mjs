@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {wechatText} from '../../src/infrastructure/wechat/text-format.mjs'
+import {readFileSync} from 'node:fs'
+test('direct design advice marker remains visible in WeChat text',()=>{
+ const skill=readFileSync(new URL('../../src/infrastructure/agents/skills/design-discussion/SKILL.md',import.meta.url),'utf8')
+ assert.match(skill,/直接给建议的讨论，在回复开头使用「💡 Zero · 方案讨论」/)
+ assert.equal(wechatText('💡 Zero · 方案讨论\n建议先做响应式网页。'), '💡 Zero · 方案讨论\n建议先做响应式网页。')
+})
 test('wide tables become phone-friendly records',()=>{const s=wechatText('当前：\n\n| 智能体 | 设备 | 用途 |\n| --- | --- | --- |\n| 微信助手 | 树莓派 | 调度 |\n| Spark | DGX | 开发 |\n\n结束');assert.equal(s,'当前：\n\n微信助手\n设备：树莓派\n用途：调度\n\nSpark\n设备：DGX\n用途：开发\n\n\n结束')})
 test('table-like code is preserved',()=>{const s='```text\n| a | b |\n| --- | --- |\n| 1 | 2 |\n```';assert.equal(wechatText(s),s)})
 test('long code packets each retain matching fences',async()=>{const {wechatParts}=await import('../../src/infrastructure/wechat/text-format.mjs'),parts=wechatParts('```js\n'+('console.log("test");\n'.repeat(180))+'```');assert.ok(parts.length>1);for(const p of parts){assert.ok(p.startsWith('```js\n'));assert.ok(p.endsWith('```'));assert.equal((p.match(/```/g)??[]).length,2)}})
