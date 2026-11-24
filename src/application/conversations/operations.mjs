@@ -47,7 +47,7 @@ export async function selectConversation(context,message,reply){
  }
 
 export async function archive(context,owner,entry,archived,reply){
-  if(!entry){await reply('会话不存在，请先发“列表”。');return {status:'not_executed',reason:'TARGET_NOT_FOUND'};}
+  if(!entry){await reply('没有找到这个项目。你可以说“我有哪些项目”，再说明要操作哪一个。');return {status:'not_executed',reason:'TARGET_NOT_FOUND'};}
   if(entry.deleted||entry.deleteIntent){await reply(entry.deleted?'该会话已永久删除，不能归档或还原。':'该会话的删除结果尚未确认，先用“列表”核对。');return {status:'not_executed',reason:'TARGET_DELETED'};}
   const r=context.ensure(owner),session=context.manager.sessions.get(entry.key),saved=context.manager.state.users[entry.key];
   const blocked=()=>hasUnfinishedWork(context,entry.key);
@@ -80,7 +80,7 @@ export async function archive(context,owner,entry,archived,reply){
     if(tid&&session&&context.manager.sessions.get(entry.key)===session){context.manager.sessions.delete(entry.key);context.backendPort.closeSession(session)}
     if(archived&&r.active===entry.id)r.active=next.id;
     await context.manager.save();
-    await reply(archived?`已归档会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致，':'空白会话已隐藏，'}历史保留；发送“还原”并选择该会话可恢复。当前会话${r.active}。`:`已还原会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致。':''}发送“切换”并选择该会话进入。`);
+    await reply(archived?`已归档会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致，':'空白会话已隐藏，'}历史仍保留。需要恢复时，可以说“还原${entry.name}项目”。`:`已还原会话${entry.id}：${entry.name}。${tid?'Codex与微信状态已核对一致。':''}需要进入时，可以说“切换到${entry.name}”。`);
     return {status:'confirmed',archived,projectId:entry.id};
    });
   }finally{if(locked)session.selecting=false;context.archiveLocks.delete(entry.key)}

@@ -144,7 +144,7 @@ export class OutputTransport {
   const failed=value.attachments.filter(a=>['unknown','failed'].includes(a.status)).length+(value.errors?.length??0)
   if(failed&&current()&&!value.failureNotice){
    value.failureNotice='sending';await checkpoint()
-   const failureText=value.attachments.some(a=>a.reason==='ARTIFACT_EXPIRED')?'附件快照已超过7天保留期，请重新生成。':value.attachments.some(a=>a.reason==='ARTIFACT_UNAVAILABLE')?'附件交付副本不可用（可能已被清理），请重新生成。':`有 ${failed} 个附件未能确认送达。可发“结果”主动重发整组结果（含已发送附件）。`
+   const failureText=value.attachments.some(a=>a.reason==='ARTIFACT_EXPIRED')?'附件已超过7天保留期，无法重发。需要时可以说明要重新制作哪份文件。':value.attachments.some(a=>a.reason==='ARTIFACT_UNAVAILABLE')?'原附件已无法读取，不能直接重发。需要时可以说明要重新制作哪份文件。':`有 ${failed} 个附件未能确认送达。你可以说“把刚才的文件再发一次”。再次发送会包含这组已发出的附件。`
    try{await this.sendWithRetry(userId,failureText,{event:'outbound.failure_notice_failed',kind:'failure_notice',parts:1,current,traceId});value.failureNotice='accepted'}catch(error){value.failureNotice=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);value.failureNoticeError=deliveryError(error)}
    await checkpoint()
   }

@@ -162,7 +162,7 @@ test('bound task recovery retains its routed completion notice and only reads th
  f.manager.ask=async()=>assert.fail('recovery must not start another execution')
  await f.queue.pump('knowledge')
  assert.equal(session.taskId,id);assert.equal(f.jobs.get(id).state,'done');assert.equal(f.manager.state.users.knowledge.lastReply,'原任务结果')
- assert.equal(f.manager.state.users.knowledge.resultIdentity.taskId,id);assert.equal(f.sent.length,1);assert.match(f.sent[0].value,/【知识库 · .*已恢复/s)
+ assert.equal(f.manager.state.users.knowledge.resultIdentity.taskId,id);assert.equal(f.sent.length,1);assert.match(f.sent[0].value,/【知识库 · .*已找回/s)
 })
 
 test('queue persistence failure never acknowledges a completed submission or switches selection',async t=>{

@@ -9,7 +9,7 @@ import {installerCommand} from '../setup/setup-locale.mjs'
 const RELEASE=/^[0-9a-f]{7,40}$/
 export const WELCOME_MESSAGE='微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 '+installerCommand('setup',{language:'zh'})+'。'
 export const welcomeMessage=(language,accountId='default')=>language==='en'?'Weixin Link is connected. Complete model setup in your computer terminal with '+installerCommand('setup',{accountId,language:'en'})+' if needed.':'微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 '+installerCommand('setup',{accountId,language:'zh'})+'。'
-export const upgradeMessage=(commit,language='zh',release)=>(language==='en'?`Weixin Link upgraded to ${release?.tag??commit.slice(0,7)} and is connected. Send status to view tasks, diagnostics to check the service, or guide for help.`:`微信助手已升级到 ${release?.tag??commit.slice(0,7)}，服务已连接。可直接发消息；发「状态」查看任务，发「诊断」检查服务，发「使用说明」查看帮助。`)+(release?'\n\n'+release.details:'')
+export const upgradeMessage=(commit,language='zh',release)=>(language==='en'?`Weixin Link upgraded to ${release?.tag??commit.slice(0,7)} and is connected. You can ask how your tasks are progressing, whether the service is working, or how to use the assistant.`:`微信助手已升级到 ${release?.tag??commit.slice(0,7)}，服务已连接。可以直接说你的需求，例如“看看任务进展”“检查助手是否正常”或“介绍一下怎么用”。`)+(release?'\n\n'+release.details:'')
 
 export class LifecycleNotice{
  constructor({stateDir,sourceDir,owners,welcomePending=false,welcomeText=async()=>WELCOME_MESSAGE,language='zh',send,log=()=>{}}){Object.assign(this,{stateDir,sourceDir,owners:[...new Set(owners)],welcomePending,welcomeText,language,send,log});this.locks=new Map();this.commit=null;this.started=false}

@@ -240,7 +240,7 @@ export class SessionManager {
       lines.push(`${index+1}. ${id===session.threadId?'[当前] ':''}${title}（${id}）`)
     }
     this.state.users[userId].conversationChoices=ids;await this.save()
-    await reply('你保存的会话：\n'+lines.join('\n')+(selecting?'\n回复编号即可切换；发送“取消”放弃。':'\n发送“恢复会话”后可按编号切换。'))
+    await reply('你保存的会话：\n'+lines.join('\n')+(selecting?'\n回复编号即可切换；发送“取消”放弃。':'\n需要恢复列表中的旧会话时，备用入口是“恢复会话”，再按编号选择。'))
   }
   async listRecentCommits(userId,reply){
     const cwd=this.workspaceFor(userId),commits=await this.ports.recentCommits(cwd)
@@ -446,9 +446,9 @@ export class SessionManager {
       let text
       if (message.method === 'item/tool/requestUserInput') {
         text = p.questions.map((q, i) => `${i + 1}. ${q.question}${q.options?.length ? '\n' + q.options.map(o => `${o.label}：${o.description}`).join('\n') : ''}`).join('\n\n')
-        text += '\n\n发送“回答”，选择问题后输入答案。'
+        text += '\n\n本次问题需要明确答复：发送“回答”后，按提示选择并填写答案。'
       } else {
-        text = `${p.reason ?? `${this.agentName} 请求批准操作`}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n发送“批准”或“拒绝”，再从列表中选择操作。`
+        text = `${p.reason ?? `${this.agentName} 请求批准操作`}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n这项操作需要你明确决定。本次请发送“批准”或“拒绝”，再选择对应操作；未确认前不会执行。`
       }
       await this.notify(session, text)
       return
@@ -559,7 +559,7 @@ export class SessionManager {
       // An exceptional transport failure cannot be predicted in an already-sent footer.
       // Keep a separate warning only for failure, never a second normal completion.
       if(mergedCompletion&&currentRecovery&&!['accepted','deferred','not_required'].includes(recovery.delivery)){
-        const warning=recovery.delivery==='failed'?'⚠️ 最终结果发送失败，结果已保存，可发 结果 重发。':'⚠️ 部分内容未确认送达，结果已保存，可发 结果 查看。'
+        const warning=recovery.delivery==='failed'?'⚠️ 最终结果发送失败，已保存。你可以说“把刚才的结果再发一次”。':'⚠️ 部分内容未确认送达，已保存。你可以说“看看刚才任务的结果”，核对后再决定是否重发。'
         await this.notify(session,localCompletion(warning,session.localTask),()=>!session.exited&&(session.workToken?.current()??true))
       }
       this.resolveWaiters(session, { status: p.turn.status, reply })
@@ -582,7 +582,7 @@ export class SessionManager {
     return true
   }
   async steer(userId, text, reply, token, expected) {
-    if(!text){await reply('请先发送“补充”，再按提示输入内容。');return}
+    if(!text){await reply('请说明要补充的内容，以及要补充到哪个任务。');return}
     const session=this.sessions.get(userId)
     if(expected&&(!session||session.traceId!==expected.traceId||session.turnId!==expected.turnId))throw Error('MANAGEMENT_STALE_TASK')
     if(!token.current()||!session||session.state!=='running'||session.exited||session.rpc.closed||session.finalReceived||!(session.workToken?.current()??false)){
@@ -702,7 +702,7 @@ export class SessionManager {
             const withFork={...saved,previous:[...(saved.previous??[]),id].slice(-20)}
             this.state.users[userId]=withFork
             try{await this.save()}catch(error){this.state.users[userId]=saved;throw Error(`已创建会话 ${id}，但保存归属失败；请在主机核对后恢复。`,{cause:error})}
-            if(!command.switchTo){await reply(`已创建旁支会话 ${id}。当前会话不变；发送“恢复会话”后选择旁支即可切换。`);return}
+            if(!command.switchTo){await reply(`已创建旁支会话 ${id}。当前会话不变，需要进入旁支时可说明要切换到哪个会话。`);return}
             const resumed=await this.protocol.resume(session.rpc,{threadId:id,cwd:this.workspaceFor(userId),instructions:await this.sessionInstructions(userId),provider:this.providerOptions()})
             if(!token.current())return
             const next={...withFork,threadId:id,previous:[...(saved.previous??[]),sourceId].slice(-20),hasMessages:true}
@@ -736,7 +736,7 @@ export class SessionManager {
           '【交互答复】',
           '批准（approve）', '拒绝（reject）', '回答（answer）',
           '远程主机和设备配置可以直接描述需求。',
-          '发送“使用说明”查看各命令用途。',
+          '日常直接描述需求即可，例如“看看项目进展”或“把上次的文件再发一次”。这些命令用于备用操作。',
         ].join('\n'))
         return
       }

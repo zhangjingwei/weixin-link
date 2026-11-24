@@ -39,7 +39,7 @@ test('supplements reach exact active turn without queue or new turn; receipt fol
 })
 test('empty, idle, starting, finalizing, stopped and unauthorized supplements never submit',async t=>{
  const f=await fixture(t)
- await sendSupplement(f,'owner','');assert.match(f.out.at(-1),/请先发送/)
+ await sendSupplement(f,'owner','');assert.match(f.out.at(-1),/请说明要补充的内容/)
  f.session.turnReady=false;await sendSupplement(f,'owner','x');assert.match(f.out.at(-1),/仍在启动/);f.session.turnReady=true
  for(const state of ['idle','delivering','stopping']){transition(f.session,state);await sendSupplement(f,'owner','x');assert.match(f.out.at(-1),/未提交/)}
  transition(f.session,'running');f.session.finalReceived=true;await sendSupplement(f,'owner','x');f.session.finalReceived=false

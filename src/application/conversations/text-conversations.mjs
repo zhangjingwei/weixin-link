@@ -32,12 +32,12 @@ export class TextConversations{
   let home=r.entries.find(e=>e.id===r.dailyId);
   if(!home||home.deleted){home={id:String(r.entries.length+1),key:owner+'#conversation#'+randomUUID(),name:'日常助手',titleSource:'placeholder'};r.entries.push(home);r.dailyId=home.id;this.manager.owners.add(home.key);command.name='日常助手';}
   command.id=home.id;
-  if(home.archived)error=`日常助手会话${home.id}已归档，发送“还原”并选择该会话后再发“日常”。`;
-  else if(home.deleteIntent||home.archiveSync==='missing')error='日常助手会话状态待核对，请先发“列表”；未新建替代会话。';
+  if(home.archived)error=`日常助手会话${home.id}已归档，可以说“还原日常助手”，恢复后再进入。`;
+  else if(home.deleteIntent||home.archiveSync==='missing')error='日常助手的记录暂时无法确认，未另建会话。你可以说“核对日常助手的状态”。';
   else r.active=home.id;
  }
- if(command?.action==='switch'){const e=this.find(owner,command.id);if(e&&!e.archived)r.active=e.id;else error='会话不存在或已归档，请先发“列表”。';}
- let e=this.find(owner);if(waiting&&command?.action!=='new'&&!(waiting.target==='switch'&&command?.action==='switch')){const target=r.entries.find(entry=>entry.key===waiting.key&&!entry.deleted);if(target)e=target;else{error='原会话已不可用，请重新发送命令。';}}
+ if(command?.action==='switch'){const e=this.find(owner,command.id);if(e&&!e.archived)r.active=e.id;else error='没有找到可进入的项目，可能已归档。你可以说“我有哪些项目”，再确认要进入哪一个。';}
+ let e=this.find(owner);if(waiting&&command?.action!=='new'&&!(waiting.target==='switch'&&command?.action==='switch')){const target=r.entries.find(entry=>entry.key===waiting.key&&!entry.deleted);if(target)e=target;else{error='原会话已不可用，请重新说明要处理哪个项目。';}}
  if(parsed.questionCode){const q=this.manager.questions.get(parsed.questionCode);if(q&&this.recipient(q.session.userId)===owner)e=this.entry(q.session.userId);}
  if(messageId!==undefined){r.bindings[String(messageId)]={key:e.key,command:command??null,sessionCommand:parsed.sessionCommand??null,promptReply};const ids=Object.keys(r.bindings);if(ids.length>200)delete r.bindings[ids[0]];}
  return {...message,userId:e.key,_conversationOwner:owner,_conversationCommand:command,_sessionCommand:parsed.sessionCommand,_promptReply:promptReply,_conversationError:error,_conversationPriorActive:priorActive,_conversationSelectionVersion:r.selectionVersion};}
@@ -71,7 +71,7 @@ export class TextConversations{
    await reply('可切换的会话：\n'+(lines.length?lines.join('\n'):'暂无会话')+'\n回复前面的序号切换；序号只用于这次选择。发送“取消”放弃。')
    return choices
   }
-  const help=local?'新建（按提示输入项目名）｜切换｜日常。当前底座暂不支持项目归档、永久删除和历史检索。':'新建｜切换｜命名｜历史｜归档｜还原｜删除（永久删除，含派生子会话）\n日常对话独立保留，发“日常”进入；停止只影响当前对话。'
+  const help=local?'直接说要新建或切换到哪个项目，也可以回到日常助手。当前底座暂不支持项目归档、永久删除和历史检索。':'你可以说“有哪些项目”“切换到知识库”“看看知识库上次的结果”或“回到日常助手”。停止任务时请说明项目；删除操作会永久删除记录，需单独确认。'
   await reply('项目列表\n'+(lines.length?lines.join('\n'):'暂无项目')+'\n'+help)
  }
  async listHistoryChoices(owner,reply){

@@ -142,5 +142,5 @@ test('voice upgrade uses maintenance handler and recovered request does not repe
  f.deps.upgrader={handle:async()=>{calls++}};f.handle=createMessageProcessor(f.deps)
  const message={userId:'owner',type:'voice',text:'[voice]',voices:[{text:'升级。'}],_ingressId:'voice-upgrade'}
  await f.handle(message);await f.handle({...message,_recovered:true})
- assert.equal(calls,1);assert.deepEqual(f.submitted,[]);assert.match(f.sent[0][1],/未重复执行/)
+ assert.equal(calls,1);assert.deepEqual(f.submitted,[]);assert.match(f.sent[0][1],/没有重复执行/)
 })

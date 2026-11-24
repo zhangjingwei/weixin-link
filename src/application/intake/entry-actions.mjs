@@ -21,13 +21,13 @@ export async function entryAction(context,message,record,step,index){
   if(!step.task)throw Error('ENTRY_NO_RUNNING_TASK')
   const result=await service.call(caller,step.action==='stop'?'request_task_stop':'supplement_task',{...args,taskId:step.task.id,turnId:step.task.turnId,...step.action==='supplement'?{text:record.text}:{},requestId})
   if(result.status==='pending'){record.activations??=[];if(!record.activations.includes(result.operationId))record.activations.push(result.operationId)}
-  return step.action==='stop'?'已提交停止指定原任务的请求；尚未确认停止。':`补充请求状态：${result.status}；没有新建任务。`
+  return step.action==='stop'?(result.status==='pending'||result.status==='requested'?'正在请求停止这个任务，是否已停止还需等待确认。':'这次停止操作尚未确认，请先核对任务状态。'):(result.status==='accepted'?'补充内容已交给正在进行的任务。':'补充内容尚未确认送达，请先核对任务状态。')
  }
  if(step.action==='cancel_all'){
   const taskIds=(step.queuedTasks??[]).map(task=>task.taskId)
   if(!taskIds.length)return '没有可取消的未开始任务。'
   const result=await service.call(caller,'request_queue_cancel_all',{...args,taskIds,requestId})
-  return result.status==='confirmed'?`已取消快照中的 ${result.data.cancelled} 项排队任务，不影响运行任务和之后的新任务。`:'任务列表已变化，未批量取消。'
+  return result.status==='confirmed'?`已取消 ${result.data.cancelled} 项等待中的任务，不影响运行任务和之后的新任务。`:'任务列表已变化，未批量取消。'
  }
  if(['cancel','prioritize'].includes(step.action)){
   if(!step.taskId||!step.queuedTasks?.some(task=>task.taskId===step.taskId))return '未定位到唯一的未开始任务，请说明要操作的任务名称。'

@@ -7,7 +7,7 @@ const marker={version:1,repository:'zhangjingwei/weixin-link',ref:'v1.0.0',commi
 const latest={tag:'v1.1.0',commit:'b'.repeat(40)}
 const inspect=(installed=marker,release=latest,language='zh')=>checkUpdates({readInstalled:async()=>installed,fetchLatest:async()=>release,language})
 test('explicit query reports versions and available update without scheduling anything',async()=>{
- const text=await inspect();assert.match(text,/当前版本：v1.0.0/);assert.match(text,/最新正式版：v1.1.0/);assert.match(text,/有可用更新/);assert.match(text,/本次检查未安排升级/)
+ const text=await inspect();assert.match(text,/当前版本：v1.0.0/);assert.match(text,/最新正式版：v1.1.0/);assert.match(text,/有可用更新/);assert.match(text,/本次只是检查，还没有安排升级/)
  assert.match(await inspect({...marker,ref:'v1.1.0'}),/已是最新/)
  assert.match(await inspect({...marker,ref:'v2.0.0'}),/高于最新正式版/)
  assert.match(await inspect({...marker,ref:'main',commit:latest.commit.slice(0,7)}),/提交一致/)

@@ -24,7 +24,7 @@ test('only a newer stable release prompts once, including after restart',async t
  await notifier.tick();await notifier.tick()
  await new UpdateNotifier(f.options).tick()
  assert.equal(f.sent.length,1)
- assert.match(f.sent[0].text,/回复“升级”/)
+ assert.match(f.sent[0].text,/升级到这个版本/)
  assert.match(f.sent[0].text,/不会自动升级/)
  assert.equal(JSON.parse(await readFile(noticePath(f),'utf8')).status,'accepted')
 })

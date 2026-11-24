@@ -70,7 +70,7 @@ export class ChatUpgrader{
    try{await this.schedule(request,{home:this.home,target:this.target})}catch(error){await saveChatUpgrade(this.home,{...request,status:'failed',stage:'schedule',error:'CHAT_UPGRADE_SCHEDULE_FAILED'});throw error}
    return request
   })
-  await reply(outcome?`已安排空闲后升级到 ${tag}。完成后发“诊断”核对服务。`:'升级已安排，未重复提交。')
+  await reply(outcome?`已安排空闲后升级到 ${tag}。你可以说“升级完成了吗”核对结果。`:'升级已安排，未重复提交。')
   const scheduled=outcome||await readChatUpgrade(this.home)
   return {status:outcome?'scheduled':'already_scheduled',maintenanceId:scheduled?.id,version:scheduled?.tag}
  }

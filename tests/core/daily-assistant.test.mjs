@@ -62,9 +62,9 @@ test('daily selection respects frozen receipt bindings and duplicate messages',(
 test('archived or missing daily thread is not replaced, and official selection failure rolls back',async()=>{
  const {router,manager}=fixture();const home=router.find('alice'),project=create(router,'Work')
  home.archived=true;let output=[];await router.control(router.bind({userId:'alice',text:'日常'}),async s=>output.push(s))
- assert.match(output[0],/发送“还原”并选择该会话/);assert.equal(router.find('alice').key,project.userId)
+ assert.match(output[0],/还原日常助手/);assert.equal(router.find('alice').key,project.userId)
  home.archived=false;home.archiveSync='missing';output=[];await router.control(router.bind({userId:'alice',text:'日常'}),async s=>output.push(s))
- assert.match(output[0],/未新建替代会话/)
+ assert.match(output[0],/未另建会话/)
  delete home.archiveSync;manager.connect=async()=>{throw Error('offline')}
  await assert.rejects(router.control(router.bind({userId:'alice',text:'日常'}),async()=>{}),/offline/)
  assert.equal(router.find('alice').key,project.userId)

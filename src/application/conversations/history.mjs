@@ -1,7 +1,7 @@
 import {historyParts} from './history-presentation.mjs'
 export function historyText(value){return String(value).replace(/<wechat-memory:[^>]+>[\s\S]*?<\/wechat-memory:[^>]+>/g,'').replace(/<wechat-task:[^>]+>[\s\S]*?<\/wechat-task:[^>]+>/g,'').replace(/!?\[([^\]\n]*)\]\((?:<\/[^>\n]+>|\/[^\s)]+)\)/g,'$1〔历史附件，未重发〕').trim()}
 
-export async function history(context,owner,entry,cmd,reply){if(entry?.deleted){await reply('该会话已永久删除，历史不可读取或还原。');return;}const old=context.pages.get(owner);if(cmd.action==='older'){if(!old){await reply('先发“历史”选择要查看的会话。');return;}entry=context.find(owner,old.id);if(!old.cursor){await reply('已到当前可读取历史的最早一页。');return;}}
+export async function history(context,owner,entry,cmd,reply){if(entry?.deleted){await reply('该会话已永久删除，历史不可读取或还原。');return;}const old=context.pages.get(owner);if(cmd.action==='older'){if(!old){await reply('请说明想看哪个项目的聊天记录。');return;}entry=context.find(owner,old.id);if(!old.cursor){await reply('已到当前可读取历史的最早一页。');return;}}
  const tid=context.manager.state.users[entry.key]?.threadId;if(!tid){await reply('该会话还没有消息。');return;}
  const cursor=cmd.action==='older'?old.cursor:undefined;
  const page=await context.withBackend(owner,rpc=>context.backendPort.listTurns(rpc,tid,{limit:cmd.action==='search'?50:5,cursor}));
@@ -22,7 +22,7 @@ export async function history(context,owner,entry,cmd,reply){if(entry?.deleted){
  }
  // Advance only after every part has been handed to the existing delivery path.
  context.pages.set(owner,{id:entry.id,cursor:page.nextCursor});
- await reply(page.nextCursor?'本页已完整展示。回复“翻页”查看更早记录。'+(cmd.action==='search'?'搜索仅覆盖本次读取的最近50轮。':''):'本页已完整展示，已到当前可读取历史的最早记录。');
+ await reply(page.nextCursor?'本页已展示完。这是备用历史入口，继续看更早记录需回复“翻页”。'+(cmd.action==='search'?'搜索仅覆盖本次读取的最近50轮。':''):'本页已完整展示，已到当前可读取历史的最早记录。');
 }
 
 // Generated input metadata may share a text block with the original request.

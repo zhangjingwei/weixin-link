@@ -51,7 +51,7 @@ export class UpdateNotifier{
   if(!latest)return
   if(!releaseTag(latest.tag)||!FULL_COMMIT.test(latest.commit??''))throw Error('UPDATE_CHECK_RESPONSE_INVALID')
   if(!newerRelease(latest.tag,installed.ref)||latest.commit.startsWith(installed.commit)&&installed.ref==='main'||this.closed||!this.ready())return
-  const message=`发现新版本（当前 ${releaseTag(installed.ref)?installed.ref:'旧开发版'}，最新 ${latest.tag}）。回复“升级”可在空闲后安装；不会自动升级。回复“不升级”或“取消”可跳过这个版本，后续新版本仍会提醒。\n\n${releaseDetails(latest)}`
+  const message=`发现新版本（当前 ${releaseTag(installed.ref)?installed.ref:'旧开发版'}，最新 ${latest.tag}）。想安装可以说“升级到这个版本”，会等任务空闲后进行，不会自动升级。也可以说“这个版本先不升级”，以后有新版仍会提醒。\n\n${releaseDetails(latest)}`
   for(const owner of this.owners){
    if(this.closed||!this.ready())return
    await this.withOwner(owner,async()=>{

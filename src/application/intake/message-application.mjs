@@ -6,7 +6,7 @@ import {recoverFailedFinal} from '../notifications/failed-final-recovery.mjs'
 import {nativeCommandKind} from './native-command-kind.mjs'
 
 const READINESS_NOTICE = {
-  CODEX_NOT_INSTALLED: '微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。',
+  CODEX_NOT_INSTALLED: '微信已连通，但智能体尚未安装，这条请求没有开始执行。请在安装电脑重新运行安装程序，完成模型配置。',
 }
 
 export function createMessageApplication({entryRouting,view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,confirmedRejection,deferMaintenance,systemNotice,diagnosticServices,diagnosticService}){
@@ -43,7 +43,7 @@ return async function handleMessage(message) {
   if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>deliver(diagnosticAction==='export'?await diagnosticPackage(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir,service:diagnosticService,services:diagnosticServices}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
   if(!initialControl&&!manager.sessions.has(message.userId)){
    const issue=await agentReadiness()
-   if(issue){await deliver(READINESS_NOTICE[issue]??'微信已连通，但当前智能体未就绪。本条没有提交给模型；可发送“安装状态”核对配置。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
+   if(issue){await deliver(READINESS_NOTICE[issue]??'微信已连通，但模型暂时无法处理请求，这条请求没有开始执行。请在安装电脑检查配置；需要应急指引时可发送“安装帮助”。',{conversationControl:true});jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
   const media = hasMedia(message)
   if (!media && !message.text?.trim()){jobs.acknowledge([message._ingressId].filter(Boolean));return}
@@ -59,7 +59,7 @@ return async function handleMessage(message) {
     jobs.acknowledge([message._ingressId].filter(Boolean));return
   }
   if(message._recovered&&(agentAction?.action==='restart'||upgradeAction)){
-   await runtime.track('delivery',()=>deliver('上次维护指令的结果待核对，未重复执行。可发“服务状态”查看当前服务。',{conversationControl:true}))
+   await runtime.track('delivery',()=>deliver('上次维护操作是否完成还不确定，没有重复执行。你可以说“检查助手服务是否正常”。',{conversationControl:true}))
    jobs.acknowledge([message._ingressId].filter(Boolean));return
   }
   let recoveryDelivery

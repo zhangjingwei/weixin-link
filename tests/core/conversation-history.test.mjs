@@ -26,7 +26,7 @@ test('recent turns render chronologically with explicit older navigation and UTC
  const result=f.out.join('\n');
  assert.ok(result.indexOf('较早问题')<result.indexOf('最新答复'));
  assert.match(result,/UTC/);assert.doesNotMatch(result,/nonce|内部/);
- assert.match(result,/最新在下/);assert.match(result,/翻页.*更早/);
+ assert.match(result,/最新在下/);assert.match(result,/备用历史入口.*更早.*翻页/);
  await history(f.context,'owner',f.entry,{action:'older'},f.reply);
  assert.equal(f.requests[1].cursor,'earlier');
 });

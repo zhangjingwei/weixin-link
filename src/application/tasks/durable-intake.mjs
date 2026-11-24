@@ -36,7 +36,7 @@ export class DurableIntake {
    }catch(error){if(this.closed)return;if(token.current()){
     if(!executionStarted&&/^PROJECT_TASK_(?:ROUTE_INVALID|TARGET_UNAVAILABLE|TARGET_CHANGED)$/.test(error.message)){this.jobs.mark(job.id,'cancelled');await reply('指定项目的任务未执行：目标或归属已变化，请核对项目后重新提交。');continue}
     if(['COMPACTION_WAIT_TIMEOUT','COMPACTION_CHECK_FAILED'].includes(error.code)){this.jobs.mark(job.id,'cancelled');await reply(error.message);continue}
-    this.jobs.mark(job.id,'uncertain');const record=this.manager.state.users[owner]??={};if(record.recovery?.execution==='running'||!record.recovery)record.recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:'unknown',delivery:'unknown'};await this.manager.save();await reply('该消息的执行或发送结果尚未确认，已保留记录；不会自动重复提交。可用“状态”或“结果”查询。')}}
+    this.jobs.mark(job.id,'uncertain');const record=this.manager.state.users[owner]??={};if(record.recovery?.execution==='running'||!record.recovery)record.recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:'unknown',delivery:'unknown'};await this.manager.save();await reply('该消息的执行或发送结果尚未确认，已保留记录；不会自动重复提交。你可以说“核对刚才的任务有没有完成”或“看看刚才的结果”。')}}
   }
  }
  async recover(...args){return recover(this,...args)}

@@ -75,7 +75,7 @@ export class AgentSwitcher{
    return {scheduled:true,id:request.id}
   })
   if(outcome.pending){await reply('已有维护任务进行中，未重复安排。');return {status:'already_scheduled',maintenanceId:outcome.id}}
-  await reply('已安排本账号空闲后重启。完成后发“服务状态”核对。')
+  await reply('已安排本账号空闲后重启。你可以说“检查助手是否正常”了解重启后的状态。')
   return {status:'scheduled',maintenanceId:outcome.id}
  }
 }

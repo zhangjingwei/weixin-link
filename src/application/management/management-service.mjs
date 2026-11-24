@@ -139,7 +139,7 @@ export class ManagementService{
   clearTimeout(this.expirations.get(op.id));this.expirations.delete(op.id)
   discardUnexecutedPayload(op)
   await this.manager.save()
-  const notice=op.name==='request_project_archive'&&op.status==='confirmed'?'项目归档状态已核对。': ['scheduled','already_scheduled'].includes(op.status)?'维护请求已安排，等待原有工作进程在空闲后处理；尚未确认完成。':op.status==='up_to_date'?'当前版本无需升级，未安排维护。':op.status==='blocked'?'已有维护请求，未重复安排。':op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'指定结果已提交发送接口。':op.status==='deferred'?'指定结果已进入原投递队列。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
+  const notice=op.name==='request_project_archive'&&op.status==='confirmed'?'项目归档状态已核对。': ['scheduled','already_scheduled'].includes(op.status)?'已安排，等当前工作结束后处理，完成后会通知你。':op.status==='up_to_date'?'当前版本无需升级，未安排维护。':op.status==='blocked'?'已有维护请求，未重复安排。':op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'已提交发送，尚未确认你是否收到。':op.status==='deferred'?'已安排发送，尚未确认送达。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
   await this.notice(op.owner,notice).catch(()=>{})
  }
  sign(value){const data=Buffer.from(JSON.stringify(value)).toString('base64url');return data+'.'+createHmac('sha256',this.cursorKey).update(data).digest('base64url')}
