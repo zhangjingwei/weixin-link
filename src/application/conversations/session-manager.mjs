@@ -91,8 +91,8 @@ export class SessionManager {
     const parts=[actions.length?'本轮命令涉及'+actions.join('、'):'本轮命令进度']
     parts.push('已结束 '+(commands.length-running.length)+' 条')
     if(running.length)parts.push('正在执行 '+running.length+' 条')
-    const failures=commands.filter(item=>item.done && item.exitCode!=null && item.exitCode!==0)
-    if(failures.length)parts.push(failures.length+' 条返回非零退出码（'+[...new Set(failures.map(item=>item.exitCode))].slice(0,3).join('、')+'）')
+    const needsReview=commands.filter(item=>item.done && item.exitCode!=null && item.exitCode!==0)
+    if(needsReview.length)parts.push('其中 '+needsReview.length+' 条执行结果需要核对')
     const text=parts.join('，')+'。'
     progress.reported=progress.version
     progress.lastNotice=now
