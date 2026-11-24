@@ -32,6 +32,10 @@ User-facing reports, JSON and HTML files are returned as WeChat attachments. Dow
 
 Ask to see a previous result to read it, or explicitly ask to resend its original files. Temporary delivery files use private storage. After successful sending, temporary copies remain available for resending for up to 7 days. Expired files may no longer be available. See [file delivery details](docs/artifact-delivery.md) (Chinese).
 
+## Use the result
+
+When a task finishes, the assistant explains what was done and how to use the result. Reports include files and reading tips when needed; web work includes a verified address when available. Unfinished or unverified parts are stated clearly. Simple questions still get a direct answer rather than a long report.
+
 ## Projects, history and reminders
 
 Ask to create or rename a project or search its past discussions. Creation confirms an existing working directory and does not switch conversations. Archiving a project keeps its history and can be undone.

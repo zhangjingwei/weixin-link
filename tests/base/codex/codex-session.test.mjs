@@ -1,4 +1,4 @@
-import {ASSISTANT_INSTRUCTIONS} from '../../../src/infrastructure/agents/assistant-policy.mjs'
+import {ASSISTANT_INSTRUCTIONS,RESULT_DELIVERY_INSTRUCTIONS} from '../../../src/infrastructure/agents/assistant-policy.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -52,6 +52,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
           if (method === 'thread/start' || method === 'thread/resume') {
             assert.equal(params.sandbox, 'danger-full-access')
             assert.ok(params.developerInstructions.startsWith(ASSISTANT_INSTRUCTIONS))
+            assert.ok(params.developerInstructions.includes(RESULT_DELIVERY_INSTRUCTIONS))
             assert.ok(params.developerInstructions.includes('本会话临时交付目录：'))
             return { thread: { id: params.threadId ?? `thread-${++threadCount}` }, sandbox: { type: 'dangerFullAccess' }, approvalPolicy: 'never' }
           }

@@ -81,6 +81,19 @@ test('final reply retains artifact preparation error through display reconstruct
 })
 
 function deferred(){let resolve;const promise=new Promise(r=>{resolve=r});return {promise,resolve}}
+test('useful result explanation and unverified limits survive actual artifact packaging',async t=>{
+ const dir=await fixture(t),manager=await new SessionManager({stateDir:join(dir,'state'),cwd:dir,owners:['a']}).init(),output=[]
+ t.after(()=>manager.close());manager.state.users.a={}
+ const file=join(dir,'report.html');await writeFile(file,'<!doctype html><meta charset="utf-8"><h1>周报</h1>')
+ const final=`已整理本周报告。下载后用浏览器打开，先看“周汇总”。\n[周报 HTML](${file})\n周日数据未提供，暂未计入；尚未发布在线网址。`
+ const session={userId:'a',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async value=>output.push(value)}
+ await manager.event(session,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'final',type:'agentMessage',phase:'final_answer',text:final}}})
+ await manager.event(session,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
+ const bundle=output.find(value=>value?.kind==='bundle')
+ assert.match(bundle.text,/下载后用浏览器打开/);assert.match(bundle.text,/周日数据未提供，暂未计入/);assert.match(bundle.text,/尚未发布在线网址/)
+ assert.equal(bundle.attachments.length,1);assert.equal(bundle.attachments[0].fileName,'report.html')
+ assert.equal((await manager.outputStoreFor('a').bytes('a',bundle.attachments[0])).toString(),'<!doctype html><meta charset="utf-8"><h1>周报</h1>')
+})
 function queueFixture(t,rows,ask){
  const lifecycle=new CancellationScopes(),records=rows.map(([id,owner])=>({id,owner,input:id,state:'pending'}))
  const jobs={pending:()=>records.filter(j=>j.state==='pending'),mark:(id,state)=>{records.find(j=>j.id===id).state=state},cancel:owner=>{for(const j of records)if(j.owner===owner&&j.state==='pending')j.state='cancelled'}}
