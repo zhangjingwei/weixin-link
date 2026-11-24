@@ -32,7 +32,8 @@ export function deliver(context,key,value,options,send){return context.serialize
   const name=String(e.name??'').replace(/[\x00-\x1f\x7f【】]/g,' ').replace(/\s+/g,' ').trim()
   const shortName=Array.from(name).length<=8&&!/^(?:原有对话|当前会话|未命名|会话\d+)/.test(name)&&name!==heading?name:null
   const identity=shortName?`${shortName}（会话${e.id}）`:`会话${e.id}`
-  const prefix=`【${heading}】\n${identity}${modelName==='未确认'?'':' · 模型 '+modelName}\n\n`
+  const modelLabel=modelName==='未确认'?'':' · 模型 '+modelName.slice(0,24)+(modelName.length>24?'…':'')
+  const prefix=`【${heading}】\n${identity}${modelLabel}\n\n`
   return send(key,typeof value==='string'?prefix+value:{...value,text:prefix+value.text},options)
  }
  if(options?.conversationControl)return send(key,context.label(key,value),options);

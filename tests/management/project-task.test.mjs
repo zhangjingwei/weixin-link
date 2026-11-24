@@ -221,3 +221,13 @@ test('routed headings use the current task, keep a stable conversation identity,
   assert(Array.from(output.split('\n',1)[0]).length<=21)
  }
 })
+
+test('long model identifiers are shortened only in the visible routed header',async t=>{
+ const f=await fixture(t),result=await f.service.call('alice','submit_project_task',task())
+ const original=f.jobs.get(result.data.taskId),model='provider/'+'x'.repeat(60)
+ f.manager.submissions={get:()=>({...original,context:{executionModel:model}})}
+ await f.view.deliver('knowledge','结果正文',{projectTaskId:original.id})
+ const output=f.sent[0].value
+ assert.match(output,/^【检查知识库搜索功能】\n知识库（会话2） · 模型 provider\/x{15}…\n\n结果正文$/)
+ assert(!output.includes(model))
+})
