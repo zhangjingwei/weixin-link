@@ -44,6 +44,34 @@ test('MCP opens standalone new and existing conversations without changing navig
  assert.equal(mismatch.status,'rejected')
 })
 
+test('project conversation rejects a thread still running in the shared assistant workspace',async t=>{
+ const f=await fixture(t),root=join(f.dir,'repo')
+ f.projects.set('textbook',{id:'textbook',name:'教材',roots:[root]})
+ f.threads.get('source').projectId='textbook'
+ const context=await f.service.call('alice','get_conversation_context',{})
+ assert.equal(context.workspace,f.dir)
+ assert.equal(context.projectWorkspace,'unverified')
+ f.manager.state.users.alice.nativeProjectId='textbook'
+ const mismatch=await f.service.call('alice','get_conversation_context',{})
+ assert.equal(mismatch.projectWorkspace,'mismatch')
+ const rejected=await f.service.call('alice','open_conversation',{nativeProjectId:'textbook',threadId:'source',requestId:'wrong-dir'})
+ assert.equal(rejected.detail,'MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
+ const created=await f.service.call('alice','open_conversation',{nativeProjectId:'textbook',requestId:'correct-dir'})
+ assert.equal(created.status,'confirmed')
+ assert.equal(f.manager.workspaceFor(f.conversations.find('alice',created.data.projectId).key),root)
+ const valid=await f.service.call('alice','get_conversation_context',{})
+ assert.equal(valid.projectWorkspace,'mismatch')
+ assert.equal(f.manager.state.users.alice.threadId,'source')
+})
+
+test('project import refuses to attach a shared-workspace thread to a different project root',async t=>{
+ const f=await fixture(t),choices=await f.service.call('alice','list_workspace_choices',{projectId:'1'})
+ const selected=choices.items.find(item=>item.name==='repo')
+ const rejected=await f.service.call('alice','request_project_import',{name:'教材',workspaceToken:selected.workspaceToken,threads:['source'],requestId:'import-wrong-dir'})
+ assert.equal(rejected.detail,'MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
+ assert.equal(f.threads.get('source').projectId,null)
+})
+
 test('original request, references and only current materials are handed off once with durable receipt',async t=>{
  const f=await fixture(t),opened=await f.service.call('alice','open_conversation',{threadId:'old',requestId:'open'})
  const original={text:'接着修复搜索，不改变筛选条件。',references:[{text:'引用材料'}],attachments:[{path:'/private/current.pdf',name:'资料.pdf',kind:'files'}]}
@@ -65,6 +93,18 @@ test('original request, references and only current materials are handed off onc
  const duplicate=await f.service.call('alice','route_conversation_request',{...args,requestId:'another-route'})
  assert.equal(duplicate.detail,'MANAGEMENT_SOURCE_ALREADY_ROUTED')
  assert.equal(f.conversations.root.alice.active,'1')
+})
+
+test('routing refuses an old project binding whose thread still uses the shared workspace',async t=>{
+ const f=await fixture(t),opened=await f.service.call('alice','open_conversation',{threadId:'other',requestId:'open-old'})
+ f.projects.set('toolbox',{id:'toolbox',name:'工具箱',roots:[join(f.dir,'repo')]})
+ const target=f.conversations.find('alice',opened.data.projectId)
+ f.manager.state.users[target.key].nativeProjectId='toolbox'
+ const id=f.jobs.add('alice',{text:'修复教材游戏'},'request')
+ f.manager.sessions.set('alice',{busy:true,taskId:id})
+ const result=await f.service.call('alice','route_conversation_request',{projectId:opened.data.projectId,threadId:'other',sourceTaskId:id,requestId:'wrong-target'})
+ assert.equal(result.detail,'MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
+ assert.equal(f.jobs.pending().length,1)
 })
 
 test('expired source, stale target, missing attachment copier and routed source never enqueue new work',async t=>{

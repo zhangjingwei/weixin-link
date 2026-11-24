@@ -1,6 +1,6 @@
 import {realpath,stat} from 'node:fs/promises'
 import {bindProjectSession} from '../conversations/native-projects.mjs'
-import {projectFolderChoices,workspaceText} from '../conversations/workspace.mjs'
+import {projectFolderChoices,workspaceText,workspaceInProject} from '../conversations/workspace.mjs'
 import {managementWrite} from './management-writes.mjs'
 
 export async function workspaceChoices(context,owner,args){
@@ -72,6 +72,7 @@ export function openConversation(context,owner,caller,args,operation='open_conve
   const workspace=thread?.cwd??(args.workspaceToken?await verifyChoice(context,owner,args.workspaceToken):args.workspace??(project?.roots.length===1?project.roots[0]:null))
   if(!workspace||!thread&&project&&!project.roots.includes(workspace))throw Error('MANAGEMENT_WORKSPACE_SELECTION_REQUIRED')
   const actualProject=project??(thread?.projectId?await api.read(rpc,thread.projectId):null)
+  if(actualProject&&!await workspaceInProject(workspace,actualProject))throw Error('MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
   return {project:actualProject,thread,workspace}
  })
  const empty=conversations.ensure(owner).entries.find(e=>{

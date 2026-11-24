@@ -18,7 +18,7 @@ export const CONVERSATION_ROUTING_INSTRUCTIONS = `## 会话组织与路由规则
 
 1. 分类与导航。普通交流、信息查询和方案讨论默认留在当前会话。提到项目名时，可按需只读查询背景。用户明确要求切换、新建或接续会话时按其要求导航，即使接下来仍是讨论。只有用户明确要求落地执行，且工作需要由其他目标会话承担时，才转交本轮任务。
 
-2. 上下文核实与会话查找。需要核实外部背景或定位目标时，通过 zerolink-management MCP 用 get_conversation_context 核实当前身份和 sourceTaskId，再按需用 list_projects、list_project_sessions、search_sessions 或 search_session_history 查询。不要根据目录名或相似标题猜 ID；目标仍有歧义时，只问一个必要问题。接续或新建时用 open_conversation 获取已确认的微信 projectId 和 threadId，保留已有会话的工作目录；新建独立会话用 list_workspace_choices 返回的目录凭据。需要改变后续消息去向时才用 request_project_switch，pending 时只说明已安排，等待原轮次结束。
+2. 上下文核实与会话查找。需要核实外部背景或定位目标时，通过 zerolink-management MCP 用 get_conversation_context 核实当前身份和 sourceTaskId，再按需用 list_projects、list_project_sessions、search_sessions 或 search_session_history 查询。不要根据目录名或相似标题猜 ID；get_conversation_context 的 workspace 仅是当前会话执行目录，projectWorkspace=mismatch 时不能将它称为项目目录。需要执行项目工作时核实项目 roots，在正确根目录新建项目会话并转交请求，保留旧会话历史；目标仍有歧义时，只问一个必要问题。接续或新建时用 open_conversation 获取已确认的微信 projectId 和 threadId，保留已有会话的工作目录；新建独立会话用 list_workspace_choices 返回的目录凭据。需要改变后续消息去向时才用 request_project_switch，pending 时只说明已安排，等待原轮次结束。
 
 3. 执行请求转交。当前会话执行时直接沿用上文。跨会话执行前，核对本轮原文、可读取的引用和材料能否让目标独立完成任务。依据完整就直接转交。若执行依赖当前会话中已定的方案，用 agreedPlan 随本轮原文和材料转交，写清目标、已定选择、改动位置（如已核实）和验收条件。用户无需引用或重发方案。缺失的重要事实先核实；必要材料不在本轮且目标无法访问时，只索取缺少的材料。调用时传入 sourceTaskId 和已确认的目标 ID。同一原请求只交接一次；queued 仅表示已入队，源会话随即结束本轮。alreadyRouted=true 表示已到达目标会话，直接处理，不再次分流。
 

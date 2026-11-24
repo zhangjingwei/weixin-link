@@ -3,6 +3,7 @@ import {taskDisplayTitle} from '../../domain/tasks/task-label.mjs'
 import {managementWrite} from './management-writes.mjs'
 import {taskId} from '../../domain/messages/message-identity.mjs'
 import {projectDispatchKey,validateProjectTask} from '../tasks/project-dispatch.mjs'
+import {workspaceInProject} from '../conversations/workspace.mjs'
 
 export function submitProjectTask(context,owner,caller,args,options={}){return managementWrite(context,owner,caller,'submit_project_task',args,op=>enqueueProjectTask(context,owner,caller,args,op,options))}
 
@@ -31,6 +32,13 @@ async function enqueueProjectTask(context,owner,caller,args,op,{allowCurrent=fal
  if(typeof context.enqueueTask!=='function'||!context.manager.submissions)throw Error('MANAGEMENT_TASK_QUEUE_UNAVAILABLE')
  const target=context.target(owner,args.projectId),session=context.manager.sessions.get(caller)
  if(target.key===caller&&!allowCurrent)throw Error('MANAGEMENT_ALREADY_IN_PROJECT')
+ const saved=context.manager.state.users[target.key]
+ if(saved?.nativeProjectId){
+  const api=context.conversations.backendPort?.nativeProjects
+  if(!api?.read)throw Error('MANAGEMENT_NATIVE_PROJECTS_UNAVAILABLE')
+  const project=await context.conversations.withBackend(owner,rpc=>api.read(rpc,saved.nativeProjectId))
+  if(!await workspaceInProject(context.manager.workspaceFor(target.key),project))throw Error('MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
+ }
  const dispatch=session?.taskId?context.manager.submissions.get(session.taskId)?.input?.projectDispatch:null
  if(!allowCurrent&&dispatch&&!dispatch.entryOrigin)throw Error('MANAGEMENT_NESTED_DISPATCH_DENIED')
  if(context.manager.submissions.pending().filter(job=>job.owner===target.key&&job.state==='pending').length>=5)throw Error('MANAGEMENT_PROJECT_QUEUE_FULL')

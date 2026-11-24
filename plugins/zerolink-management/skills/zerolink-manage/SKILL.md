@@ -18,7 +18,7 @@ description: 用户通过微信列出或切换 ZeroLink 项目、派发或停止
 
 ## 由模型组织会话
 
-用户直接提出目标时，由执行模型结合语义和 MCP 查询决定继续当前会话、接续另一会话或新建，不按关键词强行分流。`get_conversation_context` 返回当前身份、sourceTaskId 和 alreadyRouted；已分流任务直接处理。需要目标上下文时查询项目、会话和必要历史；不为查询新建或切换。
+用户直接提出目标时，由执行模型结合语义和 MCP 查询决定继续当前会话、接续另一会话或新建，不按关键词强行分流。`get_conversation_context` 返回当前身份、sourceTaskId、alreadyRouted 和项目目录匹配状态；projectWorkspace=mismatch 表示当前会话目录不属于关联项目，不能把通用 agent-workspace 当作该项目开发目录。已分流任务直接处理。需要目标上下文时查询项目、会话和必要历史；不为查询新建或切换。
 
 `open_conversation` 可接续项目内或独立会话；不传 threadId 则新建，独立会话须用 `list_workspace_choices` 的目录凭据。确认目标后，用 `route_conversation_request(projectId,threadId,sourceTaskId,requestId)` 原样交接本轮请求、引用和当前附件；若依赖已讨论的方案，用可选参数 agreedPlan 附上已定内容。同一请求只交接一次。queued 后结束源轮次，不重复执行；如需后续消息跟随，再申请切换，pending 仍需等待。
 

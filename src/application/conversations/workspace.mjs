@@ -1,5 +1,19 @@
 import {realpath,stat,readdir} from 'node:fs/promises'
-import {isAbsolute,join,basename} from 'node:path'
+import {isAbsolute,join,basename,relative,sep} from 'node:path'
+
+export async function workspaceInProject(workspace,project){
+ if(typeof workspace!=='string'||!isAbsolute(workspace)||!Array.isArray(project?.roots)||!project.roots.length)return false
+ let actual
+ try{actual=await realpath(workspace)}catch{return false}
+ for(const root of project.roots){
+  if(typeof root!=='string'||!isAbsolute(root))continue
+  let canonical
+  try{canonical=await realpath(root)}catch{continue}
+  const path=relative(canonical,actual)
+  if(!path||path!=='..'&&!path.startsWith('..'+sep)&&!isAbsolute(path))return true
+ }
+ return false
+}
 
 export async function projectFolderChoices(context,key){
  const root=await realpath(workspaceText(context,key))

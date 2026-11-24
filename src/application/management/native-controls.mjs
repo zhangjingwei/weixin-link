@@ -1,5 +1,6 @@
 import {managementWrite} from './management-writes.mjs'
 import {verifyChoice} from './project-management.mjs'
+import {workspaceInProject} from '../conversations/workspace.mjs'
 
 const operations={
  get_thread_goal:'thread/goal/get',request_goal_update:'thread/goal/set',request_goal_clear:'thread/goal/clear',
@@ -23,7 +24,14 @@ export async function nativeControl(context,owner,caller,name,args){
  if(name==='request_goal_update'||name==='request_goal_clear')params.origin='user'
  if(text!==undefined)params.input=[{type:'text',text}]
  const run=async()=>{
-  if(name==='request_project_import')params.roots=[{path:await verifyChoice(context,owner,workspaceToken)}]
+  if(name==='request_project_import'){
+   const root=await verifyChoice(context,owner,workspaceToken)
+   params.roots=[{path:root}]
+   for(const id of params.threads??[]){
+    const thread=await context.conversations.withBackend(owner,rpc=>context.conversations.backendPort.readConversation(rpc,id))
+    if(thread?.id!==id||!await workspaceInProject(thread.cwd,{roots:[root]}))throw Error('MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
+   }
+  }
   if(name==='request_queue_add')params.clientUserMessageId=requestId
   if(name==='request_project_import')params.idempotencyKey=requestId
   if(name==='request_thread_revert'&&[...context.manager.sessions.values()].some(s=>s.threadId===threadId&&(s.busy||s.finishing)))throw Error('MANAGEMENT_THREAD_BUSY')

@@ -1,12 +1,22 @@
 import {managementWrite} from './management-writes.mjs'
 import {conversationRepository} from '../../infrastructure/agents/conversation-repository.mjs'
 import {hasAttachments,currentMaterials} from '../../domain/messages/material-association.mjs'
+import {workspaceInProject} from '../conversations/workspace.mjs'
 
-export function conversationContext(context,owner,caller){
+export async function conversationContext(context,owner,caller){
  const entry=context.conversations.entry(caller),saved=context.manager.state.users[caller]??{},session=context.manager.sessions.get(caller)
  const job=session?.taskId&&context.manager.submissions?.get(session.taskId)
  const dispatch=job?.input?.projectDispatch
- return {projectId:entry.id,threadId:saved.threadId??null,nativeProjectId:saved.nativeProjectId??null,name:entry.name,workspace:context.manager.workspaceFor(caller),sourceTaskId:job?.id??null,alreadyRouted:!!dispatch&&!dispatch.entryOrigin,materials:job?currentMaterials(job.input,job.id):[],hasAttachments:hasAttachments(job?.input),scope:'当前执行会话和本轮持久任务，不代表微信导航选择'}
+ const workspace=context.manager.workspaceFor(caller)
+ let projectWorkspace='unverified'
+ if(saved.nativeProjectId){
+  const api=context.conversations.backendPort?.nativeProjects
+  if(api?.read){
+   try{const project=await context.conversations.withBackend(owner,rpc=>api.read(rpc,saved.nativeProjectId));projectWorkspace=await workspaceInProject(workspace,project)?'matches':'mismatch'}
+   catch{projectWorkspace='unverified'}
+  }
+ }
+ return {projectId:entry.id,threadId:saved.threadId??null,nativeProjectId:saved.nativeProjectId??null,name:entry.name,workspace,projectWorkspace,sourceTaskId:job?.id??null,alreadyRouted:!!dispatch&&!dispatch.entryOrigin,materials:job?currentMaterials(job.input,job.id):[],hasAttachments:hasAttachments(job?.input),scope:'当前执行会话和本轮持久任务，不代表微信导航选择或项目根目录'}
 }
 
 export async function repositoryContext(context,owner,args){
