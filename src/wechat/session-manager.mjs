@@ -1,6 +1,5 @@
 import {SessionManager} from '../application/conversations/session-manager.mjs'
 import {createSessionProtocol} from '../infrastructure/agents/session-protocol.mjs'
-import {recoveryText} from '../application/tasks/recovery-state.mjs'
 import {integrationGuidance} from '../integrations/runtime.mjs'
 import {materialInput} from '../infrastructure/agents/material-context.mjs'
 import {flowInput, stripTaskFlow} from '../infrastructure/agents/task-flow.mjs'
@@ -18,7 +17,7 @@ import {recentCommits} from '../infrastructure/agents/recent-commits.mjs'
 // use-case formatting and external adapters. The engine imports none of them.
 export const sessionPorts = Object.freeze({
   assistantInstructions: ASSISTANT_INSTRUCTIONS,
-  integrationGuidance, materialInput, flowInput, stripTaskFlow, recoveryText,
+  integrationGuidance, materialInput, flowInput, stripTaskFlow,
   outputStore: options => new OutputStore(options), outputLinks,
   cancellationScopes: () => new CancellationScopes(),
   codexBinary: () => installConfig().codexBinary,

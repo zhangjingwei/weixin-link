@@ -22,16 +22,16 @@ export class CodexProtocolClient {
    const request=this.pending.get(message.id)
    if(!request){this.log('rpc.unmatched_response',{rpc_id:message.id});return}
    this.pending.delete(message.id);clearTimeout(request.timer)
-   this.log('rpc.response',{rpc_id:message.id,method:request.method,status:message.error?'error':'ok',code:message.error?.code,duration_ms:Date.now()-request.started})
+   this.log('rpc.response',{rpc_id:message.id,method:request.method,status:message.error?'error':'ok',...(request.continuationPage?{continuation_page:true}:{}),...(request.method==='thread/list'&&message.result?.nextCursor?{more_pages:true}:{}),code:message.error?.code,duration_ms:Date.now()-request.started})
    message.error?request.reject(this.errors.response(message.error,request.method)):request.resolve(message.result)
   }else{try{Promise.resolve(this.onEvent(message)).catch(error=>this.log('rpc.event_failed',this.errorFields(error)))}catch(error){this.log('rpc.event_failed',this.errorFields(error))}}
  }
  write(message){if(this.closed)throw this.errors.disconnected();this.transport.send(message)}
  request(method,params={},timeout=this.timeout){
   return new Promise((resolve,reject)=>{
-   const id=++this.nextId,started=Date.now();this.log('rpc.request',{rpc_id:id,method})
+   const id=++this.nextId,started=Date.now();this.log('rpc.request',{rpc_id:id,method,...(method==='thread/list'&&params?.cursor?{continuation_page:true}:{})})
    const timer=setTimeout(()=>{this.pending.delete(id);this.log('rpc.timeout',{rpc_id:id,method,duration_ms:Date.now()-started});reject(this.errors.timeout(method))},timeout)
-   this.pending.set(id,{resolve,reject,timer,method,started})
+   this.pending.set(id,{resolve,reject,timer,method,started,continuationPage:method==='thread/list'&&!!params?.cursor})
    try{this.write({id,method,params})}catch(error){clearTimeout(timer);this.pending.delete(id);reject(error instanceof Error?error:this.errors.disconnected(method))}
   })
  }

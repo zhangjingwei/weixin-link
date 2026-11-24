@@ -39,15 +39,13 @@ test('service stop waits for both launch state and the old process to exit',asyn
  const unconfirmed=await confirmServiceStopped(async()=>({active:false}),42,{attempts:2,wait:async()=>{},probe:()=>{}})
  assert.equal(unconfirmed,false)
 })
-test('Linux installation reports an unmanaged unit without changing either service',async t=>{
+test('Linux personal installation leaves an unrelated named-service template alone',async t=>{
  const home=await fixture(t),dir=join(home,'.config/systemd/user')
  await mkdir(dir,{recursive:true})
  const regular=join(dir,'wechat-ping-bot.service'),template=join(dir,'wechat-ping-bot@.service')
  const original='# Managed by wechat-assistant setup v1\nexisting config\n'
  await writeFile(regular,original);await writeFile(template,'[Service]\nExecStart=/legacy/bot\n')
- await assert.rejects(installServices({home,root:'/new/source',platform:'linux',run:async()=>assert.fail('must not reload on conflict')}),error=>{
-  assert.equal(error.message,'EXISTING_SERVICE_REQUIRES_REVIEW');assert.equal(error.servicePath,template);return true
- })
- assert.equal(await readFile(regular,'utf8'),original)
+ await installServices({home,root:'/new/source',platform:'linux',run:async()=>{}})
+ assert.match(await readFile(regular,'utf8'),/new\/source/)
  assert.equal(await readFile(template,'utf8'),'[Service]\nExecStart=/legacy/bot\n')
 })

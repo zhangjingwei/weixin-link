@@ -7,7 +7,7 @@ export async function entryAction(context,message,record,step,index){
  if(step.action==='clarify')return step.question||'这条请求要交给哪个项目？'
  if(step.action==='desktop_status'){
   const state=await service.call(caller,'get_desktop_status',{})
-  if(state.handoff)return '桌面接续状态：'+({waiting:'等待当前工作结束；微信新任务已暂停',launching:'正在请求打开，尚未确认桌面显示',desktop:'已请求在桌面打开；微信新任务已暂停，桌面显示仍需你确认',launch_unknown:'打开结果未确认；微信执行仍暂停'}[state.handoff.phase]??'需要核对')+'。关闭桌面后可说“回到微信继续”。'
+  if(state.handoff)return '桌面接续状态：'+({waiting:'等待当前工作结束；微信新任务已暂停',launching:'正在请求打开，尚未确认桌面显示',desktop:'已请求在桌面打开；微信新任务已暂停，桌面显示仍需你确认',launch_unknown:'打开结果未确认；微信执行仍暂停'}[state.handoff.phase]??'需要核对')+'。在桌面释放这条会话后可说“回到微信继续”。'
   return state.enabled?'桌面接续已启用，目前仍由微信处理任务。':state.supported?'桌面接续尚未就绪，请在安装电脑检查是否启用并已安装支持的客户端。':'当前系统暂不支持桌面接续。'
  }
  const target=service.target(owner,step.projectId)
@@ -15,7 +15,7 @@ export async function entryAction(context,message,record,step,index){
  if(step.action==='desktop_open'||step.action==='desktop_return'){
   const result=await service.call(caller,step.action==='desktop_open'?'request_desktop_handoff':'request_desktop_return',{...args,requestId})
   if(result.status==='pending'){record.activations??=[];if(!record.activations.includes(result.operationId))record.activations.push(result.operationId)}
-  return result.status==='pending'?'已安排桌面接续，等待当前工作结束。':result.status==='confirmed'?'已回到微信，可以继续处理任务。':'接续尚未完成，请先关闭桌面客户端，再核对接续状态。'
+  return result.status==='pending'?'已安排桌面接续，等待当前工作结束。':result.status==='confirmed'?'已回到微信，可以继续处理任务。':'接续尚未完成，请先在桌面关闭这条会话，再核对接续状态。'
  }
  if(step.action==='task'){
   if(manager.state.desktopHandoff)throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')

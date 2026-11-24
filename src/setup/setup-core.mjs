@@ -19,9 +19,9 @@ export const CODEX_VERSION='0.163.0'
 const exec=promisify(execFile)
 const exists=async p=>{try{await access(p);return true}catch{return false}}
 export function setupPaths({home=(process.env.HOME||platformHome()),root=projectRoot}={}){return {home,root,state:join(home,'.local/share/wechat-ping-bot'),units:join(home,'.config/systemd/user'),...installConfig(home,{root})}}
-export function unitText({root,node=process.execPath,template=false,home=(process.env.HOME||platformHome())}){
+export function unitText({root,node=process.execPath,home=(process.env.HOME||platformHome())}){
  const quote=s=>{if(/[\n\r\0]/.test(s))throw Error('INVALID_SERVICE_PATH');return '"'+s.replaceAll('\\','\\\\').replaceAll('"','\\"').replaceAll('%','%%')+'"'}
- return `# Managed by wechat-assistant setup v1\n[Unit]\nDescription=WeChat assistant${template?' account %i':''}\nAfter=network-online.target\n[Service]\nType=simple\nWorkingDirectory=${quote(resolve(root))}\nExecStart=${quote(node)} ${quote(join(resolve(root),'src/wechat/bot.mjs'))}\nEnvironment=${quote('PATH='+[dirname(node),join(home,'.local/bin'),'/usr/local/bin','/usr/bin','/bin'].join(':'))}\n${template?'Environment=WECHAT_ACCOUNT=%i\n':'Environment=WECHAT_ACCOUNT=default\n'}UMask=0077\nRestart=on-failure\nRestartSec=5\nTimeoutStopSec=30\n[Install]\nWantedBy=default.target\n`
+ return `# Managed by wechat-assistant setup v1\n[Unit]\nDescription=WeChat assistant\nAfter=network-online.target\n[Service]\nType=simple\nWorkingDirectory=${quote(resolve(root))}\nExecStart=${quote(node)} ${quote(join(resolve(root),'src/wechat/bot.mjs'))}\nEnvironment=${quote('PATH='+[dirname(node),join(home,'.local/bin'),'/usr/local/bin','/usr/bin','/bin'].join(':'))}\nEnvironment=WECHAT_ACCOUNT=default\nUMask=0077\nRestart=on-failure\nRestartSec=5\nTimeoutStopSec=30\n[Install]\nWantedBy=default.target\n`
 }
 export async function initInstallation({home=(process.env.HOME||platformHome()),root=projectRoot,workspace=join(home,'work/wechat-assistant')}={}){
  if(!isAbsolute(workspace)||/[\r\n\0]/.test(workspace))throw Error('INVALID_WORKSPACE')
@@ -33,9 +33,10 @@ export async function initInstallation({home=(process.env.HOME||platformHome()),
 }
 export async function installServices({home=(process.env.HOME||platformHome()),root=projectRoot,reload=true,run=exec,platform=process.platform}={}){
  const manager=new ServiceManager({platform,home,root,run});if(platform!=='linux'){await manager.prepare('wechat-ping-bot.service');return {servicesPrepared:true,started:false}}
- const paths=setupPaths({home,root});await mkdir(paths.units,{recursive:true,mode:0o700});const prepared=[]
- for(const template of [false,true]){const name=template?'wechat-ping-bot@.service':'wechat-ping-bot.service',path=join(paths.units,name),text=unitText({root,template,home});if(await exists(path)){const old=await readFile(path,'utf8');if(old!==text&&!old.startsWith('# Managed by wechat-assistant setup v1\n'))throw Object.assign(Error('EXISTING_SERVICE_REQUIRES_REVIEW'),{servicePath:path});if(old===text)continue}prepared.push({path,text})}
- for(const {path,text}of prepared){await writeFile(path+'.tmp',text,{mode:0o600});await rename(path+'.tmp',path)}
+ const paths=setupPaths({home,root});await mkdir(paths.units,{recursive:true,mode:0o700});const path=join(paths.units,'wechat-ping-bot.service'),text=unitText({root,home})
+ const old=await readFile(path,'utf8').catch(error=>{if(error.code!=='ENOENT')throw error})
+ if(old!==undefined&&!old.startsWith('# Managed by wechat-assistant setup v1\n'))throw Object.assign(Error('EXISTING_SERVICE_REQUIRES_REVIEW'),{servicePath:path})
+ if(old!==text){await writeFile(path+'.tmp',text,{mode:0o600});await rename(path+'.tmp',path)}
  if(reload)await run('systemctl',['--user','daemon-reload'],{timeout:15000})
  return {servicesPrepared:true,started:false}
 }

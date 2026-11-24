@@ -69,7 +69,8 @@ test('Codex goal, fork, plan, review, and fast mode call native RPCs',async()=>{
     await f.manager.handle('owner','开启快速模式',f.reply)
     await sendPrompt(f,'owner','plan','修复测试')
     const turn=f.calls.find(c=>c.method==='turn/start')
-    assert.equal(turn.params.collaborationMode.mode,'plan')
+    assert.equal(turn.params.collaborationMode.mode,'default')
+    assert(turn.params.input.some(item=>item.text?.includes('本轮仅调研和制定方案')))
     assert.equal(turn.params.serviceTier,'fast')
     f.manager.sessions.get('owner').busy=false;f.manager.sessions.get('owner').state='idle'
     await f.manager.handle('owner','按这个方案实施',f.reply)
@@ -134,10 +135,10 @@ test('plan and review ingress are captured before dispatch and retain their ingr
   const receiver=createReceiveMessage({manager:{save:async()=>{},lifecycle:{capture:()=>({current:()=>true})}},jobs,view:{},dispatch:message=>dispatched.push(message),hasMedia:()=>false,conversations:{bind:message=>message,realOwners:new Set(['owner'])},runtime:{sealed:false},setupController:{command:()=>null},setupReceipts:{get:()=>null},normalizeVoice:message=>message,classifyMessage:message=>{const value=message._sessionCommand??controlCommand(message.text);return value?{kind:'session',value}:null}})
   const message={userId:'owner',text:'修复测试',_sessionCommand:{action:'plan',text:'修复测试'},raw:{message_id:'one'}}
   await receiver.captureBatch([message,{userId:'owner',text:'状态',raw:{message_id:'two'}}])
-  assert.deepEqual(captured,['修复测试'])
+  assert.deepEqual(captured,['修复测试','状态'])
   receiver.onMessage(message)
   await new Promise(resolve=>setTimeout(resolve,10))
-  assert.equal(dispatched[0]._ingressId,'ingress-2')
+  assert.equal(dispatched[0]._ingressId,'ingress-1')
 })
 
 test('state-changing native controls are captured before cursor checkpoint',async()=>{
@@ -242,4 +243,73 @@ test('replayed native mutation reports unknown outcome without sending the RPC a
   await handle({userId:'owner',text:'分叉会话',raw:{message_id:'44'},_ingressId:'ingress-44',_recovered:true})
   assert.match(notices[0],/未重复执行/)
   assert.deepEqual(acknowledged,['ingress-44'])
+})
+
+test('repeated web searches send one progress update before the final answer',async()=>{
+ const f=await fixture()
+ try{
+  await f.manager.handle('owner','查一下资料',f.reply)
+  const session=f.manager.sessions.get('owner')
+  const search=id=>f.manager.event(session,{method:'item/started',params:{threadId:session.threadId,turnId:session.turnId,item:{id,type:'webSearch'}}})
+  f.output.length=0
+  await search('first')
+  await search('first')
+  assert.deepEqual(f.output,[])
+  await search('second')
+  await search('third')
+  assert.equal(f.output.length,1)
+  assert.match(f.output[0],/查网页/)
+ }finally{await f.close()}
+})
+
+test('an idle WeChat writer releases the saved thread and close releases its next connection',async t=>{
+ const f=await fixture()
+ try{
+  t.mock.timers.enable({apis:['setTimeout','Date']})
+  const session=await f.manager.connect('owner',f.reply)
+  t.mock.timers.tick(599999)
+  f.manager.recordUserInput('owner')
+  t.mock.timers.tick(599999)
+  assert.equal(session.rpc.closed,false)
+  session.state='running'
+  t.mock.timers.tick(600000)
+  assert.equal(session.rpc.closed,false)
+  session.state='idle'
+  session.nativeStatus='active'
+  t.mock.timers.tick(1000)
+  assert.equal(session.rpc.closed,false)
+  session.nativeStatus='idle'
+  f.manager.submissions={hasPendingInput:()=>true}
+  t.mock.timers.tick(1000)
+  assert.equal(session.rpc.closed,false)
+  f.manager.submissions=null
+  t.mock.timers.tick(1000)
+  await new Promise(resolve=>setImmediate(resolve))
+  assert.equal(session.rpc.closed,true)
+  assert.equal(f.manager.sessions.has('owner'),false)
+  const next=await f.manager.connect('owner',f.reply)
+  assert.equal(next.threadId,session.threadId)
+  await f.manager.handle('owner','关闭',f.reply)
+  assert.equal(next.rpc.closed,true)
+  assert.equal(f.manager.state.users.owner.threadId,session.threadId)
+ }finally{t.mock.timers.reset();await f.close()}
+})
+
+test('native progress, token usage and reroutes are bound to the active turn',async()=>{
+ const f=await fixture()
+ try{
+  await f.manager.handle('owner','查进展',f.reply)
+  const s=f.manager.sessions.get('owner'),event=(method,params)=>f.manager.event(s,{method,params:{threadId:s.threadId,turnId:s.turnId,...params}})
+  await event('model/rerouted',{toModel:'actual-model'})
+  await event('model/rerouted',{turnId:'old',toModel:'old-model'})
+  assert.equal(s.executionModel,'actual-model')
+  await event('thread/tokenUsage/updated',{tokenUsage:{last:{totalTokens:42}}})
+  assert.equal(s.tokenUsage.totalTokens,42)
+  await event('turn/plan/updated',{plan:[{step:'检查',status:'completed'},{step:'运行测试',status:'inProgress'}]})
+  assert.match(s.lastProgress.text,/1\/2.*运行测试/)
+  await event('turn/diff/updated',{diff:'diff --git a/a b/a\n+private content'})
+  assert.match(s.lastProgress.text,/1 个文件/);assert(!s.lastProgress.text.includes('private'))
+  await event('item/mcpToolCall/progress',{message:'private value'})
+  assert(!s.lastProgress.text.includes('private'))
+ }finally{await f.close()}
 })

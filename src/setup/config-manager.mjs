@@ -59,11 +59,9 @@ async function probeConfiguration(kind,config,{home=currentHome(),env=process.en
  }catch(error){if(error instanceof ConfigError)throw error;throw new ConfigError('CONFIG_CONNECTION_CHECK_FAILED',kind)}
 }
 export async function runtimeEndpoints(home=currentHome()){
- const {listAccounts}=await import('../infrastructure/accounts/account-store.mjs'),endpoints=[]
- for(const account of await listAccounts(home)){
-  try{await access(process.platform==='win32'?join(account.stateDir,'control-token'):account.socket);endpoints.push(account.socket)}catch(error){if(error.code!=='ENOENT')throw new ConfigError('CONFIG_RUNTIME_UNAVAILABLE')}
- }
- return endpoints
+ const {accountPaths}=await import('../infrastructure/accounts/account-store.mjs')
+ const account=accountPaths('default',home)
+ try{await access(process.platform==='win32'?join(account.stateDir,'control-token'):account.socket);return [account.socket]}catch(error){if(error.code==='ENOENT')return [];throw new ConfigError('CONFIG_RUNTIME_UNAVAILABLE')}
 }
 export async function configure(kind,input,{home=currentHome(),workspace,env=process.env,verify=probeConfiguration,restoring=false}={}){
  const config=validateConfig(kind,input),options={home,workspace,env},path=configPath(kind,options),previous=await readPrivateFile(path),expected=digest(previous)

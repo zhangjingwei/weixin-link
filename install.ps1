@@ -22,7 +22,7 @@ function Select-BootstrapOption([string]$Title,[string[]]$Options,[int]$Default=
             default {
                 $number=0
                 if([int]::TryParse([string]$key.KeyChar,[ref]$number)){
-                    if($number -eq 0 -and $Options.Count -eq 6){$selected=6}
+                    if($number -eq 0 -and $Options.Count -eq 5){$selected=5}
                     elseif($number -ge 1 -and $number -le $Options.Count){$selected=$number}
                 }
             }
@@ -58,12 +58,12 @@ if ($bootstrapExisting) {
     if($bootstrapEnglish){throw 'A background service exists but the selected source directory is missing. Set WEIXIN_LINK_DIR to the original source; no new installation was created.'}else{throw '检测到已有后台服务，但所选源码目录不存在。请用 WEIXIN_LINK_DIR 指定原目录；未创建新安装。'}
 }
 if ($bootstrapExisting -and -not [Console]::IsInputRedirected) {
-    if($bootstrapEnglish){$choice=Select-BootstrapOption 'Use ↑/↓ to choose, then press Enter:' @('Upgrade','Configure model','Log in to WeChat again','Add WeChat account','Uninstall','Exit')}
-    else{$choice=Select-BootstrapOption '用 ↑/↓ 选择，回车确认：' @('升级','配置模型','重新登录微信','添加微信账号','卸载','退出')}
-    if($choice -eq 6){return}
+    if($bootstrapEnglish){$choice=Select-BootstrapOption 'Use ↑/↓ to choose, then press Enter:' @('Upgrade','Configure model','Log in to WeChat again','Uninstall','Exit')}
+    else{$choice=Select-BootstrapOption '用 ↑/↓ 选择，回车确认：' @('升级','配置模型','重新登录微信','卸载','退出')}
+    if($choice -eq 5){return}
     if($choice -ne '1'){
         if(!(Test-Path -LiteralPath (Join-Path $bootstrapDest 'src\setup\account-manager.mjs') -PathType Leaf)){throw 'UPGRADE_REQUIRED_FOR_MENU'}
-        if($choice -eq '5'){
+        if($choice -eq '4'){
             if($bootstrapDest -eq [IO.Path]::GetPathRoot($bootstrapDest) -or $bootstrapDest -eq $bootstrapHome){throw 'INVALID_INSTALLATION_DIR'}
             if(Test-Path -LiteralPath (Join-Path $bootstrapDest '.git')){throw 'UNINSTALL_SOURCE_REQUIRES_REVIEW'}
             if(!(Test-Path -LiteralPath (Join-Path $bootstrapDest 'src\setup\uninstall.mjs') -PathType Leaf)){throw 'UPGRADE_REQUIRED_FOR_UNINSTALL'}
@@ -80,23 +80,12 @@ if ($bootstrapExisting -and -not [Console]::IsInputRedirected) {
             return
         }
         $account = 'default'
-        if($choice -eq '4'){
-            $account = Read-Host $(if($bootstrapEnglish){'New account name (lowercase letters, digits, hyphens)'}else{'新账号名称（小写字母、数字、连字符）'})
-            if($account -cnotmatch '^[a-z][a-z0-9-]{0,31}$' -or $account -eq 'default'){throw 'INVALID_ACCOUNT_ID'}
-        }
         $env:HOME = $bootstrapHome
         $env:PATH = (Split-Path -Parent $bootstrapNode) + ';' + $env:PATH
         Push-Location $bootstrapDest
         try{
             if($choice -eq '2'){& $bootstrapNode 'src/setup/setup.mjs' wizard $account --human}
             if($choice -eq '3'){& $bootstrapNode 'src/setup/setup.mjs' wechat-login --relogin $account --human}
-            if($choice -eq '4'){
-                & $bootstrapNode 'src/setup/account-manager.mjs' create $account --human
-                if($LASTEXITCODE -ne 0){throw 'ACCOUNT_CREATE_FAILED'}
-                & $bootstrapNode 'src/setup/setup.mjs' wizard $account --human
-                if($LASTEXITCODE -ne 0){throw 'SETUP_FAILED_wizard'}
-                & $bootstrapNode 'src/setup/setup.mjs' wechat-login $account --human
-            }
             if($LASTEXITCODE -ne 0){throw 'SETUP_FAILED'}
         }finally{Pop-Location}
         return

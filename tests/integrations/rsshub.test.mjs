@@ -50,7 +50,7 @@ test('RSSHub is denied until enabled per account and rechecked after disable', a
   await assert.rejects(invokeIntegration('rsshub', {operation: 'latest', source: 'tech'}, options), /INTEGRATION_DISABLED/)
   await setIntegrationEnabled('rsshub', true, options)
   assert.equal((await integrationStatus(options)).find(item => item.id === 'rsshub').valid, true)
-  await assert.rejects(invokeIntegration('rsshub', {operation: 'latest', source: 'tech'}, {...options, account: 'second'}), /INTEGRATION_DISABLED/)
+  await assert.rejects(invokeIntegration('rsshub', {operation: 'latest', source: 'tech'}, {...options, account: 'second'}), /SINGLE_USER_INSTALLATION/)
   await assert.rejects(invokeIntegration('rsshub', {operation: 'latest', source: 'unknown'}, options), /INTEGRATION_ARGUMENTS_INVALID/)
   assert.equal((await invokeIntegration('rsshub', {operation: 'latest', source: 'tech'}, options)).items.length, 0)
   await setIntegrationEnabled('rsshub', false, options)

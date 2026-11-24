@@ -16,7 +16,7 @@ export class SetupController{
  command(text){return setupCommand(text)}
  async status({includeActions=false}={}){
   const r=await this.runDoctor({home:this.home,accountId:this.accountId}),profile=await readProviderProfile(this.stateDir),verified=await readTerminalSetupStatus(this.stateDir)
-  const inferenceVerified=verified?.provider===(profile?.kind??'subscription')&&verified.fingerprint===terminalSetupFingerprint(profile)
+  const inferenceVerified=verified?.verified===true&&verified.provider===(profile?.kind??'subscription')&&verified.fingerprint===terminalSetupFingerprint(profile)
   return {checks:r.checks.map(c=>({name:c.name,ok:!!c.ok,...includeActions?{action:c.action}:{}})),ready:!!r.ready,inferenceVerified:!!inferenceVerified}
  }
  async handle(command,reply,{signal,scope=this.accountId??'owner',executionKey}={}){
@@ -30,7 +30,7 @@ export class SetupController{
   }
   if(command==='updates'){await reply(this.checkUpdates?await this.checkUpdates(english?'en':'zh'):english?'Update checking is unavailable in this installation. No upgrade was scheduled.':'当前安装未接入版本检查，未安排升级。');return}
   if(command==='manual'){await reply(english?USER_GUIDE_EN:USER_GUIDE);return}
-  if(command==='wizardInfo'){await reply(english?'Run '+setupAtHome+' on your computer and choose 2 (Configure model). Then choose subscription sign-in, DeepSeek, Qwen, or Kimi and complete a model test. Enter API keys only in your terminal.':'首次模型配置请在安装电脑运行 '+setupAtHome+'，并在菜单中选择 2。终端会引导选择订阅登录、DeepSeek、Qwen 或 Kimi，并完成模型测试。请勿把 API Key 发到微信。');return}
+  if(command==='wizardInfo'){await reply(english?'Run '+setupAtHome+' on your computer and choose 2 (Configure model). Then choose subscription sign-in, DeepSeek, Qwen, or Kimi and check the Codex connection. Enter API keys only in your terminal.':'首次模型配置请在安装电脑运行 '+setupAtHome+'，并在菜单中选择 2。终端会引导选择订阅登录、DeepSeek、Qwen 或 Kimi，并检查 Codex 连接。请勿把 API Key 发到微信。');return}
   if(command==='help'){await reply(english?'Complete model setup on your computer: '+setupAtHome+'.\nsetup-status: check this account and its model access\ninstall-agent: check the bundled Codex CLI\nlogin-agent: see subscription sign-in instructions\ncheck-agent: test the Codex protocol and model\nEnter third-party API keys only in your local terminal.':'安装配置在电脑终端完成，运行以下命令后选择 2：'+setupAtHome+'。\n安装状态（setup-status）：查看当前账号环境与模型接入状态\n安装智能体（install-agent）：检查项目自带的 Codex CLI\n登录智能体（login-agent）：查看订阅登录方法\n验收智能体（check-agent）：检查 Codex 协议并发起一次模型测试\n第三方模型密钥只在本机终端输入。');return}
   if(this.busy){await reply(english?'An installation check is already running. Please wait.':'当前安装检查正在执行，请等待完成。');return}
   this.busy=true

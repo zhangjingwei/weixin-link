@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import {deliveryError} from '../wechat/delivery-error.mjs'
 const identifiers = new Set(['trace_id','poll_id','thread_id','turn_id','rpc_id','rpc_code','method','status','reason','kind','phase','code','signal','error_type','error_kind','error_code','api_reason','delivery_state','stage','provider','model','model_provider'])
 const numbers = new Set(['seq','source_ms','duration_ms','queue_depth','bytes','chars','parts','part','count','attempt','http_status','api_code','pid','exit_code','dropped'])
-const booleans = new Set(['final_attempt'])
+const booleans = new Set(['will_retry','waiting_approval','waiting_input','final_attempt','continuation_page','more_pages'])
 export function errorFields(error) {
   const names = new Set(['Error','TypeError','SyntaxError','RangeError','AbortError','TimeoutError','AggregateError','ApiError','AuthError','NoContextError','MediaError','TransportError','WeChatBotError'])
   const codes = new Set(['EPIPE','ECONNRESET','ECONNREFUSED','ETIMEDOUT','ENOENT','EACCES','ENOSPC','EIO','ABORT_ERR'])

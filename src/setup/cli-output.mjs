@@ -9,7 +9,7 @@ export function setupMessage(action, result = {}, language = setupLanguage()) {
    case 'pair':return result.status==='already_pairing'?'✓ WeChat pairing is already in progress…':'✓ WeChat pairing started…'
    case 'refresh-qr':return '✓ WeChat login address refreshed.'
    case 'create':return `✓ Account profile ${result.account} created.`
-   case 'verify-wait':return result.pin_submitted?'✓ PIN submitted; WeChat login completed.':'✓ WeChat login completed; no PIN was required.'
+   case 'verify-wait':return '✓ WeChat is connected. Open the chat and send your first question.'
    default:return JSON.stringify(result)
   }
  }
@@ -21,7 +21,7 @@ export function setupMessage(action, result = {}, language = setupLanguage()) {
    '✓ 登录已在进行，正在获取登录地址…' : '✓ 已发起微信登录，正在获取登录地址…'
   case 'refresh-qr': return '✓ 微信登录地址已刷新。'
   case 'create': return `✓ 已创建账号档案 ${result.account}。`
-  case 'verify-wait': return result.pin_submitted?'✓ PIN 已提交，微信登录完成。':'✓ 微信登录完成，无需输入 PIN。'
+  case 'verify-wait': return '✓ 微信已连接。打开微信，给助手发一条消息就可以开始了。'
   default: return JSON.stringify(result)
  }
 }
@@ -43,6 +43,7 @@ export function setupError(error,language=setupLanguage()) {
   QR_REFRESH_REQUIRED:'当前登录地址不可用，请重新运行 '+loginCommand+'。',
   LOGIN_URL_NOT_READY_RETRY:'登录地址尚未准备好，请稍后重试 '+loginCommand+'。',
   VERIFICATION_NOT_REQUESTED:'微信尚未要求输入 PIN，或本次登录已经结束。请在手机确认当前登录状态。',
+  SINGLE_USER_INSTALLATION:'这是单人安装，请直接配置或登录微信。',
   ACCOUNT_NOT_FOUND:'未找到该账号档案，请核对账号名。',
   LOGIN_URL_UNAVAILABLE:'未获取到可用的 HTTPS 登录地址，请重试或检查微信服务。',PIN_TERMINAL_REQUIRED:'微信要求输入 PIN，请在交互式终端重新运行 '+loginCommand+'。',
   VERIFICATION_WAIT_TIMEOUT:'等待微信登录超时，请重新获取登录地址。',

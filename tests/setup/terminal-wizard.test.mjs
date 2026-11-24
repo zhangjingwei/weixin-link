@@ -3,17 +3,19 @@ import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
-import {runTerminalWizard} from '../../src/setup/terminal-wizard.mjs'
+import {runTerminalWizard as runWizard} from '../../src/setup/terminal-wizard.mjs'
 import {probeTerminalModel,runModelProbeCommand,MODEL_PROBE_TIMEOUT_MS} from '../../src/setup/terminal-model-probe.mjs'
 import {readTerminalSetupStatus} from '../../src/setup/terminal-setup-status.mjs'
 import {saveProviderProfile,readProviderProfile} from '../../src/setup/provider-profile.mjs'
 import {accountPaths} from '../../src/infrastructure/accounts/account-store.mjs'
 
+const runTerminalWizard=options=>runWizard({selectModel:async()=> 'test-sol',...options})
+
 async function fixture(t){const home=await mkdtemp(join(tmpdir(),'terminal-wizard-')),stateDir=accountPaths('default',home).stateDir;await mkdir(stateDir,{recursive:true});t.after(()=>rm(home,{recursive:true,force:true}));return {home,stateDir}}
 
 test('terminal wizard configures a provider, checks Codex and records only verified inference',async t=>{
  const f=await fixture(t),calls=[],messages=[]
- const result=await runTerminalWizard({home:f.home,choose:async()=> '2',configure:async(kind,accountId,{home})=>{calls.push('configure');await saveProviderProfile({kind,accountId,home,apiKey:'sk-private-test-key'})},check:async()=>calls.push('check'),probe:async()=>{calls.push('probe');return {verified:true,provider:'deepseek',model:'deepseek-flash'}},applyService:async()=>{calls.push('apply');return false},write:text=>messages.push(text)})
+ const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=> '2',configure:async(kind,accountId,{home})=>{calls.push('configure');await saveProviderProfile({kind,accountId,home,apiKey:'sk-private-test-key'})},check:async()=>calls.push('check'),probe:async()=>{calls.push('probe');return {verified:true,provider:'deepseek',model:'deepseek-flash'}},applyService:async()=>{calls.push('apply');return false},write:text=>messages.push(text)})
  assert.equal(result.verified,true);assert.deepEqual(calls,['configure','check','probe','apply'])
  assert.equal((await readTerminalSetupStatus(f.stateDir)).provider,'deepseek')
  assert(!messages.join('\n').includes('sk-private-test-key'))
@@ -21,21 +23,21 @@ test('terminal wizard configures a provider, checks Codex and records only verif
 
 test('subscription remains selectable and clears a previous provider before testing',async t=>{
  const f=await fixture(t),calls=[];await saveProviderProfile({kind:'qwen',workspaceId:'workspace123',apiKey:'sk-private-test-key',home:f.home})
- await runTerminalWizard({home:f.home,choose:async()=> '1',login:async({send})=>{calls.push('login');await send('官方设备授权提示')},check:async()=>calls.push('check'),probe:async()=>{calls.push('probe');return {verified:true,provider:'subscription',model:null}},applyService:async()=>{calls.push('apply');return false},write:()=>{}})
+ await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=> '1',login:async({send})=>{calls.push('login');await send('官方设备授权提示')},check:async()=>calls.push('check'),probe:async()=>{calls.push('probe');return {verified:true,provider:'subscription',model:'test-sol'}},applyService:async()=>{calls.push('apply');return false},write:()=>{}})
  assert.deepEqual(calls,['login','check','probe','apply']);assert.equal(await readProviderProfile(f.stateDir),null)
  assert.equal((await readTerminalSetupStatus(f.stateDir)).provider,'subscription')
 })
 
 test('failed probe followed by deferral leaves no verified marker',async t=>{
  const f=await fixture(t),choices=['4','0'],messages=[]
- const result=await runTerminalWizard({home:f.home,choose:async()=>choices.shift(),configure:async()=>{},check:async()=>{},probe:async()=>{throw Error('raw upstream secret should not print')},write:text=>messages.push(text)})
+ const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=>choices.shift(),configure:async()=>{},check:async()=>{},probe:async()=>{throw Error('raw upstream secret should not print')},write:text=>messages.push(text)})
  assert.equal(result.verified,false);assert.equal(await readTerminalSetupStatus(f.stateDir),null)
  assert(!messages.join('\n').includes('raw upstream secret'))
 })
 
 test('English terminal wizard uses English prompts and keeps the same provider choices',async t=>{
  const f=await fixture(t),prompts=[],messages=[]
- await runTerminalWizard({home:f.home,language:'en',choose:async prompt=>{prompts.push(prompt);return '0'},write:text=>messages.push(text)})
+ await runTerminalWizard({verifyModel:true,home:f.home,language:'en',choose:async prompt=>{prompts.push(prompt);return '0'},write:text=>messages.push(text)})
  assert(prompts[0].includes('Subscription sign-in'))
  assert(prompts[0].includes('DeepSeek'))
  assert(prompts[0].includes('Qwen'))
@@ -43,13 +45,13 @@ test('English terminal wizard uses English prompts and keeps the same provider c
 })
 test('selected English language is saved for the first WeChat notice',async t=>{
  const f=await fixture(t)
- await runTerminalWizard({home:f.home,language:'en',choose:async()=> '1',login:async()=>{},check:async()=>{},probe:async()=>({verified:true,provider:'subscription',model:null}),applyService:async()=>false,write:()=>{}})
+ await runTerminalWizard({verifyModel:true,home:f.home,language:'en',choose:async()=> '1',login:async()=>{},check:async()=>{},probe:async()=>({verified:true,provider:'subscription',model:'test-sol'}),applyService:async()=>false,write:()=>{}})
  assert.equal((await readTerminalSetupStatus(f.stateDir)).language,'en')
 })
 
 test('service apply failure does not leave a verified marker',async t=>{
  const f=await fixture(t),choices=['2','0']
- const result=await runTerminalWizard({home:f.home,choose:async()=>choices.shift(),configure:async(kind,accountId,{home})=>saveProviderProfile({kind,accountId,home,apiKey:'sk-private-test-key'}),check:async()=>{},probe:async()=>({verified:true,provider:'deepseek',model:'deepseek-flash'}),applyService:async()=>{throw Error('MODEL_SERVICE_RESTART_NOT_SCHEDULED')},write:()=>{}})
+ const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=>choices.shift(),configure:async(kind,accountId,{home})=>saveProviderProfile({kind,accountId,home,apiKey:'sk-private-test-key'}),check:async()=>{},probe:async()=>({verified:true,provider:'deepseek',model:'deepseek-flash'}),applyService:async()=>{throw Error('MODEL_SERVICE_RESTART_NOT_SCHEDULED')},write:()=>{}})
  assert.equal(result.deferred,true)
  assert.equal(await readTerminalSetupStatus(f.stateDir),null)
 })
@@ -78,7 +80,7 @@ test('terminal probe reports a timed-out inference without marking setup verifie
   assert.equal(runOptions.timeout,MODEL_PROBE_TIMEOUT_MS)
   throw Object.assign(Error('private upstream details'),{killed:true,signal:'SIGTERM'})
  }})
- const result=await runTerminalWizard({home:f.home,choose:async()=>choices.shift(),login:async()=>{},check:async()=>{},probe,write:text=>messages.push(text)})
+ const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=>choices.shift(),login:async()=>{},check:async()=>{},probe,write:text=>messages.push(text)})
  assert.equal(result.deferred,true)
  assert.equal(await readTerminalSetupStatus(f.stateDir),null)
  assert(messages.some(message=>message.includes('MODEL_PROBE_TIMEOUT')&&message.includes('OpenAI')))
@@ -116,9 +118,9 @@ test('a non-timeout process failure cannot pass verification merely because a no
 
 test('retrying a timed-out subscription test preserves authorization and performs no second login',async t=>{
  const f=await fixture(t),choices=['1','1'],calls=[],messages=[];let probes=0
- const result=await runTerminalWizard({home:f.home,choose:async prompt=>{messages.push(prompt);return choices.shift()},login:async()=>calls.push('login'),check:async()=>calls.push('protocol'),probe:async()=>{
+ const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async prompt=>{messages.push(prompt);return choices.shift()},login:async()=>calls.push('login'),check:async()=>calls.push('protocol'),probe:async()=>{
   calls.push('probe');if(++probes===1){assert.equal(await readTerminalSetupStatus(f.stateDir),null);throw Error('MODEL_PROBE_TIMEOUT')}
-  return {verified:true,provider:'subscription',model:null}
+  return {verified:true,provider:'subscription',model:'test-sol'}
  },applyService:async()=>false,write:text=>messages.push(text)})
  assert.equal(result.verified,true);assert.deepEqual(calls,['login','protocol','probe','probe'])
  assert.equal((await readTerminalSetupStatus(f.stateDir)).verified,true)
@@ -128,7 +130,7 @@ test('retrying a timed-out subscription test preserves authorization and perform
 
 test('English timeout can be deferred without misreporting a login failure',async t=>{
  const f=await fixture(t),choices=['1','0'],messages=[]
- const result=await runTerminalWizard({home:f.home,language:'en',choose:async prompt=>{messages.push(prompt);return choices.shift()},login:async()=>{},check:async()=>{},probe:async()=>{throw Error('MODEL_PROBE_TIMEOUT')},write:text=>messages.push(text)})
+ const result=await runTerminalWizard({verifyModel:true,home:f.home,language:'en',choose:async prompt=>{messages.push(prompt);return choices.shift()},login:async()=>{},check:async()=>{},probe:async()=>{throw Error('MODEL_PROBE_TIMEOUT')},write:text=>messages.push(text)})
  assert.equal(result.deferred,true);assert.equal(await readTerminalSetupStatus(f.stateDir),null)
  assert(messages.some(text=>text.includes('does not establish an OpenAI subscription sign-in failure')))
  assert(messages.some(text=>text.includes('Retry only the model test')))
@@ -138,4 +140,44 @@ test('real subprocess can finish its answer before timing out during shutdown',a
  const f=await fixture(t)
  const result=await probeTerminalModel({home:f.home,timeoutMs:1000,execute:(_binary,args,options)=>runModelProbeCommand(process.execPath,['-e',"require('node:fs').writeFileSync(process.argv[1],process.argv[2]);setInterval(()=>{},1000)",args[args.indexOf('--output-last-message')+1],args.at(-1).split('：').at(-1)],options)})
  assert.equal(result.verified,true)
+})
+
+test('default installation applies configuration after protocol check without invoking inference',async t=>{
+ const f=await fixture(t),calls=[]
+ const result=await runTerminalWizard({home:f.home,language:'en',choose:async()=>'1',
+  login:async()=>{},check:async()=>calls.push('check'),probe:async()=>assert.fail('unexpected model request'),
+  applyService:async()=>calls.push('apply'),write:()=>{}})
+ assert.deepEqual(calls,['check','apply'])
+ assert.equal(result.verified,false)
+ const saved=await readTerminalSetupStatus(f.stateDir)
+ assert.equal(saved.protocolReady,true)
+ assert.equal(saved.verified,false)
+ assert.equal(saved.verifiedAt,undefined)
+ assert.equal(saved.language,'en')
+})
+
+test('working model selection is passed to inference and recorded in setup result',async t=>{
+ const f=await fixture(t),calls=[]
+ const result=await runWizard({home:f.home,verifyModel:true,choose:async()=>'1',login:async()=>calls.push('login'),check:async()=>calls.push('check'),
+  selectModel:async()=>{calls.push('select');return 'test-sol'},probe:async({model})=>{assert.equal(model,'test-sol');calls.push('probe');return {verified:true,provider:'subscription',model}},
+  applyService:async()=>false,write:()=>{}})
+ assert.equal(result.model,'test-sol');assert.deepEqual(calls,['login','check','select','probe'])
+ assert.equal((await readTerminalSetupStatus(f.stateDir)).model,'test-sol')
+})
+
+test('model-list retry retains login and deferral does not apply service or mark setup ready',async t=>{
+ const f=await fixture(t),calls=[],choices=['1','1','0'];let attempts=0
+ const result=await runWizard({home:f.home,choose:async()=>choices.shift(),login:async()=>calls.push('login'),check:async()=>calls.push('check'),
+  selectModel:async()=>{attempts++;throw Error('private upstream detail')},applyService:async()=>assert.fail('must not apply'),write:text=>assert(!text.includes('private upstream'))})
+ assert.equal(attempts,2);assert.equal(result.deferred,true);assert.deepEqual(calls,['login','check'])
+ assert.equal(await readTerminalSetupStatus(f.stateDir),null)
+})
+
+test('model probe uses the explicitly selected subscription model',async t=>{
+ const f=await fixture(t)
+ const result=await probeTerminalModel({home:f.home,model:'test-sol',execute:async(binary,args)=>{
+  assert.equal(args[args.indexOf('--model')+1],'test-sol')
+  await writeFile(args[args.indexOf('--output-last-message')+1],args.at(-1).split('：').at(-1))
+ }})
+ assert.equal(result.model,'test-sol')
 })

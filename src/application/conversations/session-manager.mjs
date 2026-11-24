@@ -1,5 +1,4 @@
 import {recordTaskResult,archiveTaskResult} from '../tasks/task-result.mjs'
-import {homedir as platformHome} from 'node:os'
 import {emptyContinuationNotice} from '../../domain/delivery/notification-policy.mjs'
 import {currentMaterials,hasAttachments} from '../../domain/messages/material-association.mjs'
 import {executionState} from '../../domain/tasks/execution-state.mjs'
@@ -9,12 +8,20 @@ import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 
-const goalStatusText=status=>({active:'已启用',paused:'已暂停',complete:'已完成'})[status]??'未知'
+const goalStatusText=status=>({active:'已启用',paused:'已暂停',blocked:'遇到阻碍',usageLimited:'已达到用量限制',budgetLimited:'已达到预算限制',complete:'已完成'})[status]??'未知'
+
+const streamKinds=new Map([
+  ['item/agentMessage/delta','reply'],
+  ['item/reasoning/summaryTextDelta','reasoningSummary'],
+  ['item/commandExecution/outputDelta','commandOutput'],
+])
+const waitingFlags=['waitingOnApproval','waitingOnUserInput']
+const SESSION_IDLE_MS=10*60_000
 
 export class SessionManager {
   constructor({ stateDir, cwd, owners, backend = null, codexHome, sessionProtocol, sessionPorts, completionMarkers = false, scheduleGuidance = '', log = () => {} }) {
     if (typeof sessionPorts?.assistantInstructions !== 'string' ||
-      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','recoveryText','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
+      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
     this.ports=sessionPorts
     this.log = log
     if(!sessionProtocol)throw Error('SESSION_PROTOCOL_REQUIRED')
@@ -34,6 +41,7 @@ export class SessionManager {
     this.scheduleGuidance = scheduleGuidance
     this.state = { version: 1, users: {} }
     this.sessions = new Map()
+    this.releasing = new Map()
     this.questions = new Map()
     this.saving = Promise.resolve()
     this.pendingSaves=0
@@ -60,6 +68,71 @@ export class SessionManager {
     return this.saving
   }
   diagnostic(session,event,fields={}) { this.log(event,{userId:session.userId,thread_id:session.threadId,turn_id:session.turnId,trace_id:session.traceId,...fields}) }
+  reportModelRecovery(session) {
+    const retry=session.modelRetry
+    if(!retry || retry.turnId!==session.turnId)return
+    session.modelRetry=null
+    this.diagnostic(session,'provider.stream_recovered',{count:retry.count,duration_ms:Date.now()-retry.startedAt})
+  }
+  async reportCommandProgress(session) {
+    const progress=session.commandProgress
+    if(!progress || progress.turnId!==session.turnId || progress.reported===progress.version)return
+    const now=Date.now()
+    const lastUpdate=Math.max(session.startedAt??now,progress.lastNotice??0,
+      session.lastProgress?.turnId===session.turnId?session.lastProgress.at:0)
+    if(now-lastUpdate<20_000)return
+    const current=()=>session.commandProgress===progress && session.turnId===progress.turnId && session.busy &&
+      !session.finalReceived && !session.contextRejected && !session.exiting && session.state!=='stopping' &&
+      !session.rpcAttempt?.closing && session.workToken?.current()!==false
+    if(!current())return
+    const commands=[...progress.items.values()]
+    const running=commands.filter(item=>!item.done)
+    const actions=[...new Set(commands.flatMap(item=>item.actions))]
+    const parts=[actions.length?'本轮命令涉及'+actions.join('、'):'本轮命令进度']
+    parts.push('已结束 '+(commands.length-running.length)+' 条')
+    if(running.length)parts.push('正在执行 '+running.length+' 条')
+    const failures=commands.filter(item=>item.done && item.exitCode!=null && item.exitCode!==0)
+    if(failures.length)parts.push(failures.length+' 条返回非零退出码（'+[...new Set(failures.map(item=>item.exitCode))].slice(0,3).join('、')+'）')
+    const text=parts.join('，')+'。'
+    progress.reported=progress.version
+    progress.lastNotice=now
+    session.lastNativeNoticeAt=now
+    if(await this.emit(session,text,current)&&current())session.lastProgress={turnId:progress.turnId,text,at:now}
+  }
+  watchTurnProgress(session) {
+    clearTimeout(session.progressTimer)
+    const {turnId,traceId} = session
+    session.lastStageAt = Date.now()
+    const report = () => {
+      if (this.sessions.get(session.userId)!==session || session.turnId!==turnId || session.traceId!==traceId ||
+          !session.busy || session.state==='stopping' || session.finalReceived || session.rpcAttempt?.closing ||
+          session.workToken?.current()===false) return
+      if(!session.nativeActiveFlags?.length && ![...this.questions.values()].some(q=>q.session===session))
+        void this.reportCommandProgress(session)
+      const quietMs=Date.now()-session.lastStageAt
+      if (quietMs>=30_000 && !session.nativeActiveFlags?.length && ![...this.questions.values()].some(question => question.session===session)) {
+        this.diagnostic(session,'turn.waiting_progress',{duration_ms:quietMs})
+        const stream=session.streamProgress
+        if(stream?.turnId===turnId && stream.preview && !stream.previewAttempted){
+          const preview=stream.preview
+          const current=()=>this.sessions.get(session.userId)===session && session.turnId===turnId &&
+            session.streamProgress===stream && stream.preview===preview && session.busy && !session.finalReceived &&
+            !session.contextRejected && !session.exiting && session.state!=='stopping' &&
+            !session.rpcAttempt?.closing && session.workToken?.current()!==false
+          // A partial control block cannot be cleaned as if it were a complete reply.
+          const visible=preview.text.split('<',1)[0].trim()
+          if(visible && current()){
+            stream.previewAttempted=true
+            void this.emit(session,'回复预览（仍在生成）\n'+visible,current)
+          }
+        }
+      }
+      session.progressTimer=setTimeout(report,quietMs<30_000?30_000-quietMs:30_000)
+      session.progressTimer.unref?.()
+    }
+    session.progressTimer=setTimeout(report,30_000)
+    session.progressTimer.unref?.()
+  }
   setRecoveryDelivery(record,session,fallback='unknown') {
     if(!record)return
     const state=session.lastDelivery?.status
@@ -188,6 +261,7 @@ export class SessionManager {
       session.model=result.model
       session.modelProvider=result.modelProvider??attempt.providerOptions.provider??null
       session.threadId=saved.threadId=result.thread.id
+      if(Object.hasOwn(result.thread,'projectId'))saved.nativeProjectId=result.thread.projectId
       session.compacting=saved.compaction?.threadId===session.threadId
       this.diagnostic(session,'provider.connected',{provider,model:session.model,model_provider:session.modelProvider})
       return session
@@ -196,14 +270,54 @@ export class SessionManager {
       throw error
     }
   }
+  releaseConnection(session) {
+    const existing=this.releasing.get(session.userId)
+    if(existing)return existing
+    const release=this.unsubscribeAndClose(session).finally(()=>this.releasing.delete(session.userId))
+    this.releasing.set(session.userId,release)
+    return release
+  }
+  async unsubscribeAndClose(session) {
+    const attempt=session.rpcAttempt,rpc=session.rpc
+    try{
+      if(!rpc?.closed&&session.threadId)await this.protocol.unsubscribe?.(rpc,session.threadId)
+    }catch{this.diagnostic(session,'session.unsubscribe_failed',{})}
+    finally{if(attempt)this.detachRpc(session,attempt);else rpc?.close()}
+  }
+  recordUserInput(userId){
+    const session=this.sessions.get(userId)
+    if(!session)return
+    session.lastUserInputAt=Date.now()
+    this.scheduleIdleRelease(session)
+  }
+  scheduleIdleRelease(session,recheck=false) {
+    clearTimeout(session.idleReleaseTimer)
+    session.lastUserInputAt??=Date.now()
+    const remaining=session.lastUserInputAt+SESSION_IDLE_MS-Date.now()
+    session.idleReleaseTimer=setTimeout(()=>{
+      if(this.sessions.get(session.userId)!==session||session.rpc?.closed)return
+      if(session.state!=='idle'||session.nativeStatus==='active'||session.selecting||session.compacting||
+        session.compactionStarting||session.exiting||session.queue.length||session.waiters?.size||
+        this.submissions?.hasPendingInput?.(session.userId)||this.submissions?.pending?.().some(job=>job.owner===session.userId)||
+        [...this.questions.values()].some(question=>question.session===session)){
+        this.scheduleIdleRelease(session,true)
+        return
+      }
+      transition(session,'closed')
+      this.sessions.delete(session.userId)
+      void this.releaseConnection(session).then(()=>this.diagnostic(session,'session.idle_released',{}))
+    },Math.max(recheck?1000:0,remaining))
+    session.idleReleaseTimer.unref()
+  }
   async connect(userId, reply) {
+    if(this.releasing.has(userId))await this.releasing.get(userId)
     if(this.state.desktopHandoff||this.desktopTransition)throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')
     if (!this.owners.has(userId)) throw new Error('当前微信账号未获授权。')
     if(!this.sessions.get(userId)||this.sessions.get(userId).rpc?.closed)await this.beforeConversationConnect?.(userId)
     const existing = this.sessions.get(userId)
     if (existing && !existing.rpc?.closed) { await existing.connectionReady; existing.reply = reply; return existing }
     const saved = this.state.users[userId] ??= {}
-    const session = { userId, reply, busy: false, connecting: true, queue: [], finals: [], items: new Map() }
+    const session = { userId, reply, lastUserInputAt:Date.now(), busy: false, connecting: true, queue: [], finals: [], items: new Map() }
     transition(session,'connecting')
     let resolveReady,rejectReady
     session.connectionReady=new Promise((resolve,reject)=>{resolveReady=resolve;rejectReady=reject})
@@ -212,7 +326,7 @@ export class SessionManager {
     try {
       await this.startProvider(session)
       await this.save()
-      transition(session,'idle');resolveReady(session)
+      transition(session,'idle');this.scheduleIdleRelease(session);resolveReady(session)
       this.diagnostic(session,'session.connected',{provider:session.provider,model:session.model,model_provider:session.modelProvider})
       return session
     } catch (error) {
@@ -316,7 +430,11 @@ export class SessionManager {
     }
     transition(session,'running')
     session.lastProgress=null
+    session.lastNativeNoticeAt=0
+    session.tokenUsage=null
+    session.nativeQueueTurn=false
     session.contextRejected=false
+    token.activate?.()
     session.workToken=token
     session.traceId = typeof text==='object'&&/^[a-zA-Z0-9_-]{8,64}$/.test(text.traceId??'')?text.traceId:randomBytes(8).toString('hex')
     session.taskId=typeof text==='object'&&text.deliveryId?text.deliveryId:session.traceId
@@ -331,6 +449,7 @@ export class SessionManager {
     this.state.users[session.userId].recovery={task:session.localTask,execution:'running',delivery:null,updated:new Date().toISOString()}
     session.startedAt = Date.now()
     this.diagnostic(session,'turn.requested')
+    session.modelRetry=null
     session.turnReady = false
     session.turnStarted = false
     session.finalReceived = false
@@ -345,15 +464,17 @@ export class SessionManager {
       if(!token.current()){if(!session.exited&&session.traceId===traceId){transition(session,'idle');session.turnReady=true;this.resolveWaiters(session,{status:'interrupted',reply:'任务已取消。'})}return}
       const deliveryId=typeof text==='object'?text.deliveryId:undefined
       const executionModel=native?.action==='review'?null:session.rpcAttempt?.providerOptions?.provider?session.model:(this.state.users[session.userId]?.modelOverride??session.model)
+      session.executionModel=executionModel
       if(deliveryId){this.submissions?.context?.(deliveryId,{executionModel:executionModel??null,task:session.localTask,request:session.requestText,continuation:session.attachmentContinuation,flowNonce:session.traceId,materials:currentMaterials(text,deliveryId)});this.submissions?.bind(deliveryId,session.threadId)}
       const materials=currentMaterials(text,deliveryId??session.traceId),pendingMaterials=this.submissions?.pendingMaterials?.(session.userId,deliveryId)??0
       session.materials=materials
       this.diagnostic(session,'materials.context',{count:materials.length,queue_depth:pendingMaterials,reason:session.attachmentContinuation?'continuation':materials.length?'current':'unbound'})
       const runtimeInput=this.backend?.prepareInput?await this.backend.prepareInput(text,{signal:token.signal}):text
       const turnParams={threadId:session.threadId,input:[...this.protocol.input(runtimeInput),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
+      if(native?.action==='plan')turnParams.input.push({type:'text',text:'用户选择了微信的“计划”：本轮仅调研和制定方案，等用户明确要求实施后再改动项目。'})
       result=native?.action==='review'
         ?await this.protocol.startReview(session.rpc,session.threadId,native.target)
-        :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,plan:native?.action==='plan',model:executionModel,fastMode:this.state.users[session.userId]?.fastMode})
+        :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,model:executionModel,fastMode:this.state.users[session.userId]?.fastMode})
       if(!result?.turn?.id)throw Error('底座未确认任务标识，结果待核对。')
       if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment
@@ -395,15 +516,16 @@ export class SessionManager {
       }
     }
   }
-  async finishExit(session, detail = '') {
+  async finishExit(session, detail = '', status = 'unknown') {
     if (session.exited) return
     transition(session,'closed')
     session.queue = []
+    clearTimeout(session.idleReleaseTimer)
     clearTimeout(session.exitTimer)
     this.clearQuestions(session)
-    this.resolveWaiters(session, { status: 'interrupted', reply: detail || '会话已退出。' })
+    this.resolveWaiters(session, { status, reply: detail || '会话已退出。' })
     if(this.sessions.get(session.userId)===session)this.sessions.delete(session.userId)
-    session.rpc.close()
+    await this.releaseConnection(session)
     await this.notify(session, `${detail ? detail + '\n' : ''}已结束当前会话连接。聊天记录已保留，继续发消息即可恢复。`)
   }
   deny(method) {
@@ -418,6 +540,70 @@ export class SessionManager {
     if(message.method==='thread/archived'||message.method==='thread/unarchived'){await this.onConversationArchive?.(p.threadId,message.method==='thread/archived');return}
     if(message.method==='thread/deleted'){await this.onConversationDelete?.(p.threadId);return}
     if(p.threadId&&p.threadId!==session.threadId){this.diagnostic(session,'event.ignored',{reason:'wrong_thread',method:message.method});return}
+    if(message.method==='thread/project/updated'&&p.threadId===session.threadId&&Object.hasOwn(p,'projectId')){
+      const saved=this.state.users[session.userId]
+      if(saved?.threadId===p.threadId&&saved.nativeProjectId!==p.projectId){
+        saved.nativeProjectId=p.projectId
+        await this.save()
+      }
+      return
+    }
+    if(message.method==='thread/goal/updated'||message.method==='thread/goal/cleared'){
+      session.nativeGoal=p.goal??null
+      return
+    }
+    if(message.method==='thread/status/changed'){
+      const flags=p.status?.type==='active' && Array.isArray(p.status.activeFlags)
+        ? waitingFlags.filter(flag=>p.status.activeFlags.includes(flag)) : []
+      const previous=session.nativeActiveFlags??[]
+      session.nativeStatus=p.status?.type
+      session.nativeActiveFlags=flags
+      if(previous.join()!==flags.join()){
+        this.diagnostic(session,'session.wait_changed',{waiting_approval:flags.includes('waitingOnApproval'),waiting_input:flags.includes('waitingOnUserInput')})
+        if(session.busy)this.watchTurnProgress(session)
+      }
+      return
+    }
+    if(message.method==='thread/closed'&&p.threadId===session.threadId){
+      session.nativeStatus='notLoaded';session.nativeActiveFlags=[]
+      if(!session.busy&&!session.finishing&&this.sessions.get(session.userId)===session){
+        this.sessions.delete(session.userId);clearTimeout(session.idleReleaseTimer)
+        transition(session,'closed');this.detachRpc(session,session.rpcAttempt)
+      }
+      return
+    }
+    if(['turn/plan/updated','turn/diff/updated','item/mcpToolCall/progress','model/rerouted','thread/tokenUsage/updated'].includes(message.method)){
+      if(!session.busy||!p.turnId||session.turnId!==p.turnId||session.finalReceived||!(session.workToken?.current()??true))return
+      if(message.method==='model/rerouted'){
+        session.executionModel=p.toModel
+        this.diagnostic(session,'model.rerouted',{model:p.toModel})
+        return
+      }
+      if(message.method==='thread/tokenUsage/updated'){session.tokenUsage=p.tokenUsage?.last;return}
+      let text
+      if(message.method==='turn/plan/updated'){
+        const plan=Array.isArray(p.plan)?p.plan:[]
+        const current=plan.find(step=>step.status==='inProgress')
+        text=`计划已完成 ${plan.filter(step=>step.status==='completed').length}/${plan.length} 步`+(current?'，正在'+String(current.step).slice(0,200):'')
+      }else if(message.method==='turn/diff/updated'){
+        const count=typeof p.diff==='string'?(p.diff.match(/^diff --git /gm)??[]).length:0
+        if(!count)return
+        text=`本轮已有 ${count} 个文件发生修改。`
+      }else{
+        const percent=typeof p.message==='string'&&p.message.match(/(?:^|[^0-9.])(100|[0-9]{1,2})%(?![0-9])/)
+        text=percent?'工具报告进度 '+percent[1]+'%。':'工具仍在处理本轮请求。'
+      }
+      const previous=session.lastProgress
+      if(previous?.turnId===p.turnId&&previous.text===text)return
+      session.lastProgress={text,at:Date.now(),turnId:p.turnId}
+      if(!session.lastNativeNoticeAt||Date.now()-session.lastNativeNoticeAt>=15000){
+        session.lastNativeNoticeAt=Date.now()
+        this.diagnostic(session,'turn.progress',{method:message.method})
+        this.watchTurnProgress(session)
+        await this.emit(session,text,()=>session.busy&&!session.finalReceived&&session.turnId===p.turnId&&(session.workToken?.current()??true))
+      }
+      return
+    }
     if (message.id !== undefined && message.method) {
       // A cancelled/completed turn must not create fresh approval prompts.
       if (!session.busy || session.exited || (session.workToken && !session.workToken.current()) || (p.turnId && p.turnId !== session.turnId)) {
@@ -457,31 +643,127 @@ export class SessionManager {
       await this.notify(session, text)
       return
     }
+    if(message.method==='warning' && typeof p.message==='string' &&
+        /^Falling back from WebSockets to HTTPS transport\.(?:\s|$)/.test(p.message)){
+      this.diagnostic(session,'provider.http_fallback')
+      return
+    }
     if(message.method==='error'){
       const code=this.protocol.eventCode(p)
-      if(code)this.diagnostic(session,'provider.event_error',{provider:session.provider,stage:session.turnStarted?'turn':'turn_start',reason:code,rpc_code:code})
+      if(p.turnId && session.turnReady && p.turnId!==session.turnId)return
+      const detail=p.error?.codexErrorInfo??p.codexErrorInfo
+      const httpStatus=detail && typeof detail==='object' ? detail[code]?.httpStatusCode : undefined
+      const turnId=p.turnId??(session.turnReady?session.turnId:null)
+      let attempt
+      if(session.busy && turnId && p.willRetry===true && ['responseStreamDisconnected','responseStreamConnectionFailed'].includes(code)){
+        let retry=session.modelRetry
+        if(retry?.turnId!==turnId)session.modelRetry=retry={turnId,count:0,startedAt:Date.now()}
+        retry.count++
+        attempt=retry.code===code && retry.httpStatus===httpStatus ? retry.consecutive+1 : 1
+        Object.assign(retry,{code,httpStatus,consecutive:attempt})
+      }else{
+        session.modelRetry=null
+      }
+      this.diagnostic(session,'provider.event_error',{attempt,provider:session.provider,stage:session.turnStarted?'turn':'turn_start',
+        reason:code,will_retry:p.willRetry,http_status:Number.isInteger(httpStatus)&&httpStatus>=100&&httpStatus<=599?httpStatus:undefined})
+      if(session.streamProgress?.preview){
+        session.streamProgress.discardedItem=session.streamProgress.preview.id
+        delete session.streamProgress.preview
+      }
+      if(session.busy)this.watchTurnProgress(session)
       return
     }
     if (message.method === 'turn/started' && session.busy) {
       if(session.turnReady&&session.turnId&&p.turn?.id!==session.turnId){this.diagnostic(session,'event.ignored',{reason:'other_turn',method:message.method});return}
       session.turnReady = true; session.turnStarted = true; session.turnId = p.turn.id
-      this.diagnostic(session,'turn.started',{provider:session.provider,model:session.model,model_provider:session.modelProvider})
+      session.executionModel=p.turn.model??session.executionModel
+      this.watchTurnProgress(session)
+      this.diagnostic(session,'turn.started',{provider:session.provider,model:session.executionModel,model_provider:session.modelProvider})
+    }
+    if(!session.busy&&!session.finishing&&!session.exited&&message.method==='item/started'&&p.item?.type==='userMessage'&&p.item.clientId&&p.turnId){
+      const job=this.submissions?.get?.(p.item.clientId)
+      if(job?.context?.nativeQueue&&job.owner===session.userId&&job.thread_id===session.threadId&&
+         ['bound','submitted'].includes(job.state)&&(!job.turn_id||job.turn_id===p.turnId)){
+        this.submissions.submitted(job.id,p.turnId)
+        transition(session,'running')
+        Object.assign(session,{taskId:job.id,traceId:job.context.flowNonce,turnId:p.turnId,turnReady:true,turnStarted:true,
+          nativeQueueTurn:true,modelRetry:null,startedAt:Date.now(),executionModel:session.model,tokenUsage:null,finalReceived:false,finals:[],displayFinals:[],
+          localTask:job.context.task,requestText:job.input?.text??job.input,materials:job.context.materials??[],
+          generatedOutputs:[],imageOutputIds:new Set(),waitingAttachment:false,attachmentContinuation:null,lastProgress:null,lastNativeNoticeAt:0})
+        session.items.clear()
+        this.watchTurnProgress(session)
+        session.workToken=this.lifecycle.capture(session.userId)
+        session.workToken.activate?.()
+        if(this.nativeQueueReply)session.reply=(value,options)=>this.nativeQueueReply(job.owner,value,options)
+      }
+    }
+    const streamKind=streamKinds.get(message.method)
+    if(streamKind){
+      if(!session.busy || !session.turnReady || session.finalReceived || p.turnId!==session.turnId ||
+          session.workToken?.current()===false || typeof p.delta!=='string' || !p.delta.length)return
+      if(streamKind!=='commandOutput')this.reportModelRecovery(session)
+      const now=Date.now()
+      session.lastStageAt=now
+      if(session.streamProgress?.turnId!==p.turnId)session.streamProgress={turnId:p.turnId,kinds:new Map()}
+      const stream=session.streamProgress
+      if(streamKind==='reply' && p.itemId && p.itemId!==stream.discardedItem && !stream.previewAttempted){
+        if(stream.preview?.id!==p.itemId)stream.preview={id:p.itemId,text:''}
+        const preview=stream.preview
+        preview.text+=p.delta.slice(0, Math.max(0, 480-preview.text.length))
+      }
+      const kinds=stream.kinds
+      const state=kinds.get(streamKind)??{count:0}
+      kinds.set(streamKind,state)
+      state.count++
+      if(state.lastReport===undefined || now-state.lastReport>=15_000){
+        this.diagnostic(session,'turn.stream_progress',{kind:streamKind,count:state.count})
+        state.lastReport=now
+      }
+      return
     }
     // Ignore delayed item notifications from a completed or superseded turn.
-    if (['item/started', 'item/completed','item/agentMessage/delta'].includes(message.method)) {
+    if (['item/started', 'item/completed'].includes(message.method)) {
       if (!session.busy || !session.turnReady || (session.finalReceived&&p.item?.type!=='imageGeneration')) { this.diagnostic(session,'event.ignored',{reason:'inactive_or_final',method:message.method}); return }
       if (p.turnId && p.turnId !== session.turnId) { this.diagnostic(session,'event.ignored',{reason:'old_turn',method:message.method}); return }
     }
-    // A completed commentary item is one user-facing stage. Streaming deltas
-    // are intentionally silent so a multi-sentence update is sent once.
-    if(message.method==='item/agentMessage/delta')return
+    if ((message.method==='item/started'||message.method==='item/completed') && p.item?.type && p.item.type!=='userMessage') this.watchTurnProgress(session)
+    if (['item/started','item/completed'].includes(message.method) && p.item?.type==='commandExecution' && p.item.id){
+      const item=p.item
+      if(session.commandProgress?.turnId!==session.turnId)
+        session.commandProgress={turnId:session.turnId,items:new Map(),version:0}
+      const progress=session.commandProgress, previous=progress.items.get(item.id)
+      const done=message.method==='item/completed'
+      if(!previous || (!previous.done && done)){
+        const labels={read:'读取文件',listFiles:'查看目录',search:'搜索内容'}
+        const actions=(Array.isArray(item.commandActions)?item.commandActions:[]).map(action=>labels[action?.type]).filter(value=>typeof value==='string')
+        progress.items.set(item.id,{done,actions:actions.length?actions:previous?.actions??[],exitCode:Number.isSafeInteger(item.exitCode)?item.exitCode:null})
+        progress.version++
+        await this.reportCommandProgress(session)
+      }
+    }
     if (message.method === 'item/started') {
-      // Retain metadata for approval review, but do not invent generic progress messages.
-      session.items.set(p.item.id, p.item)
+      const item=p.item
+      const seen=session.items.has(item.id)
+      session.items.set(item.id,item)
+      if(item.type==='webSearch'&&item.id&&!seen){
+        const turnId=session.turnId
+        if(session.searchProgress?.turnId!==turnId){
+          session.searchProgress={turnId,announced:false}
+        }else if(!session.searchProgress.announced){
+          session.searchProgress.announced=true
+          const current=()=>session.turnId===turnId&&session.busy&&!session.finalReceived&&!session.contextRejected&&(session.workToken?.current()??true)
+          const recent=session.lastProgress?.turnId===turnId&&Date.now()-session.lastProgress.at<15000
+          if(!recent&&current()){
+            const text='我还在查网页，正在继续核对相关资料。'
+            if(await this.emit(session,text,current)&&current())session.lastProgress={turnId,text,at:Date.now()}
+          }
+        }
+      }
       this.diagnostic(session,'tool.started',{kind:p.item.type})
       if(!['agentMessage','userMessage','reasoning','plan'].includes(p.item.type))await this.onToolStatus?.(session,p.item,true)
     }
     if (message.method === 'item/completed') {
+      if(session.streamProgress?.preview?.id && session.streamProgress.preview.id===p.item?.id)delete session.streamProgress.preview
       if(p.item?.type&&!['agentMessage','userMessage','reasoning','plan'].includes(p.item.type))await this.onToolStatus?.(session,p.item,false)
       if(p.item?.type==='imageGeneration'&&!p.item.failure&&['completed','succeeded','success'].includes(p.item.status)&&(session.workToken?.current()??true)){
         session.imageOutputIds??=new Set()
@@ -492,8 +774,9 @@ export class SessionManager {
         }
       }
       if (p.item?.type === 'webSearch') this.diagnostic(session,'tool.completed',{kind:'webSearch'})
-      if(p.item?.type&&p.item.type!=='agentMessage'&&p.item.type!=='webSearch')this.diagnostic(session,'tool.completed',{kind:p.item.type,status:p.item.status,exit_code:p.item.exitCode})
+      if(p.item?.type&&p.item.type!=='agentMessage'&&p.item.type!=='webSearch')this.diagnostic(session,'tool.completed',{kind:p.item.type,status:p.item.status,exit_code:p.item.exitCode,...(p.item.type==='commandExecution'&&Number.isSafeInteger(p.item.durationMs)&&p.item.durationMs>=0?{duration_ms:p.item.durationMs}:{})})
       if (p.item?.type === 'agentMessage' && p.item.text) {
+        this.reportModelRecovery(session)
         const flow=this.ports.stripTaskFlow(this.protocol.cleanOutputText(p.item.text),session.traceId)
         const rest=flow.text
         if(p.item.phase==='final_answer'||!p.item.phase)session.waitingAttachment=flow.waiting
@@ -511,6 +794,7 @@ export class SessionManager {
     if (message.method === 'turn/completed' && session.busy) {
       if (p.turn?.id && p.turn.id !== session.turnId) return
       if(this.sessions.has(session.userId)&&this.sessions.get(session.userId)!==session)return
+      clearTimeout(session.progressTimer)
       transition(session,'delivering')
       this.clearQuestions(session)
       const awaitingAttachment=p.turn.status==='completed'&&session.waitingAttachment&&(session.workToken?.current()??true)
@@ -545,11 +829,13 @@ export class SessionManager {
       this.state.users[session.userId].lastTask=session.localTask
       this.state.users[session.userId].lastReply = reply
       try { await this.save() } catch(error) { this.diagnostic(session,'state.save_failed',this.ports.errorFields(error));reply+='\n（微信会话状态保存失败，本轮回复可能无法在重启后恢复。）';this.state.users[session.userId].lastReply=reply }
-      this.diagnostic(session,'turn.completed',{status:p.turn.status,provider:session.provider,model:session.model,model_provider:session.modelProvider,duration_ms:Date.now()-(session.startedAt??Date.now()),chars:Array.from(reply).length})
+      this.diagnostic(session,'turn.completed',{status:p.turn.status,provider:session.provider,model:session.executionModel,model_provider:session.modelProvider,duration_ms:Date.now()-(session.startedAt??Date.now()),chars:Array.from(reply).length})
       if (session.exited) return
-      if (session.exiting) { await this.finishExit(session, p.turn.status === 'interrupted' ? '当前任务已停止。' : '本轮任务已结束。'); return }
+      if (session.exiting) { await this.finishExit(session, p.turn.status === 'interrupted' ? '当前任务已停止。' : '本轮任务已结束。', p.turn.status); return }
       const display=receivedWhileWaiting?reply:(session.displayFinals??session.finals).join('\n\n')+reply.slice(session.finals.join('\n\n').length)
-      if(receivedWhileWaiting){this.diagnostic(session,'notification.suppressed',{reason:'attachment_already_pending'})}
+      if(session.nativeQueueTurn&&!this.submissions.claimReceipt('native-final:'+session.taskId)){
+        session.lastDelivery={status:'unknown',updated:new Date().toISOString()}
+      }else if(receivedWhileWaiting){this.diagnostic(session,'notification.suppressed',{reason:'attachment_already_pending'})}
       else if(typeof output==='string'){if(display)await this.emit(session,display)}else await this.emit(session,{...output,text:display+output.text.slice(reply.length)})
       const recovery=this.state.users[session.userId].recovery
       if(receivedWhileWaiting){session.lastDelivery={status:'not_required',updated:new Date().toISOString()}}
@@ -566,9 +852,15 @@ export class SessionManager {
         const warning=recovery.delivery==='failed'?'⚠️ 最终结果发送失败，已保存。你可以说“把刚才的结果再发一次”。':'⚠️ 部分内容未确认送达，已保存。你可以说“看看刚才任务的结果”，核对后再决定是否重发。'
         await this.notify(session,localCompletion(warning,session.localTask),()=>!session.exited&&(session.workToken?.current()??true))
       }
+      if(session.nativeQueueTurn){
+        this.submissions.markOutcome(session.taskId,p.turn.status==='completed'&&!awaitingAttachment?'completed':'not_confirmed')
+        this.submissions.mark(session.taskId,p.turn.status==='interrupted'?'cancelled':'done')
+        session.nativeQueueTurn=false
+      }
       this.resolveWaiters(session, { status: p.turn.status, reply })
       if(session.exited)return
       transition(session,'idle')
+      this.scheduleIdleRelease(session)
       if (session.queue.length&&!session.rpcAttempt?.closing&&!session.rpc?.closed) {
         try { await (()=>{const next=session.queue.shift();return typeof next==='string'?this.send(session,next):this.send(session,next.input,next.token)})() }
         catch (error) { await this.notify(session, `排队消息未能执行：${error.message}`) }
@@ -623,7 +915,7 @@ export class SessionManager {
     if (!await this.acceptMessage(userId,messageId)) return
     let command = parsedCommand??(typeof text === 'string' ? this.ports.controlCommand(text) : null)
     if(!command&&!token.current())return
-    if(this.state.desktopHandoff&&!['status','result','progress','help'].includes(command?.action)){await reply('桌面正在接续这个账号的工作，微信暂不执行操作。请先关闭桌面，再说“回到微信继续”。');return}
+    if(this.state.desktopHandoff&&!['progress','help'].includes(command?.action)){await reply('桌面正在接续这个账号的工作，微信暂不执行操作。请先关闭桌面，再说“回到微信继续”。');return}
     this.log('message.handled',{userId,messageId,kind:command?.action??(typeof text==='string'?'text':'media')})
     try {
       if(command?.action==='reviewCommit'){
@@ -718,14 +1010,14 @@ export class SessionManager {
           }finally{session.selecting=false}
         }
         const reviewText=command.target?.type==='commit'?'请审查选定的提交。':command.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
-        await this.send(session,command.action==='plan'?command.text:reviewText,token,command)
+        await this.send(session,command.action==='plan'?{text:command.text,nativeCommand:command}:reviewText,token,command)
         return
       }
       if (command?.action === 'help') {
         await reply([
           '微信命令列表：',
           '【当前任务】',
-          '状态（status）', '进度（progress）', '补充（supplement）', '停止（stop）', '结果（result）', '恢复（recover）', '退出（exit）',
+          '进度（progress）', '补充（supplement）', '停止（stop）', '恢复（recover）', '退出（exit）',
           '【长任务与计划】',
           '长任务（goal）', '长任务状态（goal-status）', '暂停长任务（goal-pause）', '继续长任务（goal-resume）', '完成长任务（goal-complete）', '清除长任务（goal-clear）', '计划（plan）',
           '【代码审查】',
@@ -733,7 +1025,7 @@ export class SessionManager {
           '【会话】',
           '会话状态（session-status）', '恢复会话（resume-session）', '重置会话（reset-session）', '压缩上下文（compact）', '分叉会话（fork）', '旁支会话（branch）',
           '【项目】',
-          '日常（daily）', '列表（list）', '新建（new）', '切换（switch）', '命名（rename）', '历史（history）', '搜索（search）', '归档（archive）', '还原（restore）', '删除（delete）', '当前目录（folder）', '新建项目（new-project）',
+          '列表（list）', '新建（new）', '切换（switch）', '命名（rename）', '历史（history）', '搜索（search）', '归档（archive）', '还原（restore）', '删除（delete）', '当前目录（folder）', '新建项目（new-project）',
           '【模型与记忆】',
           '模型（models）', '开启快速模式（fast-on）', '关闭快速模式（fast-off）', '记忆（memory）', '开启记忆（memory-on）', '关闭记忆（memory-off）',
           '【服务】',
@@ -754,29 +1046,28 @@ export class SessionManager {
         await reply(`${label}${queued?`；排队 ${queued} 条`:''}。${latest||(['running','connecting'].includes(state)?'\n尚无新的阶段信息。':'')}`)
         return
       }
-      if (command?.action === 'status') { try{const root=join((process.env.HOME||platformHome()),'.local/share/wechat-assistant-backups');let b;try{b=JSON.parse(await readFile(join(root,'last-failure.json'),'utf8'));await reply('备份：最近一次失败或因忙碌延后，请检查备份服务。')}catch{b=JSON.parse(await readFile(join(root,'latest.json'),'utf8'));await reply(b.status==='verified'?'备份：'+b.generation+'，NAS校验及隔离恢复通过。':'备份：最近一次未验证成功。')}}catch{} const recovery=this.ports.recoveryText(this.state.users[userId]?.recovery);if(recovery)await reply(recovery);await reply(`会话：${this.state.users[userId]?.threadId ?? '尚未创建'}\n状态：${({connecting:'正在连接',idle:'空闲',running:'处理中',stopping:'正在停止',delivering:'正在发送最终回复',closed:'已断开'})[runtime?.state] ?? (runtime?.connecting?'正在连接':runtime?.busy?'处理中':runtime?.finishing?'正在发送最终回复':'空闲')}，排队 ${(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)} 条，待答复 ${[...this.questions.values()].filter(q => q.session.userId === userId).length} 条。\n未确认任务：${this.submissions?.uncertainCount?.(userId)??0} 条，需核对后再决定是否重试。\n目录：${this.workspaceFor(userId)}\n底座：${this.agentName}\n运行环境：宿主机。`); return }
       if(command?.action==='recover'){
         const n=this.submissions?.recheck?.(userId)??0
         if(n)this.wakeRecovery?.(userId)
         await reply(n?`已安排核对 ${n} 条未确认任务，只查询原任务，不重新执行。稍后用 “状态” 查看。`:'没有可自动核对的未确认任务；缺少会话关联的记录不能安全重提。')
         return
       }
-      if (command?.action === 'result') {
-        const record=this.state.users[userId]
-        if(record?.recovery)await reply(this.ports.recoveryText(record.recovery))
-        if(['running','unknown','waiting_attachment'].includes(record?.recovery?.execution))return
-        const resultSession={userId,reply,workToken:token}
-        if(record?.lastOutput){const output=this.outputStore.replay(record.lastOutput);record.lastOutput=output;await this.save();await this.emit(resultSession,output);this.setRecoveryDelivery(record.recovery,resultSession);await this.save()}
-        else {await this.emit(resultSession,record?.lastReply??'尚无历史回复。');this.setRecoveryDelivery(record?.recovery,resultSession);await this.save()}
-        return
-      }
       if (command?.action === 'stop' || command?.action === 'exit') {
         if(command.expected&&(!runtime?.busy||runtime.traceId!==command.expected.traceId||runtime.turnId!==command.expected.turnId))throw Error('MANAGEMENT_STALE_TASK')
-        this.lifecycle.cancel(userId)
+        if(command.stopIngressId){
+          if((runtime?.traceId??null)!==command.stopTrace)throw Error('MANAGEMENT_STALE_TASK')
+          if(runtime?.busy && runtime.taskId){
+            const job=this.submissions.get(runtime.taskId)
+            if(job && ['bound','submitted'].includes(job.state) && !this.submissions.claimLiveStop(userId,command.stopIngressId,runtime.taskId)){
+              await reply('原任务的停止请求正在核对，请稍后查看状态。')
+              return
+            }
+          }
+        }else this.lifecycle.cancel(userId,{preserveActive:!!(runtime?.busy||runtime?.finishing)})
         if(this.state.users[userId]?.waitingAttachment){delete this.state.users[userId].waitingAttachment;if(this.state.users[userId].recovery)this.state.users[userId].recovery.execution='interrupted';await this.save()}
         const scopeId=runtime?.threadId??this.state.users[userId]?.threadId
         if(runtime?.compacting||this.state.users[userId]?.compaction?.threadId===scopeId)await reply('上下文压缩可能仍在进行；本次停止未确认取消压缩。新任务会先核对状态。')
-        if (!runtime || runtime.rpc.closed) { await reply(`当前没有运行中的本地 ${this.agentName} 任务。`); return }
+        if (!runtime || runtime.rpc?.closed) { await reply(command.action==='exit'?'微信这边的会话连接已关闭。':`当前没有运行中的本地 ${this.agentName} 任务。`); return }
         const queued=runtime.queue.length;runtime.queue=[]
         const stopTrace=runtime.traceId
         let localInterrupt
@@ -784,7 +1075,7 @@ export class SessionManager {
         let localStopError
         try{if(runtime.busy&&!runtime.connecting)await interruptOnce()}catch(error){localStopError??=error}
         if(localStopError)throw localStopError
-        if(!command.preserveReply)runtime.reply = reply
+        if(command.action==='exit'&&!command.preserveReply)runtime.reply = reply
         if (command.action === 'stop') {
           runtime.queue=[]
           if(runtime.connecting){await reply('已取消待启动任务并清空排队消息。');return}
@@ -828,7 +1119,17 @@ export class SessionManager {
   }
   async ask(userId, text, reply = async () => {}, timeout = 180_000, token = this.lifecycle.capture(userId)) {
     if(!token.current())return {status:'interrupted',reply:'任务已取消。'}
-    const session = await this.connect(userId, reply)
+    const expected=text?.expectedThreadId
+    if(expected&&expected!==this.state.users[userId]?.threadId)throw Object.assign(Error('原会话已变化'),{code:'DESKTOP_THREAD_CHANGED'})
+    let session
+    try { session = await this.connect(userId, reply) }
+    catch (error) {
+      if (error.connectionClosed || error.requestTimeout || error.code==='CODEX_BINARY_REQUIRED') {
+        throw Object.assign(Error('Codex 会话连接失败，本条消息尚未提交。'),{code:'CODEX_CONNECT_FAILED',cause:error})
+      }
+      throw error
+    }
+    if(expected&&expected!==session.threadId)throw Object.assign(Error('原会话已变化'),{code:'DESKTOP_THREAD_CHANGED'})
     if(!token.current())return {status:'interrupted',reply:'任务已取消。'}
     if (session.busy) throw new Error('Test session is busy')
     let resolveResult
@@ -846,6 +1147,8 @@ export class SessionManager {
     this.lifecycle.close()
     for (const session of this.sessions.values()) {
       transition(session,'closed')
+      clearTimeout(session.progressTimer)
+      clearTimeout(session.idleReleaseTimer)
       clearTimeout(session.exitTimer)
       this.clearQuestions(session)
       session.rpc.close()

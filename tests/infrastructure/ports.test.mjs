@@ -31,12 +31,11 @@ test('port contract refuses incomplete implementations', () => {
 test('message use case receives narrow functions rather than an SDK client factory', () => {
   const ports = messagePorts({infrastructure: createInfrastructurePorts(), delivery: {deliver: async () => ({status: 'accepted'})}, stateDir: '/tmp/test-account', cwd: '/tmp/test-workspace'})
   assert.equal(typeof ports.media.prepare, 'function')
-  assert.equal(typeof ports.agent.checkReady, 'function')
   assert.equal(typeof ports.delivery.deliver, 'function')
   assert.equal(typeof ports.delivery.confirmedRejection, 'function')
   assert.equal(typeof ports.media.package, 'function')
   assert.equal(ports.media.outputStore, undefined)
   assert.equal(ports.references.createClient, undefined)
-  assert.equal(ports.agent.load, undefined)
+  assert.equal(ports.agent, undefined)
   assert.throws(() => messagePorts({infrastructure: {}, delivery: {}}), /MESSAGE_PORT_INVALID/)
 })

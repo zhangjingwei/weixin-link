@@ -15,6 +15,7 @@ export class DurableJobs {
    CREATE INDEX IF NOT EXISTS job_owner ON jobs(owner,created);
    CREATE INDEX IF NOT EXISTS ingress_external_identity ON ingress(COALESCE(json_extract(payload,'$._conversationOwner'),json_extract(payload,'$.raw.from_user_id'),owner),CAST(COALESCE(json_extract(payload,'$.raw.message_id'),json_extract(payload,'$.raw.client_id')) AS TEXT),created);`)
   const hasColumn=(table,name)=>this.db.prepare(`PRAGMA table_info(${table})`).all().some(row=>row.name===name)
+  if(!hasColumn('jobs','stop_request'))this.db.exec('ALTER TABLE jobs ADD COLUMN stop_request TEXT')
   if(!hasColumn('jobs','priority'))this.db.exec('ALTER TABLE jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0')
   if(!hasColumn('jobs','outcome'))this.db.exec('ALTER TABLE jobs ADD COLUMN outcome TEXT')
   if(!hasColumn('jobs','context'))this.db.exec('ALTER TABLE jobs ADD COLUMN context TEXT')
@@ -31,6 +32,22 @@ export class DurableJobs {
  context(id,context){this.db.prepare('UPDATE jobs SET context=? WHERE id=?').run(JSON.stringify(context),id)}
  bind(id,threadId){this.db.prepare("UPDATE jobs SET state='bound',thread_id=? WHERE id=? AND state IN ('pending','starting')").run(threadId,id)}
  submitted(id,turnId){this.db.prepare("UPDATE jobs SET state='submitted',turn_id=? WHERE id=? AND state='bound'").run(turnId,id)}
+ waitForDesktop(owner,id,confirmation){
+  return this.db.prepare("UPDATE jobs SET state='waiting_desktop',context=? WHERE owner=? AND id=? AND state='starting' AND thread_id IS NULL").run(JSON.stringify({desktopConfirmation:confirmation}),owner,id).changes===1
+ }
+ desktopChoices(owner,threadId){
+  return this.db.prepare("SELECT json_extract(context,'$.desktopConfirmation.code') AS code FROM jobs WHERE owner=? AND state='waiting_desktop' AND json_extract(context,'$.desktopConfirmation.threadId')=? ORDER BY created,rowid LIMIT 5").all(owner,threadId).map(row=>row.code)
+ }
+ desktopJob(owner,code){
+  const row=this.db.prepare("SELECT id FROM jobs WHERE owner=? AND state='waiting_desktop' AND json_extract(context,'$.desktopConfirmation.code')=?").get(owner,code)
+  return row&&this.get(row.id)
+ }
+ retryAfterDesktop(owner,id,code){
+  return this.db.prepare("UPDATE jobs SET state='pending' WHERE owner=? AND id=? AND state='waiting_desktop' AND json_extract(context,'$.desktopConfirmation.code')=?").run(owner,id,code).changes===1
+ }
+ claimNativeQueue(owner,id,threadId,context){
+  return this.db.prepare("UPDATE jobs SET state='bound',thread_id=?,context=? WHERE owner=? AND id=? AND state='pending' AND thread_id IS NULL").run(threadId,JSON.stringify(context),owner,id).changes===1
+ }
  claimStart(owner,id){return this.db.prepare("UPDATE jobs SET state='starting' WHERE owner=? AND id=? AND state='pending' AND thread_id IS NULL").run(owner,id).changes===1}
  changePending(owner,id,action){
   if(!['cancel','prioritize'].includes(action))throw Error('MANAGEMENT_INVALID_ARGUMENTS')
@@ -46,10 +63,32 @@ export class DurableJobs {
  mark(id,state){if(!['done','uncertain','cancelled'].includes(state))throw Error('INVALID_STATE');this.db.prepare("UPDATE jobs SET state=? WHERE id=? AND state NOT IN ('done','cancelled')").run(state,id)}
  findCaptured(message){const real=messageOwner(message),key=externalMessageId(message);if(key===undefined)return null
  const row=this.db.prepare('SELECT id,payload,state FROM ingress WHERE id=?').get(ingressId(real,key))??this.db.prepare("SELECT id,payload,state FROM ingress WHERE COALESCE(json_extract(payload,'$._conversationOwner'),json_extract(payload,'$.raw.from_user_id'),owner)=? AND CAST(COALESCE(json_extract(payload,'$.raw.message_id'),json_extract(payload,'$.raw.client_id')) AS TEXT)=? ORDER BY created LIMIT 1").get(real,String(key));return row?{...JSON.parse(row.payload),_ingressId:row.id,_captureState:row.state}:null}
- capture(message){const key=requireExternalMessageId(message),prior=this.findCaptured(message);if(prior)return prior._captureState==='pending'?prior._ingressId:null;const real=messageOwner(message),id=ingressId(real,key);const value=Object.fromEntries(['userId','text','images','files','videos','voices','raw','references','_setupAction','_contextToken','_conversationOwner','_conversationCommand','_sessionCommand','_promptReply','_traceId'].filter(k=>message[k]!==undefined).map(k=>[k,message[k]])),payload=JSON.stringify(value);if(Buffer.byteLength(payload)>2*1024*1024)throw Error('ENVELOPE_TOO_LARGE');this.db.prepare("INSERT OR IGNORE INTO ingress(id,owner,payload,state,created) VALUES(?,?,?,'pending',?)").run(id,message.userId,payload,Date.now());return this.db.prepare('SELECT state FROM ingress WHERE id=?').get(id)?.state==='pending'?id:null}
+ capture(message){const key=requireExternalMessageId(message),prior=this.findCaptured(message);if(prior)return prior._captureState==='pending'?prior._ingressId:null;const real=messageOwner(message),id=ingressId(real,key);const value=Object.fromEntries(['userId','text','images','files','videos','voices','raw','references','_setupAction','_contextToken','_conversationOwner','_conversationCommand','_conversationSelectionVersion','_sessionCommand','_promptReply','_traceId','_desktopChoices','_desktopQuit'].filter(k=>message[k]!==undefined).map(k=>[k,message[k]])),payload=JSON.stringify(value);if(Buffer.byteLength(payload)>2*1024*1024)throw Error('ENVELOPE_TOO_LARGE');this.db.prepare("INSERT OR IGNORE INTO ingress(id,owner,payload,state,created) VALUES(?,?,?,'pending',?)").run(id,message.userId,payload,Date.now());return this.db.prepare('SELECT state FROM ingress WHERE id=?').get(id)?.state==='pending'?id:null}
+ // Freeze the queue boundary before the SDK advances its cursor. A replay
+ // of the same stop must never cancel messages that arrived afterwards.
+ captureStop(message){
+  this.db.exec('BEGIN IMMEDIATE')
+  try{
+   const prior=this.findCaptured(message)
+   const id=this.capture(message)
+   if(!prior && id){
+    const owner=message.userId
+    this.db.prepare("UPDATE ingress SET state='cancelled' WHERE owner=? AND state='pending' AND id<>?").run(owner,id)
+    this.db.prepare("UPDATE jobs SET state='cancelled' WHERE owner=? AND state IN ('pending','starting','waiting_desktop') AND thread_id IS NULL").run(owner)
+    this.db.prepare("UPDATE jobs SET stop_request=? WHERE owner=? AND state IN ('bound','submitted')").run(id,owner)
+   }
+   this.db.exec('COMMIT')
+   return {id,fresh:!prior}
+  }catch(error){this.db.exec('ROLLBACK');throw error}
+ }
+ claimRecoveredStop(job){
+  return this.db.prepare("UPDATE jobs SET stop_request=NULL WHERE id=? AND owner=? AND thread_id=? AND turn_id=? AND stop_request IS NOT NULL").run(job.id,job.owner,job.thread_id,job.turn_id).changes===1
+ }
+ claimLiveStop(owner,id,taskId){return this.db.prepare('UPDATE jobs SET stop_request=NULL WHERE owner=? AND stop_request=? AND id=?').run(owner,id,taskId).changes===1}
  rawCurrent(id){return this.db.prepare('SELECT state FROM ingress WHERE id=?').get(id)?.state==='pending'}
+ hasPendingInput(owner){return !!this.db.prepare("SELECT 1 FROM ingress WHERE owner=? AND state='pending' LIMIT 1").get(owner)}
  rawPending(){return this.db.prepare("SELECT id,payload FROM ingress WHERE state='pending' ORDER BY created,rowid").all().map(r=>({...JSON.parse(r.payload),_ingressId:r.id,_recovered:true}))}
  acknowledge(ids){const stmt=this.db.prepare("UPDATE ingress SET state='done' WHERE id=? AND state='pending'");for(const id of ids??[])stmt.run(id)}
- cancel(owner){this.db.prepare("UPDATE ingress SET state='cancelled' WHERE owner=? AND state='pending'").run(owner);this.db.prepare("UPDATE jobs SET state='cancelled' WHERE owner=? AND state NOT IN ('done','cancelled')").run(owner)}
+ cancel(owner){this.db.prepare("UPDATE jobs SET stop_request=COALESCE(stop_request,'cancel') WHERE owner=? AND state IN ('bound','submitted') AND json_extract(context,'$.nativeQueue')=1").run(owner);this.db.prepare("UPDATE ingress SET state='cancelled' WHERE owner=? AND state='pending'").run(owner);this.db.prepare("UPDATE jobs SET state='cancelled' WHERE owner=? AND state IN ('pending','starting','waiting_desktop') AND thread_id IS NULL").run(owner)}
  close(){this.db.close()}
 }

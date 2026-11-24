@@ -1,9 +1,9 @@
 import {conversationCommand,conversationInput} from '../../src/interfaces/wechat/conversation-command.mjs'
 import test from 'node:test';import assert from 'node:assert/strict';import {TextConversations} from '../../src/application/conversations/text-conversations.mjs';
 import {createCodexConversationBackend} from '../../src/infrastructure/agents/codex-conversation-backend.mjs'
-const fixture=()=>{const manager={state:{users:{alice:{threadId:'thread-a',previous:['thread-old']}}},owners:new Set(['alice','bob']),sessions:new Map(),questions:new Map(),save:async()=>{}};const r=new TextConversations(manager,['alice','bob'],conversationInput,createCodexConversationBackend(manager));const catalog=new Map([['thread-a',{id:'thread-a',name:null,status:{type:'idle'},archived:false}],['thread-old',{id:'thread-old',name:null,status:{type:'notLoaded'},archived:false}]]);const calls=[];const rpc={request:async(m,p)=>{calls.push([m,p]);if(m==='thread/list')return {data:[...catalog.values()].filter(t=>t.archived===p.archived),nextCursor:null};if(m==='thread/archive'||m==='thread/unarchive'){catalog.get(p.threadId).archived=m==='thread/archive';return {}}if(m==='thread/delete'){catalog.delete(p.threadId);return {}}if(m==='thread/read')throw Object.assign(Error('no rollout found for thread id'),{definitiveRpcError:true});throw Error('Unexpected '+m)}};r.withBackend=async(owner,work)=>work(rpc);return {manager,r,catalog,rpc,calls}};
+const fixture=()=>{const manager={state:{users:{alice:{threadId:'thread-a',previous:['thread-old']}}},owners:new Set(['alice','bob']),sessions:new Map(),questions:new Map(),save:async()=>{}};const r=new TextConversations(manager,['alice','bob'],conversationInput,createCodexConversationBackend(manager));const catalog=new Map([['thread-a',{id:'thread-a',name:null,status:{type:'idle'},archived:false}],['thread-old',{id:'thread-old',name:null,status:{type:'notLoaded'},archived:false}]]);const calls=[];const rpc={request:async(m,p)=>{calls.push([m,p]);if(m==='project/list')return {data:[],nextCursor:null};if(m==='thread/list')return {data:[...catalog.values()].filter(t=>t.archived===p.archived),nextCursor:null};if(m==='thread/archive'||m==='thread/unarchive'){catalog.get(p.threadId).archived=m==='thread/archive';return {}}if(m==='thread/delete'){catalog.delete(p.threadId);return {}}if(m==='thread/read')throw Object.assign(Error('no rollout found for thread id'),{definitiveRpcError:true});throw Error('Unexpected '+m)}};r.withBackend=async(owner,work)=>work(rpc);return {manager,r,catalog,rpc,calls}};
 const create=(r,name,raw)=>{r.bind({userId:'alice',text:'新建'});return r.bind({userId:'alice',text:name,...(raw?{raw}:{})})}
-const choose=(r,id,owner='alice')=>{r.bind({userId:owner,text:'切换'});const root=r.ensure(owner);root.prompt.choices=root.entries.filter(e=>!e.archived&&!e.deleted).map(e=>e.id);const number=root.prompt.choices.indexOf(String(id))+1;return r.bind({userId:owner,text:String(number||999)})}
+const choose=(r,id,owner='alice')=>{r.bind({userId:owner,text:'switch'});const root=r.ensure(owner);root.prompt.choices=root.entries.filter(e=>!e.archived&&!e.deleted).map(e=>e.id);const number=root.prompt.choices.indexOf(String(id))+1;return r.bind({userId:owner,text:String(number||999)})}
 test('catalog adapter reuses an owned connection and closes a temporary connection',async()=>{
  const calls=[];let closed=0;
  const rpc={request:async method=>{calls.push(method)},write:message=>calls.push(message.method),close:()=>{closed++}};
@@ -23,8 +23,8 @@ test('users cannot switch into each others slots or inherited threads',()=>{cons
 test('active conversation replies omit repeated labels; switched replies retain their origin',()=>{const {r}=fixture();const a=r.bind({userId:'alice',text:'任务A'});assert.equal(r.label(a.userId,'进度'),'进度');assert.deepEqual(r.label(a.userId,{text:'结果',attachments:[{path:'/tmp/result'}]}),{text:'结果',attachments:[{path:'/tmp/result'}]});create(r,'B');assert.match(r.label(a.userId,'完成'),/会话1 · 原有对话/);assert.equal(r.label('bob','消息'),'消息')});
 test('approval selection routes to original session after switch without changing active selection',async()=>{const {r,manager}=fixture();manager.questions.set('abcdef',{session:{userId:'alice'},message:{method:'item/commandExecution/requestApproval',params:{reason:'测试操作'}}});const b=create(r,'B');const prompt=r.bind({userId:'alice',text:'批准'});await r.control(prompt,async()=>{});const chosen=r.bind({userId:'alice',text:'1'});assert.equal(chosen.userId,'alice');assert.deepEqual(chosen._sessionCommand,{action:'approval',accept:true,code:'abcdef'});assert.equal(r.bind({userId:'alice',text:'继续B'}).userId,b.userId)});
 test('answer selection prompts for text and keeps the original session',async()=>{const {r,manager}=fixture();manager.questions.set('abc123',{session:{userId:'alice'},message:{method:'item/tool/requestUserInput',params:{questions:[{id:'machine',question:'使用哪台机器？'}]}}});create(r,'B');const out=[];await r.control(r.bind({userId:'alice',text:'回答'}),async text=>out.push(text));assert(out.at(-1).includes('使用哪台机器？'));await r.control(r.bind({userId:'alice',text:'1'}),async text=>out.push(text));assert(out.at(-1).includes('请输入答案'));const answer=r.bind({userId:'alice',text:'本机'});assert.equal(answer.userId,'alice');assert.deepEqual(answer._sessionCommand,{action:'answer',code:'abc123',text:'本机'})});
-test('switch lists projects and accepts a number in the next reply',async()=>{const {r}=fixture();create(r,'B');create(r,'C');const out=[];await r.control(r.bind({userId:'alice',text:'切换'}),async text=>out.push(text));assert(out.at(-1).includes('可切换的会话'));assert(out.at(-1).includes('1. '));assert(out.at(-1).includes('2. '));assert(out.at(-1).includes('回复前面的序号切换'));const choice=r.bind({userId:'alice',text:'2'});assert.deepEqual(choice._conversationCommand,{action:'switch',id:'2'});assert.equal(r.ensure('alice').active,'2')});
-test('switch list renumbers visible choices after archiving without changing project IDs',async()=>{const {r}=fixture();create(r,'B');create(r,'C');r.refreshTitles=async()=>{};r.find('alice','2').archived=true;const out=[];await r.control(r.bind({userId:'alice',text:'切换'}),async text=>out.push(text));assert.match(out.at(-1),/\n2\. 未命名项目 3/);assert.match(out.at(-1),/\n3\. 未命名项目 4/);const chosen=r.bind({userId:'alice',text:'2'});assert.deepEqual(chosen._conversationCommand,{action:'switch',id:'3'});assert.equal(r.ensure('alice').active,'3')});
+test('switch lists projects and accepts a number in the next reply',async()=>{const {r}=fixture();create(r,'B');create(r,'C');const out=[];await r.control(r.bind({userId:'alice',text:'switch'}),async text=>out.push(text));assert(out.at(-1).includes('可切换的会话'));assert(out.at(-1).includes('1. '));assert(out.at(-1).includes('2. '));assert(out.at(-1).includes('回复前面的序号切换'));const choice=r.bind({userId:'alice',text:'2'});assert.deepEqual(choice._conversationCommand,{action:'switch',id:'2'});assert.equal(r.ensure('alice').active,'2')});
+test('switch list renumbers visible choices after archiving without changing project IDs',async()=>{const {r}=fixture();create(r,'B');create(r,'C');r.refreshTitles=async()=>{};r.find('alice','2').archived=true;const out=[];await r.control(r.bind({userId:'alice',text:'switch'}),async text=>out.push(text));assert.match(out.at(-1),/\n2\. 未命名项目 3/);assert.match(out.at(-1),/\n3\. 未命名项目 4/);const chosen=r.bind({userId:'alice',text:'2'});assert.deepEqual(chosen._conversationCommand,{action:'switch',id:'3'});assert.equal(r.ensure('alice').active,'3')});
 test('history lists archived conversations and selects without switching',async()=>{const {r}=fixture();create(r,'B');r.refreshTitles=async()=>{};r.find('alice','2').archived=true;const active=r.ensure('alice').active,out=[];await r.control(r.bind({userId:'alice',text:'历史'}),async text=>out.push(text));assert.match(out.at(-1),/2\. 历史对话 2（已归档）/);const choice=r.bind({userId:'alice',text:'2'});assert.deepEqual(choice._conversationCommand,{action:'history',id:'2'});assert.equal(r.ensure('alice').active,active)});
 test('history uses thread turns, preserves busy reply handler and paginates explicitly',async()=>{const {r,manager}=fixture();const handler=()=>{};let calls=[];manager.sessions.set('alice',{reply:handler});manager.connect=async(key,reply)=>{assert.equal(reply,handler);return {rpc:{request:async(m,p)=>{calls.push(p);return {data:[{items:[{type:'userMessage',content:[{type:'text',text:'问题'}]},{type:'agentMessage',text:'答复'}]}],nextCursor:calls.length===1?'next':null}}}}};r.withBackend=async(owner,work)=>work((await manager.connect('alice',handler)).rpc);r.refreshTitles=async()=>{};const out=[];await r.control(r.bind({userId:'alice',text:'历史'}),async s=>out.push(s));assert.match(out[0],/选择要查看历史的会话/);await r.control(r.bind({userId:'alice',text:'1'}),async s=>out.push(s));await r.control(r.bind({userId:'alice',text:'翻页'}),async s=>out.push(s));assert.equal(calls[1].cursor,'next');assert.match(out[1],/问题/);assert.match(out[1],/答复/)});
 test('duplicate create does not allocate another slot or retarget current selection',()=>{const {r}=fixture();r.bind({userId:'alice',text:'新建',raw:{message_id:'m0'}});const m={userId:'alice',text:'B',raw:{message_id:'m1'}};const first=r.bind(m);choose(r,1);const again=r.bind(m);assert.equal(again.userId,first.userId);assert.equal(r.ensure('alice').entries.length,3);assert.equal(r.find('alice').key,'alice')});
@@ -103,23 +103,17 @@ test('successful delete notification arriving before RPC response does not close
 test('deleting current conversation delivers the acknowledgement even after selecting its replacement',async()=>{const {r}=fixture();const message=r.bind({userId:'alice',text:'删除1'}),sent=[];await r.control(message,(value,options)=>r.deliver(message.userId,value,options,async(k,v)=>{sent.push(v);return {status:'accepted'}}));assert.equal(r.ensure('alice').active,'2');assert.match(sent.at(-1),/已永久删除会话1/);assert.equal(r.find('alice','1').unread.length,0);const status=await r.deliver('alice','late deleted history',{},async()=>{throw Error('Must not deliver')});assert.equal(status.status,'cancelled')});
 test('archiving current conversation also delivers management reply directly',async()=>{const {r}=fixture();const message=r.bind({userId:'alice',text:'归档1'}),sent=[];await r.control(message,(value,options)=>r.deliver(message.userId,value,options,async(k,v)=>{sent.push(v);return {status:'accepted'}}));assert.equal(r.ensure('alice').active,'2');assert.match(sent.at(-1),/已归档会话1/)});
 
-test('daily conversation has a stable label after blank title refresh and named title updates',async()=>{
- const {r,manager}=fixture(),out=[];
- await r.control(r.bind({userId:'alice',text:'切换'}),async text=>out.push(text));
- assert.match(out.at(-1),/1\. 日常助手/);
- assert.doesNotMatch(out.at(-1),/1\. 未命名对话/);
- assert.equal(r.find('alice','1').name,'未命名对话 1'); // display does not rename the native thread
- await r.titleUpdated('thread-a','购物计划');
- assert.equal(r.displayName('alice',r.find('alice','1')),'日常助手 · 购物计划');
- await r.titleUpdated('thread-a',null);
- assert.equal(r.displayName('alice',r.find('alice','1')),'日常助手');
- // Daily identity follows dailyId, even after the original daily conversation is replaced.
- r.bind({userId:'alice',text:'取消'});
- const extra=create(r,'new daily');r.ensure('alice').dailyId=r.entry(extra.userId).id;
- assert.equal(r.displayName('alice',r.entry(extra.userId)),'日常助手 · 未命名项目 3');
- assert.equal(r.displayName('alice',r.find('alice','1')),'未命名对话 1');
- assert.equal(manager.state.users.alice.threadId,'thread-a');
-});
+test('the initial conversation uses its native title and ordinary untitled fallback',async()=>{
+ const {r}=fixture()
+ await r.titleUpdated('thread-a','购物计划')
+ assert.equal(r.find('alice','1').name,'购物计划')
+ await r.titleUpdated('thread-a',null)
+ assert.equal(r.find('alice','1').name,'当前会话')
+ await r.refreshTitles('alice')
+ assert.equal(r.find('alice','1').name,'当前会话')
+ assert.equal(r.find('alice','2').name,'会话 2')
+})
+
 
 test('switch acknowledgement displays confirmed thread directory instead of default workspace',async()=>{
  const {r,manager,catalog}=fixture();
@@ -136,3 +130,133 @@ test('switch acknowledgement displays confirmed thread directory instead of defa
  assert.match(out.at(-1),/工作目录：未获底座确认/);
  assert.doesNotMatch(out.at(-1),/default|Codex已确认|后续消息/);
 });
+
+test('catalog questions and pagination stay in the current conversation for the model',async()=>{
+ const {r,calls}=fixture()
+ for(const text of ['当前有哪些项目','我有哪些项目？','当前都有哪些会话','更多会话','看看电脑最近的会话']){
+  const message=r.bind({userId:'alice',text})
+  assert.equal(message._conversationCommand,null)
+  assert.equal(await r.control(message,assert.fail),false)
+ }
+ assert.deepEqual(calls,[])
+ assert.equal(conversationCommand('帮我看看当前有哪些项目需要修复'),null)
+ assert.equal(conversationInput('当前有哪些项目',{pending:{target:'switch'}}).promptResult,'keep')
+ assert.equal(conversationInput('当前有哪些项目',{pending:{target:'rename'}}).command.name,'当前有哪些项目')
+})
+
+test('project overview pages through native projects including empty projects, and reports incomplete queries',async()=>{
+ const {r}=fixture()
+ let failing=false
+ r.withBackend=async(owner,work)=>work({request:async(method,params)=>{
+  assert.equal(owner,'alice');assert.equal(method,'project/list')
+  if(!params.cursor)return {data:[{id:'one',name:'知识库',recencyAt:null}],nextCursor:'page2'}
+  assert.equal(params.cursor,'page2')
+  return {data:[{id:'one',name:'知识库'},{id:'two',name:'工具箱'}],nextCursor:failing?'page2':null}
+ }})
+ assert.deepEqual((await r.codexProjects('alice')).map(p=>p.name),['知识库','工具箱'])
+ failing=true
+ assert.equal(await r.codexProjects('alice'),null)
+})
+
+test('Chinese switch stays in the conversation without opening a numbered menu',async()=>{
+ const {r}=fixture()
+ const message=r.bind({userId:'alice',text:'切换'})
+ assert.equal(r.ensure('alice').prompt,undefined)
+ assert.equal(await r.control(message,()=>assert.fail('unexpected switch menu')),false)
+ assert.equal(message.userId,'alice')
+})
+
+test('computer continuation selects the existing thread and directory for the next WeChat message',async()=>{
+ const {r,manager}=fixture()
+ const row={id:'personal-thread',name:'修复搜索',cwd:'/work/knowledge',updatedAt:5000,status:{type:'idle'}}
+ let reads=0
+ r.withBackend=async(_,work)=>work({request:async(method,params)=>{
+  if(method==='thread/list'){assert.equal(params.sortKey,'updated_at');return {data:[{...row,id:'router',ephemeral:true},{...row,id:'wechat',originator:'wechat_codex'},row]}}
+  assert.equal(method,'thread/read');assert.equal(params.threadId,row.id);reads++;return {thread:row}
+ }})
+ manager.workspaceFor=key=>manager.state.users[key].workspace
+ const request={userId:'alice',text:'接着刚才那条聊',raw:{message_id:'one'}}
+ const out=[]
+ await r.control(r.bind(request),s=>out.push(s))
+ const next=r.bind({userId:'alice',text:'继续修搜索'})
+ assert.equal(manager.state.users[next.userId].threadId,row.id)
+ assert.equal(manager.state.users[next.userId].workspace,row.cwd)
+ assert.equal(manager.state.users[next.userId].hasMessages,true)
+ assert.equal(reads,1);assert.match(out[0],/修复搜索/)
+ await r.control(r.bind(request),s=>out.push(s))
+ assert.equal(out.length,1)
+ await r.control(r.bind({...request,raw:{message_id:'two'}}),s=>out.push(s))
+ assert.equal(r.root.alice.entries.filter(e=>e.key===next.userId).length,1)
+})
+
+test('ambiguous computer conversations accept a folder name and recheck busy state before switching',async()=>{
+ const {r}=fixture()
+ const recent=[{id:'a',name:'修搜索',cwd:'/work/kb',updatedAt:400},{id:'b',name:'版本',cwd:'/work/tools',updatedAt:300}]
+ r.withBackend=async(_,work)=>work({request:async(method,p)=>method==='thread/list'?{data:recent}:{thread:{...recent.find(t=>t.id===p.threadId),status:{type:'active'}}}})
+ const out=[]
+ await r.control(r.bind({userId:'alice',text:'接着刚才那条聊'}),s=>out.push(s))
+ assert.match(out[0],/想接着哪一条聊/);assert.equal(r.root.alice.active,'1')
+ await r.control(r.bind({userId:'alice',text:'tools'}),s=>out.push(s))
+ assert.match(out.at(-1),/电脑上这轮结束/);assert.equal(r.root.alice.active,'1')
+})
+
+test('微信从 app-server 分页查所有会话，包括独立会话，保持选中项',async()=>{
+ const {r,manager}=fixture(),calls=[]
+ manager.state.desktopHandoff={phase:'desktop'}
+ r.withBackend=async(owner,work)=>work({request:async(method,params)=>{
+  calls.push(method)
+  assert.equal(Object.hasOwn(params,'projectId'),false)
+  assert.equal(params.archived,false)
+  return params.cursor?{data:[{id:'other',name:'项目会话',projectId:'p'}]}:
+   {data:[{id:'thread-a',name:'独立会话',projectId:null},{id:'temp',ephemeral:true}],nextCursor:'next'}
+ }})
+ const {ManagementService}=await import('../../src/application/management/management-service.mjs')
+ const service=new ManagementService({manager,conversations:r})
+ try{
+  const page=await service.call('alice','list_project_sessions',{})
+  assert.deepEqual(page.sessions.map(t=>t.name),['独立会话'])
+  const next=await service.call('alice','list_project_sessions',{cursor:page.nextCursor})
+  assert.deepEqual(next.sessions.map(t=>t.name),['项目会话'])
+ }finally{service.close()}
+ assert.deepEqual(calls,['thread/list','thread/list'])
+ assert.equal(r.ensure('alice').active,'1')
+})
+
+test('connecting a known thread reads only that thread and preserves sibling bindings',async()=>{
+ const {r,manager}=fixture(),seen=[]
+ r.withBackend=(_,work)=>work({request:async(method,{threadId})=>{
+  seen.push(method)
+  return {thread:{id:threadId,archived:false,name:'当前会话'}}
+ }})
+ const sibling=structuredClone(r.find('alice','2'))
+ await manager.beforeConversationConnect('alice')
+ assert.deepEqual(seen,['thread/read'])
+ assert.equal(r.find('alice','1').name,'当前会话')
+ assert.deepEqual(r.find('alice','2'),sibling)
+})
+
+test('untitled conversation uses native preview without writing a native title, then follows a real rename',async()=>{
+ const {r,catalog,calls}=fixture()
+ const thread=catalog.get('thread-a');thread.name=null;thread.preview='调整微信回复排版和标题'
+ await r.refreshTitles('alice')
+ assert.equal(r.find('alice','1').name,'调整微信回复排版和标题')
+ assert.equal(r.find('alice','1').titleSource,'preview')
+ await r.titleUpdated('thread-a',null)
+ assert.equal(r.find('alice','1').name,'调整微信回复排版和标题')
+ await r.titleUpdated('thread-a','微信助手开发')
+ assert.equal(r.find('alice','1').name,'微信助手开发')
+ assert(!calls.some(([method])=>method==='thread/name/set'))
+})
+
+test('a slow switch cannot claim it selected a conversation after a newer selection',async()=>{
+ const {r,manager}=fixture(),message=choose(r,2),out=[]
+ manager.connect=async key=>{
+  r.ensure('alice').selectionVersion++
+  r.ensure('alice').active='1'
+  return {threadId:manager.state.users[key].threadId,rpc:{request:async()=>({thread:{id:manager.state.users[key].threadId}})}}
+ }
+ await r.control(message,async text=>out.push(text))
+ assert.equal(r.ensure('alice').active,'1')
+ assert(out.some(text=>text.includes('未改变当前选择')))
+ assert(!out.some(text=>text.startsWith('已切换到')))
+})

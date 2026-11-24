@@ -80,3 +80,24 @@ test('worker preserves trace and bounded failure stage without persisting subpro
  assert.equal(JSON.stringify(request).includes('private'),false)
  assert.equal(upgradeFailureCode({stderr:'untrusted UPGRADE_BUSY text'}),'CHAT_UPGRADE_FAILED')
 })
+
+test('maintenance worker entry points process requests using native paths',async t=>{
+ const {spawnSync}=await import('node:child_process')
+ const {fileURLToPath}=await import('node:url')
+ const {symlink}=await import('node:fs/promises')
+ const home=await mkdtemp(join(tmpdir(),'maintenance-entry-'))
+ t.after(()=>rm(home,{recursive:true,force:true}))
+ for(const worker of ['chat-upgrade-worker','agent-switch-worker']){
+  const script=fileURLToPath(new URL('../../src/setup/'+worker+'.mjs',import.meta.url))
+  let entry=script
+  if(process.platform!=='win32'){
+   entry=join(home,worker+'-alias.mjs')
+   await symlink(script,entry)
+  }
+  const child=spawnSync(process.execPath,[entry,'nonexistent','missing'],{
+   env:{...process.env,HOME:home,USERPROFILE:home},timeout:5000
+  })
+  assert.ifError(child.error)
+  assert.equal(child.status,1,worker+' must reject a missing request')
+ }
+})

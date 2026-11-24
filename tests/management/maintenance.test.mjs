@@ -6,7 +6,7 @@ import {managementTools} from '../../src/application/management/tools.mjs'
 function fixture(t){
  const calls=[],root={alice:{active:'1',entries:[{id:'1',key:'alice',name:'入口'},{id:'2',key:'project',name:'项目'}]},bob:{active:'1',entries:[{id:'1',key:'bob',name:'Bob'}]}}
  const manager={state:{users:{alice:{threadId:'a'},project:{threadId:'p'},bob:{threadId:'b'}}},sessions:new Map([['alice',{busy:true,traceId:'caller-task'}]]),questions:new Map(),save:async()=>calls.push('save')}
- const conversations={root,backendPort:{capabilities:{catalog:true}},realOwners:new Set(['alice','bob']),entry:key=>{for(const [owner,r]of Object.entries(root)){const e=r.entries.find(e=>e.key===key);if(e)return {...e,owner}}},displayName:(_owner,e)=>e.name}
+ const conversations={root,backendPort:{capabilities:{catalog:true}},realOwners:new Set(['alice','bob']),entry:key=>{for(const [owner,r]of Object.entries(root)){const e=r.entries.find(e=>e.key===key);if(e)return {...e,owner}}}}
  const maintenance={serviceStatus:async()=>({ready:true,idle:false}),installationStatus:async()=>({inferenceVerified:false}),diagnostics:async()=>({recent_failures:[]}),guide:async language=>({text:language==='en'?'Guide':'说明'}),status:async()=>({restart:null,upgrade:null}),restart:async()=>{calls.push('restart');return {status:'scheduled',maintenanceId:'restart-worker'}},upgrade:async release=>{calls.push(release);return {status:'scheduled',maintenanceId:'upgrade-worker',version:release.tag}}}
  const service=new ManagementService({manager,conversations,maintenance,updates:{query:async()=>({latest:{tag:'v2.0.0',commit:'a'.repeat(40)}})},notice:async()=>{}});t.after(()=>service.close())
  return {service,manager,conversations,maintenance,calls}

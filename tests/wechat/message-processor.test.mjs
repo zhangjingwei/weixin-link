@@ -32,7 +32,7 @@ test('extracted message processor rejects unauthorized, cancelled and stale mess
 })
 test('extracted processor retains ping handling and durable ordinary submission',async()=>{
  const f=fixture();await f.handle({userId:'owner',text:'ping',_ingressId:'ping-id'})
- assert.deepEqual(f.sent,[['owner','pong\n〔系统通知〕']]);assert.deepEqual(f.acked,['ping-id'])
+ assert.deepEqual(f.sent,[['owner','pong 〔系统通知〕']]);assert.deepEqual(f.acked,['ping-id'])
  await f.handle({userId:'owner',text:'normal request',_ingressId:'request-id'})
  assert.equal(f.submitted.length,1);assert.equal(f.submitted[0][0],'owner');assert.equal(f.submitted[0][2],'request-id')
 })
@@ -126,15 +126,14 @@ test('explicit setup commands continue without a duplicate welcome',async()=>{
  assert.deepEqual(f.sent,[['owner','安装状态结果']]);assert.equal(f.submitted.length,0)
 })
 
-test('voice status bypasses unavailable model and stop bypasses maintenance gating',async()=>{
+test('voice status enters normal model intake and stop bypasses maintenance gating',async()=>{
  const f=fixture(),handled=[]
- f.deps.manager.sessions.clear();f.deps.backend.kind='remote';f.deps.backend.preflight=()=>{throw Error('must not preflight')}
  f.deps.manager.acceptMessage=async()=>true;f.deps.manager.handle=async(owner,text)=>handled.push([owner,text])
  f.handle=createMessageProcessor(f.deps)
  const voice=text=>({userId:'owner',type:'voice',text:'[voice]',voices:[{text}],_ingressId:text,raw:{item_list:[{voice_item:{text}}]}})
  await f.handle(voice('状态。'))
  f.deps.runtime.draining=true;await f.handle(voice('停止。'))
- assert.deepEqual(handled,[['owner','状态'],['owner','停止']]);assert.deepEqual(f.submitted,[])
+ assert.deepEqual(handled,[['owner','停止']]);assert.deepEqual(f.submitted.map(args=>args[1].text),['状态。'])
 })
 test('voice upgrade uses maintenance handler and recovered request does not repeat',async()=>{
  const f=fixture();let calls=0
@@ -143,4 +142,89 @@ test('voice upgrade uses maintenance handler and recovered request does not repe
  const message={userId:'owner',type:'voice',text:'[voice]',voices:[{text:'升级。'}],_ingressId:'voice-upgrade'}
  await f.handle(message);await f.handle({...message,_recovered:true})
  assert.equal(calls,1);assert.deepEqual(f.submitted,[]);assert.match(f.sent[0][1],/没有重复执行/)
+})
+
+test('standalone greeting replies locally once, even when the model is unavailable',async()=>{
+ const f=fixture(),claims=new Set()
+ f.deps.manager.sessions.clear()
+ f.deps.entryRouting={process:async()=>assert.fail('unexpected model routing')}
+ f.deps.jobs.claimReceipt=id=>!claims.has(id)&&!!claims.add(id)
+ f.deps.outgoing.deliver=async(id,text)=>{f.sent.push([id,text]);return {status:'unknown'}}
+ const handle=createMessageProcessor(f.deps)
+ const message={userId:'owner',text:'你好！',_ingressId:'hello'}
+ await handle(message)
+ await handle({...message,_recovered:true})
+ assert.deepEqual(f.sent,[['owner','你好！有什么可以帮你？']])
+ assert.deepEqual(f.submitted,[])
+})
+
+test('greetings with requests, quotes or pending clarification retain normal routing',async()=>{
+ const f=fixture(),routed=[]
+ f.deps.entryRouting={process:async message=>{routed.push(message._ingressId);return true}}
+ const handle=createMessageProcessor(f.deps)
+ const base={userId:'owner',text:'你好'}
+ await handle({...base,text:'你好，帮我整理文件',_ingressId:'task'})
+ await handle({...base,references:[{text:'之前的问题'}],_ingressId:'quote'})
+ f.deps.manager.state.textConversations={owner:{entryClarification:{question:'哪个项目？'}}}
+ await handle({...base,_ingressId:'clarification'})
+ assert.deepEqual(routed,['task','quote','clarification'])
+ assert.deepEqual(f.sent,[])
+})
+
+test('bare continue confirms only one captured desktop request; ambiguous or ordinary text never quits',async()=>{
+ const f=fixture(),confirmed=[]
+ f.deps.runtime.track=(_,fn)=>fn()
+ f.deps.durable.confirmDesktop=async(_,action,code)=>confirmed.push([action,code])
+ f.deps.jobs.desktopJob=(_,code)=>({input:{text:'任务 '+code}})
+ const msg={userId:'owner',text:'继续'}
+ await f.handle({...msg,_desktopChoices:['aaaaaaaa']})
+ await f.handle({...msg,_desktopChoices:['aaaaaaaa','bbbbbbbb']})
+ await f.handle({...msg,_desktopChoices:[]})
+ assert.deepEqual(confirmed,[['继续','aaaaaaaa']])
+ assert.match(f.sent[0][1],/继续 bbbbbbbb/)
+ assert.equal(f.submitted.length,1)
+})
+
+test('关闭桌面端 dispatches the desktop quit tool once for the captured thread',async()=>{
+ const {createReceiveMessage}=await import('../../src/application/intake/receive-message.mjs')
+ const f=fixture(),calls=[]
+ Object.assign(f.deps.manager.state.users.owner,{threadId:'thread'})
+ Object.assign(f.deps.jobs,{findCaptured:()=>null,claimReceipt:()=>!calls.length})
+ f.deps.runtime.track=(_,fn)=>fn()
+ f.deps.durable.quitDesktop=async message=>calls.push(message._desktopQuit.threadId)
+ const receiver=createReceiveMessage({...f.deps,conversations:{bind:m=>m},normalizeVoice:m=>m,hasMedia:()=>false,setupReceipts:{get:()=>null},setupController:{command:()=>null}})
+ const prepare=references=>receiver.prepare({userId:'owner',text:'关闭桌面端'},{traceId:'test',quote:()=>references})
+ assert.equal(prepare([{text:'quoted'}])._desktopQuit,undefined)
+ const captured={...prepare([]),_ingressId:'quit-id'}
+ await f.handle(captured)
+ await f.handle(captured)
+ assert.deepEqual(calls,['thread'])
+ assert.deepEqual(f.submitted,[])
+})
+
+test('text and voice result lookups reach the model without replaying a rejected previous reply',async()=>{
+ const f=fixture(),record=f.deps.manager.state.users.owner
+ record.lastReply='上一轮回答'
+ record.recovery={execution:'completed',delivery:'failed',delivery_error:{api_code:-2}}
+ f.deps.manager.save=async()=>{}
+ for(const text of ['结果','RESULT?']){
+  await f.handle({userId:'owner',text,_ingressId:text})
+ }
+ const transcript='结果。'
+ await f.handle({userId:'owner',type:'voice',text:'[voice]',voices:[{text:transcript}],_ingressId:'voice-result',raw:{item_list:[{voice_item:{text:transcript}}]}})
+ assert.deepEqual(f.submitted.map(args=>args[1].text),['结果','RESULT?',transcript])
+ assert.deepEqual(f.sent,[])
+ assert.equal(record.recovery.autoResend,undefined)
+ assert.equal(record.recovery.delivery,'failed')
+})
+
+test('first message with no live session goes straight to durable intake',async()=>{
+ const f=fixture(),events=[]
+ f.deps.manager.sessions.clear()
+ f.deps.log=event=>events.push(event)
+ const handle=createMessageProcessor(f.deps)
+ await handle({userId:'owner',text:'请检查当前项目',_ingressId:'cold-start'})
+ assert.equal(f.submitted.length,1)
+ assert.equal(f.submitted[0][2],'cold-start')
+ assert(!events.some(event=>event.startsWith('agent.readiness')))
 })

@@ -6,7 +6,7 @@ import {createSessionProtocol} from '../../src/infrastructure/agents/session-pro
 function fixture(t){
  const entries=[{id:'1',key:'alice',owner:'alice',name:'Entry'},{id:'2',key:'project',owner:'alice',name:'Project'}]
  const manager={state:{users:{alice:{threadId:'a'},project:{threadId:'p'}}},sessions:new Map([['alice',{busy:true,model:'old'}]]),questions:new Map(),save:async()=>{},protocol:{supportsModels:true,providerOptions:()=>({provider:null}),listModels:async()=>({models:[{model:'allowed'}]})}}
- const conversations={root:{alice:{entries,active:'1'}},realOwners:new Set(['alice']),entry:key=>entries.find(e=>e.key===key),displayName:(_,e)=>e.name,withBackend:async(_,fn)=>fn({})}
+ const conversations={root:{alice:{entries,active:'1'}},realOwners:new Set(['alice']),entry:key=>entries.find(e=>e.key===key),withBackend:async(_,fn)=>fn({})}
  const service=new ManagementService({manager,conversations});t.after(()=>service.close());return {manager,service,conversations}
 }
 test('selection is project scoped, durable, idempotent and does not interrupt the caller',async t=>{

@@ -9,7 +9,7 @@ export function requestDesktop(context,owner,caller,name,args){return management
  if(name==='request_desktop_return'){
   const handoff=context.manager.state.desktopHandoff
   if(!handoff||handoff.owner!==owner||handoff.projectId!==e.id||handoff.threadId!==op.threadId)throw Error('MANAGEMENT_DESKTOP_HANDOFF_MISMATCH')
-  const checked=await context.desktop.readAfterClose(op.threadId,{workspace:op.workspace})
+  const checked=await context.desktop.readAfterClose(op.threadId,{workspace:op.workspace,verifyWriter:true})
   if(checked?.threadId!==op.threadId)throw Error('MANAGEMENT_DESKTOP_THREAD_MISMATCH')
   if(context.manager.state.desktopHandoff!==handoff||handoff.workspace!==op.workspace)throw Error('MANAGEMENT_DESKTOP_HANDOFF_CHANGED')
   if(context.closed||!context.ready()||!context.conversations.realOwners.has(owner)||context.target(owner,args.projectId)!==e||(context.manager.state.users[e.key]?.threadId??null)!==op.threadId||(context.manager.workspaceFor?.(e.key)??null)!==op.workspace)throw Error('MANAGEMENT_STALE_TARGET')
@@ -36,7 +36,7 @@ export async function executeDesktop(context,op){
  // Fail closed across a restart or an unknown desktop launch result.
  manager.state.desktopHandoff={owner:op.owner,projectId:e.id,threadId:op.threadId,workspace:op.workspace,phase:'launching',createdAt:context.now()};op.status='executing';await manager.save()
  if(context.closed||!context.ready())throw Error('MANAGEMENT_UNAVAILABLE')
- for(const [key,session]of manager.sessions){session.exited=true;manager.detachRpc?.(session,session.rpcAttempt);session.rpc?.close();manager.sessions.delete(key)}
+ for(const [key,session]of manager.sessions){session.exited=true;manager.sessions.delete(key);if(manager.releaseConnection)await manager.releaseConnection(session);else{manager.detachRpc?.(session,session.rpcAttempt);session.rpc?.close()}}
  try{await context.desktop.open(op.threadId,{current:()=>!context.closed&&context.ready()});manager.state.desktopHandoff.phase='desktop';op.status='confirmed';op.data={mode:'desktop',launched:true,visibilityVerified:false}}
  catch{manager.state.desktopHandoff.phase='launch_unknown';op.status='unknown';op.detail='MANAGEMENT_DESKTOP_LAUNCH_UNCONFIRMED'}
 }

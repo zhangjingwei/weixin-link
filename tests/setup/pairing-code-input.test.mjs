@@ -27,12 +27,12 @@ test('interactive PIN input disables terminal echo before showing its prompt',as
  assert(!output.join('').includes('123456'))
 })
 
-test('a mistyped account name reports ACCOUNT_NOT_FOUND before asking for a PIN',async t=>{
+test('a named account reports SINGLE_USER_INSTALLATION before asking for a PIN',async t=>{
  const home=await mkdtemp(join(tmpdir(),'weixin-pin-account-'))
  t.after(()=>rm(home,{recursive:true,force:true}))
  const script=fileURLToPath(new URL('../../src/setup/account-manager.mjs',import.meta.url))
  await assert.rejects(exec(process.execPath,[script,'verify','weixin-tes'],{env:{...process.env,HOME:home}}),error=>{
-  assert.equal(JSON.parse(error.stdout).error,'ACCOUNT_NOT_FOUND')
+  assert.equal(JSON.parse(error.stdout).error,'SINGLE_USER_INSTALLATION')
   assert(!error.stderr.includes('PIN'))
   return true
  })

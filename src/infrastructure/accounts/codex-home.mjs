@@ -1,9 +1,10 @@
 import {mkdir,lstat} from 'node:fs/promises'
 import {join} from 'node:path'
-import {accountPaths} from './account-store.mjs'
+import {homedir} from 'node:os'
 
 export function accountCodexHome(accountId=process.env.WECHAT_ACCOUNT??'default',home){
- return join(accountPaths(accountId,home).stateDir,'codex-home')
+ if(accountId!=='default')throw Error('SINGLE_USER_INSTALLATION')
+ return process.env.CODEX_HOME||join(home||process.env.HOME||homedir(),'.codex')
 }
 
 export async function ensureAccountCodexHome(accountId=process.env.WECHAT_ACCOUNT??'default',home){

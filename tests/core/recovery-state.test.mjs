@@ -15,13 +15,10 @@ test('recheck only reopens uncertain owner-linked work for reconciliation',async
  jobs.cancel('u');assert.equal(jobs.recheck('u'),0)
  }finally{jobs.close();await rm(dir,{recursive:true,force:true})}
 })
-test('result reports current task, does not replay stale result or start inference; partial sends fail',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'result-')),out=[]
+test('partial and unknown sends preserve delivery uncertainty',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'result-'))
  const m=await new SessionManager({stateDir:dir,cwd:dir,owners:['u'],rpcFactory:()=>{throw Error('must not execute')}}).init()
  try{
- m.state.users.u={lastReply:'old result',recovery:{task:{id:'1234',title:'新任务'},execution:'running',delivery:null}}
- await m.handle('u','结果',async t=>out.push(t));assert.equal(out.length,1);assert.ok(!out.includes('old result'));assert.match(out[0],/仍在执行/)
- m.state.users.u.recovery={execution:'completed',delivery:'unknown'};await m.handle('u','结果',async t=>{out.push(t);return {status:'accepted'}});assert.equal(m.state.users.u.recovery.delivery,'accepted')
  assert.equal(await m.emit({userId:'u',reply:async()=>({status:'partial'})},'x'),false)
  const unknown={userId:'u',reply:async()=>undefined}
  assert.equal(await m.emit(unknown,'x'),false)

@@ -3,7 +3,6 @@
  */
 export function messagePorts({infrastructure, delivery, stateDir, cwd}) {
   const candidate = {
-    agent: {checkReady: infrastructure?.agent?.readiness},
     media: {has: infrastructure?.media?.has, prepare: infrastructure?.media?.prepare, compose: infrastructure?.media?.compose,
       package: typeof infrastructure?.media?.outputStore === 'function' && typeof stateDir === 'string' && typeof cwd === 'string'
         ? (userId, value) => infrastructure.media.outputStore({stateDir, cwd}).package(userId, value) : undefined},

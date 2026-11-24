@@ -8,6 +8,7 @@
 !/package.json
 !/package-lock.json
 !/install.sh
+!/upgrade-local.sh
 
 !/USER-GUIDE.md
 !/USER-GUIDE.en.md

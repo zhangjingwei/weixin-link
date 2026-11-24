@@ -13,7 +13,7 @@ import {SessionManager} from '../../src/wechat/session-manager.mjs'
 function fixture(t){
  const root={alice:{active:'1',entries:[{id:'1',key:'alice',name:'项目'}]}},events=[]
  const manager={state:{users:{alice:{threadId:'original-thread'}}},sessions:new Map(),questions:new Map(),save:async()=>events.push('save')}
- const conversations={root,realOwners:new Set(['alice']),entry:key=>key==='alice'?{...root.alice.entries[0],owner:'alice'}:null,displayName:()=> '项目'}
+ const conversations={root,realOwners:new Set(['alice']),entry:key=>key==='alice'?{...root.alice.entries[0],owner:'alice'}:null}
  const desktop={status:async()=>({supported:true,enabled:true}),prepare:async()=>events.push('prepare'),open:async id=>events.push('open:'+id),readAfterClose:async id=>{events.push('read:'+id);return {threadId:id}}}
  const service=new ManagementService({manager,conversations,desktop,notice:async()=>{}});service.resumeTasks=()=>events.push('resume');t.after(()=>service.close())
  return {manager,conversations,desktop,service,events}
@@ -72,7 +72,7 @@ test('paused durable queue retains jobs without spinning and resumes once releas
 async function adapter(t){
  const dir=await mkdtemp(join(tmpdir(),'desktop-adapter-')),home=join(dir,'codex-home');await mkdir(home);t.after(()=>rm(dir,{recursive:true,force:true}))
  let processes='',readStatus='notLoaded';const calls=[],rpcs=[]
- const client=createDesktopClient({account:{stateDir:dir},codexHome:home,workspace:dir,binary:'/test/codex',platform:'darwin',inspect:async path=>path.endsWith('.app')?{isDirectory:()=>true,isSymbolicLink:()=>false}:lstat(path),run:async(binary,args)=>{calls.push({binary,args});return {stdout:binary==='/bin/ps'?processes:''}},rpcFactory:options=>{rpcs.push(options);return {write(){},close(){},request:async method=>method==='thread/read'?{thread:{id:'thread-1',status:{type:readStatus}}}:{}}}})
+ const client=createDesktopClient({account:{stateDir:dir},codexHome:home,workspace:dir,binary:'/test/codex',platform:'darwin',inspect:async path=>path.endsWith('.app')?{isDirectory:()=>true,isSymbolicLink:()=>false}:lstat(path),run:async(binary,args)=>{calls.push({binary,args});return {stdout:binary==='/bin/ps'?processes:''}},rpcFactory:options=>{rpcs.push(options);return {write(){},close(){},request:async method=>['thread/read','thread/resume'].includes(method)?{thread:{id:'thread-1',status:{type:readStatus}}}:{}}}})
  return {client,calls,rpcs,home,enable:()=>writeFile(join(dir,'desktop-handoff.json'),JSON.stringify({version:1,enabled:true,app:'ChatGPT'})),processes:value=>{processes=value},readStatus:value=>{readStatus=value}}
 }
 test('desktop launch is opt in, uses only private account home and a validated deep link',async t=>{
@@ -81,10 +81,10 @@ test('desktop launch is opt in, uses only private account home and a validated d
  assert(open.args.includes('CODEX_HOME='+f.home));assert(open.args.includes('CODEX_SQLITE_HOME='+f.home));assert(open.args.includes('codex://threads/thread-1'));assert(!open.args.includes('--args'))
  await assert.rejects(f.client.open('bad\nthread'),/THREAD_INVALID/)
 })
-test('existing desktop or bundled background process prevents both launching and returning',async t=>{
+test('existing desktop prevents a second launch but a released thread can return',async t=>{
  const f=await adapter(t);await f.enable();f.processes('/Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n')
- await assert.rejects(f.client.open('thread-1'),/APP_ALREADY_RUNNING/);await assert.rejects(f.client.readAfterClose('thread-1'),/APP_STILL_RUNNING/)
- assert(!f.calls.some(c=>c.binary==='/usr/bin/open'));assert.equal(f.rpcs.length,0)
+ await assert.rejects(f.client.open('thread-1'),/APP_ALREADY_RUNNING/);assert.equal((await f.client.readAfterClose('thread-1',{verifyWriter:true})).threadId,'thread-1')
+ assert(!f.calls.some(c=>c.binary==='/usr/bin/open'));assert.equal(f.rpcs.length,1)
 })
 test('return only reads original metadata and requires an idle native thread',async t=>{
  const f=await adapter(t);await f.enable();await f.client.readAfterClose('thread-1');assert.deepEqual(f.rpcs[0].providerOptions.args,['app-server']);assert.equal(f.rpcs[0].codexHome,f.home)

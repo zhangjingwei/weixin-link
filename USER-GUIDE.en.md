@@ -58,7 +58,6 @@ Ask which models are available, then name the model for a project's future tasks
 If the model cannot answer, use these emergency commands:
 
 - **stop**: stop the current conversation's task and clear its waiting queue.
-- **status**: check the current conversation and task.
 - **install-help**: installation and authorization guidance.
 - **service-status**, **guide**, **help**: service status and usage information.
 

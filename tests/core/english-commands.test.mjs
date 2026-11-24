@@ -8,7 +8,9 @@ import {agentSwitchCommand} from '../../src/setup/agent-switch.mjs'
 import {chatUpgradeCommand} from '../../src/setup/chat-upgrade.mjs'
 
 test('project commands have equivalent English names without a slash',()=>{
- const pairs={daily:'日常',list:'列表',new:'新建',switch:'切换',history:'历史',rename:'命名',older:'翻页',search:'搜索',folder:'当前目录','new-project':'新建项目',archive:'归档',restore:'还原',delete:'删除',archive2:'归档2',restore2:'还原2',delete2:'删除2'}
+ assert.deepEqual(conversationCommand('switch'),{action:'prompt',target:'switch'})
+ assert.equal(conversationCommand('切换'),null)
+ const pairs={list:'列表',new:'新建',history:'历史',rename:'命名',older:'翻页',search:'搜索',folder:'当前目录','new-project':'新建项目',archive:'归档',restore:'还原',delete:'删除',archive2:'归档2',restore2:'还原2',delete2:'删除2'}
  for(const [english,chinese] of Object.entries(pairs)){
   assert.deepEqual(conversationCommand(english),conversationCommand(chinese),english)
   assert.deepEqual(conversationCommand(english.toUpperCase()),conversationCommand(chinese),english)
@@ -20,7 +22,7 @@ test('project commands have equivalent English names without a slash',()=>{
 })
 
 test('task and interaction commands have equivalent English names',()=>{
- const pairs={goal:'长任务','goal-status':'长任务状态','goal-pause':'暂停长任务','goal-resume':'继续长任务','goal-complete':'完成长任务','goal-clear':'清除长任务',plan:'计划',review:'代码审查',compare:'对比审查','commit-review':'审查提交',compact:'压缩上下文',fork:'分叉会话',branch:'旁支会话','session-status':'会话状态','fast-on':'开启快速模式','fast-off':'关闭快速模式',supplement:'补充',stop:'停止',result:'结果',recover:'恢复',exit:'退出',models:'模型',status:'状态',progress:'进度',help:'命令列表',memory:'记忆','memory-on':'开启记忆','memory-off':'关闭记忆','resume-session':'恢复会话','reset-session':'重置会话',approve:'批准',reject:'拒绝',answer:'回答'}
+ const pairs={goal:'长任务','goal-status':'长任务状态','goal-pause':'暂停长任务','goal-resume':'继续长任务','goal-complete':'完成长任务','goal-clear':'清除长任务',plan:'计划',review:'代码审查',compare:'对比审查','commit-review':'审查提交',compact:'压缩上下文',fork:'分叉会话',branch:'旁支会话','session-status':'会话状态','fast-on':'开启快速模式','fast-off':'关闭快速模式',supplement:'补充',stop:'停止',recover:'恢复',exit:'退出',models:'模型',progress:'进度',help:'命令列表',memory:'记忆','memory-on':'开启记忆','memory-off':'关闭记忆','resume-session':'恢复会话','reset-session':'重置会话',approve:'批准',reject:'拒绝',answer:'回答'}
  for(const [english,chinese] of Object.entries(pairs)){
   assert.deepEqual(controlCommand(english),controlCommand(chinese),english)
   assert.deepEqual(controlCommand(english.toUpperCase()),controlCommand(chinese),english)

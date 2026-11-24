@@ -5,7 +5,7 @@ const english={
  'goal-complete':'完成长任务','goal-clear':'清除长任务',plan:'计划',review:'代码审查',
  compare:'对比审查','commit-review':'审查提交',compact:'压缩上下文',fork:'分叉会话',branch:'旁支会话',
  'session-status':'会话状态','fast-on':'开启快速模式','fast-off':'关闭快速模式',supplement:'补充',
- stop:'停止',result:'结果',recover:'恢复',exit:'退出',models:'模型',status:'状态',progress:'进度',help:'命令列表',
+ stop:'停止',recover:'恢复',exit:'退出',models:'模型',progress:'进度',help:'命令列表',
  memory:'记忆','memory-on':'开启记忆','memory-off':'关闭记忆','resume-session':'恢复会话',
  'reset-session':'重置会话',approve:'批准',reject:'拒绝',answer:'回答',
 }
@@ -29,7 +29,7 @@ export function controlCommand(text) {
   if(command==='开启快速模式')return {action:'fast',enabled:true}
   if(command==='关闭快速模式')return {action:'fast',enabled:false}
   if(command==='补充')return {action:'prompt',target:'steer'}
-  const chinese={停止:'stop',结果:'result',恢复:'recover',退出:'exit',模型:'models',状态:'status',进度:'progress',命令列表:'help'}
+  const chinese={停止:'stop',恢复:'recover',退出:'exit',关闭:'exit',模型:'models',进度:'progress',命令列表:'help'}
   const alias=command.replace(/[。？！!?]$/,'')
   if(alias==='记忆')return {action:'memory',op:'list'}
   if(chinese[alias])return {action:chinese[alias]}

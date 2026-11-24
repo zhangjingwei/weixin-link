@@ -28,3 +28,10 @@ test('private provider credentials reach the local Codex process without enterin
  assert.equal(spawned.codexHome,'/private/account/codex-home')
  assert.equal(spawned.binary,'/bundled/codex')
 })
+
+test('a confirmed active writer blocks resume without starting a replacement thread',async()=>{
+ const calls=[],protocol=createSessionProtocol()
+ const rpc={request:async(method)=>{calls.push(method);throw Object.assign(Error('thread example already has an active writer'),{rpcCode:-32600,definitiveRpcError:true})}}
+ await assert.rejects(protocol.open(rpc,{saved:{threadId:'example'},cwd:'/tmp',provider:{}}),{code:'CODEX_THREAD_WRITER_BUSY'})
+ assert.deepEqual(calls,['thread/resume'])
+})

@@ -17,7 +17,7 @@ async function fixture(t,fail){
  }}).init();t.after(()=>manager.close());return {manager,clients,calls}
 }
 test('legacy backup variables do not configure a second provider',()=>{
- assert.deepEqual(codexProviderOptions(retiredEnv).thread,{})
+ assert.deepEqual(codexProviderOptions(retiredEnv),codexProviderOptions({}))
  assert.equal(codexProviderOptions(retiredEnv).provider,null)
  assert.throws(()=>codexProviderOptions({WECHAT_CODEX_PROVIDER:'custom',WECHAT_CODEX_BASE_URL:'https://custom.example.com'}),/key environment name/)
 })
@@ -39,4 +39,17 @@ test('a saved thread with unavailable provider is preserved rather than replaced
  const f=await fixture(t,m=>m==='thread/resume'?error:null);f.manager.state.users.owner={threadId:'saved-thread',hasMessages:true}
  await assert.rejects(f.manager.connect('owner',async()=>{}),e=>e===error)
  assert.equal(f.manager.state.users.owner.threadId,'saved-thread');assert.equal(f.calls.filter(c=>c.method==='thread/start').length,0)
+})
+
+test('HTTP by default configures subscription threads and retains Codex authentication',()=>{
+ const trial=codexProviderOptions({})
+ assert.equal(trial.provider,null)
+ assert.equal(trial.credentialReady,true)
+ assert.equal(trial.thread.modelProvider,'weixin-subscription-http')
+ const table='model_providers.'+trial.thread.modelProvider
+ assert(trial.args.includes(table+'.requires_openai_auth=true'))
+ assert(trial.args.includes(table+'.supports_websockets=false'))
+ assert(!trial.args.some(a=>a.includes('base_url')||a.includes('env_key')))
+ const custom={WECHAT_CODEX_PROVIDER:'custom',WECHAT_CODEX_BASE_URL:'https://example.com',WECHAT_CODEX_API_KEY_ENV:'CUSTOM_KEY'}
+ assert.deepEqual(codexProviderOptions(custom,{subscriptionTransport:'auto'}),codexProviderOptions(custom))
 })

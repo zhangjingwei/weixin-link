@@ -16,7 +16,7 @@ test('custom provider profile overrides resumed model and disables unsupported s
   assert.ok(options.args.includes('model_provider="custom"'))
   assert.ok(options.args.includes('model_reasoning_effort="high"'))
   assert.throws(()=>codexProviderOptions({WECHAT_CODEX_REASONING_EFFORT:'unsafe value'}))
-  assert.deepEqual(codexProviderOptions({}).thread,{})
+  assert.deepEqual(codexProviderOptions({},{subscriptionTransport:'auto'}).thread,{})
   assert.throws(()=>codexProviderOptions({WECHAT_CODEX_PROVIDER:'bad/path'}))
 })
 
@@ -237,8 +237,8 @@ test('state persistence failure does not suppress final delivery or leave the se
  assert.equal(session.finishing,false);assert.equal(session.busy,false);assert.ok(output[0].startsWith('任务结果'));assert.ok(output[0].includes('会话状态保存失败'));assert.ok(events.includes('state.save_failed'));assert.ok(!output[0].includes('private-path'))
 })
 
-test('status and models are explicit controls; commands with other arguments remain user text',()=>{
- assert.equal(controlCommand('状态').action,'status');assert.equal(controlCommand('任务状态'),null)
+test('models is an explicit control and status is conversational; commands with other arguments remain user text',()=>{
+ assert.equal(controlCommand('状态'),null);assert.equal(controlCommand('任务状态'),null)
  for(const input of ['/states','/state','/codex states'])assert.equal(controlCommand(input),null)
  assert.equal(controlCommand('模型').action,'models');assert.equal(controlCommand('/codex models'),null);assert.equal(controlCommand('/models extra'),null)
 })
@@ -250,9 +250,9 @@ test('models reads actual paginated RPC catalogue without starting a turn or cha
 test('models failures do not fabricate a catalogue or launch model inference',async()=>{
  const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={};manager.sessions.set('owner',{userId:'owner',threadId:'thread',rpc:{closed:false,request:async()=>{throw Error('model catalogue unavailable')}}});await manager.handle('owner','模型',async text=>output.push(text));assert.equal(output.length,1);assert.ok(output[0].includes('unavailable'));assert.ok(!output[0].includes('gpt-'))
 })
-test('stop clears queued instructions during final delivery; status/new reflect finishing state',async()=>{
+test('stop clears queued instructions during final delivery; new respects finishing state',async()=>{
  const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={};const s={userId:'owner',threadId:'thread',busy:false,finishing:true,queue:['queued'],rpc:{closed:false,close(){throw Error('must not close during final delivery')}}};manager.sessions.set('owner',s)
- await manager.handle('owner','停止',async text=>output.push(text));assert.equal(s.queue.length,0);assert.ok(output.at(-1).includes('已清空'));await manager.handle('owner','状态',async text=>output.push(text));assert.ok(output.at(-1).includes('正在发送最终回复'));await manager.handle('owner','重置会话',async text=>output.push(text));assert.ok(output.at(-1).includes('仍在发送'))
+ await manager.handle('owner','停止',async text=>output.push(text));assert.equal(s.queue.length,0);assert.ok(output.at(-1).includes('已清空'));await manager.handle('owner','重置会话',async text=>output.push(text));assert.ok(output.at(-1).includes('仍在发送'))
 })
 test('partial answers do not suppress the final answer or intervening tool events',async()=>{
  const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={};const s={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>output.push(text)}
@@ -479,4 +479,168 @@ test('stop and exit each issue one local interrupt',async()=>{
    assert.equal(calls.filter(x=>x==='turn/interrupt').length,1)
   }finally{for(const s of m.sessions.values())clearTimeout(s.exitTimer);m.close();await m.saving;await rm(dir,{recursive:true,force:true})}
  }
+})
+
+test('failed interrupt and stop during delivery preserve the final reply', async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'stop-final-'))
+ const manager=await new SessionManager({stateDir:dir,cwd:dir,owners:['u'],rpcFactory:()=>({
+  closed:false,write(){},close(){this.closed=true},async request(method){
+   if(method==='thread/start')return {thread:{id:'t'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'}
+   if(method==='turn/start')return {turn:{id:'turn'}}
+   if(method==='turn/interrupt')throw Error('interrupt timed out')
+   return {}
+  }
+ })}).init()
+ t.after(async()=>{manager.close();await manager.saving;await rm(dir,{recursive:true,force:true})})
+ const delivered=[]
+ const deliveryStarted=Promise.withResolvers(),resume=Promise.withResolvers()
+ await manager.handle('u','work',async(text,options)=>{
+  if(text==='final'){
+   deliveryStarted.resolve()
+   await resume.promise
+   if(options.current())delivered.push(text)
+  }
+  return {status:'accepted'}
+ })
+ const session=manager.sessions.get('u')
+ await manager.handle('u','停止',async()=>{})
+ assert.equal(session.workToken.current(),true)
+ session.finals=['final'];session.displayFinals=['final']
+ const completed=manager.event(session,{method:'turn/completed',params:{threadId:'t',turn:{id:'turn',status:'completed'}}})
+ await deliveryStarted.promise
+ await manager.handle('u','停止',async()=>{})
+ resume.resolve()
+ await completed
+ assert.deepEqual(delivered,['final'])
+})
+
+test('quiet turn reports elapsed stage time only while the same turn is active',async t=>{
+ t.mock.timers.enable({apis:['setTimeout','Date']})
+ const logs=[]
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u'],log:(event,fields)=>logs.push({event,...fields})})
+ const session={userId:'u',threadId:'t',busy:true,items:new Map()}
+ manager.sessions.set('u',session)
+ await manager.event(session,{method:'turn/started',params:{turn:{id:'turn'}}})
+ t.mock.timers.tick(30_000)
+ const waits=()=>logs.filter(row=>row.event==='turn.waiting_progress').map(row=>row.duration_ms)
+ assert.deepEqual(waits(),[30_000])
+ t.mock.timers.tick(20_000)
+ await manager.event(session,{method:'item/started',params:{turnId:'turn',item:{id:'cmd',type:'commandExecution'}}})
+ t.mock.timers.tick(10_000)
+ assert.deepEqual(waits(),[30_000])
+ t.mock.timers.tick(20_000)
+ assert.deepEqual(waits(),[30_000,30_000])
+ session.busy=false
+ t.mock.timers.tick(60_000)
+ assert.deepEqual(waits(),[30_000,30_000])
+})
+
+test('App Server diagnostics report pending input, retry and throttled stream activity without payloads',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout']})
+ const {safeRecord}=await import('../../../src/infrastructure/diagnostics/diagnostic-log.mjs')
+ const {formatEvent}=await import('../../../src/tools/debug-logs.mjs')
+ const rows=[]
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u'],log:(event,fields)=>rows.push(safeRecord(event,fields))})
+ const session={userId:'u',threadId:'t',busy:true,items:new Map()}
+ manager.sessions.set('u',session)
+ const send=(method,params)=>manager.event(session,{method,params:{threadId:'t',turnId:'a',...params}})
+ await send('turn/started',{turn:{id:'a'}})
+ const flags=['waitingOnApproval','waitingOnUserInput']
+ await send('thread/status/changed',{status:{type:'active',activeFlags:flags}})
+ await send('thread/status/changed',{status:{type:'active',activeFlags:flags}})
+ assert.deepEqual(session.nativeActiveFlags,flags)
+ t.mock.timers.tick(30_000)
+ assert(!rows.some(r=>r.event==='turn.waiting_progress'))
+ await send('thread/status/changed',{status:{type:'active',activeFlags:[]}})
+ await send('error',{willRetry:true,error:{message:'private',codexErrorInfo:{responseStreamDisconnected:{httpStatusCode:503}}}})
+ await send('error',{willRetry:false,error:{message:'private',codexErrorInfo:'private'}})
+ await send('item/agentMessage/delta',{turnId:'old',delta:'private'})
+ for(let i=0;i<10;i++)await send('item/agentMessage/delta',{delta:'private'})
+ t.mock.timers.tick(15_000)
+ await send('item/agentMessage/delta',{delta:'private'})
+ await send('item/reasoning/summaryTextDelta',{delta:'private'})
+ await send('item/commandExecution/outputDelta',{delta:'private'})
+ t.mock.timers.tick(15_000)
+ assert(!rows.some(r=>r.event==='turn.waiting_progress'))
+ t.mock.timers.tick(15_000)
+ assert(rows.some(r=>r.event==='turn.waiting_progress'&&r.duration_ms===30_000))
+ const lines=rows.map(r=>formatEvent(JSON.stringify(r))?.slice(10))
+ assert.deepEqual(lines.filter(l=>l?.startsWith('Codex 正在等你')),['Codex 正在等你批准操作、回答问题'])
+ assert(lines.includes('Codex 已解除等待用户操作的状态'))
+ assert(lines.includes('模型连接中断，Codex 正在重试（HTTP 503）'))
+ assert(lines.includes('Codex 报告错误（原因未提供），不会自动重试'))
+ assert.deepEqual(lines.filter(l=>l?.startsWith('已收到')),['已收到回复片段（本轮累计 1 个）','已收到回复片段（本轮累计 11 个）','已收到分析摘要片段（本轮累计 1 个）','已收到命令输出片段（本轮累计 1 个）'])
+ assert(!JSON.stringify(rows).includes('private'))
+})
+
+test('a stalled reply sends one preview and preserves the authoritative final answer',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout']})
+ const output=[]
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u']})
+ manager.save=async()=>{}
+ manager.state.users.u={}
+ const session={userId:'u',threadId:'thread',busy:true,items:new Map(),queue:[],finals:[],
+   reply:async text=>{output.push(text);return {status:'accepted'}}}
+ manager.sessions.set('u',session)
+ const send=(method,params)=>manager.event(session,{method,params:{threadId:'thread',turnId:'turn',...params}})
+ await send('turn/started',{turn:{id:'turn'}})
+ await send('item/agentMessage/delta',{itemId:'a',delta:'已查到'})
+ await send('item/agentMessage/delta',{itemId:'a',delta:'两个项目。<wechat-memory:x>private'})
+ t.mock.timers.tick(29_999)
+ assert.deepEqual(output,[])
+ t.mock.timers.tick(1)
+ await session.delivering
+ t.mock.timers.tick(30_000)
+ await session.delivering
+ assert.deepEqual(output,['回复预览（仍在生成）\n已查到两个项目。'])
+ await send('item/completed',{item:{id:'a',type:'agentMessage',phase:'final_answer',text:'已核实有三个项目。'}})
+ await send('turn/completed',{turn:{id:'turn',status:'completed'}})
+ assert.equal(output.length,2)
+ assert.equal(output[1],'已核实有三个项目。')
+ assert.equal(manager.state.users.u.lastReply,output[1])
+})
+
+test('stream retry diagnostics aggregate per turn and recover only on model output',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout']})
+ const {formatEvent}=await import('../../../src/tools/debug-logs.mjs')
+ const rows=[]
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u'],log:(event,fields)=>rows.push({event,...fields,timestamp:new Date()})})
+ const session=id=>({threadId:id,turnId:id,userId:'u',turnReady:true,busy:true})
+ const a=session('a'), b=session('b')
+ const send=(s,method,params)=>manager.event(s,{method,params:{threadId:s.threadId,turnId:s.turnId,...params}})
+ const retry=s=>send(s,'error',{willRetry:true,error:{codexErrorInfo:'responseStreamDisconnected'}})
+ await retry(a)
+ await retry(b)
+ await retry(a)
+ t.mock.timers.tick(12000)
+ await send(a,'item/commandExecution/outputDelta',{delta:'private'})
+ await send(a,'item/agentMessage/delta',{turnId:'old',delta:'stale'})
+ await send(a,'warning',{message:'Falling back from WebSockets to HTTPS transport. private'})
+ assert(!rows.some(r=>r.event==='provider.stream_recovered'))
+ await send(a,'item/agentMessage/delta',{delta:'reply'})
+ await send(a,'item/agentMessage/delta',{delta:'again'})
+ await send(b,'item/reasoning/summaryTextDelta',{delta:'private'})
+ const lines=rows.map(r=>formatEvent(JSON.stringify(r))?.slice(10)).filter(Boolean)
+ assert.equal(lines.filter(l=>l==='模型连接中断，Codex 正在重试').length,2)
+ assert.deepEqual(lines.filter(l=>l.includes('已恢复')),['模型输出已恢复，共重试 2 次（耗时 12.0 秒）','模型输出已恢复，共重试 1 次（耗时 12.0 秒）'])
+ assert(lines.includes('Codex 已切换到 HTTP'))
+ assert(!JSON.stringify(rows).includes('private'))
+})
+
+test('long command runs send throttled structured WeChat progress without command contents',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout']})
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u']})
+ const output=[], session={userId:'u',threadId:'t',turnId:'a',busy:true,turnReady:true,items:new Map(),startedAt:Date.now(),reply:async text=>{output.push(text);return {status:'accepted'}}}
+ manager.sessions.set('u',session)
+ const event=(stage,id,fields={})=>manager.event(session,{method:'item/'+stage,params:{threadId:'t',turnId:'a',item:{type:'commandExecution',id,command:'private',commandActions:[{type:'search',query:'private'}],...fields}}})
+ await event('started','first')
+ await event('completed','first',{exitCode:1})
+ await event('completed','first',{exitCode:1})
+ assert.deepEqual(output,[])
+ t.mock.timers.tick(21000)
+ await event('started','second',{commandActions:[{type:'read',path:'private'}]})
+ await event('completed','second',{exitCode:0})
+ assert.equal(output.length,1)
+ assert.match(output[0],/搜索内容、读取文件，已结束 1 条，正在执行 1 条，1 条返回非零退出码（1）/)
+ assert(!output[0].includes('private'))
 })

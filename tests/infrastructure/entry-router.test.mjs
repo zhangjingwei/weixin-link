@@ -17,11 +17,32 @@ test('classification has an ephemeral home, no project tools, strict output and 
  await classify.close();assert(closed)
  await assert.rejects(access(options.codexHome))
 })
-test('server tool requests and stalled model turns fail closed and close the process',async()=>{
- let closed=false
- const make=(timeoutMs,tools)=>createEntryClassifier({binary:'/fake',codexHome:'/missing',timeoutMs,providerOptions:()=>({args:[]}),rpcFactory:o=>({write(){},respondError(){},close(){closed=true},async request(method){if(method==='model/list')return {data:[{model:'gpt-6.1-terra',supportedReasoningEfforts:[{reasoningEffort:'low'},{reasoningEffort:'medium'}]}]};if(method==='thread/start')return {model:'gpt-6.1-terra',thread:{id:'r'},sandbox:{type:'readOnly'},approvalPolicy:'untrusted'};if(method==='turn/start'){if(tools)queueMicrotask(()=>o.onEvent({id:1,method:'item/tool/call',params:{}}));return {turn:{id:'t'}}}return {}}})})
- await assert.rejects(make(100,true)({}),/TOOL_DENIED/);assert(closed);closed=false
- await assert.rejects(make(15,false)({}),/TIMEOUT/);assert(closed)
+test('router rejects tool requests and lets a slow classification finish',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']})
+ let emit,closed=false
+ const started=Promise.withResolvers()
+ const classify=createEntryClassifier({binary:'/fake',codexHome:'/missing',providerOptions:()=>({args:[]}),rpcFactory:o=>{
+  emit=o.onEvent
+  return {write(){},respondError(){},close(){closed=true},async request(method){
+   if(method==='model/list')return {data:[{model:'gpt-6.1-terra',supportedReasoningEfforts:[{reasoningEffort:'medium'}]}]}
+   if(method==='thread/start')return {model:'gpt-6.1-terra',thread:{id:'r'},sandbox:{type:'readOnly'},approvalPolicy:'untrusted'}
+   if(method==='turn/start'){started.resolve();return {turn:{id:'t'}}}
+   return {}
+  }}
+ }})
+ t.after(()=>classify.close())
+ const slow=classify({})
+ await started.promise
+ t.mock.timers.tick(120000)
+ emit({method:'item/completed',params:{threadId:'r',item:{type:'agentMessage',text:'{"steps":[{"action":"status","projectId":"1","question":null}],"useClarification":false}'}}})
+ emit({method:'turn/completed',params:{threadId:'r',turn:{id:'t',status:'completed'}}})
+ assert.equal((await slow).action,'status')
+ assert.equal(closed,false)
+ const denied=classify({})
+ await new Promise(resolve=>setImmediate(resolve))
+ emit({id:1,method:'item/tool/call',params:{}})
+ await assert.rejects(denied,/TOOL_DENIED/)
+ assert.equal(closed,true)
 })
 test('routing policy selects only available Terra with medium support',async()=>{
  const {entryModel}=await import('../../src/domain/tasks/entry-model.mjs')

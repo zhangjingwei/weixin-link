@@ -46,8 +46,8 @@ test('legacy HA config remains compatible but does not implicitly authorize any 
   assert.ok(!guidance.includes('ha.example.test'))
   const bot2 = {...options, account: 'bot2'}
   assert.equal(await integrationGuidance(bot2), '')
-  await assert.rejects(checkIntegration(id, bot2), /INTEGRATION_DISABLED/)
-  await assert.rejects(invokeIntegration(id, {operation: 'states'}, bot2), /INTEGRATION_DISABLED/)
+  await assert.rejects(checkIntegration(id, bot2), /SINGLE_USER_INSTALLATION/)
+  await assert.rejects(invokeIntegration(id, {operation: 'states'}, bot2), /SINGLE_USER_INSTALLATION/)
 })
 test('disable revokes future calls immediately and succeeds with missing or invalid HA configuration', async t => {
   const {options, requests, configure} = await fixture(t)
