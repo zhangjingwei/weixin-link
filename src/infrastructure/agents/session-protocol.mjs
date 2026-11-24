@@ -85,8 +85,8 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
    throw Error('CODEX_QUEUE_PAGINATION_LIMIT')
   },
   supportsRemoteTaskRecovery:true,
-  // Collaboration mode is stored on the Codex thread. Always select it for
-  // each turn, otherwise a normal request after a plan can remain in Plan Mode.
+  // Collaboration mode is stored on the Codex thread. Explicitly select the
+  // default mode on every WeChat turn, including resumed threads.
   startTurn:(rpc,{threadId,input,deliveryId,model,fastMode,workflowRequest,workflowMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},collaborationMode:{mode:'default',settings:{model,reasoning_effort:null,developer_instructions:workflowTurnGuidance(workflowRequest,workflowMode)}},...typeof fastMode==='boolean'?{serviceTier:fastMode?'fast':'auto'}:{}}),
   startReview:(rpc,threadId,target)=>rpc.request('review/start',{threadId,target}),
   goal:async(rpc,threadId,command)=>{

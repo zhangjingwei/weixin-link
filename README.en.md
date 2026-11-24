@@ -175,7 +175,7 @@ By default the installer checks the Codex protocol for this account and continue
 
 ## More capabilities and documentation
 
-Stay in one WeChat entry and ask a named project to do work. Explicit cross-project text tasks enter that project’s durable queue and return labelled progress and results without switching conversations. Queries do not create tasks, and attachments are not forwarded implicitly.
+Stay in one WeChat entry and ask a named project to do work. Explicit cross-project text tasks enter that project’s durable queue and return progress and results without switching conversations. Queries do not create tasks, and attachments are not forwarded implicitly.
 
 - [User guide](USER-GUIDE.en.md): conversations, models, memory, attachments and results.
 - [Configuration and maintenance](CONFIGURATION.md): installation, upgrades, backups and troubleshooting.

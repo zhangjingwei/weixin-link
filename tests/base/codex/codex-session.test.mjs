@@ -85,7 +85,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     await manager.handle('owner', {text:exact,traceId:'known-trace-123'}, reply, 1)
     const first = clients.at(-1)
     assert.equal(first.calls.at(-1).params.input[0].text, exact)
-    assert.match(first.calls.at(-1).params.collaborationMode.settings.developer_instructions,/讨论有实质取舍时留在当前会话/)
+    assert.match(first.calls.at(-1).params.collaborationMode.settings.developer_instructions,/按已加载的对应 skill 处理/)
     assert.equal(manager.sessions.get('owner').traceId,'known-trace-123')
     await first.event({ method: 'item/completed', params: { threadId: 'thread-1', item: { id: 'progress', type: 'agentMessage', phase: 'commentary', text: '正在检查项目配置。' } } })
     assert.ok(output.includes('正在检查项目配置。'))
