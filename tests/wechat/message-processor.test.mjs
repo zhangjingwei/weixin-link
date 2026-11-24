@@ -218,6 +218,18 @@ test('text and voice result lookups reach the model without replaying a rejected
  assert.equal(record.recovery.delivery,'failed')
 })
 
+test('short follow-ups enter the same project turn without a local topic switch',async()=>{
+ const f=fixture(),routed=[]
+ const {EntryRouting}=await import('../../src/application/intake/entry-routing.mjs')
+ f.deps.entryRouting=new EntryRouting({modelManagedConversations:true,classify:()=>assert.fail('short follow-up must not invoke the legacy router')})
+ f.deps.manager.state.textConversations={owner:{active:'1',entries:[{id:'1',key:'owner',name:'当前项目'},{id:'2',key:'other',name:'知识库'}]}}
+ f.deps.durable.submit=(...args)=>routed.push(args)
+ const handle=createMessageProcessor(f.deps)
+ for(const [index,text] of ['对','继续','结果'].entries())await handle({userId:'owner',text,_ingressId:'short-'+index})
+ assert.deepEqual(routed.map(args=>[args[0],args[1].text]),[['owner','对'],['owner','继续'],['owner','结果']])
+ assert.equal(f.deps.manager.state.textConversations.owner.active,'1')
+})
+
 test('first message with no live session goes straight to durable intake',async()=>{
  const f=fixture(),events=[]
  f.deps.manager.sessions.clear()

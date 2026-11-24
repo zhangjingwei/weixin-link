@@ -48,6 +48,44 @@ test('turn start sends the guidance as developer instructions without altering t
  assert.equal(sent.collaborationMode.mode,'default')
 })
 
+test('successive short turns preserve the same thread and distinguish agreement, continuation and result lookup',async()=>{
+ const sent=[]
+ const rpc={request:async(method,params)=>{assert.equal(method,'turn/start');sent.push(params);return {turn:{id:'turn-'+sent.length}}}}
+ const protocol=createSessionProtocol()
+ const requests=[
+  '我们要不要为知识库增加搜索？先讨论一下',
+  '对来源会话中已商定的方案（供落实本轮原始请求）：先比较本地索引和远端搜索。',
+  '继续',
+  '请按刚才选定的方案实现知识库搜索',
+  '结果',
+ ]
+ for(const request of requests)await protocol.startTurn(rpc,{threadId:'same-thread',input:[{type:'text',text:request}],model:'test-model',workflowRequest:request})
+ assert.deepEqual(sent.map(turn=>turn.threadId),Array(5).fill('same-thread'))
+ assert.deepEqual(sent.map(turn=>turn.input[0].text),requests)
+ const guidance=sent.map(turn=>turn.collaborationMode.settings.developer_instructions)
+ assert.match(guidance[0],/方案讨论意向/)
+ assert.match(guidance[1],/最近一项明确建议或选择的简短确认/)
+ assert.match(guidance[1],/此前只在讨论|原本只在讨论/)
+ assert.doesNotMatch(guidance[1],/本轮有方案讨论意向/)
+ assert.match(guidance[2],/已获授权的工作/)
+ assert.doesNotMatch(guidance[3],/简短确认|结果或状态查询|方案讨论意向/)
+ assert.match(guidance[4],/结果或状态查询/)
+ assert.match(guidance[4],/不新建任务、不重做/)
+})
+
+test('short confirmations keep project ownership and ask once when the referent is ambiguous',()=>{
+ for(const request of ['对','同意。','收到','继续','结果？']){
+  const guidance=workflowTurnGuidance(request)
+  assert.match(guidance,/若多个项目或任务都可能是所指且会改变操作，只问一个必要问题/)
+  assert.doesNotMatch(guidance,/本轮有方案讨论意向/)
+ }
+ assert.match(workflowTurnGuidance('对'),/不当作新议题/)
+ assert.match(workflowTurnGuidance('收到'),/不当作新议题或新的实施授权/)
+ assert.match(workflowTurnGuidance('继续'),/此前只在讨论，继续讨论/)
+ assert.match(workflowTurnGuidance('结果'),/沿本会话已确认的任务归属核对现有结果/)
+ assert.doesNotMatch(workflowTurnGuidance('知识库项目结果'),/这是最近任务的结果或状态查询/)
+})
+
 test('discussion marker is added once only for clear design discussion',()=>{
  const request='你觉得我们是否需要单独做一个桌面版？'
  assert.equal(discussionReplyPrefix(request,'建议先验证网页端需求。'),'💡 Zero · 方案讨论\n')
