@@ -55,6 +55,15 @@ async function fixture(t){
 test('upgrade stages first, removes rollback copies after success, and restarts only active services',async t=>{
  const f=await fixture(t)
  f.adapter.services.push({id:'other',active:false})
+ const originalStatus=f.adapter.status
+ f.adapter.status=async account=>{
+  if((await readFile(join(f.target,'version'),'utf8'))==='new'){
+   const [id]=await readdir(join(f.home,'.local/share/weixin-link/upgrades'))
+   assert.equal(await readFile(join(f.home,'.local/share/weixin-link/upgrades',id,'state/credentials.json'),'utf8'),'original-credentials')
+   assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,1)
+  }
+  return originalStatus(account)
+ }
  const result=await upgradeInstallation(f.options)
  assert.equal(result.status,'complete')
  assert.equal(await readFile(join(f.target,'version'),'utf8'),'new')
@@ -62,6 +71,28 @@ test('upgrade stages first, removes rollback copies after success, and restarts 
  assert.deepEqual(await readdir(join(f.home,'.local/share/weixin-link/upgrades')),[])
  assert.equal(await readFile(join(f.state,'credentials.json'),'utf8'),'original-credentials')
  assert.deepEqual(f.calls,['prepare','drain','seal','stop','stop','start'])
+})
+test('successful cleanup leaves older unrelated backups untouched',async t=>{
+ const f=await fixture(t),older=join(f.home,'installed source.backup-older'),olderRecovery=join(f.home,'.local/share/weixin-link/upgrades','older')
+ await mkdir(older);await writeFile(join(older,'keep'),'old backup')
+ await mkdir(olderRecovery,{recursive:true});await writeFile(join(olderRecovery,'keep'),'old recovery')
+ assert.equal((await upgradeInstallation(f.options)).status,'complete')
+ assert.equal(await readFile(join(older,'keep'),'utf8'),'old backup')
+ assert.equal(await readFile(join(olderRecovery,'keep'),'utf8'),'old recovery')
+ assert.deepEqual(await readdir(join(f.home,'.local/share/weixin-link/upgrades')),['older'])
+})
+test('cleanup error reports a healthy upgrade and retains remaining recovery material and lock',async t=>{
+ const f=await fixture(t),messages=[]
+ const result=await upgradeInstallation({...f.options,log:text=>messages.push(text),cleanupRemove:async(path,options)=>{
+  if(path.startsWith(f.target+'.backup-'))throw Error('CLEANUP_DENIED')
+  await rm(path,options)
+ }})
+ assert.deepEqual(result,{status:'complete',cleanup:'incomplete'})
+ assert.equal(await readFile(join(f.target,'version'),'utf8'),'new')
+ assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,1)
+ assert.equal((await readdir(join(f.home,'.local/share/weixin-link/upgrades'))).length,1)
+ assert((await readdir(join(f.home,'.local/share/weixin-link'))).includes('upgrade.lock'))
+ assert(messages.some(text=>text.includes('临时回滚数据清理未完成')))
 })
 test('running account without a WeChat login upgrades and remains unlogged',async t=>{
  const f=await fixture(t)
@@ -182,7 +213,9 @@ test('rollback stop failure retains recovery data and never restores a live data
  await assert.rejects(upgradeInstallation(f.options),/UPGRADE_ROLLBACK_FAILED/)
  assert.equal(await readFile(join(f.target,'version'),'utf8'),'new')
  assert((await readdir(join(f.home,'.local/share/weixin-link'))).includes('upgrade.lock'))
- assert.equal((await readdir(join(f.home,'.local/share/weixin-link/upgrades'))).length,1)
+ const [id]=await readdir(join(f.home,'.local/share/weixin-link/upgrades'))
+ assert.equal(await readFile(join(f.home,'.local/share/weixin-link/upgrades',id,'state/credentials.json'),'utf8'),'original-credentials')
+ assert.equal((await readdir(f.home)).filter(name=>name.startsWith('installed source.backup-')).length,1)
 })
 test('a different release selected by a service override is not treated as the requested source',async t=>{
  const f=await fixture(t),unit=join(f.home,'legacy.service')

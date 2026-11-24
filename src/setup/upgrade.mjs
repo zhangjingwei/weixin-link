@@ -88,7 +88,7 @@ export async function standardDeployment({target,home=userHome(),platform=proces
  }
 }
 
-export async function upgradeInstallation({source,target,home=userHome(),adapter,prepare,localUpdate=false,log=console.log,healthAttempts=30,wait=delay}){
+export async function upgradeInstallation({source,target,home=userHome(),adapter,prepare,localUpdate=false,log=console.log,healthAttempts=30,wait=delay,cleanupRemove=rm}){
  source=resolve(source);target=resolve(target)
  if(source===target||source.startsWith(target+sep)||target.startsWith(source+sep))throw Error('UPGRADE_SOURCE_OVERLAP')
  for(const path of [source,target]){
@@ -116,7 +116,7 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
  const id=randomUUID(),stage=join(dirname(target),'.weixin-upgrade-'+id),backup=target+'.backup-'+id
  const recovery=join(home,'.local/share/weixin-link/upgrades',id),snapshot=join(recovery,'state')
  const lease=randomUUID(),active=adapter.services.filter(s=>s.active),drained=[],stopped=[],initialStatus=new Map()
- let swapped=false,oldMoved=false,saved=false,finished=false,phase='preparing',failureCode
+ let swapped=false,oldMoved=false,saved=false,finished=false,phase='preparing',failureCode,outcome
  const journal=async status=>writeFile(join(recovery,'upgrade.json'),JSON.stringify({status,phase,error:failureCode,trace_id:/^[0-9a-f-]{36}$/i.test(process.env.WEIXIN_LINK_UPGRADE_TRACE_ID??'')?process.env.WEIXIN_LINK_UPGRADE_TRACE_ID:undefined,target,backup,stage,snapshot,accounts:active.map(s=>s.id)},null,2)+'\n',{mode:0o600})
  const stateEntries=async()=> (await readdir(state)).filter(name=>name!=='tools')
  const copyState=async(from,to)=>cp(from,to,{recursive:true,filter:async path=>{
@@ -188,7 +188,8 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
   if(localUpdate)await rename(join(target,localUpgradeMarker+'.tmp-'+id),join(target,localUpgradeMarker))
   finished=true
   log('✓ 更新完成。临时回滚数据将清理。')
-  return {status:'complete'}
+  outcome={status:'complete'}
+  return outcome
  }catch(error){
   failureCode=['ENOENT','EACCES','ETIMEDOUT','NPM_CLI_NOT_FOUND'].includes(error.code)?error.code:/^UPGRADE_[A-Z_]+$/.test(error.message)?error.message:'UPGRADE_FAILED'
   if(oldMoved){
@@ -217,9 +218,17 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
   await rm(stage,{recursive:true,force:true}).catch(()=>{})
   // Keep the recovery record and lock only when automatic rollback is unconfirmed.
   if(finished){
-   await rm(backup,{recursive:true,force:true})
-   await rm(recovery,{recursive:true,force:true})
-   await rm(lock,{recursive:true,force:true})
+   try{
+    await cleanupRemove(backup,{recursive:true,force:true})
+    await cleanupRemove(recovery,{recursive:true,force:true})
+    await cleanupRemove(lock,{recursive:true,force:true})
+   }catch{
+    // The new version (or restored old version) has already passed its health
+    // check. Keep the remaining journal and lock for manual cleanup rather
+    // than reporting a healthy deployment as a failed upgrade.
+    if(outcome)outcome.cleanup='incomplete'
+    log('⚠ 临时回滚数据清理未完成；请检查升级锁和本次恢复目录：'+recovery)
+   }
   }
  }
 }
