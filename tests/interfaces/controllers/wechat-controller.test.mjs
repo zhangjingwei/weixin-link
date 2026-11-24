@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import {createWeChatController} from '../../../src/interfaces/controllers/wechat-controller.mjs'
 
 function fixture() {
-  const captured = [], dispatched = [], replies = [], events = []
+  const deferred = [], captured = [], dispatched = [], replies = [], events = []
   const token = {current: () => true}
   const bot = {parser: {parse: wire => wire.message}, reply: async (...args) => replies.push(args)}
-  const manager = {save: async () => events.push('save'), lifecycle: {capture: () => token}}
+  const manager = {save: async () => events.push('save'), lifecycle: {capture: () => token, cancel: owner => events.push('cancel-'+owner)}}
   const jobs = {findCaptured: () => null, capture: message => {events.push('capture'); captured.push(message); return 'inbox-1'}}
   const conversations = {realOwners: new Set(['owner']), bind: message => message, recipient: owner => owner}
   const runtime = {sealed: false}
@@ -17,8 +17,8 @@ function fixture() {
     normalizeVoice: message => message,
     classifyMessage: message => message.text === '停止' ? {kind: 'session', value: {action: 'stop'}} : null,
     traceWire: () => 'wire-trace', traceMessage: () => {events.push('trace'); return 'message-trace'}, quote: () => [],
-    dispatch: message => dispatched.push(message), log: () => {}})
-  return {controller, bot, manager, jobs, runtime, captured, dispatched, replies, events}
+    deferMaintenance: message => deferred.push(message), dispatch: message => dispatched.push(message), log: () => {}})
+  return {deferred, controller, bot, manager, jobs, runtime, captured, dispatched, replies, events}
 }
 
 test('SDK batch capture saves before inbox insertion and reuses staged message', async () => {
@@ -32,7 +32,8 @@ test('SDK batch capture saves before inbox insertion and reuses staged message',
   assert.equal(f.events.includes('trace'), true)
   assert.equal(f.dispatched.length, 1)
   assert.equal(f.dispatched[0]._ingressId, 'inbox-1')
-  assert.equal(f.captured.length, 2)
+  assert.equal(f.captured.length, 1)
+  assert.equal(f.events.filter(e=>e==='save').length,1)
 })
 
 test('failed pre-checkpoint save does not capture or advance the batch', async () => {
@@ -85,4 +86,31 @@ test('failed ordinary capture reports failure and never dispatches', async () =>
   assert.equal(f.dispatched.length, 0)
   assert.equal(f.replies.length, 1)
   assert.match(f.replies[0][1], /未能持久保存/)
+})
+
+test('seal between checkpoint and callback retains the captured message for resume', async () => {
+  const f = fixture(), wire = {message:{userId:'owner', text:'任务', raw:{message_id:'sealed'}}}
+  await f.controller.prepareBatch([wire])
+  f.runtime.sealed = true
+  f.manager.save = () => { throw Error('unexpected second save') }
+  f.controller.onMessage(f.bot.parser.parse(wire))
+  assert.equal(f.deferred[0]._ingressId,'inbox-1')
+  assert.equal(f.dispatched.length,0)
+})
+
+test('SDK stop checkpoints the bound conversation before fast dispatch', async () => {
+  const f=fixture()
+  f.jobs.captureStop=message=>{
+    assert.equal(message.userId,'owner')
+    f.events.push('stop-record')
+    return {id:'stop-1',fresh:true}
+  }
+  f.manager.sessions=new Map([['owner',{busy:true,traceId:'original-turn'}]])
+  const wire={message:{userId:'owner',text:'停止',raw:{message_id:'external-stop'}}}
+  await f.controller.prepareBatch([wire])
+  assert.deepEqual(f.events,['save','stop-record','cancel-owner'])
+  assert.equal(f.dispatched.length,0)
+  f.controller.onMessage(f.bot.parser.parse(wire))
+  assert.equal(f.dispatched[0]._stopTrace,'original-turn')
+  assert.equal(f.dispatched[0]._ingressId,'stop-1')
 })

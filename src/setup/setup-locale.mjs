@@ -18,7 +18,7 @@ export function languageOption(args=[]){
 }
 
 export function installerCommand(action,{platform=process.platform,language}={}){
- if(!['setup','login','relogin','account-create'].includes(action))throw Error('INVALID_INSTALL_ACTION')
+ if(!['setup','login','relogin'].includes(action))throw Error('INVALID_INSTALL_ACTION')
  if(platform==='win32')return (language?'$env:WEIXIN_LINK_LANG=\''+language+'\'; ':'')+"& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))"
  return 'curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.sh | '+(language?'WEIXIN_LINK_LANG='+language+' ':'')+'sh'
 }

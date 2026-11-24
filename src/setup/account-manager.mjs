@@ -4,7 +4,7 @@ const repositoryDirectory=repositoryFilePath(new URL('../../',import.meta.url))
 import {ServiceManager,confirmServiceStopped} from './platform-service.mjs'
 import {pairingStatus,PairingState,currentLoginLink} from '../infrastructure/wechat/pairing-state.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
-import {createAccount,listAccounts,assertAccount,loginHealth} from '../infrastructure/accounts/account-store.mjs'
+import {assertAccount,loginHealth} from '../infrastructure/accounts/account-store.mjs'
 import {readFile,writeFile,copyFile,mkdir,chmod,rename} from 'node:fs/promises'
 import {join} from 'node:path'
 import {execFile} from 'node:child_process'
@@ -13,7 +13,7 @@ import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {readPairingCode} from './pairing-code-input.mjs'
 import {waitForPairingVerification} from './pairing-verification.mjs'
 const services=new ServiceManager()
-const exec=promisify(execFile),action=process.argv[2],id=process.argv[3]
+const exec=promisify(execFile),action=process.argv[2],id=process.argv[3]==='--human'?'default':process.argv[3]??'default'
 async function active(service){return (await services.status(service)).active}
 async function submitCode(p,code){
  if(!/^\d{4,12}$/.test(code))throw Error('INVALID_VERIFICATION_CODE')
@@ -22,8 +22,16 @@ async function submitCode(p,code){
 }
 async function run(){
  if(action==='capabilities')return {auto_pin_wait:true}
- if(action==='create'){const p=await createAccount(id);return {account:p.id,status:'created'}}
- if(action==='list'){const rows=[];for(const p of await listAccounts()){let runtime;try{runtime=await controlRequest(p.socket,'GET','/status')}catch{}const pairing=await pairingStatus(p.stateDir,{running:await active('wechat-pair-'+p.id+'.service')}),health=await loginHealth(p);rows.push({account:p.id,service_active:await active(p.service),ready:runtime?.ready??false,pairing:pairing.status,qr_remaining_seconds:pairing.remaining_seconds??null,credential_status:health.credentialStatus,issues:health.issues,codex_backend:runtime?.backend??null})}return {accounts:rows}}
+ if(action==='create')throw Error('SINGLE_USER_INSTALLATION')
+ if(id!=='default')throw Error('SINGLE_USER_INSTALLATION')
+ if(action==='list'){
+  const p=await assertAccount('default')
+  let runtime
+  try{runtime=await controlRequest(p.socket,'GET','/status')}catch{}
+  const pairing=await pairingStatus(p.stateDir,{running:await active('wechat-pair-default.service')})
+  const health=await loginHealth(p)
+  return {accounts:[{account:p.id,service_active:await active(p.service),ready:runtime?.ready??false,pairing:pairing.status,qr_remaining_seconds:pairing.remaining_seconds??null,credential_status:health.credentialStatus,issues:health.issues,codex_backend:runtime?.backend??null}]}
+ }
  let p
  try{p=await assertAccount(id)}catch(error){if(error.code==='ENOENT')throw Error('ACCOUNT_NOT_FOUND');throw error}
  if(action==='login'){if(await active(p.service))throw Error('STOP_ACCOUNT_BEFORE_RELOGIN');const unit='wechat-pair-'+p.id;if(await active(unit+'.service'))return {account:p.id,status:'already_pairing'};await services.pair(p.id);return {account:p.id,status:'pairing_started'}}
@@ -63,7 +71,7 @@ async function run(){
  }
  if(action==='stop'){await services.stop('wechat-pair-'+p.id+'.service').catch(()=>{});if(!await active(p.service)){await services.stop(p.service);return {account:p.id,status:'stopped'}}await exec(process.execPath,[join(repositoryDirectory,'src/tools/activate-diagnostics.mjs'),'--stop'],{env:{...process.env,WECHAT_ACCOUNT:p.id},timeout:650000});return {account:p.id,status:'stopped'}}
  if(action==='start'){if(!await readFile(join(p.stateDir,'codex-owners.json'),'utf8'))throw Error('LOGIN_FIRST');await services.start(p.service);return {account:p.id,status:'starting'}}
- throw Error('USAGE: create|login|refresh-qr|verify|verify-wait|list|start|stop ACCOUNT')
+ throw Error('USAGE: login|refresh-qr|verify|verify-wait|list|start|stop ACCOUNT')
 }
 const human=process.argv.includes('--human')
 try{const result=await run();console.log(human?setupMessage(action,result):JSON.stringify({ok:true,...result}))}catch(e){if(human)console.error(setupError(e));else console.log(JSON.stringify({ok:false,error:/^[A-Z0-9_:| -]+$/.test(e.message)?e.message:e.code??'ACCOUNT_OPERATION_FAILED'}));process.exitCode=1}

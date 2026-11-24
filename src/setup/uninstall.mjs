@@ -42,7 +42,7 @@ export async function uninstallInstallation({home=process.env.HOME||homedir(),ro
  const packageFile=JSON.parse(await readFile(join(root,'package.json'),'utf8'))
  if(!['weixin-link','wechat-ping-bot'].includes(packageFile.name))throw Error('INSTALLATION_NOT_FOUND')
  const ids=await accounts(home)
- const finish=async servicesRemoved=>{for(const accountId of ids)await detachManagementSkill({accountId,home});return {servicesRemoved,accountDataPreserved:true,workspacePreserved:true}}
+ const finish=async servicesRemoved=>{await detachManagementSkill({home});return {servicesRemoved,accountDataPreserved:true,workspacePreserved:true}}
  const units=ids.map(id=>id==='default'?'wechat-ping-bot.service':`wechat-ping-bot@${id}.service`)
  if(platform==='linux'){
   const directory=join(home,'.config/systemd/user')

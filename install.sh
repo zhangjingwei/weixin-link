@@ -59,7 +59,7 @@ bootstrap_select() (
           esac
         fi ;;
       [1-9]) if test "$bootstrap_key" -le "$bootstrap_count"; then bootstrap_selected=$bootstrap_key; else continue; fi ;;
-      0) if test "$bootstrap_count" -eq 6; then bootstrap_selected=6; else continue; fi ;;
+      0) if test "$bootstrap_count" -eq 5; then bootstrap_selected=5; else continue; fi ;;
       *) continue ;;
     esac
     printf '\033[%sA' "$bootstrap_count" >/dev/tty
@@ -85,22 +85,20 @@ if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
     esac
     if test "$bootstrap_service_found" = false; then bootstrap_mode=resume; fi
   fi
+  if test "${WEIXIN_LINK_RESUME_ONLY:-}" = 1 && test "$bootstrap_mode" != resume; then
+    echo 'Pending installation is no longer resumable.' >&2; exit 1
+  fi
   if test "$bootstrap_mode" = upgrade && ( : </dev/tty ) 2>/dev/null; then
     if test "$bootstrap_english" = 1; then
-      bootstrap_choice=$(bootstrap_select 'Use ↑/↓ to choose, then press Enter:' 1 'Upgrade' 'Configure model' 'Log in to WeChat again' 'Add WeChat account' 'Uninstall' 'Exit')
+      bootstrap_choice=$(bootstrap_select 'Use ↑/↓ to choose, then press Enter:' 1 'Upgrade' 'Configure model' 'Log in to WeChat again' 'Uninstall' 'Exit')
     else
-      bootstrap_choice=$(bootstrap_select '用 ↑/↓ 选择，回车确认：' 1 '升级' '配置模型' '重新登录微信' '添加微信账号' '卸载' '退出')
+      bootstrap_choice=$(bootstrap_select '用 ↑/↓ 选择，回车确认：' 1 '升级' '配置模型' '重新登录微信' '卸载' '退出')
     fi
     case "$bootstrap_choice" in
       1) ;;
       2) bootstrap_command=setup; bootstrap_mode=maintenance ;;
       3) bootstrap_command=relogin; bootstrap_mode=maintenance ;;
       4)
-        bootstrap_command=account-create; bootstrap_mode=maintenance
-        if test "$bootstrap_english" = 1; then printf 'New account name (lowercase letters, digits, hyphens): ' >/dev/tty; else printf '新账号名称（小写字母、数字、连字符）：' >/dev/tty; fi
-        IFS= read -r bootstrap_account </dev/tty || exit 1
-        ;;
-      5)
         bootstrap_command=uninstall; bootstrap_mode=maintenance
         if test "$bootstrap_english" = 1; then
           bootstrap_confirm=$(bootstrap_select 'Uninstall the program? Account data and workspace will be kept.' 1 'Cancel' 'Confirm uninstall')
@@ -109,11 +107,12 @@ if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
         fi
         test "$bootstrap_confirm" = 2 || exit 0
         ;;
-      6) exit 0 ;;
+      5) exit 0 ;;
       *) echo 'INVALID_INSTALL_CHOICE' >&2; exit 1 ;;
     esac
   fi
 else
+  if test "${WEIXIN_LINK_RESUME_ONLY:-}" = 1; then echo 'Pending installation directory is missing.' >&2; exit 1; fi
   bootstrap_mode=install
   case "$(uname -s)" in
     Linux)
@@ -131,6 +130,41 @@ else
       ;;
   esac
 fi
+bootstrap_replace_pending() {
+  if test -e "$bootstrap_dest/.git" || test -e "$bootstrap_dest/.env"; then echo 'Pending installation contains local source or configuration; inspect before replacing.' >&2; exit 1; fi
+  bootstrap_backup=$(mktemp -d "$(dirname -- "$bootstrap_dest")/.weixin-link-pending-backup.XXXXXX")
+  touch "$bootstrap_tmp/source/.weixin-link-install-pending"
+  mv "$bootstrap_dest" "$bootstrap_backup/source"
+  if ! mv "$bootstrap_tmp/source" "$bootstrap_dest"; then mv "$bootstrap_backup/source" "$bootstrap_dest"; rmdir "$bootstrap_backup"; exit 1; fi
+  PATH="$(dirname "$bootstrap_node"):$PATH"; export PATH
+  cd "$bootstrap_dest"
+  if bootstrap_run_interactive /bin/sh ./src/setup/unix-install.sh; then
+    rm -f .weixin-link-install-pending
+    if test "$bootstrap_english" = 1; then
+      printf 'If you need the files from the previous installation attempt, they are backed up here:\n%s\n' "$bootstrap_backup/source"
+    else
+      printf '上次安装留下的程序文件已备份。如需找回，可到这里查看：\n%s\n' "$bootstrap_backup/source"
+    fi
+    exit 0
+  fi
+  if test "$bootstrap_english" = 1; then
+    printf 'Setup did not finish. The previous program files are backed up here:\n%s\n' "$bootstrap_backup/source" >&2
+  else
+    printf '这次安装未完成。上次安装的程序文件已备份在这里：\n%s\n' "$bootstrap_backup/source" >&2
+  fi
+  exit 1
+}
+# A local preview already has a checked Git archive. Install it at the final
+# service path before invoking its wizard, just like a pinned release retry.
+if test "${WEIXIN_LINK_RESUME_ONLY:-}" = 1 && test -n "${WEIXIN_LINK_LOCAL_ARCHIVE:-}"; then
+  test "$bootstrap_mode" = resume && test -f "$bootstrap_dest/.weixin-link-install-pending" || exit 1
+  bootstrap_tmp=$(mktemp -d "$(dirname -- "$bootstrap_dest")/.weixin-link-local.XXXXXX")
+  trap 'rm -rf -- "$bootstrap_tmp"' EXIT
+  mkdir "$bootstrap_tmp/source"
+  tar -xf "$WEIXIN_LINK_LOCAL_ARCHIVE" -C "$bootstrap_tmp/source"
+  test -f "$bootstrap_tmp/source/src/setup/unix-install.sh" && test -f "$bootstrap_tmp/source/package-lock.json" || { echo 'Invalid local installation snapshot.' >&2; exit 1; }
+  bootstrap_replace_pending
+fi
 if test "$bootstrap_mode" = resume && test -z "${WEIXIN_LINK_EXPECTED_COMMIT:-}"; then
   PATH="$(dirname "$bootstrap_node"):$PATH"; export PATH
   cd "$bootstrap_dest"
@@ -146,7 +180,6 @@ if test "$bootstrap_mode" = maintenance; then
   case "$bootstrap_command" in
    setup) bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wizard "$bootstrap_account" --human ;;
    relogin) bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wechat-login --relogin "$bootstrap_account" --human ;;
-   account-create) "$bootstrap_node" src/setup/account-manager.mjs create "$bootstrap_account" --human; bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wizard "$bootstrap_account" --human; bootstrap_run_interactive "$bootstrap_node" src/setup/setup.mjs wechat-login "$bootstrap_account" --human ;;
    uninstall)
      test ! -e .git || { echo 'UNINSTALL_SOURCE_REQUIRES_REVIEW' >&2; exit 1; }
      bootstrap_has_service=false
@@ -217,22 +250,7 @@ fi
 if { test "$bootstrap_ref" = main || test "$bootstrap_stable" = true; } && test -n "$bootstrap_commit"; then
   printf '{"version":1,"repository":"zhangjingwei/weixin-link","ref":"%s","commit":"%s"}\n' "$bootstrap_ref" "$bootstrap_commit" > "$bootstrap_tmp/source/.weixin-link-release.json"
 fi
-if test "$bootstrap_mode" = resume; then
-  if test -e "$bootstrap_dest/.git" || test -e "$bootstrap_dest/.env"; then echo 'Pending installation contains local source or configuration; inspect before replacing.' >&2; exit 1; fi
-  bootstrap_backup=$(mktemp -d "$(dirname -- "$bootstrap_dest")/.weixin-link-pending-backup.XXXXXX")
-  mv "$bootstrap_dest" "$bootstrap_backup/source"
-  if ! mv "$bootstrap_tmp/source" "$bootstrap_dest"; then mv "$bootstrap_backup/source" "$bootstrap_dest"; rmdir "$bootstrap_backup"; exit 1; fi
-  touch "$bootstrap_dest/.weixin-link-install-pending"
-  PATH="$(dirname "$bootstrap_node"):$PATH"; export PATH
-  cd "$bootstrap_dest"
-  if bootstrap_run_interactive /bin/sh ./src/setup/unix-install.sh; then
-    rm -f .weixin-link-install-pending
-    printf 'Previous incomplete source saved at: %s\n' "$bootstrap_backup/source"
-    exit 0
-  fi
-  printf 'Installation remains incomplete; previous source saved at: %s\n' "$bootstrap_backup/source" >&2
-  exit 1
-fi
+if test "$bootstrap_mode" = resume; then bootstrap_replace_pending; fi
 if test "$bootstrap_mode" = upgrade; then
   test -f "$bootstrap_tmp/source/src/setup/upgrade.mjs" || { if test "$bootstrap_english" = 1; then echo 'This release does not support upgrades.' >&2; else echo '该版本不支持升级。' >&2; fi; exit 1; }
   if test "$bootstrap_english" = 1; then echo 'Upgrade source downloaded. Checking the installed service…'; else echo '下载升级版本完成，正在检查已安装服务…'; fi

@@ -13,7 +13,7 @@ async function fixture(t,decision){
  const dir=await mkdtemp(join(tmpdir(),'unified-entry-')),jobs=new DurableJobs(join(dir,'jobs.db'));t.after(()=>{jobs.close();return rm(dir,{recursive:true,force:true})})
  const entries=[{id:'1',key:'alice',name:'入口'},{id:'2',key:'knowledge',name:'知识库'},{id:'3',key:'tools',name:'工具箱'}],root={alice:{active:'1',entries}},sent=[],token={current:()=>true}
  const manager={state:{users:{alice:{threadId:'a'},knowledge:{threadId:'k'},tools:{threadId:'t'}}},sessions:new Map(),questions:new Map(),owners:new Set(entries.map(e=>e.key)),save:async()=>{},submissions:jobs,workspaceFor:()=>dir,lifecycle:{capture:()=>token}}
- const conversations={root,realOwners:new Set(['alice']),ensure:owner=>root[owner],entry:key=>{const e=entries.find(e=>e.key===key);return e?{...e,owner:'alice'}:null},displayName:(_,e)=>e.name}
+ const conversations={root,realOwners:new Set(['alice']),ensure:owner=>root[owner],entry:key=>{const e=entries.find(e=>e.key===key);return e?{...e,owner:'alice'}:null}}
  const service=new ManagementService({manager,conversations,enqueueTask:(...args)=>jobs.add(...args)});t.after(()=>service.close())
  const router=new EntryRouting({manager,conversations,jobs,service,classify:async()=>decision,deliver:async(_,text)=>{sent.push(text);return {status:'accepted'}}});t.after(()=>router.close())
  const message={userId:'alice',_conversationOwner:'alice',text:'知识库检查搜索，然后工具箱优化页面',raw:{message_id:'one'}};message._ingressId=jobs.capture(message)
@@ -67,4 +67,15 @@ test('bulk cancellation uses the exact pending snapshot and rolls back if a task
 test('an unknown named target is rejected by the application even if a model selects a valid current project',()=>{
  assert.throws(()=>entryPlan({action:'task',projectId:'1',requestedProjectName:'火星项目'},'让火星项目修复首页',[{projectId:'1',name:'日常助手'}]),/TARGET_UNCONFIRMED/)
  assert.throws(()=>entryPlan({action:'task',projectId:'2',requestedProjectName:'知识库'},'只修改工具箱',[{projectId:'2',name:'知识库'}]),/TARGET_UNCONFIRMED/)
+})
+
+test('progress does not present completed-turn commentary as ongoing work',async t=>{
+ const f=await fixture(t)
+ const session={userId:'knowledge',busy:false,turnId:'old-turn',traceId:'trace',lastProgress:{turnId:'old-turn',text:'正在修改搜索代码'}}
+ f.manager.sessions.set('knowledge',session)
+ const completed=await f.service.call('alice','get_project_progress',{projectId:'2'})
+ assert.equal(completed.inProgress,null);assert.equal(completed.nativeProgress,null)
+ session.busy=true
+ const running=await f.service.call('alice','get_project_progress',{projectId:'2'})
+ assert.equal(running.nativeProgress,'正在修改搜索代码');assert(running.inProgress)
 })

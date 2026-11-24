@@ -4,7 +4,6 @@ import {voiceCommandInput} from './voice-command-input.mjs'
 import {singleMedia} from '../application/intake/single-media.mjs'
 import {mediaMessageContext} from '../interfaces/wechat/voice-text.mjs'
 import {systemNotice} from '../interfaces/views/system-notice.mjs'
-import {codexAvailability} from '../setup/setup-core.mjs'
 import {createManagementController} from '../interfaces/controllers/management-controller.mjs'
 import {messagePorts} from '../application/ports/message-ports.mjs'
 
@@ -19,7 +18,6 @@ export function createMessageProcessor(deps) {
     hasMedia: ports.media.has,
     singleMedia: (message, token, mediaDependencies) => singleMedia(message, token, mediaDependencies, mediaMessageContext),
     quoteInput: ports.references.quoteInput,
-    agentReadiness: deps.agentReadiness ?? ports.agent.checkReady({backend: deps.backend, owners: deps.owners,codexAvailability:options=>codexAvailability({accountId:deps.accountId,...options})}),
     diagnosticPackage: ports.media.package,
     confirmedRejection: ports.delivery.confirmedRejection,
     systemNotice,

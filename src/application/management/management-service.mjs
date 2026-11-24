@@ -1,13 +1,16 @@
+import {conversationContext,repositoryContext,associateRepositoryConversations} from './conversation-management.mjs'
+import {desktopStatus,requestDesktop,executeDesktop} from './desktop-management.mjs'
 import {projectProgress} from './progress-management.mjs'
 import {changeQueuedTask,cancelQueuedTasks} from './queue-management.mjs'
 import {requestModelSwitch} from './model-management.mjs'
 import {requestProjectArchive,executeProjectArchive} from './project-archive-management.mjs'
 import {maintenanceRead,requestMaintenance,executeMaintenance} from './maintenance-management.mjs'
-import {submitProjectTask} from './project-task-management.mjs'
+import {submitProjectTask,routeConversationRequest} from './project-task-management.mjs'
 import {pruneManagementOperations,discardUnexecutedPayload} from './management-writes.mjs'
-import {workspaceChoices,createProject,renameProject} from './project-management.mjs'
+import {workspaceChoices,createProject,renameProject,openProjectSession,openConversation} from './project-management.mjs'
 import {listProjectTasks,getTaskResult,requestResultRedelivery,executeRedelivery,requestTaskReconciliation,executeReconciliation} from './result-management.mjs'
-import {searchHistory} from './history-search.mjs'
+import {hasNativeControl,nativeControl} from './native-controls.mjs'
+import {searchNativeHistory} from './history-search.mjs'
 import {createSchedule,listSchedules,cancelSchedule} from './schedule-management.mjs'
 import {checkUpdates,skipUpdate} from './update-management.mjs'
 import {randomUUID,createHmac,timingSafeEqual} from 'node:crypto'
@@ -18,8 +21,8 @@ const signatureFor=(name,args)=>createHmac('sha256','zerolink-operation-v1').upd
 
 // A management facade over the existing conversation/task state, not another queue.
 export class ManagementService{
- constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,maintenance,routingStatus,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
-  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,maintenance,routingStatus,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
+ constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,prepareHandoff,inspectRepository,maintenance,desktop,routingStatus,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
+  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,prepareHandoff,inspectRepository,maintenance,desktop,routingStatus,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
   manager.state.managementOperations??=[];this.operations=manager.state.managementOperations
   for(const op of this.operations)if(['pending','executing'].includes(op.status))op.status=op.status==='pending'?'not_executed':'unknown'
   pruneManagementOperations(this.operations,this.now())
@@ -29,28 +32,61 @@ export class ManagementService{
  target(owner,id){const e=this.entries(owner).find(e=>e.id===id);if(!e)throw Error('MANAGEMENT_TARGET_NOT_FOUND');return e}
  snapshot(owner,e){
   const saved=this.manager.state.users[e.key]??{},s=this.manager.sessions.get(e.key)
-  return {projectId:e.id,name:this.conversations.displayName(owner,e),active:this.conversations.root[owner].active===e.id,daily:this.conversations.root[owner].dailyId===e.id,archived:!!e.archived,workspace:saved.workspace??null,workspaceSource:'local_configuration',threadId:saved.threadId??null,configuredModel:saved.modelOverride??null,connectedModel:s?.model??null,state:s?.state??'disconnected',task:s?.busy&&s.traceId&&s.turnId?{id:s.traceId,turnId:s.turnId,jobId:s.taskId??null}:null,queued:(s?.queue?.length??0)+(this.manager.submissions?.pending?.()??[]).filter(j=>j.owner===e.key).length,uncertain:this.manager.submissions?.uncertainCount?.(e.key)??0,recovery:saved.recovery??null,lastProgress:s?.lastProgress?.turnId===s?.turnId?s?.lastProgress?.text?.slice(0,2000)??null:null,progressTruncated:(s?.lastProgress?.text?.length??0)>2000,pendingApprovals:[...this.manager.questions.values()].filter(q=>q.session.userId===e.key).length,latestResult:saved.resultIdentity??null,evidence:'local_runtime',observedAt:new Date(this.now()).toISOString()}
+  return {projectId:e.id,nativeProjectId:saved.nativeProjectId??null,name:e.name,active:this.conversations.root[owner].active===e.id,archived:!!e.archived,workspace:saved.workspace??null,workspaceSource:'local_configuration',threadId:saved.threadId??null,configuredModel:saved.modelOverride??null,connectedModel:s?.model??null,turnModel:s?.executionModel??null,turnTokenUsage:s?.tokenUsage??null,nativeStatus:s?.nativeStatus??null,nativeActiveFlags:s?.nativeActiveFlags??[],goal:s?.nativeGoal??null,state:s?.state??'disconnected',task:s?.busy&&s.traceId&&s.turnId?{id:s.traceId,turnId:s.turnId,jobId:s.taskId??null}:null,queued:(s?.queue?.length??0)+(this.manager.submissions?.pending?.()??[]).filter(j=>j.owner===e.key).length,uncertain:this.manager.submissions?.uncertainCount?.(e.key)??0,recovery:saved.recovery??null,lastProgress:s?.lastProgress?.turnId===s?.turnId?s?.lastProgress?.text?.slice(0,2000)??null:null,progressTruncated:(s?.lastProgress?.text?.length??0)>2000,pendingApprovals:[...this.manager.questions.values()].filter(q=>q.session.userId===e.key).length,latestResult:saved.resultIdentity??null,executionOwner:this.manager.state.desktopHandoff?'desktop':'wechat',evidence:'local_runtime',observedAt:new Date(this.now()).toISOString()}
  }
  exact(e,args){const s=this.manager.sessions.get(e.key);if(!s||!s.busy||s.traceId!==args.taskId||s.turnId!==args.turnId||s.rpc?.closed)throw Error('MANAGEMENT_STALE_TASK');return s}
  async call(caller,name,args){
-  validateManagementCall(name,args);const owner=this.owner(caller)
+  const spec=validateManagementCall(name,args);const owner=this.owner(caller)
+  if(this.manager.state.desktopHandoff&&!spec.annotations.readOnlyHint&&!['request_desktop_handoff','request_desktop_return'].includes(name))throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')
+  if(name==='get_conversation_context')return conversationContext(this,owner,caller)
+  if(name==='get_conversation_repository')return repositoryContext(this,owner,args)
+  if(name==='associate_repository_conversations')return associateRepositoryConversations(this,owner,caller,args)
+  if(hasNativeControl(name))return nativeControl(this,owner,caller,name,args)
+  if(name==='get_desktop_status')return desktopStatus(this,owner)
+  if(['request_desktop_handoff','request_desktop_return'].includes(name)){
+   const previous=this.manager.state.desktopHandoff
+   if(name==='request_desktop_return'&&previous?.phase==='waiting'&&previous.projectId===args.projectId){
+    const pending=this.operations.find(op=>op.id===previous.operationId&&op.owner===owner&&op.status==='pending')
+    if(pending){pending.status='not_executed';pending.detail='MANAGEMENT_DESKTOP_RETURN_REQUESTED';clearTimeout(this.expirations.get(pending.id));this.expirations.delete(pending.id);await this.manager.save()}
+   }
+   this.manager.desktopTransition=true
+   try{return await requestDesktop(this,owner,caller,name,args)}
+   catch(error){if(previous)this.manager.state.desktopHandoff=previous;throw error}
+   finally{this.manager.desktopTransition=false;if(!this.manager.state.desktopHandoff)this.resumeTasks?.()}
+  }
   if(name==='request_queue_cancel_all')return cancelQueuedTasks(this,owner,caller,args)
   if(name==='request_queue_change')return changeQueuedTask(this,owner,caller,args)
   if(name==='request_model_switch')return requestModelSwitch(this,owner,caller,args)
   if(name==='request_project_archive')return requestProjectArchive(this,owner,caller,args)
   if(['get_service_status','get_installation_status','get_diagnostics','get_usage_guide','get_maintenance_status'].includes(name))return maintenanceRead(this,owner,name,args)
   if(['request_service_restart','request_upgrade'].includes(name))return requestMaintenance(this,owner,caller,name,args)
-  const extended={submit_project_task:()=>submitProjectTask(this,owner,caller,args),list_workspace_choices:()=>workspaceChoices(this,owner,args),create_project:()=>createProject(this,owner,caller,args),rename_project:()=>renameProject(this,owner,caller,args),search_session_history:()=>searchHistory(this,owner,args),list_project_tasks:()=>listProjectTasks(this,owner,args),get_task_result:()=>getTaskResult(this,owner,args),request_result_redelivery:()=>requestResultRedelivery(this,owner,caller,args),request_task_reconciliation:()=>requestTaskReconciliation(this,owner,caller,args),check_updates:()=>checkUpdates(this,owner),skip_update:()=>skipUpdate(this,owner,caller,args),create_schedule:()=>createSchedule(this,owner,caller,args),list_schedules:()=>listSchedules(this,owner,args),cancel_schedule:()=>cancelSchedule(this,owner,caller,args)}
+  const extended={open_conversation:()=>openConversation(this,owner,caller,args),route_conversation_request:()=>routeConversationRequest(this,owner,caller,args),create_project_session:()=>openProjectSession(this,owner,caller,args),submit_project_task:()=>submitProjectTask(this,owner,caller,args),list_workspace_choices:()=>workspaceChoices(this,owner,args),create_project:()=>createProject(this,owner,caller,args),rename_project:()=>renameProject(this,owner,caller,args),search_sessions:()=>searchNativeHistory(this,owner,args,true),search_session_history:()=>searchNativeHistory(this,owner,args),list_project_tasks:()=>listProjectTasks(this,owner,args),get_task_result:()=>getTaskResult(this,owner,args),request_result_redelivery:()=>requestResultRedelivery(this,owner,caller,args),request_task_reconciliation:()=>requestTaskReconciliation(this,owner,caller,args),check_updates:()=>checkUpdates(this,owner),skip_update:()=>skipUpdate(this,owner,caller,args),create_schedule:()=>createSchedule(this,owner,caller,args),list_schedules:()=>listSchedules(this,owner,args),cancel_schedule:()=>cancelSchedule(this,owner,caller,args)}
   if(extended[name])return extended[name]()
   if(name==='get_entry_routing_status'){const root=this.conversations.root[owner];const classifier=this.routingStatus?.();return {classifier:classifier?{model:classifier.model??null,reasoningEffort:classifier.reasoningEffort??null,serviceTier:classifier.serviceTier??null}:null,metrics:root.entryRoutingMetrics??{},scope:'已保存记录，不等同于当前活跃进程数量',pending:Object.values(root.entryRoutes??{}).filter(r=>['deciding','classifying','decided'].includes(r.status)).length,recent:Object.values(root.entryRoutes??{}).slice(-5).map(r=>({status:r.status,title:r.decision?.title??null,createdAt:r.createdAt}))}}
   if(name==='get_management_operation'){const op=this.operations.find(op=>op.id===args.operationId&&op.owner===owner);if(!op)throw Error('MANAGEMENT_OPERATION_NOT_FOUND');return this.result(op)}
-  if(name==='list_projects')return {callerProjectId:this.conversations.entry(caller).id,projects:this.entries(owner).map(e=>this.snapshot(owner,e))}
+  if(name==='list_projects'){
+   const nativeProjects=await this.conversations.codexProjects?.(owner)??null
+   return {nativeProjects,codexProjects:nativeProjects?.map(project=>project.name)??null,callerProjectId:this.conversations.entry(caller).id,projects:this.entries(owner).map(e=>this.snapshot(owner,e))}
+  }
   if(name==='resolve_target'){
    const q=args.query.normalize('NFKC').trim().toLowerCase(),entries=this.entries(owner)
-   const daily=['daily','日常','日常助手'].includes(q)?entries.filter(e=>e.id===this.conversations.root[owner].dailyId):[]
-   const exact=daily.length?daily:entries.filter(e=>[e.id,e.name,this.conversations.displayName(owner,e)].some(v=>String(v).normalize('NFKC').toLowerCase()===q))
-   const found=exact.length?exact:entries.filter(e=>[e.name,this.conversations.displayName(owner,e),this.manager.state.users[e.key]?.workspace].some(v=>v&&String(v).normalize('NFKC').toLowerCase().includes(q)))
+   const exact=entries.filter(e=>[e.id,e.name].some(v=>String(v).normalize('NFKC').toLowerCase()===q))
+   const found=exact.length?exact:entries.filter(e=>[e.name,this.manager.state.users[e.key]?.workspace].some(v=>v&&String(v).normalize('NFKC').toLowerCase().includes(q)))
    return {resolution:found.length===1?'unique':found.length?'ambiguous':'not_found',candidates:found.map(e=>this.snapshot(owner,e)),changed:false}
+  }
+  if(name==='list_project_sessions'){
+   const api=this.conversations.backendPort?.nativeProjects
+   if(!api)throw Error('MANAGEMENT_NATIVE_PROJECTS_UNAVAILABLE')
+   const page=await this.conversations.withBackend(owner,rpc=>api.sessions(rpc,args.nativeProjectId,args.cursor))
+   if(!args.cursor&&!page.nextCursor){
+    for(const entry of this.entries(owner)){
+     const session=this.manager.sessions.get(entry.key),saved=this.manager.state.users[entry.key]
+     if(!entry.archived&&session?.threadId&&(!args.nativeProjectId||saved?.nativeProjectId===args.nativeProjectId)&&!page.sessions.some(t=>t.threadId===session.threadId)){
+      page.sessions.push({threadId:session.threadId,name:entry.name,cwd:this.manager.workspaceFor(entry.key)})
+     }
+    }
+   }
+   return page
   }
   if(name==='list_models')return this.conversations.withBackend(owner,rpc=>this.manager.protocol.listModels(rpc))
   const e=this.target(owner,args.projectId)
@@ -99,7 +135,7 @@ export class ManagementService{
  async execute(op){return this.track(()=>this.run(op))}
  async run(op){
   if(op.status!=='pending')return
-  if(['request_result_redelivery','request_task_reconciliation','request_service_restart','request_upgrade','request_project_archive'].includes(op.name))return this.runExtended(op)
+  if(['request_result_redelivery','request_task_reconciliation','request_service_restart','request_upgrade','request_project_archive','request_desktop_handoff'].includes(op.name))return this.runExtended(op)
   const {manager,conversations}=this,root=conversations.root[op.owner]
   try{
    if(this.closed||!this.ready())throw Error('MANAGEMENT_UNAVAILABLE')
@@ -133,13 +169,13 @@ export class ManagementService{
  async runExtended(op){
   try{
    if(this.closed||!this.ready())throw Error('MANAGEMENT_UNAVAILABLE')
-   const done=op.name==='request_project_archive'?await executeProjectArchive(this,op):['request_service_restart','request_upgrade'].includes(op.name)?await executeMaintenance(this,op):op.name==='request_result_redelivery'?await executeRedelivery(this,op):await executeReconciliation(this,op)
+   const done=op.name==='request_desktop_handoff'?await executeDesktop(this,op):op.name==='request_project_archive'?await executeProjectArchive(this,op):['request_service_restart','request_upgrade'].includes(op.name)?await executeMaintenance(this,op):op.name==='request_result_redelivery'?await executeRedelivery(this,op):await executeReconciliation(this,op)
    if(done===false)return
   }catch(error){op.status=op.status==='executing'?'unknown':'not_executed';op.detail=/^(?:MANAGEMENT|SCHEDULE|UPDATE)_[A-Z_]+$/.test(error.message)?error.message:'MANAGEMENT_OPERATION_UNCONFIRMED'}
   clearTimeout(this.expirations.get(op.id));this.expirations.delete(op.id)
   discardUnexecutedPayload(op)
   await this.manager.save()
-  const notice=op.name==='request_project_archive'&&op.status==='confirmed'?'项目归档状态已核对。': ['scheduled','already_scheduled'].includes(op.status)?'已安排，等当前工作结束后处理，完成后会通知你。':op.status==='up_to_date'?'当前版本无需升级，未安排维护。':op.status==='blocked'?'已有维护请求，未重复安排。':op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'已提交发送，尚未确认你是否收到。':op.status==='deferred'?'已安排发送，尚未确认送达。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
+  const notice=op.name==='request_desktop_handoff'?(op.status==='confirmed'?'已请求在桌面打开这个会话。请在电脑确认是否显示；桌面接续期间，微信暂不执行新任务。关闭桌面后可说“回到微信继续”。':!this.manager.state.desktopHandoff?'桌面接续已取消，微信可以继续处理工作。':'桌面打开结果尚未确认，微信任务仍暂停。请先关闭桌面，再说“回到微信继续”核对。'):op.name==='request_project_archive'&&op.status==='confirmed'?'项目归档状态已核对。': ['scheduled','already_scheduled'].includes(op.status)?'已安排，等当前工作结束后处理，完成后会通知你。':op.status==='up_to_date'?'当前版本无需升级，未安排维护。':op.status==='blocked'?'已有维护请求，未重复安排。':op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'已提交发送，尚未确认你是否收到。':op.status==='deferred'?'已安排发送，尚未确认送达。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
   await this.notice(op.owner,notice).catch(()=>{})
  }
  sign(value){const data=Buffer.from(JSON.stringify(value)).toString('base64url');return data+'.'+createHmac('sha256',this.cursorKey).update(data).digest('base64url')}

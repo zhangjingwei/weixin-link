@@ -1,3 +1,4 @@
+import {localUpgradeMarker} from './local-upgrade-notice.mjs'
 import {changelogSection,releaseDetails} from '../../domain/updates/release-notes.mjs'
 import {readFile,stat} from 'node:fs/promises'
 import {join} from 'node:path'
@@ -40,7 +41,13 @@ export async function readInstalledNotes(sourceDir,tag){
 
 export async function readInstalledNotice(sourceDir,language='zh'){
  const installed=await readInstalledRelease(sourceDir)
- if(!installedRelease(installed))return null
+ if(!installedRelease(installed)){
+  try{
+   const local=JSON.parse(await readFile(join(sourceDir,localUpgradeMarker),'utf8'))
+   if(local.version===1&&typeof local.tree==='string'&&/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(local.tree))return {commit:local.tree,local:true}
+  }catch(error){if(error.code!=='ENOENT')throw error}
+  return null
+ }
  const tag=releaseTag(installed.ref)?installed.ref:null
  return {commit:installed.commit,tag,details:tag?releaseDetails({tag,notes:await readInstalledNotes(sourceDir,tag)},language):''}
 }

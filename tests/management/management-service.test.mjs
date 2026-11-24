@@ -1,4 +1,8 @@
 import test from 'node:test'
+import {mkdtemp,rm} from 'node:fs/promises'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
+import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
 import assert from 'node:assert/strict'
 import {ManagementService} from '../../src/application/management/management-service.mjs'
 import {TextConversations} from '../../src/application/conversations/text-conversations.mjs'
@@ -26,6 +30,18 @@ test('read-only resolution filters owners, preserves active selection, and repor
  await assert.rejects(service.call('alice','get_project_status',{projectId:'private'}),/NOT_FOUND/)
  assert.equal(conversations.root.alice.active,'1');assert.deepEqual(calls,[])
 })
+test('project status reports uncertain tasks separately from the queue',async t=>{
+ const {service,manager}=fixture(t)
+ const dir=await mkdtemp(join(tmpdir(),'uncertain-status-')),jobs=new DurableJobs(join(dir,'q.sqlite'))
+ t.after(async()=>{jobs.close();await rm(dir,{recursive:true,force:true})})
+ manager.submissions=jobs
+ jobs.mark(jobs.add('alice','uncertain','sdk'),'uncertain')
+ const {projectId}=await service.call('alice','get_conversation_context',{})
+ const status=await service.call('alice','get_project_status',{projectId})
+ assert.equal(status.uncertain,1)
+ assert.equal(status.queued,0)
+})
+
 test('untrusted owner fields, tools and forged cursors are rejected',async t=>{
  const {service}=fixture(t)
  await assert.rejects(service.call('alice','list_projects',{ownerId:'bob'}),/INVALID_ARGUMENTS/)
@@ -117,4 +133,15 @@ test('history continuation rejects a changed active turn rather than skipping ne
  backend.listTurns=async()=>({data:[{id:'turn',items:[{type:'agentMessage',text}]}]})
  const first=await service.call('alice','get_session_history',{projectId:'2'});text='修改'+text
  await assert.rejects(service.call('alice','get_session_history',{projectId:'2',cursor:first.nextCursor}),/HISTORY_CHANGED/)
+})
+
+test('list_projects exposes the native catalog independently of registered project IDs',async t=>{
+ const {service,backend}=fixture(t)
+ backend.listProjects=async()=>[{id:'p',name:'原生项目',roots:[]}]
+ const result=await service.call('alice','list_projects',{})
+ assert.deepEqual(result.codexProjects,['原生项目'])
+ assert.ok(result.projects.some(p=>p.name==='知识库'))
+ assert.ok(result.projects.every(p=>p.name!=='原生项目'))
+ backend.listProjects=async()=>{throw Error('unavailable')}
+ assert.equal((await service.call('alice','list_projects',{})).codexProjects,null)
 })

@@ -23,7 +23,7 @@ test('installation resumes with an existing symlinked workspace',async t=>{
  assert((await readFile(join(actual,'AGENTS.md'),'utf8')).startsWith('# User rules\nKeep this text.\n'))
  assert.equal(JSON.parse(await readFile(join(state,'installation.json'),'utf8')).workspace,workspace)
 })
-test('service installation prepares both templates and never starts or overrides foreign services',async t=>{const home=await fixture(t),root=join(home,'source with spaces'),calls=[];const run=async(...a)=>{calls.push(a)};await installServices({home,root,run,platform:'linux'});assert.deepEqual(calls[0][1],['--user','daemon-reload']);assert(!calls.some(c=>c[1].includes('start')));const dir=join(home,'.config/systemd/user');const text=await readFile(join(dir,'wechat-ping-bot@.service'),'utf8');assert(text.includes('WECHAT_ACCOUNT=%i'));assert(text.includes('/src/wechat/bot.mjs'));assert(text.includes('source with spaces'));await writeFile(join(dir,'wechat-ping-bot.service'),'foreign service');await assert.rejects(installServices({home,root,run,platform:'linux'}),/REQUIRES_REVIEW/);assert.equal(await readFile(join(dir,'wechat-ping-bot.service'),'utf8'),'foreign service')})
+test('service installation prepares the personal service and never starts or overrides foreign services',async t=>{const home=await fixture(t),root=join(home,'source with spaces'),calls=[];const run=async(...a)=>{calls.push(a)};await installServices({home,root,run,platform:'linux'});assert.deepEqual(calls[0][1],['--user','daemon-reload']);assert(!calls.some(c=>c[1].includes('start')));const dir=join(home,'.config/systemd/user');assert(!(await readdir(dir)).includes('wechat-ping-bot@.service'));const text=await readFile(join(dir,'wechat-ping-bot.service'),'utf8');assert(text.includes('/src/wechat/bot.mjs'));assert(text.includes('source with spaces'));await writeFile(join(dir,'wechat-ping-bot.service'),'foreign service');await assert.rejects(installServices({home,root,run,platform:'linux'}),/REQUIRES_REVIEW/);assert.equal(await readFile(join(dir,'wechat-ping-bot.service'),'utf8'),'foreign service')})
 test('doctor separates a working channel from missing Codex and does not expose command output',async t=>{const home=await fixture(t),root=join(home,'source');await mkdir(join(root,'node_modules/wechatbot-zerolink/dist/messaging'),{recursive:true});await writeFile(join(root,'node_modules/wechatbot-zerolink/dist/index.js'),'');await writeFile(join(root,'node_modules/wechatbot-zerolink/package.json'),JSON.stringify({name:'wechatbot-zerolink',version:'2.2.0-zerolink.2'}));await writeFile(join(root,'node_modules/wechatbot-zerolink/dist/messaging/poller.js'),'beforeCheckpoint');await initInstallation({home,root});await installServices({home,root,reload:false});const r=await doctor({home,root,run:async(bin)=>{if(bin.endsWith('codex'))throw Error('secret failure');return {stdout:'secret'}}});assert.equal(r.codexInstalled,false);assert.equal(r.codexLoggedIn,false);assert.equal(r.channelPrerequisitesReady,true);assert(!JSON.stringify(r).includes('secret'))})
 test('bundled Codex runtime is resolved from the source tree, never the user PATH',async t=>{
  const home=await fixture(t),root=join(home,'source'),binary=findCodex(home,{root}),calls=[]
@@ -34,18 +34,15 @@ test('bundled Codex runtime is resolved from the source tree, never the user PAT
  assert.equal(r.status,'bundled');assert.equal(calls[0][0],binary)
  assert(!calls.some(c=>c[0]==='npm'))
 })
-test('login status uses the selected account home and ignores an inherited Codex home',async t=>{
- const home=await fixture(t),root=join(home,'source'),binary=findCodex(home,{root}),calls=[]
- await mkdir(join(binary,'..'),{recursive:true});await writeFile(binary,'fixture')
- const original=process.env.CODEX_HOME;process.env.CODEX_HOME=join(home,'personal-codex')
+test('personal Codex setup respects CODEX_HOME and rejects a named service',async t=>{
+ const home=await fixture(t),original=process.env.CODEX_HOME
  try{
-  for(const accountId of ['default','work'])await codexAvailability({home,root,accountId,run:async(_binary,args,options)=>{calls.push({args,options});return {stdout:'codex-cli 0.163.0\n'}}})
+  delete process.env.CODEX_HOME
+  assert.equal(await ensureAccountCodexHome('default',home),join(home,'.codex'))
+  process.env.CODEX_HOME=join(home,'personal-codex')
+  assert.equal(await ensureAccountCodexHome('default',home),process.env.CODEX_HOME)
+  assert.throws(()=>accountCodexHome('work',home),/SINGLE_USER_INSTALLATION/)
  }finally{if(original===undefined)delete process.env.CODEX_HOME;else process.env.CODEX_HOME=original}
- const checks=calls.filter(call=>call.args[0]==='login')
- assert.deepEqual(checks.map(call=>call.options.env.CODEX_HOME),[accountCodexHome('default',home),accountCodexHome('work',home)])
- assert.notEqual(checks[0].options.env.CODEX_HOME,checks[1].options.env.CODEX_HOME)
- const linked=accountCodexHome('linked',home);await mkdir(join(linked,'..'),{recursive:true});await symlink(join(home,'personal-codex'),linked)
- await assert.rejects(ensureAccountCodexHome('linked',home),/INVALID_CODEX_HOME/)
 })
 test('doctor reports custom provider access without requiring subscription login',async t=>{
  const home=await fixture(t),root=join(home,'source'),binary=findCodex(home,{root}),calls=[]

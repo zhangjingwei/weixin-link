@@ -88,9 +88,11 @@ test('guide and status can be viewed during a project-name prompt without consum
  assert.equal(classify(guide).kind,'setup')
  assert.equal(guide._setupAction,'manualEn')
  assert.equal(router.ensure('alice').prompt.target,'newProject')
- const status=router.bind({userId:'alice',text:'status',raw:{message_id:'status'}})
- assert.equal(classify(status).value.action,'status')
- assert.equal(router.ensure('alice').prompt.target,'newProject')
+ for(const text of ['status','结果？','result']){
+  const lookup=router.bind({userId:'alice',text,raw:{message_id:text}})
+  assert.equal(classify(lookup),null)
+  assert.equal(router.ensure('alice').prompt.target,'newProject')
+ }
  const answer=router.bind({userId:'alice',text:'demo',raw:{message_id:'answer'}})
  assert.deepEqual(answer._conversationCommand,{action:'projectFolderPrompt',name:'demo'})
  assert.equal(classify(answer).kind,'conversation')

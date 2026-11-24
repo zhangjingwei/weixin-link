@@ -1,3 +1,4 @@
+import {createDesktopClient} from '../infrastructure/agents/desktop-client.mjs'
 import {attachmentHandoffs} from '../infrastructure/media/attachment-handoff.mjs'
 import {EntryRouting} from '../application/intake/entry-routing.mjs'
 import {createManagementMaintenanceController} from '../interfaces/controllers/management-maintenance-controller.mjs'
@@ -7,6 +8,8 @@ import {createManagementMcpController} from '../interfaces/controllers/managemen
 import {managementConfiguration,managementGuidance} from '../infrastructure/agents/management-plugin.mjs'
 import {voiceCommandInput} from './voice-command-input.mjs'
 import {trackLoginValidity} from './login-validity.mjs'
+import {readWelcomeRequest,recordWelcomeRequest} from '../infrastructure/wechat/welcome-request.mjs'
+import {watchLocalUpgrade} from '../infrastructure/updates/local-upgrade-notice.mjs'
 import {LifecycleNotice,welcomeMessage} from './lifecycle-notice.mjs'
 import {setupLanguage} from '../setup/setup-locale.mjs'
 import {createMessageProcessor} from './message-processor.mjs'
@@ -29,13 +32,16 @@ import {createInfrastructurePorts} from './infrastructure-ports.mjs'
 import {AgentSwitcher} from '../setup/agent-switch.mjs'
 import {ChatUpgrader} from '../setup/chat-upgrade.mjs'
 import {TextConversations} from '../application/conversations/text-conversations.mjs'
+import {importLegacySessions} from '../infrastructure/storage/import-legacy-sessions.mjs'
+import {migrateNativeBindings} from '../application/conversations/native-projects.mjs'
 import {createCodexConversationBackend} from '../infrastructure/agents/codex-conversation-backend.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
-import {accountPaths,assertAccount,assertUniqueLogin,rememberIdentity} from '../infrastructure/accounts/account-store.mjs'
+import {accountPaths,assertAccount,rememberIdentity} from '../infrastructure/accounts/account-store.mjs'
 import {DurableIntake} from '../application/tasks/durable-intake.mjs'
 import {RuntimeControl} from '../infrastructure/runtime/runtime-control.mjs'
 import {nonBlockingHandler} from './message-handler.mjs'
+import {createPollingLifecycle} from './polling-lifecycle.mjs'
 import {MessageDispatch} from './message-dispatch.mjs'
 import {createDiagnosticLog,errorFields,createSdkLogger} from '../infrastructure/diagnostics/diagnostic-log.mjs'
 import {browserLoginUrl} from '../infrastructure/wechat/pairing-state.mjs'
@@ -55,7 +61,8 @@ const runtimeStateDir=backend.stateDir
 await mkdir(stateDir, { recursive: true, mode: 0o700 })
 const testing = process.argv.includes('--test-codex')
 const owners = testing ? ['integration'] : JSON.parse(await readFile(join(stateDir, 'codex-owners.json'), 'utf8'))
-if (!Array.isArray(owners) || !owners.length || !owners.every(id => typeof id === 'string')) throw new Error('Configure authorized WeChat owners first')
+if (!Array.isArray(owners) || owners.length!==1 || !owners.every(id => typeof id === 'string')) throw new Error('Single-user mode requires one authorized WeChat sender')
+if(!testing)await importLegacySessions(stateDir,agent.sessionOptions.codexHome)
 const testName = process.env.CODEX_TEST_SESSION ?? `${Date.now()}-${process.pid}`
 if (testing && !/^[a-zA-Z0-9_-]+$/.test(testName)) throw new Error('Invalid test session name')
 const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-logs':'logs')})
@@ -63,6 +70,7 @@ const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:testing?'test':'live'})
 const systemTimeZone=Intl.DateTimeFormat().resolvedOptions().timeZone
 const scheduleGuidance=`服务当前系统时区为 ${systemTimeZone}。用户未指定时区时，按此时区理解本地时间；单次计划的 at 须使用目标日期对应偏移的 ISO 8601 时间。以下 +08:00 仅用于说明格式。定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../interfaces/cli/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2027-01-01T09:00:00+08:00","text":"开会"}。定时提交任务：{"action":"create","kind":"task","at":"2027-01-01T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":${JSON.stringify(systemTimeZone)}} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向原会话的持久任务队列提交原样文字，由该会话对应的任务执行链路处理；不预先声称任务完成。命令从环境读取当前会话标识，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
+
 // 会话编排由应用层负责；底座协议由所选 agent.sessionOptions 注入。
 const manager = await new SessionManager({log, completionMarkers:true, scheduleGuidance, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, ...agent.sessionOptions }).init()
 const agentSwitcher=new AgentSwitcher({account})
@@ -81,6 +89,7 @@ const setupController=await new SetupController({stateDir,accountId:account.id,c
 const classifyMessage=createCommandClassifier()
 const conversationBackend=createCodexConversationBackend(manager)
 const conversations=new TextConversations(manager,owners,conversationInput,conversationBackend)
+for(const owner of owners)await migrateNativeBindings(conversations,owner)
 await manager.save()
 const bot = infrastructure.wechat.createClient({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
 const notifyStart=bot.api.notifyStart.bind(bot.api)
@@ -88,6 +97,7 @@ bot.api.notifyStart=async(...args)=>{try{const result=await notifyStart(...args)
 const loginValidity=trackLoginValidity(bot)
 const typingStatus=new TypingStatus({start:userId=>bot.sendTyping(conversations.recipient(userId)),stop:userId=>bot.stopTyping(conversations.recipient(userId)),log})
 const typingTimer=setInterval(()=>typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key)))),1000);typingTimer.unref()
+
 // Device-code polling may take longer than the SDK's default GET timeout.
 const apiGet = bot.http.apiGet.bind(bot.http)
 bot.http.apiGet = async (baseUrl, path, headers) => {
@@ -105,19 +115,34 @@ let intakeHandler,durable
 const replayMaintenance=()=>{
  for(const [id,message] of maintenancePending){maintenancePending.delete(id);if(jobs.rawCurrent(id))intakeHandler(message)}
 }
+
 // 私有控制端点可在微信登录前启动，用于状态检查和维护控制。
 const runtime=new RuntimeControl({
  controlTokenFile:join(stateDir,'control-token'),
  backend:{id:backend.id,kind:backend.kind,agentKind:agent.kind,memoryMode:backend.memoryMode??'wechat'},
- features:{daily_assistant:true,setup_commands:true,native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,update_notice:true},
+ features:{setup_commands:true,native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,update_notice:true},
  onManagement:request=>management.onRequest(request),
  onSchedule:request=>{if(!schedules)throw Error('SCHEDULE_STATE_UNAVAILABLE');return schedules.onRequest(request)},
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
   startup:()=>startupPhase,
  snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+(durable?.users.size??0),saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
- onSeal:()=>bot.stop(),onResume:()=>{void (async()=>{if(bot.runPromise)await bot.runPromise.catch(()=>{});if(!stopping){await bot.start();replayMaintenance()}})().catch(e=>log('service.resume_failed',errorFields(e)))},
- onDrainRelease:replayMaintenance,
+ onSeal:()=>polling.seal(),
+ onResume:resumePolling,
+ onDrainRelease:resumePolling,
 })
+const polling=createPollingLifecycle({
+ bot,runtime,canRun:()=>loggedIn&&!stopping,
+ recover:()=>{
+   schedules?.start()
+   updates.start()
+   for(const message of jobs.rawPending())if(!maintenancePending.has(message._ingressId))intakeHandler(message)
+   durable.resume()
+ },
+ replay:replayMaintenance,
+})
+async function resumePolling(){
+ try{await polling.release()}catch(error){log('service.resume_failed',errorFields(error))}
+}
 const mediaDependencies={
  log,
  prepare:async(message,token)=>{const start=Date.now(),messageId=message.raw?.message_id??message.raw?.client_id,trace_id=message._traceId;log('attachments.download_started',{trace_id,messageId});try{const r=await runtime.track('media',()=>infrastructure.media.prepare(message,stateDir,undefined,token?.signal));log('attachments.download_completed',{trace_id,messageId,duration_ms:Date.now()-start,count:r.attachments.length,bytes:r.attachments.reduce((n,a)=>n+(a.bytes??0),0),status:r.errors.length?'partial':'ok'});return r}catch(e){log('attachments.download_failed',{trace_id,messageId,duration_ms:Date.now()-start,...errorFields(e)});throw e}},
@@ -133,7 +158,12 @@ try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime
  track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 const managementInstallation=await managementPlugin({accountId:account.id,codexHome:agent.sessionOptions.codexHome,stateDir})
-const managementService=new ManagementService({routingStatus:()=>agent.classifyEntry?.statistics?.(),manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
+const desktop=createDesktopClient({account,providerKind:agent.providerKind,codexHome:agent.sessionOptions.codexHome,binary:installation.codexBinary,workspace:installation.workspace})
+// 先打开持久收件库并接好入站处理链；登录成功后才恢复未完成工作。
+const jobs=await infrastructure.storage.accountInbox(stateDir);manager.submissions=jobs
+const handoffs=attachmentHandoffs(stateDir,jobs)
+const managementService=new ManagementService({prepareHandoff:args=>handoffs.prepare(args),desktop,routingStatus:()=>agent.classifyEntry?.statistics?.(),manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
+managementService.resumeTasks=()=>durable.resume()
 // Persist restart reconciliation and private-payload cleanup before accepting MCP calls.
 await manager.save()
 const management=createManagementMcpController({manager,service:managementService,configuration:capability=>managementConfiguration({socket:account.socket,capability,controlToken:runtime.token})})
@@ -142,31 +172,32 @@ if(managementInstallation.enabled){
  manager.managementGuidance=managementGuidance
 }
 await runtime.listen(account.socket)
-// 先打开持久收件库并接好入站处理链；登录成功后才恢复未完成工作。
-const jobs=await infrastructure.storage.accountInbox(stateDir);manager.submissions=jobs
-let welcomePending=false;try{welcomePending=JSON.parse(await readFile(join(stateDir,'welcome-pending.json'),'utf8')).pending===true}catch{}
+let welcomeRequest={}
+try{welcomeRequest=await readWelcomeRequest(stateDir)}catch{log('lifecycle_notice.failed',{code:'WELCOME_REQUEST_UNREADABLE'})}
 let savedSetupLanguage;try{savedSetupLanguage=(await readTerminalSetupStatus(stateDir))?.language}catch{}
 const noticeLanguage=savedSetupLanguage??setupLanguage()
-const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,welcomePending,language:noticeLanguage,
- welcomeText:async()=>{let result,profile;try{result=await readTerminalSetupStatus(stateDir);profile=await readProviderProfile(stateDir)}catch{}return result?.provider===agent.providerKind&&result.fingerprint===terminalSetupFingerprint(profile)?noticeLanguage==='en'?`Weixin Link is connected. ${result.model??'The subscription model'} passed a real inference test during setup. You can start chatting.`:'微信助手已连接，'+(result.model??'订阅模型')+' 已通过安装终端的真实推理测试。现在可以直接聊天。':welcomeMessage(noticeLanguage,account.id)},
+const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,...welcomeRequest,language:noticeLanguage,
+ welcomeText:async()=>{let result,profile;try{result=await readTerminalSetupStatus(stateDir);profile=await readProviderProfile(stateDir)}catch{}if(!result||result.provider!==agent.providerKind||result.fingerprint!==terminalSetupFingerprint(profile))return welcomeMessage(noticeLanguage,account.id)
+ if(!result.verified)return noticeLanguage==='en'?'Weixin Link is connected. Send your first question.':'微信助手已连接，可以直接发送你的第一个问题。'
+ return noticeLanguage==='en'?`Weixin Link is connected. ${result.model??'The subscription model'} passed a real inference test during setup. You can start chatting.`:'微信助手已连接，'+(result.model??'订阅模型')+' 已通过安装终端的真实推理测试。现在可以直接聊天。'},
  send:(owner,text)=>view.announcement(owner,text),log})
 const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace
 const inbound=createWeChatController({bot,view,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
- normalizeVoice:voiceCommandInput,
+ normalizeVoice:voiceCommandInput,deferMaintenance:message=>maintenancePending.set(message._ingressId,message),
  traceWire:wire=>ingressTrace.traceId(wire),traceMessage:message=>ingressTrace.callback(message),quote:message=>weixin.quote(message),dispatch:message=>intakeHandler(message),log})
 weixin=infrastructure.wechat.installProtocol(bot,{db:jobs.db,log,prepareBatch:inbound.prepareBatch})
 ingressTrace=traceIngress(bot,log)
 manager.onToolStatus=process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1'?createToolNotifier({send:(peer,event)=>bot.sendToolStatus(peer,event),serialize:(peer,fn)=>conversations.serialize(peer,fn),track:fn=>runtime.track('delivery',fn),recipient:key=>conversations.recipient(key),log}):undefined
 
-durable=new DurableIntake({jobs,manager,conversations,log,reply:(userId,value,options)=>view.deliver(userId,value,options)})
+durable=new DurableIntake({jobs,manager,conversations,desktopWriter:desktop.writer,log,reply:(userId,value,options)=>view.deliver(userId,value,options)})
+manager.nativeQueueReply=(owner,value,options)=>view.deliver(owner,value,options)
 manager.wakeRecovery=owner=>durable.wake(owner)
-manager.lifecycle.onCancel(userId=>{pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
+manager.lifecycle.onCancel((userId,{queueAlreadyCancelled}={})=>{pending.cancel(userId);durable.cancel(userId,{queueAlreadyCancelled});typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const handoffs=attachmentHandoffs(stateDir,jobs)
 const handoffCleanup=setInterval(()=>{void runtime.track('management',()=>handoffs.cleanup()).catch(()=>log('attachment_handoff.cleanup_failed',{code:'HANDOFF_CLEANUP_FAILED'}))},3600000);handoffCleanup.unref()
 await handoffs.cleanup().catch(()=>log('attachment_handoff.cleanup_failed',{code:'HANDOFF_CLEANUP_FAILED'}))
-const entryRouting=new EntryRouting({prepareHandoff:args=>handoffs.prepare(args),manager,conversations,jobs,service:managementService,classify:agent.classifyEntry,deliver:(...args)=>view.deliver(...args),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
+const entryRouting=new EntryRouting({modelManagedConversations:managementInstallation.enabled,log,canAnswerDirectly:managementInstallation.enabled,prepareHandoff:args=>handoffs.prepare(args),manager,conversations,jobs,service:managementService,classify:agent.classifyEntry,deliver:(...args)=>view.deliver(...args),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
 const handleMessage=createMessageProcessor({entryRouting,view,manager,jobs,conversations,runtime,log,stateDir,accountId:account.id,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,mediaDependencies,durable,classifyMessage,infrastructure,diagnosticServices:new ServiceManager(),diagnosticService:account.service,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
 intakeHandler=nonBlockingHandler(async message => {
   try {
@@ -185,17 +216,23 @@ intakeHandler=nonBlockingHandler(async message => {
 },error=>log('message.background_failed',errorFields(error)),{enter:()=>runtime.enter('ingress')})
 bot.onMessage(inbound.onMessage)
 
+const stopWatchingUpgrade=watchLocalUpgrade(join(import.meta.dirname,'../..'),()=>{
+ if(runtime.ready()&&!runtime.draining&&!stopping)void lifecycleNotice.start()
+})
+
 // 退出时停止新工作，等待微信上下文与会话状态落盘，再关闭控制端点。
-async function shutdown(signal){if(stopping)return;stopping=true;clearInterval(handoffCleanup);await entryRouting.close();management.close();updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
+async function shutdown(signal){if(stopping)return;stopping=true;stopWatchingUpgrade();clearInterval(handoffCleanup);await entryRouting.close();management.close();updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})
 
-// 登录并核查账号身份后恢复积压消息，最后才启动微信轮询。
+// 登录并核查账号身份，待 SDK 加载微信上下文后恢复积压消息。
 startupPhase='login_in_progress'
+let startupQrIssued=false
 await bot.login({ callbacks: {
-  onQrUrl: url => { startupPhase='login_in_progress';loginQrReady=!!browserLoginUrl(url);loginPollReady=false;markAwaitingLogin();log(loginQrReady?'wechat.login_url_ready':'wechat.login_url_invalid') },
+  onQrUrl: url => { startupQrIssued=true;startupPhase='login_in_progress';loginQrReady=!!browserLoginUrl(url);loginPollReady=false;markAwaitingLogin();log(loginQrReady?'wechat.login_url_ready':'wechat.login_url_invalid') },
   onScanned: () => log('wechat.qr_scanned'),
 } })
-const loginCheck=await assertUniqueLogin(account.id,bot.getCredentials());for(const issue of loginCheck.issues)log('account.other_profile_unreadable',{code:issue.code});await rememberIdentity(account,bot.getCredentials())
-loggedIn=true;startupPhase='login_complete';schedules?.start();updates.start();for(const message of jobs.rawPending())intakeHandler(message);durable.resume();log('wechat.login_completed');console.log('LOGIN_OK CODEX_DEFAULT')
+await rememberIdentity(account,bot.getCredentials())
+if(startupQrIssued)lifecycleNotice.loginId=await recordWelcomeRequest(stateDir)
+loggedIn=true;startupPhase='login_complete';log('wechat.login_completed');console.log('LOGIN_OK CODEX_DEFAULT')
 bot.on('poll:start',()=>{const timer=setTimeout(()=>{if(!stopping)void lifecycleNotice.start()},100);timer.unref()})
-await bot.start()
+await polling.start()

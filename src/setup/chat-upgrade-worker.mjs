@@ -2,6 +2,7 @@ import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {readFile,unlink} from 'node:fs/promises'
 import {join} from 'node:path'
+import {realpathSync} from 'node:fs'
 import {fileURLToPath} from 'node:url'
 import {setTimeout as delay} from 'node:timers/promises'
 import {userHome} from './platform-service.mjs'
@@ -51,7 +52,7 @@ export async function performChatUpgrade({home=userHome(),target=fileURLToPath(n
  }catch(error){if((await read(home))?.id===requestId)await save(home,{...request,status:'failed',stage,error:upgradeFailureCode(error)});throw error}
 }
 
-if(process.argv[1]&&process.argv[1].endsWith('/chat-upgrade-worker.mjs')){
+if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
  const home=userHome(),requestId=process.argv[2]
  try{await performChatUpgrade({home,requestId,target:process.argv[3]})}catch{process.exitCode=1}
  finally{if(process.platform==='darwin')await unlink(join(home,'.local/share/weixin-link/chat-upgrade-'+requestId+'.plist')).catch(()=>{})}

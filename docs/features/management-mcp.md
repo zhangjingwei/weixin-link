@@ -17,7 +17,7 @@
 | 工具 | 输入要点 | 结果/边界 |
 | --- | --- | --- |
 | resolve_target | query | unique / ambiguous / not_found；只读，不切换 |
-| list_projects | 无 | 当前用户已登记项目和日常会话 |
+| list_projects | 无 | Codex 项目及微信已登记的会话 |
 | get_project_status | projectId | 本地执行、队列、恢复状态、管理操作；不是项目完成度 |
 | get_session_history | projectId、可选 cursor | 文本分块和绑定目标的续页，不重发附件 |
 | request_model_switch | projectId, model, requestId | 保存指定项目的模型选择，后续新任务生效；不改供应商、不打断当前任务 |
@@ -29,7 +29,7 @@
 
 | get_management_operation | operationId | 当前用户的具体管理操作回执，不重放 |
 | list_workspace_choices | 来源 projectId | 当前目录及允许子目录，五分钟绑定凭据 |
-| create_project | name、workspaceToken、requestId | 只创建记录，不切换、不建文件夹 |
+| create_project | name、workspaceToken、requestId | 通过 project/create 创建原生项目，返回 nativeProjectId |
 | rename_project | projectId、name、requestId | 沿用命名用例，已有线程需底座确认 |
 | search_session_history | projectId、query、可选 cursor | 最近最多50轮；返回范围、时间、位置与续页 |
 | list_project_tasks | projectId、offset、limit | 完整持久 taskId；不暴露原请求正文 |
@@ -90,9 +90,9 @@ node src/tools/verify-management-native.mjs
 
 ## 第二批能力的约束
 
-新建项目先取来源目录候选，凭据绑定用户、来源项目、真实根目录、目标目录和设备/inode，五分钟有效；创建前重新校验，不能把模型提供的任意路径当授权。目录选择不是操作系统沙箱。新建只落项目记录和 canonical workspace，不改变 active、不连接底座；后续切换需单独请求。日常会话使用 daily 标识定位。
+新建项目先取来源目录候选，凭据绑定用户、来源项目、真实根目录、目标目录和设备/inode，五分钟有效；创建前重新校验，不能把模型提供的任意路径当授权。目录选择不是操作系统沙箱。新建会通过 app-server 创建原生项目；微信保存会话操作编号。list_project_sessions 按原生项目 ID 查询会话，create_project_session 可新建会话或绑定指定 threadId。后续切换需单独请求。普通聊天继续使用当前会话。
 
-结果查询不会走旧“结果”的重发分支。新结果保存完整任务/线程/轮次身份；旧记录采用明确的兼容身份。查询文本按最多10,000个字符分块，历史附件链接不作为新交付链接。指定持久任务可从其原线程只读核对历史文本，最近20份旧结果的文本和附件清单保存在同一会话状态中，重发查询窗口为7天；过期元数据在后续结果归档时清理，不另存文件字节。超出该范围、没有保留清单时 redeliveryAvailable=false，不猜测文件位置。最近结果的 resultToken 十分钟有效；提交重发时把确切快照冻结到同一管理操作中，之后即使新结果到达也不改发新结果。投递前验证全部附件的归属、保留期、大小和哈希；不可用则不先发文字、不重新生成。accepted 只表示现有投递接口的确认，不表示用户已阅读。
+微信文字和语音中的“结果”进入普通对话，通过 get_task_result 只读查询。新结果保存完整任务/线程/轮次身份；旧记录采用明确的兼容身份。查询文本按最多10,000个字符分块，历史附件链接不作为新交付链接。指定持久任务可从其原线程只读核对历史文本，最近20份旧结果的文本和附件清单保存在同一会话状态中，重发查询窗口为7天；过期元数据在后续结果归档时清理，不另存文件字节。超出该范围、没有保留清单时 redeliveryAvailable=false，不猜测文件位置。最近结果的 resultToken 十分钟有效；提交重发时把确切快照冻结到同一管理操作中，之后即使新结果到达也不改发新结果。投递前验证全部附件的归属、保留期、大小和哈希；不可用则不先发文字、不重新生成。accepted 只表示现有投递接口的确认，不表示用户已阅读。
 
 任务核对先按完整持久 taskId 验证归属和 uncertain 状态。空闲后仅将那一条记录送回既有恢复流程；不把 pending 新任务当作恢复对象，不调用 turn/start 重执行旧任务。恢复结果仍由原 DurableIntake/SessionManager 保存。项目状态附最近20条管理操作摘要；具体操作用 get_management_operation 查询。
 

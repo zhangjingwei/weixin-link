@@ -11,7 +11,14 @@ import {promisify} from 'node:util'
 import sharp from 'sharp'
 const ffmpeg=ffmpegBinary
 const exec=promisify(execFile),MAX=50*1024*1024
-const extensions=new Set(['.png','.jpg','.jpeg','.webp','.gif','.mp4','.pdf','.html','.htm','.zip','.txt','.md','.csv','.json','.docx','.xlsx','.pptx','.wav','.mp3','.silk'])
+const extensions=new Set(['.png','.jpg','.jpeg','.webp','.gif','.mp4','.pdf','.html','.htm','.zip','.txt','.md','.csv','.json','.docx','.xlsx','.pptx','.wav','.mp3','.silk',
+ '.js','.mjs','.cjs','.jsx','.ts','.mts','.cts','.tsx','.vue','.svelte','.astro','.css','.scss','.sass','.less',
+ '.py','.pyi','.rb','.php','.pl','.pm','.lua','.r','.jl','.dart','.swift','.java','.kt','.kts','.scala','.groovy',
+ '.go','.rs','.c','.h','.cc','.hh','.cpp','.hpp','.cxx','.hxx','.m','.mm','.cs','.fs','.fsx','.vb',
+ '.ex','.exs','.erl','.hrl','.hs','.clj','.ml','.mli','.zig','.sol','.asm','.s',
+ '.sh','.bash','.zsh','.fish','.ps1','.psm1','.bat','.cmd','.awk','.sql','.graphql','.proto',
+ '.xml','.yaml','.yml','.toml','.gradle','.cmake','.mk','.diff','.patch'])
+const sourceNames=new Set(['Makefile','makefile','GNUmakefile','Dockerfile','Containerfile','Jenkinsfile','Rakefile','Gemfile','Vagrantfile'])
 const inside=(root,path)=>{const rel=relative(root,path);return !/^\.\.[\\/]/.test(rel)&&rel!=='..'&&!isAbsolute(rel)}
 const digest=data=>createHash('sha256').update(data).digest('hex')
 export function outputLinks(text,cwd=process.cwd()){return deliveryLinks(text,cwd).map(item=>item.path)}
@@ -33,7 +40,7 @@ export class OutputStore {
    const name=basename(candidate.path??'generated.png');let data,kind,fileName=name,sourcePath,sourceHash
    try{
     if(candidate.error)throw Error(candidate.error)
-    if(candidate.path&&!extensions.has(extname(candidate.path).toLowerCase()))throw Error('UNSUPPORTED_FILE')
+    if(candidate.path&&!extensions.has(extname(name).toLowerCase())&&!sourceNames.has(name))throw Error('UNSUPPORTED_FILE')
     if(candidate.path&&this.fileReader){data=await this.fileReader(candidate.path,signal)}else if(candidate.path){
      const path=await realpath(candidate.path)
      const privateBase=await realpath(resolve(this.stateDir,'deliverables')).catch(()=>null),ownPrivate=await realpath(deliveryDirectory(this.stateDir,userId)).catch(()=>null)
@@ -70,7 +77,7 @@ export class OutputStore {
      try{({stderr}=await exec(ffmpeg,['-hide_banner','-protocol_whitelist','file,pipe','-i',probe,'-map','0:v:0','-frames:v','1','-f','null','-'],{timeout:20000,maxBuffer:128*1024,signal}))}finally{await unlink(probe)}
      if(!/Video: h264\b/.test(stderr))throw Error('MP4_REQUIRES_H264');kind='video'
     }else if(['.wav','.mp3','.silk'].includes(ext)){kind=this.voiceMode==='native'?'voice':'file'
-    }else{if(!extensions.has(ext))throw Error('UNSUPPORTED_FILE');kind='file'}
+    }else{kind='file'}
     if(data.length>MAX||total+data.length>MAX)throw Error('OUTPUT_SIZE_LIMIT')
     const hash=digest(data);if(seen.has(hash))continue;seen.add(hash);total+=data.length
     const path=join(dir,hash+(kind==='image'?extname(fileName):ext));await writeFile(path,data,{mode:0o600,flag:'wx'})
@@ -78,7 +85,7 @@ export class OutputStore {
    }catch(error){if(signal?.aborted)throw error;packet.errors.push({fileName:name,code:['EXPORT_PATH_REFUSED','FILE_SIZE_LIMIT','IMAGE_SIZE_LIMIT','MP4_REQUIRES_H264','OUTPUT_SIZE_LIMIT','INVALID_MP4','UNSUPPORTED_FILE','INVALID_DELIVERY_LINK'].includes(error.message)?error.message:error.code==='ENOENT'?'FILE_NOT_FOUND':'ARTIFACT_PREPARE_FAILED'})}
   }
   if(candidates.length>8)packet.errors.push({code:'OUTPUT_COUNT_LIMIT'})
-  if(packet.errors.length)packet.text+='\n部分附件未能准备发送：'+packet.errors.map(e=>`${e.fileName??'附件'}（${e.code}）`).join('；')
+  if(packet.errors.length)packet.text+='\n部分附件未能准备发送：'+packet.errors.map(e=>`${e.fileName??'附件'}（${e.code==='UNSUPPORTED_FILE'?'暂不支持这种文件格式':e.code}）`).join('；')
   return packet
  }
  async bytes(userId,item){
@@ -144,7 +151,11 @@ export class OutputTransport {
   const failed=value.attachments.filter(a=>['unknown','failed'].includes(a.status)).length+(value.errors?.length??0)
   if(failed&&current()&&!value.failureNotice){
    value.failureNotice='sending';await checkpoint()
-   const failureText=value.attachments.some(a=>a.reason==='ARTIFACT_EXPIRED')?'附件已超过7天保留期，无法重发。需要时可以说明要重新制作哪份文件。':value.attachments.some(a=>a.reason==='ARTIFACT_UNAVAILABLE')?'原附件已无法读取，不能直接重发。需要时可以说明要重新制作哪份文件。':`有 ${failed} 个附件未能确认送达。你可以说“把刚才的文件再发一次”。再次发送会包含这组已发出的附件。`
+   for(const error of value.errors??[]){
+    const reason=['UNSUPPORTED_FILE','FILE_NOT_FOUND','EXPORT_PATH_REFUSED'].includes(error.code)?error.code:'ARTIFACT_PREPARE_FAILED'
+    this.log('outbound.attachment_prepare_failed',{userId,trace_id:traceId,reason})
+   }
+   const failureText=failed===value.errors?.length?'有 '+failed+' 个附件未能准备好，尚未发送。请按上面的原因处理后重新生成附件。':value.attachments.some(a=>a.reason==='ARTIFACT_EXPIRED')?'附件已超过7天保留期，无法重发。需要时可以说明要重新制作哪份文件。':value.attachments.some(a=>a.reason==='ARTIFACT_UNAVAILABLE')?'原附件已无法读取，不能直接重发。需要时可以说明要重新制作哪份文件。':`有 ${failed} 个附件未能确认送达。你可以说“把刚才的文件再发一次”。再次发送会包含这组已发出的附件。`
    try{await this.sendWithRetry(userId,failureText,{event:'outbound.failure_notice_failed',kind:'failure_notice',parts:1,current,traceId});value.failureNotice='accepted'}catch(error){value.failureNotice=error.code==='DELIVERY_CANCELLED'?'cancelled':deliveryFailureState(error);value.failureNoticeError=deliveryError(error)}
    await checkpoint()
   }

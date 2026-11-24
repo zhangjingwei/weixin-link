@@ -1,8 +1,11 @@
 import {nativeMemoryConfig} from './native-memory.mjs'
 
+import localTransport from './subscription-transport.json' with {type:'json'}
+
+const httpSubscriptionProvider='weixin-subscription-http'
 const PROVIDER_PREFIX = 'WECHAT_CODEX'
 
-export function codexProviderOptions(env = process.env, {prefix = PROVIDER_PREFIX} = {}) {
+export function codexProviderOptions(env = process.env, {prefix = PROVIDER_PREFIX, subscriptionTransport = localTransport} = {}) {
   const value = name => env[`${prefix}_${name}`]?.trim()
   const provider = value('PROVIDER')
   if (provider && !/^[a-zA-Z0-9_-]+$/.test(provider)) throw Error('Invalid Codex provider')
@@ -28,12 +31,23 @@ export function codexProviderOptions(env = process.env, {prefix = PROVIDER_PREFI
       [`shell_environment_policy.filters.${apiKeyEnv}`]:'exclude'}
     for(const [key,item]of Object.entries(values))if(item!==undefined)overrides.push('-c',`${key}=${JSON.stringify(item)}`)
   }
+  const httpSubscription=!provider && subscriptionTransport==='http'
+  if(httpSubscription){
+    const table='model_providers.'+httpSubscriptionProvider
+    // Let Codex select the endpoint for its current login and manage token renewal.
+    overrides.push('-c',`model_provider="${httpSubscriptionProvider}"`,
+      '-c',`${table}.name="Weixin subscription HTTP"`,
+      '-c',`${table}.wire_api="responses"`,
+      '-c',`${table}.requires_openai_auth=true`,
+      '-c',`${table}.supports_websockets=false`)
+  }
+  const threadProvider=httpSubscription?httpSubscriptionProvider:provider
   const search = value('WEB_SEARCH') ?? 'live'
   if (!['live', 'cached', 'disabled'].includes(search)) throw Error('Invalid Codex web search mode')
   return {
     args: ['app-server', ...Object.entries(nativeMemoryConfig).flatMap(([key,value])=>['-c',`${key}=${value}`]), ...overrides, '-c', `web_search="${search}"`, '--listen', 'stdio://'],
     thread: {...(model ? {model} : {}),
-      ...(provider ? {modelProvider: provider} : {}),
+      ...(threadProvider ? {modelProvider: threadProvider} : {}),
       ...(reasoningEffort ? {reasoningEffort} : {})},
     provider: provider || null,
     credentialEnvKey,
@@ -42,9 +56,14 @@ export function codexProviderOptions(env = process.env, {prefix = PROVIDER_PREFI
   }
 }
 
+const knownErrorCodes=new Set([
+  'contextWindowExceeded','sessionBudgetExceeded','usageLimitExceeded','rateLimitExceeded','flexUnavailable',
+  'serverOverloaded','cyberPolicy','misalignmentPolicyViolation','tooManyDenials','httpConnectionFailed',
+  'responseStreamConnectionFailed','internalServerError','unauthorized','badRequest','threadRollbackFailed',
+  'sandboxError','responseStreamDisconnected','responseTooManyFailedAttempts','activeTurnNotSteerable','other',
+])
 export function providerEventCode(params={}) {
-  const info=params.codexErrorInfo
-  if(typeof info==='string')return info
-  if(info&&typeof info==='object')return Object.keys(info)[0]
-  return null
+  const info=params.error?.codexErrorInfo??params.codexErrorInfo
+  const code=typeof info==='string'?info:info && typeof info==='object'?Object.keys(info)[0]:null
+  return knownErrorCodes.has(code)?code:null
 }

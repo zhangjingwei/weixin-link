@@ -101,7 +101,9 @@ Windows x64（PowerShell）：
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-卸载会保留账号数据和工作区。
+在电脑的 Codex CLI 或桌面端聊过后，可以在微信说“接着刚才那条聊”。近期有多条候选时，回复标题、文件夹名或序号即可。也可以说“看看电脑最近的会话”。
+
+微信助手供一个人使用，沿用个人 Codex 的登录和会话目录。卸载会保留微信数据和工作区。
 
 支持 Linux（x64、arm64）、macOS（Intel、Apple Silicon）和 Windows（x64）。
 
@@ -136,9 +138,13 @@ Windows x64（PowerShell）：
 
 发送附件时说明“把这份文件交给知识库分析”。任务生成报告、JSON 或 HTML 等成果时，会以微信附件发回；HTML 下载后可用浏览器打开。不会把其他聊天里的旧文件自动交给新任务。
 
-模型不可用时，仍可发送“停止”“状态”“安装帮助”等应急命令。完整人工操作见[精确命令参考](docs/reference/commands.md)，日常流程见[使用指南](USER-GUIDE.md)。
+模型不可用时，仍可发送“停止”“服务状态”“安装帮助”等应急命令。完整人工操作见[精确命令参考](docs/reference/commands.md)，日常流程见[使用指南](USER-GUIDE.md)。
 
 ## 常见问题
+
+### 怎么看一条微信消息处理到哪了？
+
+在源码目录运行 `npm run logs`，然后在微信发一条消息。终端会用中文显示新产生的收件、模型处理和发送事件。时间为本地时间，括号里是对应步骤记录的耗时。按 Ctrl+C 结束查看，微信服务会继续运行。
 
 ### Codex 订阅登录提示未开启 Device code authorization
 
@@ -150,7 +156,7 @@ Windows x64（PowerShell）：
 
 ### 已完成订阅授权，但模型测试超时
 
-授权成功后，安装器还要确认模型能否正常回答，最多等待约 3 分钟。出现 `MODEL_PROBE_TIMEOUT` 表示这次测试没能及时得到结果，不代表登录失败。选择「仅重试模型测试」即可保留已有登录；也可以稍后再配置。
+安装向导默认只检查当前账号的 Codex 原生接口，通过后即可继续微信登录。需要验证真实回复时，在微信发送「验收智能体」，或在终端运行 `node src/setup/setup.mjs wizard --verify-model`。终端测试最多等待约 3 分钟；超时可保留已有配置，仅重试测试。
 
 ## 更多能力与文档
 

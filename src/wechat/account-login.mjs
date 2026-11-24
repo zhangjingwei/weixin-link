@@ -3,12 +3,13 @@ import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {PairingState} from '../infrastructure/wechat/pairing-state.mjs'
 import {createSdkLogger} from '../infrastructure/diagnostics/diagnostic-log.mjs'
 import {WeChatBot} from 'wechatbot-zerolink'
-import {readFile,writeFile,rename,unlink} from 'node:fs/promises'
+import {readFile,unlink} from 'node:fs/promises'
 import {join} from 'node:path'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {setTimeout as delay} from 'node:timers/promises'
 import {assertAccount,registerLogin} from '../infrastructure/accounts/account-store.mjs'
+import {recordWelcomeRequest} from '../infrastructure/wechat/welcome-request.mjs'
 import {pairingStorage} from '../infrastructure/wechat/pairing-storage.mjs'
 const exec=promisify(execFile),p=await assertAccount(process.argv[2]);
 const pairingTimeout=setTimeout(()=>process.exit(1),600000);pairingTimeout.unref()
@@ -25,6 +26,6 @@ try{
   onExpired:()=>{qrWrites=qrWrites.then(()=>state('qr_expired'))},
   onVerifyCode:async retry=>{await qrWrites;await state(retry?'verification_code_rejected':'verification_code_required');for(let n=0;n<180;n++){try{const path=join(p.stateDir,'pairing-code.txt'),code=(await readFile(path,'utf8')).trim();await unlink(path);if(/^\d{4,12}$/.test(code))return code}catch(e){if(e.code!=='ENOENT')throw e}await delay(1000)}throw Error('VERIFICATION_TIMEOUT')}
  }})
- await qrWrites;await registerLogin(p.id,credentials);await writeFile(join(p.stateDir,'welcome-pending.json'),JSON.stringify({pending:true})+'\n',{mode:0o600});await state('logged_in')
+ await qrWrites;await registerLogin(p.id,credentials);await recordWelcomeRequest(p.stateDir);await state('logged_in')
  await new ServiceManager().start(p.service,{enable:true});let ready=false;for(let n=0;n<30;n++){try{if((await controlRequest(p.socket,'GET','/status')).ready){ready=true;break}}catch{}await delay(500)}if(!ready)throw Error('WECHAT_SERVICE_NOT_READY');await state('service_started')
 }catch(error){const code=['CREDENTIALS_UNREADABLE','WECHAT_ACCOUNT_ALREADY_REGISTERED','PROFILE_BOUND_TO_DIFFERENT_ACCOUNT','VERIFICATION_TIMEOUT','INVALID_OWNERS','WECHAT_SERVICE_NOT_READY'].includes(error.message)?error.message:'LOGIN_OR_START_FAILED';await state(code);process.exitCode=1}

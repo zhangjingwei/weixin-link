@@ -18,7 +18,15 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   return result
  }
  const resume=async(rpc,{threadId,cwd,instructions,provider})=>{
-  const result=verify(await rpc.request('thread/resume',{...params(rpc,{cwd,instructions,provider}),threadId,excludeTurns:true}))
+  let result
+  try{
+   result=verify(await rpc.request('thread/resume',{...params(rpc,{cwd,instructions,provider}),threadId,excludeTurns:true}))
+  }catch(error){
+   if(error.definitiveRpcError&&error.rpcCode===-32600&&/already has an active writer/i.test(error.message)){
+    throw Object.assign(Error('已在另一个应用中打开。请先在那边关闭会话，才能在这里继续。'),{code:'CODEX_THREAD_WRITER_BUSY',threadId})
+   }
+   throw error
+  }
   if(result.thread.id!==threadId)throw Error('底座未确认目标对话，未切换。')
   await enableThreadMemory(rpc,threadId)
   return result
@@ -44,11 +52,12 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
    let result
    if(saved.threadId){
     try{result=await resume(rpc,{threadId:saved.threadId,cwd,instructions,provider})}
-    catch(error){if(saved.hasMessages||!error.message.includes('no rollout found for thread id'))throw error}
+    catch(error){if(saved.nativeProjectId||saved.hasMessages||!error.message.includes('no rollout found for thread id'))throw error}
    }
-   if(!result){result=verify(await rpc.request('thread/start',params(rpc,{cwd,instructions,provider})));await enableThreadMemory(rpc,result.thread.id)}
+   if(!result){result=verify(await rpc.request('thread/start',{...params(rpc,{cwd,instructions,provider}),...(saved.nativeProjectId?{projectId:saved.nativeProjectId}:{})}));if(saved.nativeProjectId&&result.thread.projectId!==saved.nativeProjectId)throw Error('CODEX_PROJECT_THREAD_UNCONFIRMED');await enableThreadMemory(rpc,result.thread.id)}
    return result
   },
+  unsubscribe:(rpc,threadId)=>rpc.request('thread/unsubscribe',{threadId},2000),
   resume,
   read:async(rpc,threadId)=>(await rpc.request('thread/read',{threadId,includeTurns:false})).thread,
   async recoverTurn(rpc,{threadId,turnId,deliveryId}){
@@ -62,10 +71,22 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
    }
    return null
   },
+  enqueue:(rpc,threadId,clientUserMessageId,input)=>rpc.request('thread/queue/add',{threadId,clientUserMessageId,input}),
+  removeQueued:(rpc,threadId,queuedSubmissionId)=>rpc.request('thread/queue/delete',{threadId,queuedSubmissionId}),
+  async findQueued(rpc,threadId,clientId){
+   let cursor
+   for(let page=0;page<40;page++){
+    const result=await rpc.request('thread/queue/list',{threadId,limit:100,...(cursor?{cursor}:{})})
+    const found=result.data.find(item=>item.clientUserMessageId===clientId)
+    if(found||!result.nextCursor)return found
+    cursor=result.nextCursor
+   }
+   throw Error('CODEX_QUEUE_PAGINATION_LIMIT')
+  },
   supportsRemoteTaskRecovery:true,
   // Collaboration mode is stored on the Codex thread. Always select it for
   // each turn, otherwise a normal request after a plan can remain in Plan Mode.
-  startTurn:(rpc,{threadId,input,deliveryId,plan=false,model,fastMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},collaborationMode:{mode:plan?'plan':'default',settings:{model,reasoning_effort:null,developer_instructions:null}},...typeof fastMode==='boolean'?{serviceTier:fastMode?'fast':'auto'}:{}}),
+  startTurn:(rpc,{threadId,input,deliveryId,model,fastMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},collaborationMode:{mode:'default',settings:{model,reasoning_effort:null,developer_instructions:null}},...typeof fastMode==='boolean'?{serviceTier:fastMode?'fast':'auto'}:{}}),
   startReview:(rpc,threadId,target)=>rpc.request('review/start',{threadId,target}),
   goal:async(rpc,threadId,command)=>{
    if(command.op==='get')return (await rpc.request('thread/goal/get',{threadId})).goal

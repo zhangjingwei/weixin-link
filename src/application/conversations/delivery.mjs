@@ -16,8 +16,16 @@ export function deliver(context,key,value,options,send){return context.serialize
   const job=context.manager.submissions?.get(options.projectTaskId)
   if(!job||job.owner!==key||!projectTaskRoute({manager:context.manager,conversations:context},job))throw Error('PROJECT_TASK_ROUTE_INVALID')
   const model=job.context?.executionModel
-  const modelName=typeof model==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,99}$/.test(model)?model:'模型未确认'
-  const name=context.displayName(e.owner,e),prefix=`【${name} · ${taskDisplayTitle(job.input,job.input.projectDispatch?.title)} · ${modelName}】\n`
+  const modelName=typeof model==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,99}$/.test(model)?model:'未确认'
+  const clean=text=>String(text??'').replace(/[\x00-\x1f\x7f【】]/g,' ').replace(/\s+/g,' ').trim()
+  const rawName=clean(e.name)
+  const placeholder=e.titleSource==='placeholder'||/^(?:微信聊天（尚未命名）|聊天（尚未命名）|未命名(?:项目|对话) \d+|原有对话)$/.test(rawName)
+  const name=placeholder?(clean(e.topicTitle)||'当前会话'):rawName||'当前会话'
+  const title=taskDisplayTitle(job.input,job.input.projectDispatch?.title).split(/[，。！？；]/,1)[0]
+  const displayName=taskDisplayTitle(name,name)
+  const sameConversation=job.input.projectDispatch?.entryOrigin||job.input.projectDispatch?.originKey===key
+  const heading=sameConversation||displayName===title?displayName:`${displayName} · ${title}`
+  const prefix=`【${heading}】\n模型：${modelName}\n\n`
   return send(key,typeof value==='string'?prefix+value:{...value,text:prefix+value.text},options)
  }
  if(options?.conversationControl)return send(key,context.label(key,value),options);

@@ -2,7 +2,7 @@ import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 import {nativeCommandKind} from './native-command-kind.mjs'
 
 /** Own receipt and fast-control decisions after the transport parses a wire. */
-export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, conversations, runtime, setupController, setupReceipts, normalizeVoice, classifyMessage, log = () => {}}) {
+export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, conversations, runtime, setupController, setupReceipts, normalizeVoice, classifyMessage, deferMaintenance, log = () => {}}) {
   return {
     prepare(parsed, {traceId, quote}) {
       const previous = jobs.findCaptured(parsed)
@@ -15,16 +15,33 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
       }
       if (!Object.hasOwn(message, '_setupAction')) message._setupAction = previous||message._promptReply ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
       message.references ??= quote(message)
+      if(!previous&&!message._promptReply&&!message._conversationCommand&&!message._sessionCommand&&!hasMedia(message)&&!message.references?.length&&/^(继续|取消)$/.test(message.text?.trim())){
+       const threadId=manager.state?.users?.[message.userId]?.threadId
+       if(threadId)message._desktopChoices=jobs.desktopChoices?.(message.userId,threadId)
+      }
+      if(!previous&&!message._promptReply&&!message._conversationCommand&&!message._sessionCommand&&!hasMedia(message)&&!message.references?.length&&/^(?:退出|关闭)桌面(?:端|版|应用)[。！!]?$/.test(message.text?.trim())){
+        message._desktopQuit={threadId:manager.state.users[message.userId]?.threadId??null}
+      }
       return message
     },
     async captureBatch(messages) {
       // beforeCheckpoint awaits this whole operation; failure blocks the cursor.
-      const ordinary = messages.filter(message => {const intent=classifyMessage(message);return !intent||nativeCommandKind(intent)})
-      const setup = messages.filter(message => message._setupAction)
       await manager.save()
-      for (const message of ordinary) jobs.capture(message)
-      for (const message of setup) {
-        message._ingressId = jobs.capture(message) ?? message._ingressId
+      for (const message of messages) {
+        const intent = classifyMessage(message)
+        const stop = intent?.kind === 'session' && intent.value.action === 'stop' && !manager.state?.desktopHandoff
+        if (message._desktopQuit || !intent || nativeCommandKind(intent) || stop || message._setupAction) {
+          if (!stop) message._ingressId = jobs.capture(message)
+          if (stop) {
+            const {id, fresh} = jobs.captureStop(message)
+            message._ingressId = id
+            const session = manager.sessions?.get(message.userId)
+            message._stopTrace = session?.traceId ?? null
+            if (fresh) manager.lifecycle.cancel(message.userId, {preserveActive: !!(session?.busy || session?.finishing), queueAlreadyCancelled: true})
+            else message._recovered = true
+          }
+        }
+        if (!message._setupAction) continue
         const receipt = setupReceipts.capture(message)
         if (receipt) {
           message._setupAction = receipt.action
@@ -33,10 +50,19 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
       }
     },
     onMessage(message) {
-      if (!conversations.realOwners.has(message._conversationOwner ?? message.userId) || runtime.sealed) return
+      if (!conversations.realOwners.has(message._conversationOwner ?? message.userId)) return
       message = normalizeVoice(message)
       if (!message._conversationOwner) message = conversations.bind(message)
       if (!Object.hasOwn(message, '_setupAction')) message._setupAction = message._recovered||message._promptReply ? null : setupController.command(message.text, message._conversationOwner ?? message.userId, message.userId)
+      if (Object.hasOwn(message, '_ingressId')) {
+        if (!message._ingressId) return
+        const captured = {...message, _intakeToken: manager.lifecycle.capture(message.userId)}
+        log('ingress.persisted', {trace_id: message._traceId, messageId: message.raw?.message_id ?? message.raw?.client_id, kind: hasMedia(message) ? 'media' : 'text'})
+        if (runtime.sealed) deferMaintenance(captured)
+        else dispatch(captured)
+        return
+      }
+      if (runtime.sealed) return
       const intent=classifyMessage(message)
       if (intent&&!nativeCommandKind(intent)) { dispatch(message); return }
       const token = manager.lifecycle.capture(message.userId)

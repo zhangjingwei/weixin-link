@@ -18,15 +18,14 @@ Send English commands as plain text, without a slash. Commands are case insensit
 
 Send a message, image, or file and explain what you need. When you reply to a quoted message, the assistant tries to read its text and tells you if it cannot.
 Commands that need a name, search term, or request work in two steps: send the command, then reply to its prompt with a separate text message. Images, files, and voice attachments cannot supply that input.
-While a prompt is waiting, you can check `guide` or `status` and then continue with your original answer.
+While a prompt is waiting, you can check `guide` and then continue with your original answer.
 
 Conversations and tasks
 
-- `daily`: Return to your everyday conversation.
+Ask “status” to have the assistant check the current project or service through MCP.
+
 - `supplement`: Reply to the prompt with more instructions for the current task.
-- `status`: Check the task and message status.
 - `progress`: Check the current progress.
-- `result`: See the latest result. Attached files may be sent again when you request it again.
 - `stop`: Stop the current task and clear queued messages.
 - `exit`: Stop and disconnect the current conversation while keeping its history.
 - `recover`: Check a submitted task whose result is still uncertain.
@@ -44,12 +43,11 @@ Service and help
 
 You can also ask for a reminder in ordinary language, such as “Remind me about the meeting tomorrow at 9 AM.” A reminder can send a message or start a scheduled task. It runs on the computer and does not read your phone calendar.
 
-3. Projects and the everyday conversation
+3. Projects and conversations
 
-Projects and the everyday conversation share one WeChat chat. For `archive`, `restore`, `delete`, and `switch`, send the command first, then reply with a number from its list. The number applies only to that selection.
+Chat and project work continue in the current conversation. For `archive`, `restore`, `delete`, and `switch`, send the command first, then reply with a number from its list. The number applies only to that selection.
 
 - `list`: List projects.
-- `daily`: Return to the everyday conversation.
 - `new`: Enter a name for a new project when prompted.
 - `rename`: Enter a new name when prompted.
 - `switch`: Show conversations, then reply with the number of the one to use.
@@ -70,7 +68,7 @@ Long-running goals and plans
 - `goal-resume`: Resume the goal.
 - `goal-complete`: Mark the goal complete.
 - `goal-clear`: Remove the goal record.
-- `plan`: Enter a request to make a plan first. After reviewing it, send a separate request to carry it out.
+- `plan`: Enter a request to make a plan in the default Codex mode. After reviewing it, send a separate request to carry it out.
 
 Code reviews
 
@@ -123,8 +121,7 @@ If WeChat says it cannot connect or the assistant does not respond as expected, 
 - `recent-errors`: See recent error messages.
 - `export-diagnostics`: Create a report to share for troubleshooting.
 - `setup-status`: Check setup and sign-in if messages arrive but tasks do not run.
-- `status`: Check whether a task is running.
-- `result`: Check the latest result before sending a task again.
+Ask “result” for the latest result and attachment names. Ask to resend the original files when you need them.
 - `install-help`: Show installation help.
 
 8. Working in a chosen folder

@@ -200,3 +200,33 @@ test('all accounts are checked before stopping any service',async t=>{
  await assert.rejects(upgradeInstallation(f.options),/UPGRADE_BUSY/)
  assert(!f.calls.includes('stop'));assert(f.calls.includes('default:resume'));assert(f.calls.includes('busy-account:resume'))
 })
+
+test('local snapshot becomes visible only after healthy startup and survives a no-op upgrade',async t=>{
+ const f=await fixture(t)
+ const marker='.weixin-link-local-update.json',snapshot=JSON.stringify({version:1,tree:'b'.repeat(40)})
+ await writeFile(join(f.source,marker),snapshot)
+ f.adapter.start=async()=>assert.rejects(readFile(join(f.target,marker)),{code:'ENOENT'})
+ const options={...f.options,localUpdate:true}
+ assert.equal((await upgradeInstallation(options)).status,'complete')
+ assert.equal(await readFile(join(f.target,marker),'utf8'),snapshot)
+ assert.equal((await upgradeInstallation(options)).status,'up_to_date')
+})
+
+test('failed local update restores the previous notification marker',async t=>{
+ const f=await fixture(t),marker='.weixin-link-local-update.json'
+ await writeFile(join(f.target,marker),'old marker')
+ await writeFile(join(f.source,marker),'new marker')
+ f.adapter.status=async()=>({ready:(await readFile(join(f.target,'version'),'utf8'))==='old'})
+ await assert.rejects(upgradeInstallation({...f.options,localUpdate:true}),/UPGRADE_HEALTH_CHECK_FAILED/)
+ assert.equal(await readFile(join(f.target,marker),'utf8'),'old marker')
+})
+
+test('personal upgrade detects a running legacy service before changing either installation',async t=>{
+ const f=await fixture(t),unit=join(f.home,'managed.service'),legacy=join(f.state,'accounts','older')
+ await mkdir(legacy,{recursive:true});await writeFile(join(legacy,'account.json'),'{"id":"older"}')
+ await writeFile(unit,'# Managed by wechat-assistant setup v1\n')
+ const run=async(_exe,args)=>({stdout:args.includes('--property=FragmentPath')?
+  'FragmentPath='+unit+'\nExecStart=/usr/bin/node '+join(f.target,'src/wechat/bot.mjs')+'\n':'ActiveState=active\nMainPID=1\n'})
+ await assert.rejects(standardDeployment({target:f.target,home:f.home,platform:'linux',run}),/UPGRADE_ACTIVE_LEGACY_ACCOUNT/)
+ assert.equal(await readFile(join(f.target,'version'),'utf8'),'old')
+})

@@ -29,6 +29,7 @@ async function fixture(t){
 }
 test('new projects use bound directory credentials, never switch or connect, and deduplicate across restart',async t=>{
  const f=await fixture(t),{service,manager,conversations}=f
+ f.backend.nativeProjects={create:async(_,name,path)=>({id:'native',name,roots:[path]}),rename:async(_,id,name)=>({id,name})}
  const choices=await service.call('alice','list_workspace_choices',{projectId:'1'})
  const choice=choices.items.find(c=>c.name==='knowledge');assert(choice)
  const args={name:'知识库',workspaceToken:choice.workspaceToken,requestId:'project-new'}
@@ -43,6 +44,28 @@ test('new projects use bound directory credentials, never switch or connect, and
  const renamed=await service.call('alice','rename_project',{projectId:created.data.projectId,name:'文档库',requestId:'rename'})
  assert.equal(renamed.status,'confirmed');assert.equal(conversations.root.alice.active,'1')
 })
+test('native projects can be renamed without creating a local conversation',async t=>{
+ const {service,backend,conversations}=await fixture(t)
+ const calls=[]
+ backend.nativeProjects={read:async(_,id)=>({id}),rename:async(_,id,name)=>{calls.push(id);return {id,name}}}
+ const size=conversations.root.alice.entries.length
+ const result=await service.call('alice','rename_project',{projectId:'native-id',name:'新名称',requestId:'rename-native'})
+ assert.equal(result.data.nativeProjectId,'native-id')
+ assert.deepEqual(calls,['native-id']);assert.equal(conversations.root.alice.entries.length,size)
+})
+test('binding an existing native session checks exact project membership and keeps the thread',async t=>{
+ const {service,backend,manager,conversations}=await fixture(t)
+ backend.nativeProjects={read:async(_,id)=>({id,name:'资料',roots:[manager.cwd]})}
+ backend.readConversation=async(_,id)=>({id,cwd:manager.cwd,name:'原会话',projectId:'project-a',status:{type:'idle'}})
+ const bind=(project,id)=>service.call('alice','create_project_session',{nativeProjectId:project,threadId:'thread',requestId:id})
+ assert.equal((await bind('project-b','wrong')).status,'rejected')
+ const result=await bind('project-a','first')
+ assert.equal(result.status,'confirmed')
+ const duplicate=await bind('project-a','second')
+ assert.equal(result.data.projectId,duplicate.data.projectId)
+ assert.equal(manager.state.users[conversations.find('alice',result.data.projectId).key].threadId,'thread')
+ assert.equal(conversations.root.alice.active,'1')
+})
 test('directory replacement, foreign credentials and arbitrary path arguments cannot create projects',async t=>{
  const {service,dir,conversations}=await fixture(t)
  const choices=await service.call('alice','list_workspace_choices',{projectId:'1'}),token=choices.items.find(c=>c.name==='knowledge').workspaceToken
@@ -52,10 +75,11 @@ test('directory replacement, foreign credentials and arbitrary path arguments ca
  const foreign=await service.call('bob','create_project',{name:'wrong',workspaceToken:token,requestId:'two'});assert.equal(foreign.status,'rejected')
  await assert.rejects(service.call('alice','create_project',{name:'wrong',workspaceToken:token,requestId:'three',path:'/etc'}),/INVALID_ARGUMENTS/)
 })
-test('daily targeting uses stable identity even after it is renamed',async t=>{
+test('target resolution uses the actual conversation name',async t=>{
  const {service,conversations}=await fixture(t);conversations.root.alice.entries[0].name='聊天天地'
  const found=await service.call('alice','resolve_target',{query:'日常'})
- assert.equal(found.resolution,'unique');assert.equal(found.candidates[0].daily,true)
+ assert.equal(found.resolution,'not_found')
+ assert.equal((await service.call('alice','resolve_target',{query:'聊天天地'})).resolution,'unique')
 })
 test('history search spans text chunks and explicitly reports a 50-turn search boundary',async t=>{
  const {service,backend}=await fixture(t)
@@ -195,7 +219,10 @@ test('historical attachment-waiting turns remain waiting rather than claiming th
 })
 
 test('extended writes prune expired receipts, preserve uncertain work and isolate owner quotas',async t=>{
- const {service,manager}=await fixture(t),now=service.now()
+ const {service,manager,backend}=await fixture(t),now=service.now()
+ manager.state.users.alice.nativeProjectId='project-a'
+ manager.state.users.bob.nativeProjectId='project-b'
+ backend.nativeProjects={rename:async(_rpc,id,name)=>({id,name})}
  const old=Array.from({length:10000},(_,i)=>({id:'old-'+i,owner:'alice',status:'confirmed',createdAt:now-8*86400000}))
  service.operations.push(...old,{id:'uncertain',owner:'alice',status:'unknown',createdAt:now-8*86400000})
  const created=await service.call('alice','rename_project',{projectId:'1',name:'renamed',requestId:'pruned'})
@@ -252,4 +279,66 @@ test('restart removes pending and previously unexecuted payloads but keeps unkno
  await SessionManager.prototype.save.call(manager)
  const persisted=JSON.parse(await readFile(join(manager.stateDir,'assistant-sessions.json'),'utf8')).managementOperations
  assert.equal(Object.hasOwn(persisted[0],'snapshot'),false);assert.equal(persisted[1].packet,'private')
+})
+
+test('native topic and message searches use read-only RPCs with scope-bound pagination',async t=>{
+ const {service,backend}=await fixture(t)
+ const {createCodexConversationBackend}=await import('../../src/infrastructure/agents/codex-conversation-backend.mjs')
+ backend.searchHistory=createCodexConversationBackend({}).searchHistory
+ const calls=[]
+ backend.withConnection=async(_,recipient,work)=>work({request:async(method,params)=>{
+  calls.push([method,params])
+  if(method==='thread/search')return {data:[{thread:{id:'desktop',name:'安装'},snippet:'安装超时'}],nextCursor:null}
+  assert.equal(method,'thread/searchOccurrences')
+  return {data:[{turnId:'turn',itemId:'item',snippet:'安装超时'}],nextCursor:params.cursor?null:'more'}
+ }})
+ const found=await service.call('alice','search_sessions',{query:'超时'})
+ assert.equal(found.matches[0].threadId,'desktop')
+ const first=await service.call('alice','search_session_history',{threadId:'desktop',query:'超时'})
+ assert.equal(first.matches[0].turnId,'turn')
+ for(const args of [{threadId:'other',query:'超时'},{threadId:'desktop',query:'other'}]){
+  await assert.rejects(service.call('alice','search_session_history',{...args,cursor:first.nextCursor}),/CURSOR/)
+ }
+ const last=await service.call('alice','search_session_history',{threadId:'desktop',query:'超时',cursor:first.nextCursor})
+ assert.equal(last.nextCursor,null)
+ assert.deepEqual(calls.map(([method,p])=>[method,p.threadId,p.searchTerm,p.cursor]),[
+  ['thread/search',undefined,'超时',undefined],['thread/searchOccurrences','desktop','超时',undefined],['thread/searchOccurrences','desktop','超时','more']
+ ])
+})
+
+test('native MCP controls send exact arguments, redact account identity and deduplicate mutations',async t=>{
+ const {service,conversations}=await fixture(t),calls=[]
+ conversations.realOwners.delete('bob')
+ conversations.withBackend=(_,work)=>work({request:async(method,params)=>{
+  calls.push([method,params])
+  if(method==='account/rateLimits/read')return {accountId:'private',rateLimits:{primary:{usedPercent:20}}}
+  if(method==='thread/queue/add')return {queuedSubmission:{id:'queued'}}
+  return {}
+ }})
+ const limits=await service.call('alice','get_account_limits',{})
+ assert.equal(limits.accountId,undefined);assert.equal(limits.rateLimits.primary.usedPercent,20)
+ for(let i=0;i<2;i++)await service.call('alice','request_queue_add',{threadId:'t',text:'work',requestId:'once'})
+ assert.deepEqual(calls[1],['thread/queue/add',{threadId:'t',input:[{type:'text',text:'work'}],clientUserMessageId:'once'}])
+ assert.equal(calls.length,2)
+ await service.call('alice','request_thread_move',{threadId:'t',requestId:'move'})
+ assert.deepEqual(calls[2],['thread/section/move',{threadId:'t',sectionId:null}])
+})
+
+test('rebinding a moved native thread refreshes project membership and blocks unfinished local delivery',async t=>{
+ const {service,backend,manager,conversations}=await fixture(t)
+ backend.nativeProjects={read:async(_,id)=>({id,name:'资料',roots:[manager.cwd]})}
+ let projectId='project-a'
+ backend.readConversation=async(_,id)=>({id,cwd:manager.cwd,name:'原会话',projectId,status:{type:'idle'}})
+ const bind=id=>service.call('alice','create_project_session',{nativeProjectId:projectId,threadId:'thread',requestId:id})
+ const first=await bind('first-binding')
+ const entry=conversations.find('alice',first.data.projectId),saved=manager.state.users[entry.key]
+ projectId='project-b'
+ const moved=await bind('moved-binding')
+ assert.equal(moved.status,'confirmed');assert.equal(moved.data.projectId,entry.id)
+ assert.equal(saved.nativeProjectId,'project-b');assert.equal(saved.threadId,'thread')
+ for(const [n,session] of [{busy:true},{finishing:true}].entries()){
+  manager.sessions.set(entry.key,session)
+  const blocked=await bind('busy-binding-'+n)
+  assert.equal(blocked.status,'rejected');assert.equal(saved.nativeProjectId,'project-b')
+ }
 })

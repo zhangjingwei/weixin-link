@@ -21,7 +21,7 @@ test('relative explicit links produce real attachments; invalid and missing link
  const calls=[],transport=new OutputTransport({store,send:async(_user,value)=>calls.push(value)})
  assert.equal((await transport.deliver('owner',packet)).status,'partial')
  assert.equal(calls.find(v=>typeof v==='object').file.toString(),'complete report')
- assert.match(calls.at(-1),/附件未能确认送达/)
+ assert.match(calls.at(-1),/3 个附件未能准备好，尚未发送/)
  await access(join(cwd,'outputs','report.md')) // project source is never deleted
 }))
 test('managed originals are removed only after acceptance; immutable private snapshots allow replay',()=>fixture(async({store,cwd})=>{
@@ -102,4 +102,28 @@ test('partial and cancelled bundles retain all managed originals',()=>fixture(as
  const cancelled=await store.package('owner',`[报告](${source})`)
  assert.equal((await transport.deliver('owner',cancelled,{current:()=>false})).status,'cancelled')
  await access(source)
+}))
+test('execution instructions identify the actual project independently of the selected navigation',()=>fixture(async({cwd,stateDir})=>{
+ const manager=await new SessionManager({stateDir,cwd,owners:['owner']}).init()
+ manager.state.textConversations={owner:{active:'3',entries:[{id:'3',key:'owner',name:'weixin-link'},{id:'5',key:'toolbox',name:'个人工具箱'}]}}
+ const instructions=await manager.sessionInstructions('toolbox')
+ assert.match(instructions,/"projectId":"5","name":"个人工具箱"/)
+ assert.doesNotMatch(instructions,/"projectId":"3"/)
+ assert.match(instructions,/不要因 active=true/)
+}))
+
+test('source, scripts and build files keep their file names and bytes in ordinary WeChat attachments',()=>fixture(async({cwd,store})=>{
+ const names=['report.py','component.TSX','worker.mjs','main.go','build.sh','Makefile','Dockerfile']
+ const expected=[]
+ for(const name of names){
+  const file=Buffer.from('# 示例 '+name+'\r\n')
+  await writeFile(join(cwd,'outputs',name),file)
+  expected.push({file,fileName:name})
+ }
+ const packet=await store.package('owner',names.map(name=>'[文件](outputs/'+name+')').join(' '))
+ assert.deepEqual(packet.errors,[])
+ const files=[]
+ const transport=new OutputTransport({store,send:async(_user,value)=>{if(typeof value==='object')files.push(value)}})
+ assert.equal((await transport.deliver('owner',packet)).status,'accepted')
+ assert.deepEqual(files,expected)
 }))

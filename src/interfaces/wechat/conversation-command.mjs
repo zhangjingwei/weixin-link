@@ -1,7 +1,8 @@
+import {isCatalogQuestion,isResultLookup} from '../../application/intake/catalog-question.mjs'
 import {controlCommand,completeControlPrompt} from './control-command.mjs'
 
 const english={
- 'new-project':'新建项目',folder:'当前目录',daily:'日常',list:'列表',new:'新建',switch:'切换',archive:'归档',restore:'还原',delete:'删除',
+ 'new-project':'新建项目',folder:'当前目录',list:'列表',new:'新建',archive:'归档',restore:'还原',delete:'删除',
  history:'历史',rename:'命名',older:'翻页',search:'搜索',
 }
 
@@ -10,16 +11,16 @@ const promptInfoCommands=new Set([
  '检查更新','check-updates','使用说明','guide','安装状态','setup-status','安装帮助','install-help',
  '诊断','diagnose','服务状态','service-status','查看最近错误','recent-errors',
 ])
-const promptInfoActions=new Set(['help','status','progress','result','agentStatus','models'])
+const promptInfoActions=new Set(['help','progress','agentStatus','models'])
 
 export function conversationCommand(text=''){
  const raw=text.trim(),s=english[raw.toLowerCase()]??raw;let m;
  if(s==='新建项目')return {action:'prompt',target:'newProject'};
  if(s==='当前目录')return {action:'workspace'};
- if(s==='日常')return {action:'daily'};
  if(s==='列表')return {action:'list'};
  if(s==='新建')return {action:'prompt',target:'new'};
- if(s==='切换')return {action:'prompt',target:'switch'};
+ if(raw.toLowerCase()==='switch')return {action:'prompt',target:'switch'};
+ if(/^(?:我想|帮我)?(?:接着|继续)(?:(?:电脑|桌面|终端)(?:上|端)?的?)?(?:刚才|刚刚|上次|最近)(?:在(?:电脑|桌面|终端)上?)?(?:的)?(?:那条|那个|那次|那段)?(?:会话|对话|聊的|聊)(?:继续聊|聊下去)?[。！!？?]?$/u.test(raw))return {action:'personalResume'};
  if(s==='历史')return {action:'prompt',target:'history'};
  if(s==='命名')return {action:'prompt',target:'rename'};
  if(s==='归档')return {action:'prompt',target:'archive'};
@@ -38,18 +39,28 @@ export function conversationInput(text='',{pending}={}){
  const value=input.trim()
  if(pending){
   if(value==='取消'||value.toLowerCase()==='cancel')return {command:{action:'promptCancel'},promptResult:'done'}
-  if(['stop','exit','停止','退出'].includes(value.toLowerCase()))return {sessionCommand:controlCommand(value),promptResult:'done'}
+  if(['stop','exit','停止','退出','关闭'].includes(value.toLowerCase()))return {sessionCommand:controlCommand(value),promptResult:'done'}
   const info=controlCommand(input)
   if(info&&(promptInfoActions.has(info.action)||info.action==='goal'&&info.op==='get'||info.action==='memory'&&info.op==='list'))return {sessionCommand:info,promptResult:'keep'}
-  if(promptInfoCommands.has(value.toLowerCase()))return {command:null,promptResult:'keep'}
+  if(/^(?:状态|status)[。？！!?]?$/iu.test(value)||isResultLookup(value)||promptInfoCommands.has(value.toLowerCase()))return {command:null,promptResult:'keep'}
   const navigation=conversationCommand(input)
+  if(isCatalogQuestion(input) && ['switch','history','archive','unarchive','delete','projectFolder','approvalChoice'].includes(pending.target))return {command:null,promptResult:'keep'}
   if(navigation?.action==='prompt'&&['switch','history','archive','unarchive','delete'].includes(navigation.target))return {command:navigation,promptResult:'done'}
   if(navigation&&['switch','archive','unarchive','delete'].includes(navigation.action))return {command:navigation,promptResult:'done'}
   const approval=controlCommand(input)
   if(approval?.action==='prompt'&&approval.target==='approvalChoice')return {command:approval,promptResult:'done'}
   if(!value)return {command:{action:'promptInvalid',text:'请输入文字。'},promptResult:'retry'}
   let result
-  if(pending.target==='switch'){
+  if(pending.target==='personalResume'){
+   if(navigation)return {command:navigation,promptResult:'done'}
+   const choices=pending.choices??[]
+   const ordinal=value.match(/^第([一二三四五1-5])(?:条|个)$/u)?.[1]
+   const number=ordinal?('一二三四五'.indexOf(ordinal)+1||Number(ordinal)):Number(value)
+   const match=Number.isInteger(number)&&number>0?choices[number-1]:choices.filter(c=>c.name===value||c.folder===value)
+   const choice=Array.isArray(match)?(match.length===1?match[0]:null):match
+   result=choice?{command:{action:'personalResume',threadId:choice.id}}:{error:'请告诉我是上面哪一条，可以回复标题或序号。'}
+  }
+  else if(pending.target==='switch'){
    const id=/^[1-9]\d*$/.test(value)?pending.choices?.[Number(value)-1]:null
    result=id?{command:{action:'switch',id}}:{error:'请回复列表中的编号。'}
   }

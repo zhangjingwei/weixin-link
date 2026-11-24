@@ -1,6 +1,6 @@
 import {isPipe} from './control-endpoint.mjs'
 import {lstat,readFile,writeFile} from 'node:fs/promises'
-import {accountPaths,listAccounts} from '../accounts/account-store.mjs'
+import {accountPaths} from '../accounts/account-store.mjs'
 import http from 'node:http'
 import net from 'node:net'
 import {randomUUID} from 'node:crypto'
@@ -103,7 +103,7 @@ export class RuntimeControl {
   await this.releaseSocketLock?.();this.releaseSocketLock=null
  }
 }
-async function tokenFile(socket){for(const p of await listAccounts())if(p.socket===socket)return p.stateDir+'/control-token';throw Error('UNKNOWN_CONTROL_ENDPOINT')}
+async function tokenFile(socket){const p=accountPaths();if(p.socket===socket)return p.stateDir+'/control-token';throw Error('UNKNOWN_CONTROL_ENDPOINT')}
 export async function controlRequest(socketPath,method,path,body,timeoutMs=2500,{token:providedToken}={}){
  const headers=isPipe(socketPath)?{'x-control-token':providedToken??await readFile(await tokenFile(socketPath),'utf8')}:{}
  return new Promise((resolve,reject)=>{

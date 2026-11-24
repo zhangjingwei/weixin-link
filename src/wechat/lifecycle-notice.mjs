@@ -6,18 +6,18 @@ import {join} from 'node:path'
 import {deliveryError} from '../infrastructure/wechat/delivery-error.mjs'
 import {installerCommand} from '../setup/setup-locale.mjs'
 
-const RELEASE=/^[0-9a-f]{7,40}$/
+const RELEASE=/^(?:[0-9a-f]{7,40}|[0-9a-f]{64})$/
 export const WELCOME_MESSAGE='微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 '+installerCommand('setup',{language:'zh'})+'。'
 export const welcomeMessage=(language,accountId='default')=>language==='en'?'Weixin Link is connected. Complete model setup in your computer terminal with '+installerCommand('setup',{accountId,language:'en'})+' if needed.':'微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 '+installerCommand('setup',{accountId,language:'zh'})+'。'
 export const upgradeMessage=(commit,language='zh',release)=>(language==='en'?`Weixin Link upgraded to ${release?.tag??commit.slice(0,7)} and is connected. You can ask how your tasks are progressing, whether the service is working, or how to use the assistant.`:`微信助手已升级到 ${release?.tag??commit.slice(0,7)}，服务已连接。可以直接说你的需求，例如“看看任务进展”“检查助手是否正常”或“介绍一下怎么用”。`)+(release?'\n\n'+release.details:'')
 
 export class LifecycleNotice{
- constructor({stateDir,sourceDir,owners,welcomePending=false,welcomeText=async()=>WELCOME_MESSAGE,language='zh',send,log=()=>{}}){Object.assign(this,{stateDir,sourceDir,owners:[...new Set(owners)],welcomePending,welcomeText,language,send,log});this.locks=new Map();this.commit=null;this.started=false}
+ constructor({stateDir,sourceDir,owners,welcomePending=false,loginId,welcomeText=async()=>WELCOME_MESSAGE,language='zh',send,log=()=>{}}){Object.assign(this,{stateDir,sourceDir,owners:[...new Set(owners)],welcomePending,loginId,welcomeText,language,send,log});this.locks=new Map();this.commit=null;this.started=false}
  path(owner){return join(this.stateDir,'lifecycle-notice-'+createHash('sha256').update(owner).digest('hex').slice(0,24)+'.json')}
  async legacyWelcomed(owner){try{return JSON.parse(await readFile(join(this.stateDir,'welcome-'+createHash('sha256').update(owner).digest('hex').slice(0,24)+'.json'),'utf8')).state==='accepted'}catch{return false}}
  async release(){
-  this.installed=null
-  try{this.installed=await readInstalledNotice(this.sourceDir,this.language);return this.installed?.commit??null}catch{return null}
+  try{this.installed=await readInstalledNotice(this.sourceDir,this.language)}catch{this.installed=null}
+  return this.installed?.commit??null
  }
  async read(owner){
   const path=this.path(owner)
@@ -33,17 +33,17 @@ export class LifecycleNotice{
  async onInbound(owner){if(!this.owners.includes(owner))return;if(!this.started){this.commit=await this.release();this.started=true}return this.attempt(owner,true)}
  attempt(owner,inbound){return this.serialize(owner,async()=>{
   let value=await this.read(owner)
-  // A branch install has no official release commit. Keep previous notices
-  // intact and never format an upgrade message with a null commit.
-  if(!this.commit&&value&&(value.commit!==null||value.kind!=='welcome'))return null
-  if(!value||value.commit!==this.commit){
-   if(!this.commit&&!this.welcomePending)return null
-   value={version:1,kind:!value&&this.welcomePending&&!await this.legacyWelcomed(owner)?'welcome':'upgrade',commit:this.commit,status:'pending'}
+  const newLogin=this.loginId && value?.loginId!==this.loginId
+  if(newLogin || !value || value.commit!==this.commit){
+   const welcome=newLogin || (!value && this.welcomePending && !await this.legacyWelcomed(owner))
+   if(!welcome && !this.commit)return null
+   value={version:1,kind:welcome?'welcome':'upgrade',commit:this.commit,status:'pending',loginId:this.loginId??value?.loginId}
    await this.write(owner,value)
   }
   if(!['pending',...(inbound?['deferred']:[])].includes(value.status))return null
+  const localUpdate=this.language==='en'?'Your WeChat assistant has been updated to the new local version.':'微信助手已更新到本地新版，可以继续使用了。'
   const release=value.kind==='upgrade'&&this.installed?.tag?this.installed:null
-  const message=value.kind==='welcome'?[await this.welcomeText(owner),quickStartGuide(this.language)].join('\n\n'):upgradeMessage(value.commit,this.language,release)
+  const message=value.kind==='welcome'?[await this.welcomeText(owner),quickStartGuide(this.language)].join('\n\n'):this.installed?.local?localUpdate:upgradeMessage(value.commit,this.language,release)
   await this.write(owner,{...value,status:'sending'})
   let status='unknown'
   try{const result=await this.send(owner,message);status=result?.status==='accepted'?'accepted':'unknown'}

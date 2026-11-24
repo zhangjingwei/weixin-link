@@ -18,3 +18,5 @@ maintenance-management 与 project-archive-management 分别处理回执后的�
 model-management 保存按项目隔离的后续轮次模型偏好；复用原模型查询、管理操作去重与会话存储，不中断当前轮次，不切换供应商。
 
 progress-management 只组织可核实结果证据和当前状态；queue-management 用精确任务快照操作原持久队列，不修改运行任务。入口状态是既有会话状态的只读投影。
+
+桌面接续由 desktop-management 负责：复用原管理操作、会话状态和队列；desktop 端口仅负责同机客户端检查、打开及关闭后读取原线程。持久交接标记在 manager.state.desktopHandoff；默认关闭，不另建任务状态库。

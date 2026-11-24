@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto'
 import {join} from 'node:path'
+import {realpathSync} from 'node:fs'
 import {fileURLToPath} from 'node:url'
 import {unlink} from 'node:fs/promises'
 import {setTimeout as delay} from 'node:timers/promises'
@@ -52,7 +53,7 @@ export async function performAgentSwitch({account,requestId,root,home,read=readA
  }
 }
 
-if(process.argv[1]&&process.argv[1].endsWith('/agent-switch-worker.mjs')){
+if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
  const id=process.argv[2],requestId=process.argv[3],account=await assertAccount(id)
  try{await performAgentSwitch({account,requestId,root:fileURLToPath(new URL('../../',import.meta.url)),home:process.env.HOME})}
  catch{process.exitCode=1}

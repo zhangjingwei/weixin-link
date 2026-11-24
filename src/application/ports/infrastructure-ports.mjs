@@ -4,7 +4,7 @@
  */
 const METHODS = {
   wechat: ['createClient', 'installProtocol', 'quoteInput', 'createOutbound', 'confirmedFinalRejection'],
-  agent: ['load', 'readiness'],
+  agent: ['load'],
   media: ['has', 'prepare', 'compose', 'outputStore', 'outputTransport'],
   integrations: ['guidance', 'status', 'check', 'invoke'],
   storage: ['registryStore', 'inbox', 'accountInbox'],

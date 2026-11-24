@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink} from 'node:fs/promises'
+import {mkdtemp,mkdir,writeFile,readFile,readdir,realpath,rm,symlink} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {execFile} from 'node:child_process'
@@ -58,8 +58,8 @@ test('same entry routes an existing installation to upgrade without running inst
 test('existing installation menu handles local maintenance without downloading an upgrade',{skip:process.platform!=='darwin'},async t=>{
  const f=await fixture(t),env=await installed(f)
  await writeFile(join(f.bin,'node'),'#!/bin/sh\nif [ "$1" = -e ]; then exit 0; fi\nprintf "%s\\n" "$*" > "$UPGRADE_CAPTURE"\n',{mode:0o755})
- for(const [choice,expected]of [['2','wizard default --human'],['3','wechat-login --relogin default --human'],['4','wechat-login bot2 --human']]){
-  const script=`spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "${choice}\\r"\n${choice==='4'?'expect "新账号名称*"\nsend "bot2\\r"\n':''}expect eof`
+ for(const [choice,expected]of [['2','wizard default --human'],['3','wechat-login --relogin default --human']]){
+  const script=`spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "${choice}\\r"\nexpect eof`
   await exec('expect',['-c',script],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
   assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes(expected))
  }
@@ -67,11 +67,11 @@ test('existing installation menu handles local maintenance without downloading a
  assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes('wizard default --human'))
  assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
  await writeFile(join(f.dest,'src/setup/uninstall.mjs'),'// fixture\n')
- await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "5\\r"\nexpect "卸载程序？"\nsend "\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
+ await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "4\\r"\nexpect "卸载程序？"\nsend "\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
  assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
  await mkdir(join(f.root,'Library/LaunchAgents'),{recursive:true})
  await writeFile(join(f.root,'Library/LaunchAgents/com.wechat-assistant.wechat-ping-bot.plist'),'managed fixture')
- await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "5\\r"\nexpect "卸载程序？"\nsend "\\033\\[B\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
+ await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "4\\r"\nexpect "卸载程序？"\nsend "\\033\\[B\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
  assert((await readFile(env.UPGRADE_CAPTURE,'utf8')).includes('uninstall.mjs'))
  await assert.rejects(readFile(join(f.dest,'keep')),{code:'ENOENT'})
 })
@@ -101,14 +101,14 @@ test('a pinned retry refreshes incomplete installation source before resuming',{
  const {stdout}=await exec('sh',[bootstrap],{env:{...env,WEIXIN_LINK_EXPECTED_COMMIT:expected}})
  assert.equal(await readFile(join(f.dest,'installed.txt'),'utf8'),'installed')
  assert.equal((await readdir(f.dest)).includes('.weixin-link-install-pending'),false)
- const backup=stdout.match(/Previous incomplete source saved at: (.+)\n/)?.[1]
+ const backup=stdout.match(/如需找回，可到这里查看：\n(.+)\n/)?.[1]
  assert(backup)
  assert.equal(await readFile(join(backup,'keep'),'utf8'),'original')
  await assert.rejects(readFile(join(f.dest,'keep')),{code:'ENOENT'})
 })
 test('an interrupted installation without services can be removed from the menu',{skip:process.platform!=='darwin'},async t=>{
  const f=await fixture(t),env=await installed(f)
- await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "5\\r"\nexpect "卸载程序？"\nsend "\\033\\[B\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
+ await exec('expect',['-c','spawn sh $env(BOOTSTRAP_SCRIPT)\nexpect "回车确认："\nsend "4\\r"\nexpect "卸载程序？"\nsend "\\033\\[B\\r"\nexpect eof'],{env:{...env,BOOTSTRAP_SCRIPT:bootstrap}})
  await assert.rejects(readFile(join(f.dest,'keep')),{code:'ENOENT'})
 })
 test('older manager path remains eligible for in-place upgrade',{skip:process.platform==='win32'},async t=>{
@@ -135,4 +135,21 @@ test('download failure leaves existing source untouched',{skip:process.platform=
  await assert.rejects(exec('sh',[bootstrap],{env:{...env,FIXTURE_ARCHIVE:join(f.root,'missing')}}))
  assert.equal(await readFile(join(f.dest,'keep'),'utf8'),'original')
  assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)
+})
+
+test('local retry runs the snapshot wizard from the installation directory on its first invocation',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t),env=await installed(f)
+ await writeFile(join(f.dest,'.weixin-link-install-pending'),'')
+ await writeFile(join(f.dest,'src/setup/unix-install.sh'),'exit 91\n')
+ await writeFile(join(f.source,'package-lock.json'),'{}')
+ await writeFile(join(f.source,'src/setup/unix-install.sh'),'pwd > wizard-location\n')
+ const archive=join(f.root,'local.tar')
+ await exec('tar',['-cf',archive,'-C',f.source,'.'])
+ await writeFile(join(f.bin,'curl'),'#!/bin/sh\nexit 92\n',{mode:0o755})
+ const {stdout}=await exec('sh',[bootstrap],{env:{...env,WEIXIN_LINK_RESUME_ONLY:'1',WEIXIN_LINK_LOCAL_ARCHIVE:archive}})
+ const backup=stdout.match(/如需找回，可到这里查看：\n(.+)\n/)[1]
+ assert.equal(await readFile(join(backup,'src/setup/unix-install.sh'),'utf8'),'exit 91\n')
+ const location=(await readFile(join(f.dest,'wizard-location'),'utf8')).trim()
+ assert.equal(await realpath(location),await realpath(f.dest))
+ assert(!(await readdir(f.dest)).includes('.weixin-link-install-pending'))
 })

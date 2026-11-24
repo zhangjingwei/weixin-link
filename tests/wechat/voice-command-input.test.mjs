@@ -13,8 +13,8 @@ test('transcribed voice binds a conversation command before queue classification
  assert.equal(voiceCommandInput(normalized),normalized)
 })
 test('system commands tolerate ASR punctuation while ordinary text and arguments remain intact',()=>{
- for(const text of ['列表','状态','停止','安装状态','升级','重启'])assert.equal(voiceCommandInput(voice(text+'。')).text,text)
- for(const text of ['给我列出文件。','命名 项目。','补充 保留句号。'])assert.equal(voiceCommandInput(voice(text)).text,text)
+ for(const text of ['列表','停止','安装状态','升级','重启'])assert.equal(voiceCommandInput(voice(text+'。')).text,text)
+ for(const text of ['状态。','给我列出文件。','命名 项目。','补充 保留句号。'])assert.equal(voiceCommandInput(voice(text)).text,text)
 })
 test('missing transcripts and mixed attachments never become commands',()=>{
  for(const message of [{...voice('停止'),images:[{}]},{...voice('停止'),files:[{}]},{...voice('停止'),voices:[{text:'停止'},{}]},{...voice('停止'),voices:[{}]}])assert.equal(voiceCommandInput(message),message)

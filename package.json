@@ -1,6 +1,6 @@
 {
   "name": "weixin-link",
-  "version": "1.10.3",
+  "version": "1.11.0",
   "description": "A self-hosted bridge for continuing Codex tasks from WeChat.",
   "main": "src/wechat/bot.mjs",
   "scripts": {
@@ -8,7 +8,9 @@
     "test:media-live": "node src/tools/media-live-check.mjs",
     "check:codex-input": "node src/tools/verify-media-contract.mjs",
     "setup": "node src/setup/setup.mjs",
+    "logs": "node src/tools/debug-logs.mjs",
     "doctor": "node src/setup/setup.mjs doctor",
+    "upgrade:local": "node src/tools/upgrade-local.mjs",
     "check:release": "node src/tools/release-check.mjs"
   },
   "keywords": [],

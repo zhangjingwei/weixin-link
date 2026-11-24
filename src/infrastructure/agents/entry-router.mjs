@@ -11,7 +11,7 @@ import {routeSchema,entryInstructions,classificationInput,classificationDecision
 
 // Separate ephemeral process/home: no project files, plugins, MCP credentials or
 // native session history are inherited. Only account authentication is copied.
-export function createEntryClassifier({binary,codexHome,providerOptions,providerSecrets={},rpcFactory=options=>new CodexRpc(options),timeoutMs=30000,idleMs=60000,modelCacheMs=300000,maxRequests=32,selectModel=entryModel,reasoningEffort='medium',serviceTier='auto'}){
+export function createEntryClassifier({binary,codexHome,providerOptions,providerSecrets={},rpcFactory=options=>new CodexRpc(options),idleMs=60000,modelCacheMs=300000,maxRequests=32,selectModel=entryModel,reasoningEffort='medium',serviceTier='auto'}){
  const stats={calls:0,failures:0,inputTokens:0,outputTokens:0,usageSamples:0,modelListQueries:0,processStarts:0}
  let worker,closed=false,tail=Promise.resolve(),idleTimer
  const classify=input=>{
@@ -53,24 +53,20 @@ export function createEntryClassifier({binary,codexHome,providerOptions,provider
  async function classifyOne(input){
   if(Buffer.byteLength(JSON.stringify(input))>256*1024)throw Error('ENTRY_ROUTER_INPUT_LIMIT')
   const payload=JSON.stringify(classificationInput(input))
-  clearTimeout(idleTimer);stats.calls++;const startedAt=Date.now();let timer,w
-  const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('ENTRY_ROUTER_TIMEOUT')),timeoutMs)})
+  clearTimeout(idleTimer);stats.calls++;const startedAt=Date.now();let w
   try{
    if(worker&&(worker.dead||worker.count>=maxRequests))await dispose()
-   const work=(async()=>{
-    w=worker??await open();w.text='';w.threadId=null;w.turnId=null;w.usage=null
-    const final=new Promise((resolve,reject)=>{w.resolve=resolve;w.reject=reject});void final.catch(()=>{})
-    if(!w.model||Date.now()-w.modelAt>modelCacheMs){stats.modelListQueries++;const {models}=await createSessionProtocol().listModels(w.rpc);w.model=selectModel(models.filter(model=>model.supportedReasoningEfforts?.some(e=>e.reasoningEffort===reasoningEffort)));stats.model=w.model;stats.reasoningEffort=reasoningEffort;stats.serviceTier=serviceTier;if(!models.some(model=>model.model===w.model&&model.supportedReasoningEfforts?.some(e=>e.reasoningEffort===reasoningEffort)))throw Error('ENTRY_ROUTER_MODEL_CONFIGURATION_UNAVAILABLE');w.modelAt=Date.now()}
-    const result=await w.rpc.request('thread/start',{cwd:w.dir,model:w.model,serviceTier,ephemeral:true,sandbox:'read-only',approvalPolicy:'untrusted',baseInstructions:entryInstructions,developerInstructions:'只分类；没有工具权限。',config:w.config})
-    if(result.model!==w.model)throw Error('ENTRY_ROUTER_MODEL_UNCONFIRMED')
-    w.threadId=result.thread?.id;if(!w.threadId||result.sandbox?.type!=='readOnly'||result.approvalPolicy!=='untrusted')throw Error('ENTRY_ROUTER_POLICY_UNCONFIRMED')
-    const started=await w.rpc.request('turn/start',{threadId:w.threadId,model:w.model,effort:reasoningEffort,serviceTier,input:[{type:'text',text:payload}],outputSchema:routeSchema})
-    w.turnId=started.turn?.id;if(!w.turnId)throw Error('ENTRY_ROUTER_TURN_UNCONFIRMED')
-    const decision=classificationDecision(JSON.parse(await final));w.count++;if(w.usage){stats.inputTokens+=w.usage.inputTokens??0;stats.outputTokens+=w.usage.outputTokens??0;stats.usageSamples++}return decision
-   })()
-   const decision=await Promise.race([work,deadline]);return decision
+   w=worker??await open();w.text='';w.threadId=null;w.turnId=null;w.usage=null
+   const final=new Promise((resolve,reject)=>{w.resolve=resolve;w.reject=reject});void final.catch(()=>{})
+   if(!w.model||Date.now()-w.modelAt>modelCacheMs){stats.modelListQueries++;const {models}=await createSessionProtocol().listModels(w.rpc);w.model=selectModel(models.filter(model=>model.supportedReasoningEfforts?.some(e=>e.reasoningEffort===reasoningEffort)));stats.model=w.model;stats.reasoningEffort=reasoningEffort;stats.serviceTier=serviceTier;if(!models.some(model=>model.model===w.model&&model.supportedReasoningEfforts?.some(e=>e.reasoningEffort===reasoningEffort)))throw Error('ENTRY_ROUTER_MODEL_CONFIGURATION_UNAVAILABLE');w.modelAt=Date.now()}
+   const result=await w.rpc.request('thread/start',{cwd:w.dir,model:w.model,serviceTier,ephemeral:true,sandbox:'read-only',approvalPolicy:'untrusted',baseInstructions:entryInstructions,developerInstructions:'只分类；没有工具权限。',config:w.config})
+   if(result.model!==w.model)throw Error('ENTRY_ROUTER_MODEL_UNCONFIRMED')
+   w.threadId=result.thread?.id;if(!w.threadId||result.sandbox?.type!=='readOnly'||result.approvalPolicy!=='untrusted')throw Error('ENTRY_ROUTER_POLICY_UNCONFIRMED')
+   const started=await w.rpc.request('turn/start',{threadId:w.threadId,model:w.model,effort:reasoningEffort,serviceTier,input:[{type:'text',text:payload}],outputSchema:routeSchema})
+   w.turnId=started.turn?.id;if(!w.turnId)throw Error('ENTRY_ROUTER_TURN_UNCONFIRMED')
+   const decision=classificationDecision(JSON.parse(await final));w.count++;if(w.usage){stats.inputTokens+=w.usage.inputTokens??0;stats.outputTokens+=w.usage.outputTokens??0;stats.usageSamples++}return decision
   }catch(error){stats.failures++;w?.reject?.(error);await dispose();throw error}
-  finally{stats.lastLatencyMs=Date.now()-startedAt;clearTimeout(timer);if(w){w.resolve=null;w.reject=null}if(worker&&!closed){idleTimer=setTimeout(()=>{void dispose()},idleMs);idleTimer.unref?.()}}
+  finally{stats.lastLatencyMs=Date.now()-startedAt;if(w){w.resolve=null;w.reject=null}if(worker&&!closed){idleTimer=setTimeout(()=>{void dispose()},idleMs);idleTimer.unref?.()}}
  }
  return classify
 }

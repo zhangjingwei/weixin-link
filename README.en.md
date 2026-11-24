@@ -101,7 +101,7 @@ You can ask two projects to work in one message, or say “First do …, then �
 
 To send material to a project, attach it and name the project. Generated reports, JSON and HTML deliverables come back as WeChat file attachments; download HTML and open it in a browser. Old files from other conversations are not forwarded automatically. Keep the installation computer running and connected to use the assistant.
 
-If the model is unavailable, stop, status and install-help remain available. See the [exact command reference](docs/reference/commands.en.md) for recovery and the [user guide](USER-GUIDE.en.md) for daily workflows.
+If the model is unavailable, stop, service-status and install-help remain available. See the [exact command reference](docs/reference/commands.en.md) for recovery and the [user guide](USER-GUIDE.en.md) for daily workflows.
 
 ## Installation and upgrades
 
@@ -123,7 +123,7 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-To add another WeChat account, choose **Add WeChat account**. See [WeChat login maintenance](CONFIGURATION.md#微信登录维护) for other cases.
+Weixin Link is a single-user installation and uses your personal Codex home. See [WeChat login maintenance](CONFIGURATION.md#微信登录维护) for other cases.
 
 To uninstall, rerun the same command, choose **Uninstall**, and confirm. Account data and the workspace are kept.
 
@@ -139,7 +139,7 @@ See the [official OpenAI device-code login guide](https://learn.chatgpt.com/docs
 
 ### Subscription authorization succeeded, but the model test timed out
 
-After sign-in, the installer checks whether the model can answer, waiting up to about 3 minutes. `MODEL_PROBE_TIMEOUT` means the test did not receive a result in time; it does not mean sign-in failed. Choose **Retry only the model test** to keep your existing sign-in, or finish configuration later.
+By default the installer checks the Codex protocol for this account and continues to WeChat sign-in. To test a real reply, send **check-agent** in WeChat or run `node src/setup/setup.mjs wizard --verify-model` in the terminal. The optional terminal test waits up to about three minutes. You can retry it with your existing authorization.
 
 ## More capabilities and documentation
 

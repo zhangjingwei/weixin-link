@@ -11,6 +11,7 @@ import {accountPaths,listAccounts} from '../infrastructure/accounts/account-stor
 import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {npmCommand,nodeEnvironment} from './platform-command.mjs'
 import {installConfig} from './install-config.mjs'
+import {localUpgradeMarker} from '../infrastructure/updates/local-upgrade-notice.mjs'
 import {setupLanguage} from './setup-locale.mjs'
 
 const exec=promisify(execFile)
@@ -57,7 +58,8 @@ export async function standardDeployment({target,home=userHome(),platform=proces
   const entry=join(target,platform==='win32'?'src/setup/service-entry.mjs':'src/wechat/bot.mjs')
   if(!definition.includes(marker)||!(command.includes(entry)||platform==='darwin'&&command.includes(xml(entry))))throw Error('UPGRADE_CUSTOM_DEPLOYMENT')
   const status=await manager.status(account.service)
-  services.push({...account,...status})
+  if(account.id!=='default'&&status.active)throw Error('UPGRADE_ACTIVE_LEGACY_ACCOUNT')
+  if(account.id==='default')services.push({...account,...status})
  }
  return {
   services,
@@ -86,7 +88,7 @@ export async function standardDeployment({target,home=userHome(),platform=proces
  }
 }
 
-export async function upgradeInstallation({source,target,home=userHome(),adapter,prepare,log=console.log,healthAttempts=30,wait=delay}){
+export async function upgradeInstallation({source,target,home=userHome(),adapter,prepare,localUpdate=false,showBackupPaths=true,log=console.log,healthAttempts=30,wait=delay}){
  source=resolve(source);target=resolve(target)
  if(source===target||source.startsWith(target+sep)||target.startsWith(source+sep))throw Error('UPGRADE_SOURCE_OVERLAP')
  for(const path of [source,target]){
@@ -150,8 +152,8 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
    await exec('icacls.exe',[recovery,'/inheritance:r','/grant:r',`*${sid}:(OI)(CI)F`,'*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F'],{timeout:10000})
   }
   await journal('preparing')
-  log('准备新版代码和依赖，现有服务继续运行…')
-  await cp(source,stage,{recursive:true,filter:path=>!relative(source,path).split(sep).includes('node_modules')})
+  log('正在准备新版程序…')
+  await cp(source,stage,{recursive:true,filter:path=>!relative(source,path).split(sep).includes('node_modules') && !(localUpdate && path===join(source,localUpgradeMarker))})
   phase='dependencies'
   if(prepare)await prepare(stage)
   else{
@@ -159,7 +161,7 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
    await exec(process.execPath,['--check',join(stage,'src/wechat/bot.mjs')],{timeout:10000})
   }
   phase='drain'
-  log('等待当前任务结束并备份运行数据…')
+  log('正在检查任务并备份数据…')
   for(const account of active){
    const current=await adapter.status(account)
    initialStatus.set(account.id,current)
@@ -171,17 +173,22 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
   phase='backup'
   for(const account of adapter.services){stopped.push(account);await adapter.stop(account)}
   await copyState(state,snapshot);saved=true;await journal('backed_up')
-  log('运行数据已备份，正在切换新版代码…')
+  log('正在切换到新版…')
   phase='switch'
   await rename(target,backup);oldMoved=true
   await rename(stage,target);swapped=true;await journal('switched')
   phase='health'
   for(const [index,account] of active.entries()){
-   log(`正在确认后台服务启动（${index+1}/${active.length}）…`)
+   if(active.length>1)log(`正在确认后台服务启动（${index+1}/${active.length}）…`)
    await adapter.start(account);await healthy(account)
   }
-  await journal('complete');finished=true
-  log('升级完成。旧版本与运行数据备份：'+recovery+'；旧源码：'+backup)
+  // Publish the snapshot identity only after every running account passed its health check.
+  if(localUpdate)await cp(join(source,localUpgradeMarker),join(target,localUpgradeMarker+'.tmp-'+id))
+  await journal('complete')
+  if(localUpdate)await rename(join(target,localUpgradeMarker+'.tmp-'+id),join(target,localUpgradeMarker))
+  finished=true
+  log('✓ 更新完成。旧版本和数据已备份。')
+  if(showBackupPaths){log('数据备份：'+recovery);log('旧版程序：'+backup)}
   return {status:'complete',backup,recovery}
  }catch(error){
   failureCode=['ENOENT','EACCES','ETIMEDOUT','NPM_CLI_NOT_FOUND'].includes(error.code)?error.code:/^UPGRADE_[A-Z_]+$/.test(error.message)?error.message:'UPGRADE_FAILED'
@@ -213,6 +220,7 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
 }
 
 const errors={
+ UPGRADE_ACTIVE_LEGACY_ACCOUNT:'旧命名账号服务仍在运行，请先停止该服务再升级单人版本。',
  UPGRADE_CUSTOM_DEPLOYMENT:'检测到自定义服务或其他版本目录。未修改现有部署；请由部署者使用自己的发布流程升级，或先完成标准安装迁移。',
  UPGRADE_CUSTOM_SOURCE:'源码目录包含 Git 工作区或自定义 .env。请使用原部署流程升级；未覆盖本地修改。',
  UPGRADE_BUSY:'当前有任务执行中，未切换版本。请等任务结束后重试。',
@@ -221,15 +229,17 @@ const errors={
 }
 function upgradeTextEnglish(message){
  if(message==='源码已是目标版本，未备份或重启服务。')return 'The installed source is already up to date. No backup or service restart was needed.'
- if(message==='准备新版代码和依赖，现有服务继续运行…')return 'Preparing the new source and dependencies while the existing service keeps running…'
- if(message==='等待当前任务结束并备份运行数据…')return 'Waiting for current tasks to finish and backing up runtime data…'
- if(message==='运行数据已备份，正在切换新版代码…')return 'Runtime data is backed up. Switching to the new source…'
+ if(message==='正在准备新版程序…')return 'Preparing the new source and dependencies while the existing service keeps running…'
+ if(message==='正在检查任务并备份数据…')return 'Waiting for current tasks to finish and backing up runtime data…'
+ if(message==='正在切换到新版…')return 'Runtime data is backed up. Switching to the new source…'
  if(message.startsWith('正在确认后台服务启动'))return message.replace('正在确认后台服务启动','Checking background service startup')
- if(message.startsWith('升级完成。旧版本与运行数据备份：'))return message.replace('升级完成。旧版本与运行数据备份：','Upgrade completed. Runtime backup: ').replace('；旧源码：','; previous source: ')
+ if(message==='✓ 更新完成。旧版本和数据已备份。')return '✓ Update complete. The previous version and data have been backed up.'
+ if(message.startsWith('数据备份：'))return message.replace('数据备份：','Data backup: ')
+ if(message.startsWith('旧版程序：'))return message.replace('旧版程序：','Previous program: ')
  if(message==='升级未通过，正在恢复旧版本和运行数据…')return 'Upgrade failed. Restoring the previous source and runtime data…'
  return message
 }
-const errorsEn={UPGRADE_CUSTOM_DEPLOYMENT:'An unmanaged service or custom source was found. The existing deployment was left unchanged.',UPGRADE_CUSTOM_SOURCE:'The source contains a Git workspace or custom .env. Use its original upgrade process.',UPGRADE_BUSY:'A task is still running. Retry after it finishes.',UPGRADE_ALREADY_RUNNING:'Another upgrade is in progress. Check its recovery record before retrying.',UPGRADE_ROLLBACK_FAILED:'Automatic rollback could not be confirmed. Preserve the backup and recovery record.'}
+const errorsEn={UPGRADE_ACTIVE_LEGACY_ACCOUNT:'Stop the running legacy named service before upgrading to the single-user version.',UPGRADE_CUSTOM_DEPLOYMENT:'An unmanaged service or custom source was found. The existing deployment was left unchanged.',UPGRADE_CUSTOM_SOURCE:'The source contains a Git workspace or custom .env. Use its original upgrade process.',UPGRADE_BUSY:'A task is still running. Retry after it finishes.',UPGRADE_ALREADY_RUNNING:'Another upgrade is in progress. Check its recovery record before retrying.',UPGRADE_ROLLBACK_FAILED:'Automatic rollback could not be confirmed. Preserve the backup and recovery record.'}
 if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
  const target=process.argv[2]
  const english=setupLanguage()==='en'

@@ -4,6 +4,7 @@ export async function maintenanceRead(context,owner,name,args){
  if(!context.maintenance)throw Error('MANAGEMENT_MAINTENANCE_UNAVAILABLE')
  const methods={get_service_status:'serviceStatus',get_installation_status:'installationStatus',get_diagnostics:'diagnostics',get_usage_guide:'guide',get_maintenance_status:'status'}
  const result=await context.maintenance[methods[name]](args.language??'zh')
+ if(name==='get_service_status')return {...result,desktopPaused:!!context.manager.state.desktopHandoff}
  if(name!=='get_maintenance_status')return result
  return {...result,requests:context.operations.filter(op=>op.owner===owner&&['request_upgrade','request_service_restart'].includes(op.name)).slice(-10).map(op=>({...context.result(op),name:op.name,createdAt:op.createdAt}))}
 }

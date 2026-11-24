@@ -6,9 +6,9 @@ import {requireExternalMessageId} from '../../infrastructure/storage/ingress-env
  * The protocol's beforeCheckpoint hook awaits prepareBatch, so failures must
  * propagate instead of advancing the polling cursor.
  */
-export function createWeChatController({bot, view, manager, jobs, conversations, runtime, setupController, setupReceipts, classifyMessage, normalizeVoice, traceWire, traceMessage, quote, dispatch, log = () => {}}) {
+export function createWeChatController({bot, view, manager, jobs, conversations, runtime, setupController, setupReceipts, classifyMessage, normalizeVoice, traceWire, traceMessage, quote, dispatch, deferMaintenance, log = () => {}}) {
   const stagedWires = new WeakMap()
-  const receive = createReceiveMessage({manager, jobs, view, dispatch, hasMedia, conversations, runtime, setupController, setupReceipts, normalizeVoice, classifyMessage, log})
+  const receive = createReceiveMessage({manager, jobs, view, dispatch, deferMaintenance, hasMedia, conversations, runtime, setupController, setupReceipts, normalizeVoice, classifyMessage, log})
   const originalParse = bot.parser.parse.bind(bot.parser)
   bot.parser.parse = wire => stagedWires.get(wire) ?? originalParse(wire)
 

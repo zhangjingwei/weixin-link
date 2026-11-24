@@ -1,14 +1,74 @@
-import {CodexRpc} from '../../base/codex/codex-rpc.mjs'
+import {initializeCodex} from '../../base/codex/protocol-operations.mjs'
+import {listCodexProjects,nativeProjects} from './codex-projects.mjs'
+
+function archiveStatus(thread){
+ const path=thread.path?.replaceAll('\\','/')
+ return typeof thread.archived==='boolean'?thread.archived:path?.includes('/archived_sessions/')?true:path?.includes('/sessions/')?false:undefined
+}
 
 export function createCodexConversationBackend(manager){
  const connection=handle=>handle?.rpc??handle;
  return {
-  capabilities:{catalog:true,archive:true,delete:true,history:true,remoteRename:true},
+  nativeProjects,
+  listProjects:listCodexProjects,
+  capabilities:{catalog:true,archive:true,delete:true,history:true},
   async withConnection(owner,recipient,work){
    const existing=[...manager.sessions.values()].find(s=>!s.rpc?.closed&&s.rpc?.request&&recipient(s.userId)===owner);
    if(existing)return work(existing.rpc);
-   const rpc=manager.createCatalogRpc?manager.createCatalogRpc():new CodexRpc({cwd:manager.cwd??process.cwd(),onEvent:()=>{},onClose:()=>{}});
-   try{await rpc.request('initialize',{clientInfo:{name:'wechat_catalog',version:'1.0.0'}});rpc.write({method:'initialized',params:{}});return await work(rpc)}finally{rpc.close()}
+   const rpc=manager.createCatalogRpc();
+   try{await initializeCodex(rpc,{name:'wechat_catalog',version:'1.0.0'});return await work(rpc)}finally{rpc.close()}
+  },
+  async searchHistory(rpc,{threadId,query,cursor,archived=false}){
+   const params={searchTerm:query,limit:20,...(cursor?{cursor}:{})}
+   const page=threadId
+    ?await rpc.request('thread/searchOccurrences',{...params,threadId})
+    :await rpc.request('thread/search',{...params,archived,sortKey:'updated_at',sortDirection:'desc'})
+   if(!Array.isArray(page?.data)||page.data.length>20||
+      (page.nextCursor!=null&&(typeof page.nextCursor!=='string'||!page.nextCursor||page.nextCursor===cursor)))throw Error('CODEX_HISTORY_SEARCH_INVALID')
+   const matches=[]
+   for(const row of page.data){
+    if(typeof row?.snippet!=='string')throw Error('CODEX_HISTORY_SEARCH_INVALID')
+    if(threadId){
+     if(!row.turnId||!row.itemId)throw Error('CODEX_HISTORY_SEARCH_INVALID')
+     matches.push({turnId:row.turnId,itemId:row.itemId,snippet:row.snippet})
+    }else{
+     const thread=row.thread
+     if(!thread?.id)throw Error('CODEX_HISTORY_SEARCH_INVALID')
+     if(!thread.ephemeral&&!thread.parentThreadId)matches.push({threadId:thread.id,nativeProjectId:thread.projectId??null,name:thread.name??null,snippet:row.snippet})
+    }
+   }
+   return {matches,nextCursor:page.nextCursor??null}
+  },
+  async queuedTasks(rpc,threadId,limit){
+   const page=await rpc.request('thread/queue/list',{threadId,limit})
+   return {items:page.data.map(item=>({taskId:item.id,title:item.input?.find(i=>i.type==='text')?.text.slice(0,120)??'附件'})),more:!!page.nextCursor}
+  },
+  async recentPersonalThreads(rpc){
+   const threads=[]
+   let cursor
+   for(let page=0;page<5;page++){
+    const result=await rpc.request('thread/list',{archived:false,limit:30,sortKey:'updated_at',sortDirection:'desc',modelProviders:[],sourceKinds:['cli','vscode','appServer'],...(cursor?{cursor}:{})})
+    if(!Array.isArray(result.data))throw Error('CODEX_THREAD_LIST_INVALID')
+    for(const thread of result.data){
+     if(thread.ephemeral||thread.parentThreadId||!thread.id||!thread.cwd||/^(?:wechat|weixin|zerolink)/i.test(thread.originator??''))continue
+     threads.push(thread)
+     if(threads.length===5)return threads
+    }
+    cursor=result.nextCursor
+    if(!cursor)break
+   }
+   return threads
+  },
+  async lookupThread(rpc,threadId){
+   let thread
+   try{thread=await this.readConversation(rpc,threadId)}
+   catch(error){
+    if(error.definitiveRpcError&&/no rollout|not found|does not exist|thread not loaded/i.test(error.message))return
+    throw error
+   }
+   if(thread?.id!==threadId)throw Error('Codex未确认会话标识，未更新列表。')
+   const archived=archiveStatus(thread)
+   if(archived!==undefined)return {thread,archived}
   },
   async list(rpc,ownedThreads){
    const catalog=new Map();
@@ -23,8 +83,7 @@ export function createCodexConversationBackend(manager){
     const own=manager.sessions.get(key);const reader=own?.rpc&&!own.rpc.closed?own.rpc:rpc;
     let thread;try{thread=await this.readConversation(reader,threadId)}catch(error){if(error.definitiveRpcError&&/no rollout|not found|does not exist|thread not loaded/i.test(error.message))continue;throw error}
     if(thread?.id!==threadId)throw Error('Codex未确认会话标识，未更新列表。');
-    const path=thread.path?.replaceAll('\\','/');
-    const archived=typeof thread.archived==='boolean'?thread.archived:path?.includes('/archived_sessions/')?true:path?.includes('/sessions/')?false:undefined;
+    const archived=archiveStatus(thread);
     if(archived===undefined)throw Error('当前Codex版本未提供可核实的空白会话归档状态。');
     catalog.set(threadId,{thread,archived});
    }

@@ -19,3 +19,8 @@ test('compact wire plans preserve application validation for multi-project execu
  assert.deepEqual(classificationDecision({steps:[{action:'status',projectId:'1'}],useClarification:true}),{action:'status',projectId:'1',steps:[],useClarification:true})
  assert.throws(()=>classificationDecision({steps:[],useClarification:false}),/OUTPUT_INVALID/)
 })
+
+test('follow-up identity is separate from navigation and does not carry full request history',()=>{
+ const x=classificationInput({text:'这个游戏还需要调整',currentProjectId:'3',projects:[],conversationFocus:{projectId:'5',name:'个人工具箱',title:'教材游戏',selectionVersion:4,request:'private-request'}})
+ assert.equal(x.currentProjectId,'3');assert.deepEqual(x.conversationFocus,{projectId:'5',name:'个人工具箱',title:'教材游戏'});assert(!JSON.stringify(x).includes('private-request'))
+})

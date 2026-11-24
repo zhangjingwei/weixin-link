@@ -1,3 +1,4 @@
+import {readWelcomeRequest,recordWelcomeRequest} from '../../src/infrastructure/wechat/welcome-request.mjs'
 import {quickStartGuide} from '../../src/setup/user-guide.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -69,7 +70,7 @@ test('definitive context rejection defers until a fresh inbound, unknown is not 
 
 test('English first login includes a short guide once and restart or upgrade does not repeat it',async t=>{
  const f=await fixture(t,{welcomePending:true});f.notice.language='en';f.notice.welcomeText=async()=>welcomeMessage('en')
- await f.notice.start();assert.match(f.sent[0][1],/Getting started/);assert.match(f.sent[0][1],/stop, status and install-help remain available/)
+ await f.notice.start();assert.match(f.sent[0][1],/Getting started/);assert.match(f.sent[0][1],/stop, service-status and install-help remain available/)
  assert.ok(Array.from(f.sent[0][1]).length<1800)
  const restarted=new LifecycleNotice({stateDir:f.notice.stateDir,sourceDir:f.notice.sourceDir,owners:['owner'],welcomePending:true,language:'en',send:async(_owner,text)=>{f.sent.push(['owner',text]);return {status:'accepted'}}})
  await restarted.start();assert.equal(f.sent.length,1)
@@ -90,4 +91,46 @@ test('tagged release without changelog explicitly reports absent highlights',asy
  const f=await fixture(t)
  await writeFile(join(f.notice.sourceDir,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'v1.2.0',commit:b}))
  await f.notice.start();assert.match(f.sent[0][1],/暂未提供核心更新摘要/);assert.match(f.sent[0][1],/releases\/tag\/v1.2.0/)
+})
+
+
+test('each completed pairing gets one welcome even when a local preview replaces a release',async t=>{
+ const f=await fixture(t,{welcomePending:true})
+ await f.notice.start()
+ const {stateDir,sourceDir,send}=f.notice
+ const restart=async()=>new LifecycleNotice({stateDir,sourceDir,send,owners:['owner'],...await readWelcomeRequest(stateDir)})
+ await writeFile(join(stateDir,'welcome-pending.json'),JSON.stringify({pending:true}))
+ await (await restart()).start()
+ assert.equal(f.sent.length,1)
+ await rm(join(sourceDir,'.weixin-link-release.json'))
+ for(let i=0;i<2;i++){
+  const id=await recordWelcomeRequest(stateDir)
+  const notice=await restart()
+  if(i===1)f.state.result='unknown'
+  await Promise.all([notice.start(),notice.onInbound('owner')])
+  await (await restart()).start()
+  assert.equal(f.sent.length,i+2)
+  assert.equal((await f.saved()).loginId,id)
+  assert.equal((await f.saved()).kind,'welcome')
+  assert.equal((await f.saved()).status,i===1?'unknown':'accepted')
+ }
+})
+
+test('publishing a local snapshot proactively notifies the owner once',async t=>{
+ const f=await fixture(t)
+ const {localUpgradeMarker,watchLocalUpgrade}=await import('../../src/infrastructure/updates/local-upgrade-notice.mjs')
+ const {sourceDir}=f.notice
+ await rm(join(sourceDir,'.weixin-link-release.json'))
+ await f.notice.start()
+ assert.deepEqual(f.sent,[])
+ const notified=Promise.withResolvers()
+ const close=watchLocalUpgrade(sourceDir,()=>f.notice.start().then(notified.resolve,notified.reject))
+ t.after(close)
+ const timeout=setTimeout(()=>notified.reject(Error('notification timed out')),5000)
+ t.after(()=>clearTimeout(timeout))
+ await writeFile(join(sourceDir,localUpgradeMarker),JSON.stringify({version:1,tree:b}))
+ await notified.promise
+ await f.notice.start()
+ await f.notice.onInbound('owner')
+ assert.deepEqual(f.sent,[['owner','微信助手已更新到本地新版，可以继续使用了。']])
 })

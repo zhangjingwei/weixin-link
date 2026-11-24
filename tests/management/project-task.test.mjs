@@ -76,8 +76,14 @@ test('routed progress, approval prompts and result bundles return immediately wi
  }
  await f.queue.pump('knowledge')
  assert.equal(f.jobs.get(response.data.taskId).state,'done');assert.equal(f.sent.length,3)
- for(const output of f.sent){assert.equal(output.key,'knowledge');assert.match(typeof output.value==='string'?output.value:output.value.text,/^【知识库 · [^】]+】/);assert(!JSON.stringify(output.value).includes('old hidden result'));assert(!JSON.stringify(output.value).includes(response.data.taskId.slice(0,8)));assert.match(typeof output.value==='string'?output.value:output.value.text,/检查知识库搜索功能/)}
- assert(f.sent.every(out=>(typeof out.value==='string'?out.value:out.value.text).split('\n')[0].endsWith(' · gpt-6.1-sol】')));assert.equal(f.sent[2].value.attachments,packet.attachments);assert.equal(packet.text,'搜索修复结果')
+ for(const output of f.sent){
+  const text=typeof output.value==='string'?output.value:output.value.text
+  assert.equal(output.key,'knowledge')
+  assert.match(text,/^【知识库 · 检查知识库搜索功能】\n模型：gpt-6\.1-sol\n\n\S/)
+  assert(!JSON.stringify(output.value).includes('old hidden result'))
+  assert(!JSON.stringify(output.value).includes(response.data.taskId.slice(0,8)))
+ }
+ assert.equal(f.sent[2].value.attachments,packet.attachments);assert.equal(packet.text,'搜索修复结果')
  assert.equal(entry.unread.length,1);assert.equal(f.conversations.root.alice.active,'1');assert.equal(f.manager.state.users.alice.lastReply,undefined)
  // Normal non-routed output retains the existing unread behavior.
  const ordinary=await f.view.deliver('knowledge','normal background result');assert.equal(ordinary.status,'deferred');assert.equal(f.sent.length,3)
@@ -149,7 +155,7 @@ test('routing survives a database reopen and expired management receipts without
  const queue=new DurableIntake({jobs:reopened,manager:f.manager,conversations:f.conversations,reply:(...args)=>f.view.deliver(...args)});t.after(()=>queue.close())
  let calls=0;f.manager.ask=async(key,input,reply)=>{calls++;assert.equal(key,'knowledge');await reply('重启后完成任务')}
  queue.resume();await queue.users.get('knowledge')
- assert.equal(calls,1);assert.equal(reopened.get(result.data.taskId).state,'done');assert.match(f.sent[0].value,/【知识库 · /)
+ assert.equal(calls,1);assert.equal(reopened.get(result.data.taskId).state,'done');assert.match(f.sent[0].value,/^【知识库 · [^\n]+】\n/)
  queue.resume();assert.equal(queue.users.size,0);assert.equal(calls,1)
 })
 
@@ -162,7 +168,7 @@ test('bound task recovery retains its routed completion notice and only reads th
  f.manager.ask=async()=>assert.fail('recovery must not start another execution')
  await f.queue.pump('knowledge')
  assert.equal(session.taskId,id);assert.equal(f.jobs.get(id).state,'done');assert.equal(f.manager.state.users.knowledge.lastReply,'原任务结果')
- assert.equal(f.manager.state.users.knowledge.resultIdentity.taskId,id);assert.equal(f.sent.length,1);assert.match(f.sent[0].value,/【知识库 · .*已找回/s)
+ assert.equal(f.manager.state.users.knowledge.resultIdentity.taskId,id);assert.equal(f.sent.length,1);assert.match(f.sent[0].value,/^【知识库 · [^\n]+】\n模型：未确认\n\n已找回/)
 })
 
 test('queue persistence failure never acknowledges a completed submission or switches selection',async t=>{
@@ -178,4 +184,17 @@ test('routing errors after model execution begins remain uncertain rather than c
  await f.queue.pump('knowledge')
  assert.equal(f.jobs.get(result.data.taskId).state,'uncertain');assert.equal(f.sent.length,1)
  assert.match(f.sent[0].value,/结果尚未确认/);assert(!f.sent[0].value.includes('任务未执行'))
+})
+
+test('same-conversation replies have a compact title without repeating the original request',async t=>{
+ const f=await fixture(t)
+ const result=await f.service.call('alice','submit_project_task',task())
+ const original=f.jobs.get(result.data.taskId)
+ const job={...original,input:{...original.input,projectDispatch:{...original.input.projectDispatch,originKey:'knowledge',entryOrigin:true}},context:{executionModel:'gpt-6.1-sol'}}
+ f.manager.submissions={get:()=>job}
+ const entry=f.conversations.root.alice.entries.find(e=>e.key==='knowledge')
+ entry.name='微信聊天（尚未命名）';entry.titleSource='placeholder'
+ await f.view.deliver('knowledge','已完成排版调整。',{projectTaskId:job.id})
+ assert.equal(f.sent[0].value,'【当前会话】\n模型：gpt-6.1-sol\n\n已完成排版调整。')
+ assert(!f.sent[0].value.includes('检查知识库搜索功能'))
 })

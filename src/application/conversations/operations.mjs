@@ -11,7 +11,6 @@ function hasUnfinishedWork(context, key) {
 }
 
 export async function rename(context,entry,name,reply){
- if(!context.backendPort.capabilities.remoteRename){entry.name=name.slice(0,60);await context.manager.save();return}
  const session=await context.manager.connect(entry.key,context.manager.sessions.get(entry.key)?.reply??reply),threadId=context.manager.state.users[entry.key]?.threadId??session.threadId;
  if(!threadId)throw Error('Codex尚未确认会话，未修改标题。');
  let failure;try{await context.backendPort.renameConversation(session,threadId,name);}catch(e){failure=e;}
@@ -35,10 +34,14 @@ export async function selectConversation(context,message,reply){
    if(official?.id!==tid)throw Error('底座未确认目标会话，未报告成功。');
    if(r.selectionVersion===message._conversationSelectionVersion)r.active=current.id;
    await context.manager.save();confirmed=true;
-   if((cmd.action==='new'||cmd.action==='daily')&&cmd.name)await context.rename(current,cmd.name,reply);
+   if(cmd.action==='switch'&&r.selectionVersion!==message._conversationSelectionVersion){
+    await reply('目标会话已确认可用，但你已选择了其他会话，本次未改变当前选择。');
+    return;
+   }
+   if(cmd.action==='new'&&cmd.name)await context.rename(current,cmd.name,reply);
    else if(context.backendPort.capabilities.catalog&&official.name)await context.titleUpdated(tid,official.name);
    const directory=typeof official.cwd==='string'&&official.cwd.trim()?official.cwd:'未获底座确认';
-   const name=context.displayName(owner,current);
+   const name=current.name;
    await reply(cmd.action==='new'?`已新建${name}。\n工作目录：${directory}`:`已切换到${name}。\n工作目录：${directory}`);
    if(context.sendOutput)await context.replay(current.key,context.sendOutput);
   }finally{

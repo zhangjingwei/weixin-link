@@ -5,6 +5,7 @@ import {accountProviderProfile,clearProviderProfile} from './provider-profile.mj
 import {configureProvider} from './provider-config-cli.mjs'
 import {deviceLogin} from './setup-login.mjs'
 import {checkCodex} from './setup-core.mjs'
+import {selectTerminalModel} from './terminal-model-selection.mjs'
 import {probeTerminalModel} from './terminal-model-probe.mjs'
 import {clearTerminalSetupStatus,writeTerminalSetupStatus,terminalSetupFingerprint} from './terminal-setup-status.mjs'
 import {ServiceManager} from './platform-service.mjs'
@@ -19,11 +20,13 @@ const messages={
 
 export async function terminalChoice(prompt){
  if(!process.stdin.isTTY||!process.stdout.isTTY)throw Error('TERMINAL_SETUP_REQUIRES_TTY')
- const options=[...prompt.matchAll(/(?:^|\n)([0-9])\. ([^\n]+)/g)].map(match=>({value:match[1],label:match[2]}))
+ const options=[...prompt.matchAll(/(?:^|\n)([0-9]+)\. ([^\n]+)/g)].map(match=>({value:match[1],label:match[2]}))
  if(!options.length)throw Error('INVALID_SETUP_MENU')
  const title=prompt.slice(0,prompt.indexOf('\n1.')).trim()
  const hint=prompt.includes('请选择：')?'用 ↑/↓ 选择，回车确认：':'Use ↑/↓ to choose, then press Enter:'
- let selected=0
+ let selected=options.findIndex(option=>/\[(?:当前|current)\]/.test(option.label))
+ if(selected<0)selected=options.findIndex(option=>/\[(?:默认|default)\]/.test(option.label))
+ if(selected<0)selected=0
  const draw=()=>{for(let i=0;i<options.length;i++)process.stdout.write(`\x1b[2K${i===selected?'> ':'  '}${options[i].label}\n`)}
  process.stdout.write(`\n${title}\n${hint}\n`)
  draw()
@@ -61,7 +64,7 @@ export async function applyTerminalSetupToService(account,home){
  return true
 }
 
-export async function runTerminalWizard({accountId='default',home=process.env.HOME||homedir(),language=setupLanguage(),choose=terminalChoice,configure=configureProvider,login=deviceLogin,check=checkCodex,probe=probeTerminalModel,applyService=applyTerminalSetupToService,write=text=>console.log(text)}={}){
+export async function runTerminalWizard({accountId='default',home=process.env.HOME||homedir(),language=setupLanguage(),choose=terminalChoice,configure=configureProvider,login=deviceLogin,check=checkCodex,probe=probeTerminalModel,selectModel=selectTerminalModel,verifyModel=false,applyService=applyTerminalSetupToService,write=text=>console.log(text)}={}){
  const m=messages[language]
  if(!m)throw Error('INVALID_SETUP_LANGUAGE')
  const account=await assertAccount(accountId,home)
@@ -83,10 +86,32 @@ export async function runTerminalWizard({accountId='default',home=process.env.HO
    }
    write(m.check)
    await check({accountId,home})
+   let workingModel=null
+   if(kind==='subscription'){
+    for(;;){
+     try{workingModel=await selectModel({accountId,home,language,choose,write});break}catch(error){
+      if(error.message==='SETUP_CANCELLED')throw error
+      write(language==='en'?'Working model selection could not be confirmed. Sign-in is retained.':'工作模型选择尚未确认，已保留登录授权。')
+      const retry=await choose(language==='en'?'\n1. Retry model selection\n0. Configure later\nChoose: ':'\n1. 重试选择工作模型\n0. 稍后选择\n请选择：')
+      if(retry==='0')break
+     }
+    }
+    if(!workingModel){write(m.deferred(installerCommand('setup',{accountId,language})));return {verified:false,deferred:true}}
+   }else{
+    write((language==='en'?'Working model: ':'工作模型：')+(await accountProviderProfile(accountId,home))?.model)
+   }
+   if(!verifyModel){
+    const profile=await accountProviderProfile(accountId,home)
+    const result={verified:false,protocolReady:true,provider:kind,model:workingModel??profile?.model??null}
+    await writeTerminalSetupStatus(account.stateDir,{...result,language,fingerprint:terminalSetupFingerprint(profile)})
+    const restarted=await applyService(account,home)
+    write(language==='en'?'Codex protocol check passed. '+(workingModel?'Working model: '+workingModel+'. ':'')+(restarted?'This account will restart when idle.':'Continue with WeChat login.')+' To test a model reply later, send check-agent in WeChat.':'Codex 接口检查通过。'+(workingModel?'工作模型：'+workingModel+'。':'')+(restarted?'已安排本账号空闲后重启。':'请继续完成微信登录。')+'需要测试模型回复时，可在微信发送“验收智能体”。')
+    return result
+   }
    let result
    for(;;){
     write(m.probe)
-    try{result=await probe({accountId,home});break}catch(error){
+    try{result=await probe({accountId,home,model:workingModel});break}catch(error){
      if(error.message!=='MODEL_PROBE_TIMEOUT')throw error
      write(m.failed(error.message,kind))
      let retry
@@ -95,11 +120,12 @@ export async function runTerminalWizard({accountId='default',home=process.env.HO
      if(retry==='0'){write(m.deferred(installerCommand('setup',{accountId,language})));return {verified:false,deferred:true}}
     }
    }
+   if(workingModel&&result.model!==workingModel)throw Error('MODEL_SELECTION_UNCONFIRMED')
    if(result.verified!==true||result.provider!==kind)throw Error('MODEL_PROBE_FAILED')
    await writeTerminalSetupStatus(account.stateDir,{...result,language,fingerprint:terminalSetupFingerprint(await accountProviderProfile(accountId,home))})
    const restarted=await applyService(account,home)
-   write(m.done(m.names[kind],restarted))
+   write(m.done(result.model??m.names[kind],restarted))
    return result
-  }catch(error){await clearTerminalSetupStatus(account.stateDir);const code=/^[A-Z0-9_]+$/.test(error.message)?error.message:'TERMINAL_SETUP_FAILED';write(m.failed(code,kind))}
+  }catch(error){if(error.message==='SETUP_CANCELLED')throw error;await clearTerminalSetupStatus(account.stateDir);const code=/^[A-Z0-9_]+$/.test(error.message)?error.message:'TERMINAL_SETUP_FAILED';write(m.failed(code,kind))}
  }
 }

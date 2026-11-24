@@ -6,8 +6,14 @@ import {installerCommand} from '../../setup/setup-locale.mjs'
  */
 export function createManagementController({manager, jobs, runtime, setupReceipts, setupController, agentSwitcher, upgrader, view, log}) {
   const acknowledge = message => jobs.acknowledge([message._ingressId].filter(Boolean))
+  const desktopBlocked=async(message,deliver)=>{
+    if(!manager?.state?.desktopHandoff)return false
+    await deliver('桌面正在接续工作，暂不升级、重启或修改安装配置。请先完成并关闭桌面，再说“回到微信继续”。',{conversationControl:true})
+    acknowledge(message);return true
+  }
   return {
     async setup(action, message, deliver) {
+      if(!['status','doctor','help','manual','manualEn'].includes(action)&&await desktopBlocked(message,deliver))return
       const receipt = message._setupReceiptId ? {id: message._setupReceiptId} : setupReceipts.capture(message)
       if (!receipt || !setupReceipts.claim(receipt.id)) {
         if (message._recovered) {
@@ -30,6 +36,7 @@ export function createManagementController({manager, jobs, runtime, setupReceipt
       acknowledge(message)
     },
     async agent(action, message, deliver, traceId) {
+      if(await desktopBlocked(message,deliver))return
       await runtime.track('setup', async () => {
         try { await agentSwitcher.handle(action, value => runtime.track('delivery', () => deliver(value, {conversationControl: true}))) }
         catch (error) {
@@ -39,6 +46,7 @@ export function createManagementController({manager, jobs, runtime, setupReceipt
       })
     },
     async upgrade(message, deliver, traceId) {
+      if(await desktopBlocked(message,deliver))return
       await runtime.track('setup', async () => {
         try { await upgrader.handle(value => runtime.track('delivery', () => deliver(value, {conversationControl: true})), {traceId}) }
         catch (error) {

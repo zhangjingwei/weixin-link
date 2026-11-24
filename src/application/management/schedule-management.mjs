@@ -2,7 +2,7 @@ import {managementWrite} from './management-writes.mjs'
 function requireSchedules(context){if(!context.schedules)throw Error('MANAGEMENT_SCHEDULE_UNAVAILABLE');return context.schedules}
 function publicSchedule(context,owner,value){
  const {conversationKey,...job}=value,entry=context.entries(owner).find(e=>e.key===conversationKey)
- return {...job,projectId:entry?.id??null,projectName:entry?context.conversations.displayName(owner,entry):null,targetAvailable:!!entry&&!entry.archived}
+ return {...job,projectId:entry?.id??null,projectName:entry?.name??null,targetAvailable:!!entry&&!entry.archived}
 }
 export function listSchedules(context,owner,args){
  const page=requireSchedules(context).list(owner,{offset:args.offset??0,limit:args.limit??10})
