@@ -1,5 +1,4 @@
 import {recordTaskResult,archiveTaskResult} from '../tasks/task-result.mjs'
-import {emptyContinuationNotice} from '../../domain/delivery/notification-policy.mjs'
 import {currentMaterials,hasAttachments} from '../../domain/messages/material-association.mjs'
 import {executionState} from '../../domain/tasks/execution-state.mjs'
 import {localTaskLabel,localCompletion} from '../../domain/tasks/task-label.mjs'
@@ -742,7 +741,6 @@ export class SessionManager {
         if (p.item.phase === 'commentary') {
           const turnId = session.turnId
           if(session.contextRejected){this.diagnostic(session,'notification.suppressed',{reason:'context_rejected'});return}
-          if(session.attachmentContinuation&&emptyContinuationNotice(rest)){this.diagnostic(session,'notification.suppressed',{reason:'continuation_start'});return}
           if(rest){
             const delivered=await this.emit(session, rest, () => (session.workToken?.current()??true) && session.busy && !session.finalReceived && session.turnId === turnId)
             if(delivered&&session.turnId===turnId){session.lastProgress={text:rest,at:Date.now(),turnId};session.lastUserNoticeAt=Date.now()}
