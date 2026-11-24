@@ -1,4 +1,6 @@
 import {createDesktopClient} from '../infrastructure/agents/desktop-client.mjs'
+import {CompanionAccess} from '../infrastructure/storage/companion-access.mjs'
+import {macCompanion} from '../application/conversations/mac-companion.mjs'
 import {attachmentHandoffs} from '../infrastructure/media/attachment-handoff.mjs'
 import {EntryRouting} from '../application/intake/entry-routing.mjs'
 import {createManagementMaintenanceController} from '../interfaces/controllers/management-maintenance-controller.mjs'
@@ -159,6 +161,8 @@ const managementInstallation=await managementPlugin({accountId:account.id,codexH
 const desktop=createDesktopClient({account,providerKind:agent.providerKind,codexHome:agent.sessionOptions.codexHome,binary:installation.codexBinary,workspace:installation.workspace})
 // 先打开持久收件库并接好入站处理链；登录成功后才恢复未完成工作。
 const jobs=await infrastructure.storage.accountInbox(stateDir);manager.submissions=jobs
+const companionAccess=process.platform==='darwin'&&owners.length===1?new CompanionAccess(jobs.db):null
+if(companionAccess)runtime.onCompanion=macCompanion({access:companionAccess,owner:owners[0],conversations,manager,jobs,stateDir,submit:(...args)=>durable.submit(...args),notice:(...args)=>view.announcement(...args),ready:()=>runtime.ready()&&!runtime.draining&&!stopping})
 const handoffs=attachmentHandoffs(stateDir,jobs)
 const managementService=new ManagementService({prepareHandoff:args=>handoffs.prepare(args),desktop,routingStatus:()=>agent.classifyEntry?.statistics?.(),manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
 managementService.resumeTasks=()=>durable.resume()
@@ -182,6 +186,7 @@ const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.d
 const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace
 const inbound=createWeChatController({bot,view,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
+ phoneAccess:companionAccess?.phone.bind(companionAccess),
  normalizeVoice:voiceCommandInput,deferMaintenance:message=>maintenancePending.set(message._ingressId,message),
  traceWire:wire=>ingressTrace.traceId(wire),traceMessage:message=>ingressTrace.callback(message),quote:message=>weixin.quote(message),dispatch:message=>intakeHandler(message),log})
 weixin=infrastructure.wechat.installProtocol(bot,{db:jobs.db,log,prepareBatch:inbound.prepareBatch})

@@ -22,6 +22,11 @@ export class DurableJobs {
  }
  add(owner,input,key,ingressIds=[]){const id=key?taskId(owner,key):randomUUID(),text=JSON.stringify(input);if(Buffer.byteLength(text)>2*1024*1024)throw Error('INPUT_TOO_LARGE');this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('INSERT OR IGNORE INTO jobs(id,owner,input,state,thread_id,turn_id,created) VALUES(?,?,?,\'pending\',NULL,NULL,?)').run(id,owner,text,Date.now());this.acknowledge(ingressIds);this.db.exec('COMMIT');return id}catch(error){this.db.exec('ROLLBACK');throw error}}
  get(id){const r=this.db.prepare('SELECT * FROM jobs WHERE id=?').get(id);return r?{...r,input:JSON.parse(r.input),context:r.context?JSON.parse(r.context):null}:null}
+ companionMessages(owner,thread){
+  return this.db.prepare(`SELECT created,substr(CASE WHEN json_type(input)='text' THEN json_extract(input,'$') ELSE json_extract(input,'$.text') END,1,6000) AS text,
+   (SELECT json_group_array(json_object('name',json_extract(value,'$.name'),'path',json_extract(value,'$.path'))) FROM json_each(jobs.input,'$.attachments') WHERE type='object' AND key<10) AS files
+   FROM jobs WHERE owner=? AND (thread_id IS NULL OR thread_id=?) ORDER BY created DESC,rowid DESC LIMIT 20`).all(owner,thread).reverse()
+ }
  listForOwner(owner,{offset=0,limit=20}={}){if(!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>20)throw Error('MANAGEMENT_INVALID_ARGUMENTS');const rows=this.db.prepare('SELECT id,state,thread_id,turn_id,created FROM jobs WHERE owner=? ORDER BY created DESC,rowid DESC LIMIT ? OFFSET ?').all(owner,limit+1,offset);return {items:rows.slice(0,limit).map(r=>({taskId:r.id,title:taskDisplayTitle(this.get(r.id).input,this.get(r.id).input?.projectDispatch?.title),state:r.state,threadId:r.thread_id,turnId:r.turn_id,createdAt:new Date(r.created).toISOString()})),nextOffset:rows.length>limit?offset+limit:null}}
  recheckTask(owner,id,threadId){return this.db.prepare("UPDATE jobs SET state=CASE WHEN turn_id IS NULL THEN 'bound' ELSE 'submitted' END WHERE owner=? AND id=? AND state='uncertain' AND thread_id=?").run(owner,id,threadId).changes}
  recheck(owner){return this.db.prepare("UPDATE jobs SET state=CASE WHEN turn_id IS NULL THEN 'bound' ELSE 'submitted' END WHERE owner=? AND state='uncertain' AND thread_id IS NOT NULL").run(owner).changes}

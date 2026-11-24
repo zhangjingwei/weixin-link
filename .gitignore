@@ -80,6 +80,9 @@
 
 # Modular source and tests.
 !/src/
+!/desktop/
+/desktop/*
+!/desktop/mac/
 !/tests/
 **/__pycache__/
 **/*.pyc
