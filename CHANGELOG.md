@@ -2,12 +2,13 @@
 
 ## Unreleased
 
-- Preserve explicitly handed-off attachments and original multi-project requests across target clarification; bind cancel-all to the queue snapshot taken before classification.
-- Require proactive WeChat attachment delivery of user-facing JSON, HTML and reports, with private copies and unchanged file bytes.
+## 1.10.0 — 2026-11-23
 
-- 意图识别改用 Terra 中档推理和普通速度，精简分类输入与结构化计划，保留完整原始任务及执行边界。
-- Complete unified entry with evidence-backed progress, exact task stop and pending-queue controls, bounded multi-project plans with dependencies, and explicit private attachment handoffs.
-- Reuse the restricted classifier per account, cache model discovery, expose routing diagnostics, and validate requested project names; use Terra with medium reasoning and Standard speed, with compact classification context and explicit model comparisons.
+- 统一入口支持项目进展汇总、精确停止与排队控制，一句话安排多个项目并保留任务依赖。
+- 本条附件可明确交接给目标项目；澄清项目后保留原始请求与附件，取消队列仅作用于识别前的任务快照。
+- 意图识别采用 Terra 中档推理、普通速度，精简上下文，复用受限识别进程并缓存模型列表。
+- 生成供用户查看的 JSON、HTML、报告等成果时主动交付微信附件，使用私有副本并保留文件完整内容。
+- 补充自然语言分流验收与恢复测试，完善目标歧义、任务依赖和附件交付边界。
 
 ## 1.9.1 — 2026-11-23
 
