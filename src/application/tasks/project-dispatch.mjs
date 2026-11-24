@@ -9,6 +9,7 @@ export function projectTaskRoute({manager,conversations},job){
  if(!route)return null
  const target=conversations?.entry(job.owner),origin=conversations?.entry(route.originKey)
  if(route.version!==1||! /^[0-9a-f-]{36}$/.test(route.operationId??'')||job.id!==taskId(job.owner,projectDispatchKey(route.operationId))||!target||!origin||target.owner!==origin.owner||!conversations.realOwners.has(target.owner)||route.projectId!==target.id)throw Error('PROJECT_TASK_ROUTE_INVALID')
+ if(route.entryOrigin&&target.key!==origin.key)throw Error('PROJECT_TASK_ROUTE_INVALID')
  return {target,origin,route}
 }
 

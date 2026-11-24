@@ -9,7 +9,8 @@ export async function maintenanceRead(context,owner,name,args){
 }
 export function requestMaintenance(context,owner,caller,name,args){return managementWrite(context,owner,caller,name,args,async op=>{
  if(!context.maintenance)throw Error('MANAGEMENT_MAINTENANCE_UNAVAILABLE')
- if(context.manager.submissions?.get(context.manager.sessions.get(caller)?.taskId??'')?.input?.projectDispatch)throw Error('MANAGEMENT_NESTED_MAINTENANCE_DENIED')
+ const dispatch=context.manager.submissions?.get(context.manager.sessions.get(caller)?.taskId??'')?.input?.projectDispatch
+ if(dispatch&&!dispatch.entryOrigin)throw Error('MANAGEMENT_NESTED_MAINTENANCE_DENIED')
  if(name==='request_upgrade'){
   const token=context.credential(args.updateToken,'update',owner)
   if(! /^[0-9a-f]{40}$/.test(token.commit??''))throw Error('MANAGEMENT_CREDENTIAL_INVALID')

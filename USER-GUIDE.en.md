@@ -47,3 +47,5 @@ Exact commands remain handled by the bridge:
 See the [exact command reference](docs/reference/commands.en.md) for recovery procedures. Natural-language management requires the enabled MCP and Skill; exact commands remain available if those are unavailable.
 
 Model selection: ask to use an available model for a project’s future tasks. The assistant validates the exact model ID and saves a project-scoped preference without interrupting the current turn. Fixed third-party providers remain managed through installation configuration.
+
+Independent entry routing classifies plain-text requests before project execution. Status/history/result reads bypass busy project queues; tasks for different projects can run separately, while each project remains sequential. Supplements bind to the original task and ambiguous targets require clarification. Attachments, quotes and interactive prompts retain their original flow. Classification adds a model call and falls back to the original queue when unavailable.

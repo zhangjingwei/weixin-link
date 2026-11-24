@@ -9,7 +9,7 @@ const READINESS_NOTICE = {
   CODEX_NOT_INSTALLED: '微信已连通，Codex 尚未安装。本条没有提交给模型；发送“安装智能体”继续设置。',
 }
 
-export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,confirmedRejection,deferMaintenance,systemNotice,diagnosticServices,diagnosticService}){
+export function createMessageApplication({entryRouting,view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,agentReadiness,diagnosticPackage,confirmedRejection,deferMaintenance,systemNotice,diagnosticServices,diagnosticService}){
 return async function handleMessage(message) {
   if(message._ingressId&&!jobs.rawCurrent(message._ingressId))return
   if(message._intakeToken&&!message._intakeToken.current())return
@@ -76,6 +76,7 @@ return async function handleMessage(message) {
     catch(error){await reply(error.message);jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
   if(!control&&!token.current())return
+  if(!control&&!media&&entryRouting&&await entryRouting.process(message,token))return
   const notice=receiptPolicy({media,busy:manager.sessions.get(message.userId)?.busy,waiting:!!manager.state.users[message.userId]?.waitingAttachment})
   message._receiptDeferred=notice==='defer'
   if(!control&&notice!=='defer'&&jobs.claimReceipt(message._ingressId)&&notice==='send'){

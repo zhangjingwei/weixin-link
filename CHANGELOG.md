@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Route plain-text intent independently of project execution: query project state/history/results while busy, submit cross-project tasks without switching, and bind supplements to the exact original task. Preserve per-project FIFO, ingress recovery, decision deduplication and safe queue fallback.
+
 ## 1.8.0 — 2026-11-23
 
 - 新增模型切换 MCP 工具：用自然语言为指定项目选择可用模型，普通消息和规划任务从后续轮次生效，不中断当前任务。
