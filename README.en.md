@@ -167,7 +167,7 @@ Model selection: ask to use an available model for a project’s future tasks. T
 
 Independent entry routing classifies plain-text requests before project execution. Status/history/result reads bypass busy project queues; tasks for different projects can run separately, while each project remains sequential. Supplements bind to the original task and ambiguous targets require clarification. Current attachments and quotes can be explicitly handed off; interactive prompts and attachment continuations retain their original flow. Classification adds a model call and falls back to the original queue when unavailable.
 
-Intent classification prefers available gpt-6-luna, then gpt-5.6-luna, with medium reasoning and fast service tier (which may increase usage costs). It does not inherit the project execution model. If no budget candidate is available, or a fixed third-party provider is configured, it falls back to the original queue instead of selecting a premium model.
+Intent classification uses available gpt-6.1-terra with medium reasoning and Standard speed, independently of the project execution model. If Terra is unavailable or a fixed third-party provider is configured, it falls back to the original queue without silently selecting another model. Classification receives compact project and task metadata; the execution path retains the complete original request.
 
 Task messages show the project name and a readable task title rather than an internal ID. Intent classification supplies a concise Chinese title; existing tasks fall back to a short excerpt of the original request. Progress and results retain the same title, while internal IDs remain available for reconciliation.
 
