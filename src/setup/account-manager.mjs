@@ -74,4 +74,4 @@ async function run(){
  throw Error('USAGE: login|refresh-qr|verify|verify-wait|list|start|stop ACCOUNT')
 }
 const human=process.argv.includes('--human')
-try{const result=await run();console.log(human?setupMessage(action,result):JSON.stringify({ok:true,...result}))}catch(e){if(human)console.error(setupError(e));else console.log(JSON.stringify({ok:false,error:/^[A-Z0-9_:| -]+$/.test(e.message)?e.message:e.code??'ACCOUNT_OPERATION_FAILED'}));process.exitCode=1}
+try{const result=await run();console.log(human?setupMessage(action,result):JSON.stringify({ok:true,...result}))}catch(e){if(human&&action==='verify-wait'&&process.send)process.send({pairingError:/^[A-Z][A-Z0-9_]{0,63}$/.test(e.message)?e.message:'VERIFICATION_FLOW_FAILED'});else if(human)console.error(setupError(e));else console.log(JSON.stringify({ok:false,error:/^[A-Z0-9_:| -]+$/.test(e.message)?e.message:e.code??'ACCOUNT_OPERATION_FAILED'}));process.exitCode=1}

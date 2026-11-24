@@ -55,3 +55,14 @@ test('a stopped pairing worker reports service startup failure',async()=>{
  const run=async()=>({stdout:JSON.stringify({accounts:[{account:'default',ready:false,pairing:'WECHAT_SERVICE_NOT_READY'}]})})
  await assert.rejects(waitForLogin('default',{start,run,language:'zh'}),/WECHAT_SERVICE_NOT_READY/)
 })
+
+test('nested verifier returns the binding error even if the old service reports ready',async()=>{
+ const start=(_bin,_args,opts)=>{
+  assert.equal(opts.stdio[3],'ipc')
+  const child=new EventEmitter()
+  queueMicrotask(()=>{child.emit('message',{pairingError:'PROFILE_BOUND_TO_DIFFERENT_ACCOUNT'});child.emit('exit',1)})
+  return child
+ }
+ const run=async()=>({stdout:JSON.stringify({accounts:[{account:'default',ready:true}]})})
+ await assert.rejects(waitForLogin('default',{start,run,language:'zh'}),/PROFILE_BOUND/)
+})

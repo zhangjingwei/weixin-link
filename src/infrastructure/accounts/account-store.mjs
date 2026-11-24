@@ -28,15 +28,20 @@ export async function bindingIdentity(account){
  if(new Set(values).size!==1)throw Error('WECHAT_BINDING_IDENTITY_MISMATCH')
  return values[0]
 }
-export async function rememberIdentity(p,credentials){const path=join(p.stateDir,'account-identity.json');await writeFile(path+'.tmp',JSON.stringify({accountId:credentials.accountId})+'\n',{mode:0o600});await rename(path+'.tmp',path)}
-export async function registerLogin(id,credentials,home=(process.env.HOME||platformHome())){const p=await assertAccount(id,home);if(!credentials?.accountId||!credentials?.userId||!credentials?.token)throw Error('INVALID_LOGIN')
- return new RemoteStore(p.base).locked('account-login',async()=>{let existing;try{existing=JSON.parse(await readFile(join(p.stateDir,'credentials.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e}let bound;try{bound=await bindingIdentity(p)}catch(e){if(e.message!=='WECHAT_BINDING_IDENTITY_MISSING')throw e}
-  const botChanged=!!bound&&bound!==credentials.accountId
-  if(botChanged&&(!existing||existing.accountId!==bound||existing.userId!==credentials.userId))throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT')
-  if(existing?.accountId&&existing.accountId!==credentials.accountId&&!botChanged)throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT')
-  let owners
-  try{owners=JSON.parse(await readFile(join(p.stateDir,'codex-owners.json'),'utf8'))}catch(e){if(e.code!=='ENOENT')throw e;owners=[credentials.userId]}
-  if(!Array.isArray(owners)||owners.length!==1||owners[0]!==credentials.userId||owners.some(v=>typeof v!=='string'||!v))throw Error('INVALID_OWNERS')
+export async function rememberIdentity(p,credentials){const path=join(p.stateDir,'account-identity.json');await writeFile(path+'.tmp',JSON.stringify({accountId:credentials.accountId,userId:credentials.userId})+'\n',{mode:0o600});await rename(path+'.tmp',path)}
+export async function registerLogin(id,credentials,home=(process.env.HOME||platformHome())){const p=await assertAccount(id,home);if(['accountId','userId','token'].some(key=>typeof credentials?.[key]!=='string'||!credentials[key]))throw Error('INVALID_LOGIN')
+ return new RemoteStore(p.base).locked('account-login',async()=>{
+  const readSaved=async name=>{
+   try{return JSON.parse(await readFile(join(p.stateDir,name),'utf8'))}
+   catch(error){if(error.code!=='ENOENT')throw error}
+  }
+  const existing=await readSaved('credentials.json'), identity=await readSaved('account-identity.json')
+  let owners=await readSaved('codex-owners.json')
+  if(owners!==undefined&&(!Array.isArray(owners)||owners.length!==1||typeof owners[0]!=='string'||!owners[0]))throw Error('INVALID_OWNERS')
+  const savedUsers=[owners?.[0],existing?.userId,identity?.userId].filter(value=>value!==undefined)
+  if((!savedUsers.length&&(existing!==undefined||identity!==undefined))||savedUsers.some(user=>user!==credentials.userId))throw Error('PROFILE_BOUND_TO_DIFFERENT_ACCOUNT')
+  owners??=[credentials.userId]
+  const botChanged=[existing?.accountId,identity?.accountId].some(previous=>previous&&previous!==credentials.accountId)
   if(botChanged){
    const generation=randomUUID()
    for(const name of ['cursor.json','context_tokens.json','typing_tickets.json']){

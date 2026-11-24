@@ -21,16 +21,20 @@ async function accountCommand(action,accountId,{run=exec}={}){
 }
 
 export async function waitForLogin(accountId,{start=spawn,language,run=exec}={}){
- const child=start(process.execPath,[manager,'verify-wait',accountId,'--human'],{stdio:'inherit',env:{...process.env,WEIXIN_LINK_LANG:language}})
+ const child=start(process.execPath,[manager,'verify-wait',accountId,'--human'],{stdio:['inherit','inherit','inherit','ipc'],env:{...process.env,WEIXIN_LINK_LANG:language}})
  return new Promise((resolve,reject)=>{
+  let pairingError
+  child.on('message',message=>{if(/^[A-Z][A-Z0-9_]{0,63}$/.test(message?.pairingError??''))pairingError=message.pairingError})
   child.on('error',()=>reject(Error('VERIFICATION_FLOW_FAILED')))
   child.on('exit',code=>{
    if(code===0)return resolve()
    accountCommand('list',accountId,{run}).then(result=>{
     const row=result.accounts?.find(account=>account.account===accountId)
+    if(pairingError==='PROFILE_BOUND_TO_DIFFERENT_ACCOUNT')return reject(Error(pairingError))
     if(row?.ready)return resolve()
+    if(pairingError)return reject(Error(pairingError))
     reject(Error(['CREDENTIALS_UNREADABLE','WECHAT_ACCOUNT_ALREADY_REGISTERED','PROFILE_BOUND_TO_DIFFERENT_ACCOUNT','WECHAT_SERVICE_NOT_READY','LOGIN_OR_START_FAILED','VERIFICATION_TIMEOUT'].includes(row?.pairing)?row.pairing:'VERIFICATION_FLOW_FAILED'))
-   },()=>reject(Error('VERIFICATION_FLOW_FAILED')))
+   },()=>reject(Error(pairingError??'VERIFICATION_FLOW_FAILED')))
   })
  })
 }
