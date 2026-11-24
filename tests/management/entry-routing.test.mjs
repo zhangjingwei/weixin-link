@@ -137,3 +137,17 @@ test('unrelated or expired clarification never forwards historical material',asy
  await f.router.process(answer,f.token);assert.equal(f.jobs.pending()[0].input.attachments,undefined)
  }
 })
+
+test('desktop return routes independently while execution is held and receives only scoped handoff metadata',async t=>{
+ const f=await fixture(t,{action:'desktop_return',projectId:'2',question:null})
+ f.manager.state.desktopHandoff={owner:'alice',projectId:'2',threadId:'p',workspace:f.manager.workspaceFor('project'),phase:'desktop'}
+ f.service.desktop={readAfterClose:async id=>({threadId:id})}
+ f.router.classify=async input=>{assert.deepEqual(input.desktopHandoff,{projectId:'2',phase:'desktop'});return {action:'desktop_return',projectId:'2',question:null}}
+ await f.router.process(f.message,f.token)
+ assert.equal(f.manager.state.desktopHandoff,undefined);assert.equal(f.jobs.pending().length,0);assert.match(f.sent[0],/已回到微信/)
+})
+test('desktop status reads outside the task queue without opening an application',async t=>{
+ const f=await fixture(t,{action:'desktop_status',projectId:'1',question:null})
+ f.service.desktop={status:async()=>({enabled:false,supported:true})}
+ await f.router.process(f.message,f.token);assert.equal(f.jobs.pending().length,0);assert.match(f.sent[0],/尚未就绪/)
+})

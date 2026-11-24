@@ -195,6 +195,7 @@ export class SessionManager {
     }
   }
   async connect(userId, reply) {
+    if(this.state.desktopHandoff||this.desktopTransition)throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')
     if (!this.owners.has(userId)) throw new Error('当前微信账号未获授权。')
     if(!this.sessions.get(userId)||this.sessions.get(userId).rpc?.closed)await this.beforeConversationConnect?.(userId)
     const existing = this.sessions.get(userId)
@@ -286,6 +287,7 @@ export class SessionManager {
     }finally{session.selecting=false}
   }
   async send(session, text, token = this.lifecycle.capture(session.userId), native = null) {
+    if(this.state.desktopHandoff||this.desktopTransition)throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')
     native??=typeof text==='object'?text.nativeCommand:null
     if(!token.current())return
     if (session.exited || session.rpc.closed) return
@@ -619,6 +621,7 @@ export class SessionManager {
     if (!await this.acceptMessage(userId,messageId)) return
     let command = parsedCommand??(typeof text === 'string' ? this.ports.controlCommand(text) : null)
     if(!command&&!token.current())return
+    if(this.state.desktopHandoff&&!['status','result','progress','help'].includes(command?.action)){await reply('桌面正在接续这个账号的工作，微信暂不执行操作。请先关闭桌面，再说“回到微信继续”。');return}
     this.log('message.handled',{userId,messageId,kind:command?.action??(typeof text==='string'?'text':'media')})
     try {
       if(command?.action==='reviewCommit'){

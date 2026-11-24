@@ -2,8 +2,11 @@ const string=(maxLength=160)=>({type:'string',minLength:1,maxLength})
 const integer=(minimum,maximum)=>({type:'integer',minimum,maximum})
 const project={projectId:string()},task={...project,taskId:string(),turnId:string()},write={requestId:string()}
 const repeat={type:'object',properties:{frequency:{...string(),enum:['daily','weekly']},time:string(5),timeZone:string(100),weekdays:{type:'array',items:integer(1,7),minItems:1,maxItems:7,uniqueItems:true}},required:['frequency','time','timeZone'],additionalProperties:false}
-const define=(name,description,properties={},required=[])=>{const mutation=/^(?:request_|create_|rename_|skip_|cancel_|submit_|supplement_)/.test(name);return {name,description,inputSchema:{type:'object',properties,required,additionalProperties:false},annotations:{readOnlyHint:!mutation,destructiveHint:['request_task_stop','request_service_restart','request_upgrade'].includes(name),idempotentHint:!mutation||required.includes('requestId'),openWorldHint:false}}}
+const define=(name,description,properties={},required=[])=>{const mutation=/^(?:request_|create_|rename_|skip_|cancel_|submit_|supplement_)/.test(name);return {name,description,inputSchema:{type:'object',properties,required,additionalProperties:false},annotations:{readOnlyHint:!mutation,destructiveHint:['request_task_stop','request_service_restart','request_upgrade','request_desktop_handoff','request_desktop_return'].includes(name),idempotentHint:!mutation||required.includes('requestId'),openWorldHint:false}}}
 export const managementTools=[
+ define('get_desktop_status','查询同机桌面接续支持和当前交接状态；不打开客户端。'),
+ define('request_desktop_handoff','用户明确要求在桌面继续时调用；收到回执并空闲后打开账号隔离桌面，暂停本账号微信执行。桌面可见性需人工确认。',{...project,...write},['projectId','requestId']),
+ define('request_desktop_return','用户已关闭桌面并要求回到微信时调用；检查桌面退出、原会话可读且空闲后恢复执行。',{...project,...write},['projectId','requestId']),
  define('resolve_target','查找当前用户已登记的项目/会话；日常按 daily 身份定位。候选不是授权，歧义时询问。',{query:string(300)},['query']),
  define('list_projects','只读列出当前用户已登记的项目/会话，包含 daily 标识。'),
  define('get_project_progress','只读最近完成结果证据、当前任务、阻碍和排队后续工作，不猜测项目整体完成度。',project,['projectId']),

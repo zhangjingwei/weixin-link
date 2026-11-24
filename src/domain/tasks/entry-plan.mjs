@@ -1,4 +1,4 @@
-export const entryActions=new Set(['task','supplement','status','routing_status','history','result','stop','cancel','cancel_all','prioritize','clarify'])
+export const entryActions=new Set(['desktop_status','desktop_open','desktop_return','task','supplement','status','routing_status','history','result','stop','cancel','cancel_all','prioritize','clarify'])
 
 export function entryPlan(decision,text,projects){
  const steps=decision?.action==='batch'?decision.steps:[decision]

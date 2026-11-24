@@ -1,3 +1,4 @@
+import {accountPaths} from '../infrastructure/accounts/account-store.mjs'
 import {integrations,integrationByConfig} from '../integrations/registry.mjs'
 import {homedir} from 'node:os'
 import {join} from 'node:path'
@@ -13,6 +14,7 @@ import {updateWorkspaceGuidance} from './workspace-guidance.mjs'
 const exec=promisify(execFile),quote=s=>"'"+s.replaceAll("'","'\"'\"'")+"'"
 const currentHome=()=>process.env.HOME||homedir()
 export function configPath(kind,{home=currentHome(),workspace,env=process.env}={}){
+ if(kind==='desktop')return join(accountPaths(env.WECHAT_ACCOUNT??'default',home).stateDir,'desktop-handoff.json')
  if(kind==='installation')return join(home,'.local/share/wechat-ping-bot/installation.json')
  const integration=integrationByConfig(kind)
  if(integration&&kind!=='remote-hosts')return integration.configPath({home,workspace,env})
@@ -30,7 +32,7 @@ export function configPath(kind,{home=currentHome(),workspace,env=process.env}={
 }
 export async function configStatus(options={}){
  const result={}
- for(const kind of [...new Set(['installation','backup','remote-hosts',...integrations.map(item=>item.manifest.configKind)])]){
+ for(const kind of [...new Set(['installation','backup','remote-hosts','desktop',...integrations.map(item=>item.manifest.configKind)])]){
   try{const text=await readPrivateFile(configPath(kind,options));if(text===null){result[kind]={configured:false};continue}const config=parseConfig(kind,text);result[kind]={configured:true,valid:true,version:config.version}}
   catch(error){result[kind]={configured:true,valid:false,error:error.code??'CONFIG_UNREADABLE'}}
  }
@@ -48,6 +50,8 @@ async function probeConfiguration(kind,config,{home=currentHome(),env=process.en
    await exec('python3',['-c','import cryptography,fcntl'],{timeout:6000,maxBuffer:65536})
    const command='test -d '+quote(config.remoteDirectory)+' && test -w '+quote(config.remoteDirectory)+' && test -r .config/wechat-backup-key/private.pem'
    await exec('ssh',['-F',env.WECHAT_SSH_CONFIG??join(home,'.ssh/wechat_hosts_config'),'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=6',config.host,command],{timeout:12000,maxBuffer:65536})
+  }else if(kind==='desktop'){
+   if(config.enabled&&process.platform!=='darwin')throw new ConfigError('CONFIG_PLATFORM_NOT_SUPPORTED','desktop')
   }else if(kind==='installation'){
    if(!(await stat(config.workspace)).isDirectory())throw Error()
    await access(config.workspace,fsConstants.W_OK)

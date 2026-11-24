@@ -93,6 +93,7 @@ export class TextConversations{
  async control(message,reply){
   const cmd=message._conversationCommand
   if(!cmd)return false
+  if(this.manager.state.desktopHandoff&&!['list','history','older','search','folder','promptCancel'].includes(cmd.action)){await reply('桌面正在接续这个账号的工作，暂不修改项目或会话。请先关闭桌面，再说“回到微信继续”。',{conversationControl:true});return true}
   const originalReply=reply
   reply=(value,options)=>originalReply(value,{...options,conversationControl:true})
   await this.manager.save()

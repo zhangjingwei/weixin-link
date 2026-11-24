@@ -7,20 +7,20 @@ export class DurableIntake {
  submit(owner,input,key,ingressIds=[]){const id=this.jobs.add(owner,input,key,ingressIds);this.wake(owner);return id}
  cancel(owner){this.jobs.cancel(owner)}
  resume(){for(const owner of new Set(this.jobs.pending().map(j=>j.owner)))if(this.manager.owners.has(owner))this.wake(owner)}
- wake(owner){if(this.closed||this.users.has(owner))return;const run=this.pump(owner).catch(e=>this.log('queue.failed',{code:e.code??'WORKER_FAILED'})).finally(()=>{this.users.delete(owner);if(!this.closed&&this.jobs.pending().some(j=>j.owner===owner))queueMicrotask(()=>this.wake(owner))});this.users.set(owner,run)}
+ wake(owner){if(this.closed||this.manager.state?.desktopHandoff||this.manager.desktopTransition||this.users.has(owner))return;const run=this.pump(owner).catch(e=>this.log('queue.failed',{code:e.code??'WORKER_FAILED'})).finally(()=>{this.users.delete(owner);if(!this.closed&&!this.manager.state?.desktopHandoff&&!this.manager.desktopTransition&&this.jobs.pending().some(j=>j.owner===owner))queueMicrotask(()=>this.wake(owner))});this.users.set(owner,run)}
  next(owner){
   const jobs=this.jobs.pending().filter(job=>job.owner===owner)
   const active=jobs.find(job=>job.state!=='pending');if(active)return active
   return jobs.find(job=>job.state!=='pending'||!(job.input?.dependencies??[]).some(id=>{const prior=this.jobs.get(id);return prior&&!['done','cancelled','uncertain'].includes(prior.state)}))??jobs[0]
  }
  async pump(owner){
-  for(;;){if(this.closed)return;const job=this.next(owner);if(!job)return;const token=this.manager.lifecycle.capture(owner),reply=(v,o)=>this.reply(owner,v,{...o,...job.input?.projectDispatch?{projectTaskId:job.id}:{},traceId:o?.traceId??(typeof job.input==='object'?job.input.traceId:undefined)})
+  for(;;){if(this.closed||this.manager.state?.desktopHandoff||this.manager.desktopTransition)return;const job=this.next(owner);if(!job)return;const token=this.manager.lifecycle.capture(owner),reply=(v,o)=>this.reply(owner,v,{...o,...job.input?.projectDispatch?{projectTaskId:job.id}:{},traceId:o?.traceId??(typeof job.input==='object'?job.input.traceId:undefined)})
    let executionStarted=false
    try{
     if(job.state==='pending'){
      const input=typeof job.input==='string'?{text:job.input}:{...job.input};input.deliveryId=job.id
      while(this.manager.sessions?.get(owner)?.busy||this.manager.sessions?.get(owner)?.finishing){if(this.closed||!token.current())return;await delay(100)}
-     if(this.closed||!token.current())return
+     if(this.closed||!token.current()||this.manager.state?.desktopHandoff||this.manager.desktopTransition)return
      if((this.jobs.get?this.jobs.get(job.id):job)?.state!=='pending'||this.next(owner)?.id!==job.id)continue
      validateProjectTask(this,job)
      const dependencies=job.input?.dependencies??[]

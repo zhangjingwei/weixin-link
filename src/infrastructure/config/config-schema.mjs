@@ -9,6 +9,7 @@ const object=(properties,required)=>({type:'object',properties,required,addition
 const host=object({platform:{enum:['posix','win32']},root:{...text,format:'remote-path'}},['platform','root'])
 export const CONFIG_SCHEMAS={
  installation:object({version:{const:1},workspace:absolute,createdAt:{...text,format:'date-time'}},['version','workspace']),
+ desktop:object({version:{const:1},enabled:{type:'boolean'},app:{enum:['ChatGPT','Codex']}},['version','enabled','app']),
  ha: haSchema,
  rsshub: rsshubSchema,
  backup:object({version:{const:1},host:{...text,pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},remoteDirectory:{...text,format:'backup-directory'}},['version','host','remoteDirectory']),
@@ -37,6 +38,7 @@ function validate(schema,value,path='',parent){
   if(schema.format==='http-url'){let url;try{url=new URL(value)}catch{fail('CONFIG_INVALID_URL',path)}if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)fail('CONFIG_INVALID_URL',path)}
   if(schema.format==='date-time'&&!Number.isFinite(Date.parse(value)))fail('CONFIG_INVALID_DATE',path)
  }
+ if(schema.type==='boolean'&&typeof value!=='boolean')fail('CONFIG_INVALID_BOOLEAN',path)
  if(schema.type==='integer'&&(!Number.isInteger(value)||value<schema.minimum||value>schema.maximum))fail('CONFIG_INVALID_INTEGER',path)
 }
 export function validateHostConfig(name,value){

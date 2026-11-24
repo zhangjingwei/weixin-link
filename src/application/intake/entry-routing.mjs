@@ -37,7 +37,7 @@ export class EntryRouting{
    record.queuedSnapshot??=queuedSnapshot()
    const candidateInput=record.preparedInput??record.pendingClarification?.preparedInput
    let decision;const started=Date.now();root.entryRoutingMetrics??={classified:0,fallbacks:0};record.status='classifying';await this.manager.save()
-   try{decision=await this.classify({text:message.text,references:(message.references??[]).slice(0,3).map(r=>({title:r.title,text:r.text?.slice(0,500)})),currentAttachments:(candidateInput?.attachments??[]).map(a=>({name:a.name,kind:a.kind})),currentProjectId:record.currentProjectId,pendingClarification:record.pendingClarification,projects:projects.map(p=>({projectId:p.projectId,name:p.name,archived:p.archived,state:p.state,task:p.task,queued:p.queued,queuedTasks:(record.queuedSnapshot[p.projectId]??[]).slice(0,5)}))})}
+   try{decision=await this.classify({text:message.text,references:(message.references??[]).slice(0,3).map(r=>({title:r.title,text:r.text?.slice(0,500)})),currentAttachments:(candidateInput?.attachments??[]).map(a=>({name:a.name,kind:a.kind})),currentProjectId:record.currentProjectId,pendingClarification:record.pendingClarification,desktopHandoff:this.manager.state.desktopHandoff?{projectId:this.manager.state.desktopHandoff.projectId,phase:this.manager.state.desktopHandoff.phase}:null,projects:projects.map(p=>({projectId:p.projectId,name:p.name,archived:p.archived,state:p.state,task:p.task,queued:p.queued,queuedTasks:(record.queuedSnapshot[p.projectId]??[]).slice(0,5)}))})}
    catch(error){record.fallbackCode=/^ENTRY_ROUTER_[A-Z_]+$/.test(error.message)?error.message:'ENTRY_ROUTER_CLASSIFICATION_FAILED';root.entryRoutingMetrics.lastFallbackCode=record.fallbackCode;root.entryRoutingMetrics.fallbacks++;root.entryRoutingMetrics.lastLatencyMs=Date.now()-started;if(!current())return true;record.status='fallback';await this.manager.save();return false}
    root.entryRoutingMetrics.classified++;root.entryRoutingMetrics.lastLatencyMs=Date.now()-started
    if(!current())return true
@@ -59,7 +59,7 @@ export class EntryRouting{
   for(let index=0;index<record.steps.length;index++){
    if(!current())return true
    try{outputs.push(await entryAction(this,message,record,record.steps[index],index));await this.manager.save()}
-   catch{outputs.push('这条请求未确认执行；目标或任务可能已变化，未转交其他项目或新建替代任务。请明确项目及要执行的操作。');break}
+   catch(error){outputs.push(error.message==='MANAGEMENT_DESKTOP_EXECUTION_PAUSED'?'桌面正在接续这个账号的工作，微信暂不执行新任务。请先关闭桌面，再说“回到微信继续”。':'这条请求未确认执行；目标或任务可能已变化，未转交其他项目或新建替代任务。请明确项目及要执行的操作。');break}
   }
   const output=outputs.filter(Boolean).join('\n\n').replace(/!?\[([^\]]*)\]\([^\n]*?\)/g,'$1')
   if(!output){record.status='done';await this.manager.save();this.jobs.acknowledge([id]);return true}

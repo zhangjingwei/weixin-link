@@ -1,3 +1,4 @@
+import {desktopStatus,requestDesktop,executeDesktop} from './desktop-management.mjs'
 import {projectProgress} from './progress-management.mjs'
 import {changeQueuedTask,cancelQueuedTasks} from './queue-management.mjs'
 import {requestModelSwitch} from './model-management.mjs'
@@ -18,8 +19,8 @@ const signatureFor=(name,args)=>createHmac('sha256','zerolink-operation-v1').upd
 
 // A management facade over the existing conversation/task state, not another queue.
 export class ManagementService{
- constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,maintenance,routingStatus,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
-  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,maintenance,routingStatus,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
+ constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,maintenance,desktop,routingStatus,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
+  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,maintenance,desktop,routingStatus,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
   manager.state.managementOperations??=[];this.operations=manager.state.managementOperations
   for(const op of this.operations)if(['pending','executing'].includes(op.status))op.status=op.status==='pending'?'not_executed':'unknown'
   pruneManagementOperations(this.operations,this.now())
@@ -29,11 +30,24 @@ export class ManagementService{
  target(owner,id){const e=this.entries(owner).find(e=>e.id===id);if(!e)throw Error('MANAGEMENT_TARGET_NOT_FOUND');return e}
  snapshot(owner,e){
   const saved=this.manager.state.users[e.key]??{},s=this.manager.sessions.get(e.key)
-  return {projectId:e.id,name:this.conversations.displayName(owner,e),active:this.conversations.root[owner].active===e.id,daily:this.conversations.root[owner].dailyId===e.id,archived:!!e.archived,workspace:saved.workspace??null,workspaceSource:'local_configuration',threadId:saved.threadId??null,configuredModel:saved.modelOverride??null,connectedModel:s?.model??null,state:s?.state??'disconnected',task:s?.busy&&s.traceId&&s.turnId?{id:s.traceId,turnId:s.turnId,jobId:s.taskId??null}:null,queued:(s?.queue?.length??0)+(this.manager.submissions?.pending?.()??[]).filter(j=>j.owner===e.key).length,uncertain:this.manager.submissions?.uncertainCount?.(e.key)??0,recovery:saved.recovery??null,lastProgress:s?.lastProgress?.turnId===s?.turnId?s?.lastProgress?.text?.slice(0,2000)??null:null,progressTruncated:(s?.lastProgress?.text?.length??0)>2000,pendingApprovals:[...this.manager.questions.values()].filter(q=>q.session.userId===e.key).length,latestResult:saved.resultIdentity??null,evidence:'local_runtime',observedAt:new Date(this.now()).toISOString()}
+  return {projectId:e.id,name:this.conversations.displayName(owner,e),active:this.conversations.root[owner].active===e.id,daily:this.conversations.root[owner].dailyId===e.id,archived:!!e.archived,workspace:saved.workspace??null,workspaceSource:'local_configuration',threadId:saved.threadId??null,configuredModel:saved.modelOverride??null,connectedModel:s?.model??null,state:s?.state??'disconnected',task:s?.busy&&s.traceId&&s.turnId?{id:s.traceId,turnId:s.turnId,jobId:s.taskId??null}:null,queued:(s?.queue?.length??0)+(this.manager.submissions?.pending?.()??[]).filter(j=>j.owner===e.key).length,uncertain:this.manager.submissions?.uncertainCount?.(e.key)??0,recovery:saved.recovery??null,lastProgress:s?.lastProgress?.turnId===s?.turnId?s?.lastProgress?.text?.slice(0,2000)??null:null,progressTruncated:(s?.lastProgress?.text?.length??0)>2000,pendingApprovals:[...this.manager.questions.values()].filter(q=>q.session.userId===e.key).length,latestResult:saved.resultIdentity??null,executionOwner:this.manager.state.desktopHandoff?'desktop':'wechat',evidence:'local_runtime',observedAt:new Date(this.now()).toISOString()}
  }
  exact(e,args){const s=this.manager.sessions.get(e.key);if(!s||!s.busy||s.traceId!==args.taskId||s.turnId!==args.turnId||s.rpc?.closed)throw Error('MANAGEMENT_STALE_TASK');return s}
  async call(caller,name,args){
-  validateManagementCall(name,args);const owner=this.owner(caller)
+  const spec=validateManagementCall(name,args);const owner=this.owner(caller)
+  if(this.manager.state.desktopHandoff&&!spec.annotations.readOnlyHint&&!['request_desktop_handoff','request_desktop_return'].includes(name))throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')
+  if(name==='get_desktop_status')return desktopStatus(this,owner)
+  if(['request_desktop_handoff','request_desktop_return'].includes(name)){
+   const previous=this.manager.state.desktopHandoff
+   if(name==='request_desktop_return'&&previous?.phase==='waiting'&&previous.projectId===args.projectId){
+    const pending=this.operations.find(op=>op.id===previous.operationId&&op.owner===owner&&op.status==='pending')
+    if(pending){pending.status='not_executed';pending.detail='MANAGEMENT_DESKTOP_RETURN_REQUESTED';clearTimeout(this.expirations.get(pending.id));this.expirations.delete(pending.id);await this.manager.save()}
+   }
+   this.manager.desktopTransition=true
+   try{return await requestDesktop(this,owner,caller,name,args)}
+   catch(error){if(previous)this.manager.state.desktopHandoff=previous;throw error}
+   finally{this.manager.desktopTransition=false;if(!this.manager.state.desktopHandoff)this.resumeTasks?.()}
+  }
   if(name==='request_queue_cancel_all')return cancelQueuedTasks(this,owner,caller,args)
   if(name==='request_queue_change')return changeQueuedTask(this,owner,caller,args)
   if(name==='request_model_switch')return requestModelSwitch(this,owner,caller,args)
@@ -99,7 +113,7 @@ export class ManagementService{
  async execute(op){return this.track(()=>this.run(op))}
  async run(op){
   if(op.status!=='pending')return
-  if(['request_result_redelivery','request_task_reconciliation','request_service_restart','request_upgrade','request_project_archive'].includes(op.name))return this.runExtended(op)
+  if(['request_result_redelivery','request_task_reconciliation','request_service_restart','request_upgrade','request_project_archive','request_desktop_handoff'].includes(op.name))return this.runExtended(op)
   const {manager,conversations}=this,root=conversations.root[op.owner]
   try{
    if(this.closed||!this.ready())throw Error('MANAGEMENT_UNAVAILABLE')
@@ -133,13 +147,13 @@ export class ManagementService{
  async runExtended(op){
   try{
    if(this.closed||!this.ready())throw Error('MANAGEMENT_UNAVAILABLE')
-   const done=op.name==='request_project_archive'?await executeProjectArchive(this,op):['request_service_restart','request_upgrade'].includes(op.name)?await executeMaintenance(this,op):op.name==='request_result_redelivery'?await executeRedelivery(this,op):await executeReconciliation(this,op)
+   const done=op.name==='request_desktop_handoff'?await executeDesktop(this,op):op.name==='request_project_archive'?await executeProjectArchive(this,op):['request_service_restart','request_upgrade'].includes(op.name)?await executeMaintenance(this,op):op.name==='request_result_redelivery'?await executeRedelivery(this,op):await executeReconciliation(this,op)
    if(done===false)return
   }catch(error){op.status=op.status==='executing'?'unknown':'not_executed';op.detail=/^(?:MANAGEMENT|SCHEDULE|UPDATE)_[A-Z_]+$/.test(error.message)?error.message:'MANAGEMENT_OPERATION_UNCONFIRMED'}
   clearTimeout(this.expirations.get(op.id));this.expirations.delete(op.id)
   discardUnexecutedPayload(op)
   await this.manager.save()
-  const notice=op.name==='request_project_archive'&&op.status==='confirmed'?'项目归档状态已核对。': ['scheduled','already_scheduled'].includes(op.status)?'已安排，等当前工作结束后处理，完成后会通知你。':op.status==='up_to_date'?'当前版本无需升级，未安排维护。':op.status==='blocked'?'已有维护请求，未重复安排。':op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'已提交发送，尚未确认你是否收到。':op.status==='deferred'?'已安排发送，尚未确认送达。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
+  const notice=op.name==='request_desktop_handoff'?(op.status==='confirmed'?'已请求在桌面打开这个会话。请在电脑确认是否显示；桌面接续期间，微信暂不执行新任务。关闭桌面后可说“回到微信继续”。':!this.manager.state.desktopHandoff?'桌面接续已取消，微信可以继续处理工作。':'桌面打开结果尚未确认，微信任务仍暂停。请先关闭桌面，再说“回到微信继续”核对。'):op.name==='request_project_archive'&&op.status==='confirmed'?'项目归档状态已核对。': ['scheduled','already_scheduled'].includes(op.status)?'已安排，等当前工作结束后处理，完成后会通知你。':op.status==='up_to_date'?'当前版本无需升级，未安排维护。':op.status==='blocked'?'已有维护请求，未重复安排。':op.status==='requested'?'已安排核对指定原任务，未重新执行。':op.status==='accepted'?'已提交发送，尚未确认你是否收到。':op.status==='deferred'?'已安排发送，尚未确认送达。':op.status==='not_executed'?'请求未执行：'+op.detail:'请求结果尚未确认，未自动重试。'
   await this.notice(op.owner,notice).catch(()=>{})
  }
  sign(value){const data=Buffer.from(JSON.stringify(value)).toString('base64url');return data+'.'+createHmac('sha256',this.cursorKey).update(data).digest('base64url')}
