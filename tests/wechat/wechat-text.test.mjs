@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {wechatText} from '../../src/infrastructure/wechat/text-format.mjs'
 import {readFileSync} from 'node:fs'
 test('direct design advice marker remains visible in WeChat text',()=>{
- const skill=readFileSync(new URL('../../src/infrastructure/agents/skills/design-discussion/SKILL.md',import.meta.url),'utf8')
+ const skill=readFileSync(new URL('../../src/infrastructure/agents/skills/discussing-designs/SKILL.md',import.meta.url),'utf8')
  assert.match(skill,/主动核对目标、范围、关键约束、失败边界和验收方式/)
  assert.match(skill,/「📋 Zero · 方案共识」收束已确认的目标、做法、边界和验收条件/)
  assert.equal(wechatText('💡 Zero · 方案讨论\n建议先做响应式网页。'), '💡 Zero · 方案讨论\n建议先做响应式网页。')

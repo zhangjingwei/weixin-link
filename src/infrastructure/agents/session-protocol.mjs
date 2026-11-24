@@ -1,10 +1,12 @@
+import {fileURLToPath} from 'node:url'
+import {join} from 'node:path'
 import {CodexRpc} from '../../base/codex/codex-rpc.mjs'
 import {codexInput} from '../../base/codex/codex-input.mjs'
 import {initializeCodex} from '../../base/codex/protocol-operations.mjs'
 import {codexProviderOptions,providerEventCode} from '../../base/codex/provider-options.mjs'
 import {nativeMemoryConfig,enableThreadMemory,publicMemoryText} from '../../base/codex/native-memory.mjs'
-import {workflowTurnGuidance} from './workflow-turn.mjs'
 
+const skillRoot=fileURLToPath(new URL('./skills',import.meta.url))
 const clientInfo={name:'wechat_codex',title:'WeChat',version:'3.0.0'}
 
 // SessionManager depends on this narrow agent protocol, not on either wire format.
@@ -47,7 +49,11 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   eventCode:providerEventCode,
   cleanOutputText:publicMemoryText,
   async workspaceRules(){return ''},
-  async initialize(rpc){await initializeCodex(rpc,clientInfo)},
+  async initialize(rpc){
+   await initializeCodex(rpc,clientInfo)
+   if(rpc.closed)throw Error('会话已取消连接。')
+   await rpc.request('skills/extraRoots/set',{extraRoots:[skillRoot]})
+  },
   async open(rpc,{saved,cwd,instructions,provider}){
    if(saved.modelOverride&&!provider.provider)provider={...provider,thread:{...provider.thread,model:saved.modelOverride}}
    let result
@@ -87,7 +93,16 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   supportsRemoteTaskRecovery:true,
   // Collaboration mode is stored on the Codex thread. Explicitly select the
   // default mode on every WeChat turn, including resumed threads.
-  startTurn:(rpc,{threadId,input,deliveryId,model,fastMode,workflowRequest,workflowMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},collaborationMode:{mode:'default',settings:{model,reasoning_effort:null,developer_instructions:workflowTurnGuidance(workflowRequest,workflowMode)}},...typeof fastMode==='boolean'?{serviceTier:fastMode?'fast':'auto'}:{}}),
+  startTurn(rpc,{threadId,input,deliveryId,model,fastMode,workflowMode}){
+   const items=workflowMode==='plan'
+    ? [...input,{type:'skill',name:'discussing-designs',path:join(skillRoot,'discussing-designs','SKILL.md')}]
+    : input
+   return rpc.request('turn/start',{
+    threadId,input:items,...deliveryId?{clientUserMessageId:deliveryId}:{},
+    collaborationMode:{mode:'default',settings:{model,reasoning_effort:null,developer_instructions:null}},
+    ...typeof fastMode==='boolean'?{serviceTier:fastMode?'fast':'auto'}:{},
+   })
+  },
   startReview:(rpc,threadId,target)=>rpc.request('review/start',{threadId,target}),
   goal:async(rpc,threadId,command)=>{
    if(command.op==='get')return (await rpc.request('thread/goal/get',{threadId})).goal

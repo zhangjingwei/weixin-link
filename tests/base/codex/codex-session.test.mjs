@@ -1,4 +1,4 @@
-import {ASSISTANT_INSTRUCTIONS,RESULT_DELIVERY_INSTRUCTIONS} from '../../../src/infrastructure/agents/assistant-policy.mjs'
+import {ASSISTANT_INSTRUCTIONS} from '../../../src/infrastructure/agents/assistant-policy.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -37,7 +37,8 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
           if (method === 'thread/start' || method === 'thread/resume') {
             assert.equal(params.sandbox, 'danger-full-access')
             assert.ok(params.developerInstructions.startsWith(ASSISTANT_INSTRUCTIONS))
-            assert.ok(params.developerInstructions.includes(RESULT_DELIVERY_INSTRUCTIONS))
+            assert.doesNotMatch(params.developerInstructions,/description:|📋 Zero · 方案共识/)
+            assert.equal(this.calls.filter(call=>call.method==='skills/extraRoots/set').length,1)
             assert.ok(params.developerInstructions.includes('本会话临时交付目录：'))
             return { thread: { id: params.threadId ?? `thread-${++threadCount}` }, sandbox: { type: 'dangerFullAccess' }, approvalPolicy: 'never' }
           }
@@ -70,7 +71,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     await manager.handle('owner', {text:exact,traceId:'known-trace-123'}, reply, 1)
     const first = clients.at(-1)
     assert.equal(first.calls.at(-1).params.input[0].text, exact)
-    assert.match(first.calls.at(-1).params.collaborationMode.settings.developer_instructions,/按已加载的对应 skill 处理/)
+    assert.equal(first.calls.at(-1).params.collaborationMode.settings.developer_instructions,null)
     assert.equal(manager.sessions.get('owner').traceId,'known-trace-123')
     await first.event({ method: 'item/completed', params: { threadId: 'thread-1', item: { id: 'progress', type: 'agentMessage', phase: 'commentary', text: '正在检查项目配置。' } } })
     assert.ok(output.includes('正在检查项目配置。'))
@@ -290,13 +291,13 @@ test('state save failure after successful turn start does not kill a running tas
 })
 test('reset invalidates connecting session even when closing the process is asynchronous',async()=>{
  let release,count=0;const calls=[]
- const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>{const n=++count;return {closed:false,write(){},close(){},async request(method){calls.push([n,method]);if(method==='initialize'){if(n===1)await new Promise(r=>{release=r});return {}}if(method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'new-thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};throw Error('unexpected inference')}}}});manager.save=async()=>{}
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>{const n=++count;return {closed:false,write(){},close(){},async request(method){calls.push([n,method]);if(method==='initialize'){if(n===1)await new Promise(r=>{release=r});return {}}if(method==='skills/extraRoots/set'||method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'new-thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};throw Error('unexpected inference')}}}});manager.save=async()=>{}
  const old=manager.handle('owner','old work',async()=>{});await new Promise(r=>setImmediate(r))
  await manager.handle('owner','重置会话',async()=>{},undefined,undefined,{action:'new'});release();await old
  assert.ok(!calls.some(([n,m])=>n===1&&m==='thread/start'));assert.ok(!calls.some(([,m])=>m==='turn/start'));assert.equal(manager.sessions.get('owner').threadId,'new-thread');manager.close()
 })
 test('all pre-stop connecting messages are cancelled; a later message still starts',async()=>{
- let release;const calls=[];const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method){calls.push(method);if(method==='initialize'){await new Promise(r=>{release=r});return {}}if(method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};if(method==='turn/start')return {turn:{id:'fresh'}};throw Error('unexpected')}})});manager.save=async()=>{}
+ let release;const calls=[];const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method){calls.push(method);if(method==='initialize'){await new Promise(r=>{release=r});return {}}if(method==='skills/extraRoots/set'||method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};if(method==='turn/start')return {turn:{id:'fresh'}};throw Error('unexpected')}})});manager.save=async()=>{}
  const first=manager.handle('owner','old one',async()=>{});await new Promise(r=>setImmediate(r));const second=manager.handle('owner','old two',async()=>{})
  await manager.handle('owner','停止',async()=>{});release();await Promise.all([first,second]);assert.ok(!calls.includes('turn/start'))
  await manager.handle('owner','new work',async()=>{});assert.equal(calls.filter(m=>m==='turn/start').length,1);manager.close()
@@ -516,7 +517,7 @@ test('waiting attachment preserves logical task and produces only one completion
 test('stop and exit each issue one local interrupt',async()=>{
  for(const command of ['停止','退出']){
   const dir=await mkdtemp(join(tmpdir(),'one-interrupt-')),calls=[]
-  const m=await new SessionManager({stateDir:dir,cwd:dir,owners:['u'],rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method){calls.push(method);if(method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'t'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};if(method==='turn/start')return {turn:{id:'turn'}};return {}}})}).init()
+  const m=await new SessionManager({stateDir:dir,cwd:dir,owners:['u'],rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method){calls.push(method);if(method==='skills/extraRoots/set'||method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'t'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};if(method==='turn/start')return {turn:{id:'turn'}};return {}}})}).init()
   try{
    await m.handle('u','work',async()=>{})
    await m.handle('u',command,async()=>{})

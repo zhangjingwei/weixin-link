@@ -15,7 +15,7 @@ test('material IDs are stable per delivery, distinct across deliveries, and dedu
 })
 test('unbound request cannot silently reuse historical files; pending is not a grouping assertion',()=>{
  const text=materialInput({pending:1}).text
- assert.ok(ASSISTANT_INSTRUCTIONS.includes('禁止自行读取或总结历史文件'));assert.ok(ASSISTANT_INSTRUCTIONS.includes('waiting_attachment'));assert.ok(ASSISTANT_INSTRUCTIONS.includes('待处理附件数量不代表同组或授权'));assert.ok(text.length<200);assert.ok(text.includes('"current":[]'))
+ assert.ok(ASSISTANT_INSTRUCTIONS.includes('缺件时等待，历史附件仅在用户明确指定时复用'));assert.ok(ASSISTANT_INSTRUCTIONS.includes('待处理附件数量不代表同组或授权'));assert.ok(text.length<200);assert.ok(text.includes('"current":[]'))
 })
 import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'

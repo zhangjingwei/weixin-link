@@ -1,6 +1,6 @@
 # 自然语言管理：MCP + Skill
 
-本期把既有项目、会话、结果、计划和更新管理 API 包装为一个本地 `zerolink-management` MCP 和 `zerolink-manage` Skill。模型负责理解自然语言和转写，服务端负责归属校验与执行。没有额外模型 API Key；仍使用账号已配置的底座和计费方式，订阅是否支持取决于该账号的 Codex 授权。本期仅接 Codex，不新增 Claude 底座，也不自行做语音识别。
+本期把既有项目、会话、结果、计划和更新管理 API 包装为一个本地 `zerolink-management` MCP 和 `managing-zerolink` Skill。模型负责理解自然语言和转写，服务端负责归属校验与执行。没有额外模型 API Key；仍使用账号已配置的底座和计费方式，订阅是否支持取决于该账号的 Codex 授权。本期仅接 Codex，不新增 Claude 底座，也不自行做语音识别。
 
 ## 使用
 
