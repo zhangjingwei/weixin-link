@@ -79,13 +79,6 @@ export class SessionManager {
     const progress=session.commandProgress
     if(!progress || progress.turnId!==session.turnId || progress.reported===progress.version)return
     const now=Date.now()
-    const lastUpdate=Math.max(session.startedAt??now,progress.lastNotice??0,
-      session.lastProgress?.turnId===session.turnId?session.lastProgress.at:0)
-    if(now-lastUpdate<20_000)return
-    const current=()=>session.commandProgress===progress && session.turnId===progress.turnId && session.busy &&
-      !session.finalReceived && !session.contextRejected && !session.exiting && session.state!=='stopping' &&
-      !session.rpcAttempt?.closing && session.workToken?.current()!==false
-    if(!current())return
     const commands=[...progress.items.values()]
     const running=commands.filter(item=>!item.done)
     const actions=[...new Set(commands.flatMap(item=>item.actions))]
@@ -96,9 +89,8 @@ export class SessionManager {
     if(needsReview.length)parts.push('其中 '+needsReview.length+' 条执行结果需要核对')
     const text=parts.join('，')+'。'
     progress.reported=progress.version
-    progress.lastNotice=now
-    session.lastNativeNoticeAt=now
-    if(await this.emit(session,text,current)&&current())session.lastProgress={turnId:progress.turnId,text,at:now}
+    // Detailed tool counts belong to the on-demand progress view, not the push channel.
+    session.lastProgress={turnId:progress.turnId,text,at:now}
   }
   watchTurnProgress(session) {
     clearTimeout(session.progressTimer)
@@ -108,27 +100,25 @@ export class SessionManager {
       if (this.sessions.get(session.userId)!==session || session.turnId!==turnId || session.traceId!==traceId ||
           !session.busy || session.state==='stopping' || session.finalReceived || session.rpcAttempt?.closing ||
           session.workToken?.current()===false) return
-      if(!session.nativeActiveFlags?.length && ![...this.questions.values()].some(q=>q.session===session))
-        void this.reportCommandProgress(session)
       const quietMs=Date.now()-session.lastStageAt
       if (quietMs>=30_000 && !session.nativeActiveFlags?.length && ![...this.questions.values()].some(question => question.session===session)) {
         this.diagnostic(session,'turn.waiting_progress',{duration_ms:quietMs})
-        const stream=session.streamProgress
-        if(stream?.turnId===turnId && stream.preview && !stream.previewAttempted){
-          const preview=stream.preview
-          const current=()=>this.sessions.get(session.userId)===session && session.turnId===turnId &&
-            session.streamProgress===stream && stream.preview===preview && session.busy && !session.finalReceived &&
-            !session.contextRejected && !session.exiting && session.state!=='stopping' &&
-            !session.rpcAttempt?.closing && session.workToken?.current()!==false
-          // A partial control block cannot be cleaned as if it were a complete reply.
-          const visible=preview.text.split('<',1)[0].trim()
-          if(visible && current()){
-            stream.previewAttempted=true
-            void this.emit(session,'回复预览（仍在生成）\n'+visible,current)
-          }
-        }
       }
-      session.progressTimer=setTimeout(report,quietMs<30_000?30_000-quietMs:30_000)
+      const now=Date.now()
+      const sinceNotice=now-Math.max(session.progressStartedAt??now,session.lastUserNoticeAt??0)
+      const interval=session.lastWaitNoticeAt?120_000:90_000
+      const waiting=!session.nativeActiveFlags?.length && ![...this.questions.values()].some(q=>q.session===session)
+      if(waiting && !session.contextRejected && sinceNotice>=interval){
+        const current=()=>this.sessions.get(session.userId)===session && session.turnId===turnId &&
+          session.busy && !session.finalReceived && !session.contextRejected && !session.exiting &&
+          session.state!=='stopping' && !session.rpcAttempt?.closing && session.workToken?.current()!==false
+        session.lastUserNoticeAt=now
+        session.lastWaitNoticeAt=now
+        void this.emit(session,'仍在处理，结果完成后会继续回复。',current)
+      }
+      const untilNotice=(session.lastWaitNoticeAt?120_000:90_000)-(Date.now()-Math.max(session.progressStartedAt??Date.now(),session.lastUserNoticeAt??0))
+      const untilDiagnostic=quietMs<30_000?30_000-quietMs:30_000
+      session.progressTimer=setTimeout(report,Math.min(untilDiagnostic,Math.max(1,untilNotice)))
       session.progressTimer.unref?.()
     }
     session.progressTimer=setTimeout(report,30_000)
@@ -431,7 +421,6 @@ export class SessionManager {
     }
     transition(session,'running')
     session.lastProgress=null
-    session.lastNativeNoticeAt=0
     session.tokenUsage=null
     session.nativeQueueTurn=false
     session.contextRejected=false
@@ -595,15 +584,9 @@ export class SessionManager {
         const percent=typeof p.message==='string'&&p.message.match(/(?:^|[^0-9.])(100|[0-9]{1,2})%(?![0-9])/)
         text=percent?'工具报告进度 '+percent[1]+'%。':'工具仍在处理本轮请求。'
       }
-      const previous=session.lastProgress
-      if(previous?.turnId===p.turnId&&previous.text===text)return
       session.lastProgress={text,at:Date.now(),turnId:p.turnId}
-      if(!session.lastNativeNoticeAt||Date.now()-session.lastNativeNoticeAt>=15000){
-        session.lastNativeNoticeAt=Date.now()
-        this.diagnostic(session,'turn.progress',{method:message.method})
-        this.watchTurnProgress(session)
-        await this.emit(session,text,()=>session.busy&&!session.finalReceived&&session.turnId===p.turnId&&(session.workToken?.current()??true))
-      }
+      this.diagnostic(session,'turn.progress',{method:message.method})
+      this.watchTurnProgress(session)
       return
     }
     if (message.id !== undefined && message.method) {
@@ -668,16 +651,13 @@ export class SessionManager {
       }
       this.diagnostic(session,'provider.event_error',{attempt,provider:session.provider,stage:session.turnStarted?'turn':'turn_start',
         reason:code,will_retry:p.willRetry,http_status:Number.isInteger(httpStatus)&&httpStatus>=100&&httpStatus<=599?httpStatus:undefined})
-      if(session.streamProgress?.preview){
-        session.streamProgress.discardedItem=session.streamProgress.preview.id
-        delete session.streamProgress.preview
-      }
       if(session.busy)this.watchTurnProgress(session)
       return
     }
     if (message.method === 'turn/started' && session.busy) {
       if(session.turnReady&&session.turnId&&p.turn?.id!==session.turnId){this.diagnostic(session,'event.ignored',{reason:'other_turn',method:message.method});return}
       session.turnReady = true; session.turnStarted = true; session.turnId = p.turn.id
+      session.progressStartedAt=Date.now();session.lastUserNoticeAt=Date.now();session.lastWaitNoticeAt=0
       session.executionModel=p.turn.model??session.executionModel
       this.watchTurnProgress(session)
       this.diagnostic(session,'turn.started',{provider:session.provider,model:session.executionModel,model_provider:session.modelProvider})
@@ -691,7 +671,7 @@ export class SessionManager {
         Object.assign(session,{taskId:job.id,traceId:job.context.flowNonce,turnId:p.turnId,turnReady:true,turnStarted:true,
           nativeQueueTurn:true,modelRetry:null,startedAt:Date.now(),executionModel:session.model,tokenUsage:null,finalReceived:false,finals:[],displayFinals:[],
           localTask:job.context.task,requestText:job.input?.text??job.input,materials:job.context.materials??[],
-          generatedOutputs:[],imageOutputIds:new Set(),waitingAttachment:false,attachmentContinuation:null,lastProgress:null,lastNativeNoticeAt:0})
+          generatedOutputs:[],imageOutputIds:new Set(),waitingAttachment:false,attachmentContinuation:null,lastProgress:null})
         session.items.clear()
         this.watchTurnProgress(session)
         session.workToken=this.lifecycle.capture(session.userId)
@@ -707,13 +687,7 @@ export class SessionManager {
       const now=Date.now()
       session.lastStageAt=now
       if(session.streamProgress?.turnId!==p.turnId)session.streamProgress={turnId:p.turnId,kinds:new Map()}
-      const stream=session.streamProgress
-      if(streamKind==='reply' && p.itemId && p.itemId!==stream.discardedItem && !stream.previewAttempted){
-        if(stream.preview?.id!==p.itemId)stream.preview={id:p.itemId,text:''}
-        const preview=stream.preview
-        preview.text+=p.delta.slice(0, Math.max(0, 480-preview.text.length))
-      }
-      const kinds=stream.kinds
+      const kinds=session.streamProgress.kinds
       const state=kinds.get(streamKind)??{count:0}
       kinds.set(streamKind,state)
       state.count++
@@ -745,27 +719,11 @@ export class SessionManager {
     }
     if (message.method === 'item/started') {
       const item=p.item
-      const seen=session.items.has(item.id)
       session.items.set(item.id,item)
-      if(item.type==='webSearch'&&item.id&&!seen){
-        const turnId=session.turnId
-        if(session.searchProgress?.turnId!==turnId){
-          session.searchProgress={turnId,announced:false}
-        }else if(!session.searchProgress.announced){
-          session.searchProgress.announced=true
-          const current=()=>session.turnId===turnId&&session.busy&&!session.finalReceived&&!session.contextRejected&&(session.workToken?.current()??true)
-          const recent=session.lastProgress?.turnId===turnId&&Date.now()-session.lastProgress.at<15000
-          if(!recent&&current()){
-            const text='我还在查网页，正在继续核对相关资料。'
-            if(await this.emit(session,text,current)&&current())session.lastProgress={turnId,text,at:Date.now()}
-          }
-        }
-      }
       this.diagnostic(session,'tool.started',{kind:p.item.type})
       if(!['agentMessage','userMessage','reasoning','plan'].includes(p.item.type))await this.onToolStatus?.(session,p.item,true)
     }
     if (message.method === 'item/completed') {
-      if(session.streamProgress?.preview?.id && session.streamProgress.preview.id===p.item?.id)delete session.streamProgress.preview
       if(p.item?.type&&!['agentMessage','userMessage','reasoning','plan'].includes(p.item.type))await this.onToolStatus?.(session,p.item,false)
       if(p.item?.type==='imageGeneration'&&!p.item.failure&&['completed','succeeded','success'].includes(p.item.status)&&(session.workToken?.current()??true)){
         session.imageOutputIds??=new Set()
@@ -788,7 +746,7 @@ export class SessionManager {
           if(session.attachmentContinuation&&emptyContinuationNotice(rest)){this.diagnostic(session,'notification.suppressed',{reason:'continuation_start'});return}
           if(rest){
             const delivered=await this.emit(session, rest, () => (session.workToken?.current()??true) && session.busy && !session.finalReceived && session.turnId === turnId)
-            if(delivered&&session.turnId===turnId)session.lastProgress={text:rest,at:Date.now(),turnId}
+            if(delivered&&session.turnId===turnId){session.lastProgress={text:rest,at:Date.now(),turnId};session.lastUserNoticeAt=Date.now()}
           }
         } else { if(p.item.phase!=='partial_answer')session.finalReceived = true; session.finals.push(rest);session.displayFinals??=[];session.displayFinals.push(rest) }
       }

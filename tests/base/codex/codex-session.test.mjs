@@ -653,7 +653,7 @@ test('App Server diagnostics report pending input, retry and throttled stream ac
  assert(!JSON.stringify(rows).includes('private'))
 })
 
-test('a stalled reply sends one preview and preserves the authoritative final answer',async t=>{
+test('a stalled reply does not push partial text and preserves the authoritative final answer',async t=>{
  t.mock.timers.enable({apis:['Date','setTimeout']})
  const output=[]
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u']})
@@ -672,12 +672,11 @@ test('a stalled reply sends one preview and preserves the authoritative final an
  await session.delivering
  t.mock.timers.tick(30_000)
  await session.delivering
- assert.deepEqual(output,['回复预览（仍在生成）\n已查到两个项目。'])
+ assert.deepEqual(output,[])
  await send('item/completed',{item:{id:'a',type:'agentMessage',phase:'final_answer',text:'已核实有三个项目。'}})
  await send('turn/completed',{turn:{id:'turn',status:'completed'}})
- assert.equal(output.length,2)
- assert.equal(output[1],'已核实有三个项目。')
- assert.equal(manager.state.users.u.lastReply,output[1])
+ assert.deepEqual(output,['已核实有三个项目。'])
+ assert.equal(manager.state.users.u.lastReply,output[0])
 })
 
 test('stream retry diagnostics aggregate per turn and recover only on model output',async t=>{
@@ -707,7 +706,7 @@ test('stream retry diagnostics aggregate per turn and recover only on model outp
  assert(!JSON.stringify(rows).includes('private'))
 })
 
-test('long command runs send throttled structured WeChat progress without command contents',async t=>{
+test('command details stay available on demand without being pushed',async t=>{
  t.mock.timers.enable({apis:['Date','setTimeout']})
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u']})
  const output=[], session={userId:'u',threadId:'t',turnId:'a',busy:true,turnReady:true,items:new Map(),startedAt:Date.now(),reply:async text=>{output.push(text);return {status:'accepted'}}}
@@ -723,11 +722,39 @@ test('long command runs send throttled structured WeChat progress without comman
  assert.deepEqual(output,[])
  t.mock.timers.tick(21000)
  await event('started','fourth',{commandActions:[{type:'read',path:'private'}]})
- await event('completed','fourth',{exitCode:0})
+ await event('completed','fourth',{exitCode:0,commandActions:[{type:'read',path:'private'}]})
+ assert.deepEqual(output,[])
+ assert.match(session.lastProgress.text,/搜索内容、读取文件，已结束 4 条，其中 3 条执行结果需要核对/)
+ assert(!session.lastProgress.text.includes('退出码'))
+ assert(!session.lastProgress.text.includes('private'))
+})
+
+test('tool statistics stay on demand and a long turn gets sparse waiting notices',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout']})
+ const output=[]
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u']})
+ const session={userId:'u',threadId:'t',busy:true,items:new Map(),reply:async text=>{output.push(text);return {status:'accepted'}}}
+ manager.sessions.set('u',session)
+ const send=(method,params)=>manager.event(session,{method,params:{threadId:'t',turnId:'a',...params}})
+ await send('turn/started',{turn:{id:'a'}})
+ await send('turn/plan/updated',{plan:[{step:'检查设置',status:'inProgress'}]})
+ await send('turn/diff/updated',{diff:'diff --git a/a b/a\n'})
+ await send('item/mcpToolCall/progress',{message:'70% private'})
+ await send('item/started',{item:{id:'search-1',type:'webSearch'}})
+ await send('item/started',{item:{id:'search-2',type:'webSearch'}})
+ assert.deepEqual(output,[])
+ assert.equal(session.lastProgress.text,'工具报告进度 70%。')
+ t.mock.timers.tick(89_999)
+ assert.deepEqual(output,[])
+ t.mock.timers.tick(1)
+ await session.delivering
+ assert.deepEqual(output,['仍在处理，结果完成后会继续回复。'])
+ t.mock.timers.tick(119_999)
  assert.equal(output.length,1)
- assert.match(output[0],/搜索内容、读取文件，已结束 3 条，正在执行 1 条，其中 3 条执行结果需要核对/)
- assert(!output[0].includes('退出码'))
- assert(!output[0].includes('-1'))
- assert(!output[0].includes('128'))
- assert(!output[0].includes('private'))
+ t.mock.timers.tick(1)
+ await session.delivering
+ assert.equal(output.length,2)
+ session.busy=false
+ t.mock.timers.tick(240_000)
+ assert.equal(output.length,2)
 })

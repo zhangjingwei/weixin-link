@@ -247,7 +247,7 @@ test('replayed native mutation reports unknown outcome without sending the RPC a
   assert.deepEqual(acknowledged,['ingress-44'])
 })
 
-test('repeated web searches send one progress update before the final answer',async()=>{
+test('repeated web searches do not push redundant progress before the final answer',async()=>{
  const f=await fixture()
  try{
   await f.manager.handle('owner','查一下资料',f.reply)
@@ -259,8 +259,7 @@ test('repeated web searches send one progress update before the final answer',as
   assert.deepEqual(f.output,[])
   await search('second')
   await search('third')
-  assert.equal(f.output.length,1)
-  assert.match(f.output[0],/查网页/)
+  assert.deepEqual(f.output,[])
  }finally{await f.close()}
 })
 
