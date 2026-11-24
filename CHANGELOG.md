@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Show readable intent-derived task titles in project progress, results and queue receipts instead of internal hash labels; preserve internal task identities for reconciliation.
+
+- Use fast service tier for intent classification while retaining low reasoning, budget Luna selection and the original-queue fallback.
+
 ## 1.9.0 — 2026-11-23
 
 - 新增独立的纯文本意图识别入口：当前项目执行任务时，仍可识别请求并向其他项目提交任务，无需切换会话。

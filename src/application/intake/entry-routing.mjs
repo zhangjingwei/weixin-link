@@ -1,3 +1,4 @@
+import {taskDisplayTitle} from '../../domain/tasks/task-label.mjs'
 import {createHash} from 'node:crypto'
 import {submitProjectTask} from '../management/project-task-management.mjs'
 import {taskId} from '../../domain/messages/message-identity.mjs'
@@ -38,11 +39,11 @@ export class EntryRouting{
    try{decision=await this.classify({text:message.text,currentProjectId:record.currentProjectId,pendingClarification:record.pendingClarification,projects:projects.map(p=>({projectId:p.projectId,name:p.name,archived:p.archived,state:p.state,task:p.task,queued:p.queued}))})}
    catch{if(!current())return true;record.status='fallback';await this.manager.save();return false}
    if(!current())return true
-   if(!decision||!actions.has(decision.action)||Object.keys(decision).some(k=>!['action','projectId','question','useClarification'].includes(k))||decision.action!=='clarify'&&!projects.some(p=>p.projectId===decision.projectId)){
+   if(!decision||!actions.has(decision.action)||Object.keys(decision).some(k=>!['action','projectId','question','useClarification','title'].includes(k))||decision.action!=='clarify'&&!projects.some(p=>p.projectId===decision.projectId)){
     record.status='fallback';await this.manager.save();return false
    }
    const target=projects.find(p=>p.projectId===decision.projectId)
-   record.decision={action:decision.action,projectId:decision.projectId,question:typeof decision.question==='string'?decision.question.slice(0,500):null}
+   record.decision={title:taskDisplayTitle(message.text,decision.title),action:decision.action,projectId:decision.projectId,question:typeof decision.question==='string'?decision.question.slice(0,500):null}
    record.text=decision.useClarification&&record.pendingClarification?record.pendingClarification.text+'\n用户对目标的补充澄清：'+message.text:message.text
    if(decision.action==='clarify')root.entryClarification={text:record.text,question:record.decision.question,createdAt:Date.now()}
    else delete root.entryClarification
@@ -57,8 +58,8 @@ export class EntryRouting{
     const target=this.service.target(owner,decision.projectId)
     if((this.manager.state.users[target.key]?.threadId??null)!==record.threadId)throw Error('ENTRY_TARGET_CHANGED')
     if(decision.action==='task'){
-     const result=await submitProjectTask(this.service,owner,caller,{...args,text:record.text,requestId:requestId(id)},{allowCurrent:true})
-     output=result.status==='queued'?`已提交到${this.conversations.displayName(owner,target)}，任务 ${result.data.taskId.slice(0,8)}。已排队，结果会在这里返回。`:'任务未确认入队，可查询管理操作 '+result.operationId+' 核对；未自动重试。'
+     const result=await submitProjectTask(this.service,owner,caller,{...args,text:record.text,requestId:requestId(id)},{allowCurrent:true,title:decision.title})
+     output=result.status==='queued'?`已提交到${this.conversations.displayName(owner,target)}：「${result.data.title}」。已排队，结果会在这里返回。`:'任务未确认入队，可查询管理操作 '+result.operationId+' 核对；未自动重试。'
     }else if(decision.action==='supplement'){
      if(!record.task)throw Error('ENTRY_NO_RUNNING_TASK')
      const result=await this.service.call(caller,'supplement_task',{...args,taskId:record.task.id,turnId:record.task.turnId,text:record.text,requestId:requestId(id)})

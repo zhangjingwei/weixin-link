@@ -74,7 +74,7 @@ test('routed progress, approval prompts and result bundles return immediately wi
  }
  await f.queue.pump('knowledge')
  assert.equal(f.jobs.get(response.data.taskId).state,'done');assert.equal(f.sent.length,3)
- for(const output of f.sent){assert.equal(output.key,'knowledge');assert.match(typeof output.value==='string'?output.value:output.value.text,/^【项目2 · 知识库 · 任务 [a-f0-9]{8}】/);assert(!JSON.stringify(output.value).includes('old hidden result'))}
+ for(const output of f.sent){assert.equal(output.key,'knowledge');assert.match(typeof output.value==='string'?output.value:output.value.text,/^【知识库 · [^】]+】/);assert(!JSON.stringify(output.value).includes('old hidden result'));assert(!JSON.stringify(output.value).includes(response.data.taskId.slice(0,8)));assert.match(typeof output.value==='string'?output.value:output.value.text,/检查知识库搜索功能/)}
  assert.equal(f.sent[2].value.attachments,packet.attachments);assert.equal(packet.text,'搜索修复结果')
  assert.equal(entry.unread.length,1);assert.equal(f.conversations.root.alice.active,'1');assert.equal(f.manager.state.users.alice.lastReply,undefined)
  // Normal non-routed output retains the existing unread behavior.
@@ -137,7 +137,7 @@ test('multiple projects execute independently while each project preserves FIFO 
  assert.deepEqual(started,[a.data.taskId,c.data.taskId]);assert.equal(f.jobs.get(b.data.taskId).state,'pending')
  release.first();await knowledge
  assert.deepEqual(started,[a.data.taskId,c.data.taskId,b.data.taskId]);assert.equal(f.sent.length,3)
- assert(f.sent.some(out=>String(out.value).includes('【项目3 · 工具箱')));assert.equal(f.conversations.root.alice.active,'1')
+ assert(f.sent.some(out=>String(out.value).includes('【工具箱 · ')));assert.equal(f.conversations.root.alice.active,'1')
 })
 
 test('routing survives a database reopen and expired management receipts without replaying completed tasks',async t=>{
@@ -147,7 +147,7 @@ test('routing survives a database reopen and expired management receipts without
  const queue=new DurableIntake({jobs:reopened,manager:f.manager,conversations:f.conversations,reply:(...args)=>f.view.deliver(...args)});t.after(()=>queue.close())
  let calls=0;f.manager.ask=async(key,input,reply)=>{calls++;assert.equal(key,'knowledge');await reply('重启后完成任务')}
  queue.resume();await queue.users.get('knowledge')
- assert.equal(calls,1);assert.equal(reopened.get(result.data.taskId).state,'done');assert.match(f.sent[0].value,/【项目2 · 知识库/)
+ assert.equal(calls,1);assert.equal(reopened.get(result.data.taskId).state,'done');assert.match(f.sent[0].value,/【知识库 · /)
  queue.resume();assert.equal(queue.users.size,0);assert.equal(calls,1)
 })
 
@@ -160,7 +160,7 @@ test('bound task recovery retains its routed completion notice and only reads th
  f.manager.ask=async()=>assert.fail('recovery must not start another execution')
  await f.queue.pump('knowledge')
  assert.equal(session.taskId,id);assert.equal(f.jobs.get(id).state,'done');assert.equal(f.manager.state.users.knowledge.lastReply,'原任务结果')
- assert.equal(f.manager.state.users.knowledge.resultIdentity.taskId,id);assert.equal(f.sent.length,1);assert.match(f.sent[0].value,/【项目2 · 知识库.*已恢复/s)
+ assert.equal(f.manager.state.users.knowledge.resultIdentity.taskId,id);assert.equal(f.sent.length,1);assert.match(f.sent[0].value,/【知识库 · .*已恢复/s)
 })
 
 test('queue persistence failure never acknowledges a completed submission or switches selection',async t=>{
