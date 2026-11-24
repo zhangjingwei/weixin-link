@@ -14,7 +14,7 @@ Follow the [README](README.en.md#quick-start) on the installation computer. Comp
 - “Have the knowledge project check search and the toolbox improve its page.” — up to 5 tasks per request.
 - “First have the knowledge project prepare requirements, then have the toolbox implement them.” — later tasks wait if earlier work fails or has an uncertain result.
 
-Results return with the project name and a readable task title. Different projects can work separately; each project's tasks run in order. Unclear targets are clarified. Queued or scheduled does not mean finished.
+Results show the project name, readable task title and the model used for that task. Different projects can work separately; each project's tasks run in order. Unclear targets are clarified. Queued or scheduled does not mean finished.
 
 ## Add instructions, stop or reorder work
 

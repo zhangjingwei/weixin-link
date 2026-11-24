@@ -15,7 +15,9 @@ export function deliver(context,key,value,options,send){return context.serialize
  if(options?.projectTaskId){
   const job=context.manager.submissions?.get(options.projectTaskId)
   if(!job||job.owner!==key||!projectTaskRoute({manager:context.manager,conversations:context},job))throw Error('PROJECT_TASK_ROUTE_INVALID')
-  const name=context.displayName(e.owner,e),prefix=`【${name} · ${taskDisplayTitle(job.input,job.input.projectDispatch?.title)}】\n`
+  const model=job.context?.executionModel
+  const modelName=typeof model==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,99}$/.test(model)?model:'模型未确认'
+  const name=context.displayName(e.owner,e),prefix=`【${name} · ${taskDisplayTitle(job.input,job.input.projectDispatch?.title)} · ${modelName}】\n`
   return send(key,typeof value==='string'?prefix+value:{...value,text:prefix+value.text},options)
  }
  if(options?.conversationControl)return send(key,context.label(key,value),options);

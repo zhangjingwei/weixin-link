@@ -340,7 +340,8 @@ export class SessionManager {
     try {
       if(!token.current()){if(!session.exited&&session.traceId===traceId){transition(session,'idle');session.turnReady=true;this.resolveWaiters(session,{status:'interrupted',reply:'任务已取消。'})}return}
       const deliveryId=typeof text==='object'?text.deliveryId:undefined
-      if(deliveryId){this.submissions?.context?.(deliveryId,{task:session.localTask,request:session.requestText,continuation:session.attachmentContinuation,flowNonce:session.traceId,materials:currentMaterials(text,deliveryId)});this.submissions?.bind(deliveryId,session.threadId)}
+      const executionModel=native?.action==='review'?null:session.rpcAttempt?.providerOptions?.provider?session.model:(this.state.users[session.userId]?.modelOverride??session.model)
+      if(deliveryId){this.submissions?.context?.(deliveryId,{executionModel:executionModel??null,task:session.localTask,request:session.requestText,continuation:session.attachmentContinuation,flowNonce:session.traceId,materials:currentMaterials(text,deliveryId)});this.submissions?.bind(deliveryId,session.threadId)}
       const materials=currentMaterials(text,deliveryId??session.traceId),pendingMaterials=this.submissions?.pendingMaterials?.(session.userId,deliveryId)??0
       session.materials=materials
       this.diagnostic(session,'materials.context',{count:materials.length,queue_depth:pendingMaterials,reason:session.attachmentContinuation?'continuation':materials.length?'current':'unbound'})
@@ -348,7 +349,7 @@ export class SessionManager {
       const turnParams={threadId:session.threadId,input:[...this.protocol.input(runtimeInput),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
       result=native?.action==='review'
         ?await this.protocol.startReview(session.rpc,session.threadId,native.target)
-        :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,plan:native?.action==='plan',model:session.rpcAttempt?.providerOptions?.provider?session.model:(this.state.users[session.userId]?.modelOverride??session.model),fastMode:this.state.users[session.userId]?.fastMode})
+        :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,plan:native?.action==='plan',model:executionModel,fastMode:this.state.users[session.userId]?.fastMode})
       if(!result?.turn?.id)throw Error('底座未确认任务标识，结果待核对。')
       if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment

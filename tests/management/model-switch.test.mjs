@@ -56,6 +56,8 @@ test('the existing session manager uses a saved choice for normal turns after re
   return {}
  }})}).init();t.after(()=>manager.close())
  manager.state.users.alice={modelOverride:'allowed'};await manager.save()
- const session=await manager.connect('alice',async()=>{});await manager.send(session,'ordinary task')
+ const contexts=[];manager.submissions={context:(id,value)=>contexts.push({id,...value}),bind(){},submitted(){}}
+ const session=await manager.connect('alice',async()=>{});session.model='old-connected-model';await manager.send(session,{text:'ordinary task',deliveryId:'task-1'})
  assert.equal(turns[0].collaborationMode.settings.model,'allowed')
+ assert.equal(contexts[0].executionModel,'allowed')
 })

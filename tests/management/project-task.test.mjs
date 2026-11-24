@@ -69,13 +69,15 @@ test('routed progress, approval prompts and result bundles return immediately wi
  const packet={kind:'bundle',text:'搜索修复结果',attachments:[{id:'snapshot'}],textParts:[]}
  f.manager.ask=async(key,input,reply)=>{
   assert.equal(key,'knowledge');assert.equal(input.deliveryId,response.data.taskId)
+  f.jobs.context(response.data.taskId,{executionModel:'gpt-6.1-sol'})
+  f.manager.state.users[key].modelOverride='gpt-6-astra'
   await reply('正在检查搜索');await reply('审批：是否允许指定操作？');await reply(packet,{checkpoint:()=>f.manager.save()})
   f.manager.state.users[key].lastReply='搜索修复结果'
  }
  await f.queue.pump('knowledge')
  assert.equal(f.jobs.get(response.data.taskId).state,'done');assert.equal(f.sent.length,3)
  for(const output of f.sent){assert.equal(output.key,'knowledge');assert.match(typeof output.value==='string'?output.value:output.value.text,/^【知识库 · [^】]+】/);assert(!JSON.stringify(output.value).includes('old hidden result'));assert(!JSON.stringify(output.value).includes(response.data.taskId.slice(0,8)));assert.match(typeof output.value==='string'?output.value:output.value.text,/检查知识库搜索功能/)}
- assert.equal(f.sent[2].value.attachments,packet.attachments);assert.equal(packet.text,'搜索修复结果')
+ assert(f.sent.every(out=>(typeof out.value==='string'?out.value:out.value.text).split('\n')[0].endsWith(' · gpt-6.1-sol】')));assert.equal(f.sent[2].value.attachments,packet.attachments);assert.equal(packet.text,'搜索修复结果')
  assert.equal(entry.unread.length,1);assert.equal(f.conversations.root.alice.active,'1');assert.equal(f.manager.state.users.alice.lastReply,undefined)
  // Normal non-routed output retains the existing unread behavior.
  const ordinary=await f.view.deliver('knowledge','normal background result');assert.equal(ordinary.status,'deferred');assert.equal(f.sent.length,3)
