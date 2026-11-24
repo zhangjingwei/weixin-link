@@ -474,7 +474,7 @@ export class SessionManager {
       if(native?.action==='plan')turnParams.input.push({type:'text',text:'用户选择了微信的“计划”：本轮仅调研和制定方案，等用户明确要求实施后再改动项目。'})
       result=native?.action==='review'
         ?await this.protocol.startReview(session.rpc,session.threadId,native.target)
-        :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,model:executionModel,fastMode:this.state.users[session.userId]?.fastMode,workflowRequest:session.requestText})
+        :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,model:executionModel,fastMode:this.state.users[session.userId]?.fastMode,workflowRequest:session.requestText,workflowMode:native?.action})
       if(!result?.turn?.id)throw Error('底座未确认任务标识，结果待核对。')
       if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment

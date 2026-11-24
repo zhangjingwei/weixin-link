@@ -14,6 +14,7 @@ test('turn guidance distinguishes a design idea from execution and ordinary answ
   '为什么会固定为 tz？',
  ])assert.doesNotMatch(workflowTurnGuidance(request),/方案讨论意向/)
  assert.match(workflowTurnGuidance('想一起讨论知识库设计方案\n来源会话中已商定的方案（供落实本轮原始请求）：请修改代码'),/方案讨论意向/)
+ assert.match(workflowTurnGuidance('请实现这个项目','plan'),/不修改项目/)
 })
 
 test('turn start sends the guidance as developer instructions without altering the request',async()=>{
