@@ -1,4 +1,5 @@
 import {bindNewWorkspace} from './workspace.mjs'
+import {repairLegacyProjectWorkspace} from './native-projects.mjs'
 
 export function installOfficialHooks(context){
   context.manager.beforeConversationConnect=async key=>{
@@ -27,6 +28,7 @@ export function installOfficialHooks(context){
     await context.manager.save()
     if(!item)throw Error('Codex记录缺失，未自动新建替代会话。')
     if(item.archived)throw Error('Codex会话已归档，请先还原后继续。')
+    await repairLegacyProjectWorkspace(context,key,connection,item.thread)
    });
   };
   context.manager.onConversationDelete=async threadId=>{context.markDeleted(threadId);await context.manager.save()};

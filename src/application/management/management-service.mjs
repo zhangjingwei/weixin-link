@@ -80,9 +80,9 @@ export class ManagementService{
    const page=await this.conversations.withBackend(owner,rpc=>api.sessions(rpc,args.nativeProjectId,args.cursor))
    if(!args.cursor&&!page.nextCursor){
     for(const entry of this.entries(owner)){
-     const session=this.manager.sessions.get(entry.key),saved=this.manager.state.users[entry.key]
-     if(!entry.archived&&session?.threadId&&(!args.nativeProjectId||saved?.nativeProjectId===args.nativeProjectId)&&!page.sessions.some(t=>t.threadId===session.threadId)){
-      page.sessions.push({threadId:session.threadId,name:entry.name,cwd:this.manager.workspaceFor(entry.key)})
+     const session=this.manager.sessions.get(entry.key),saved=this.manager.state.users[entry.key],threadId=session?.threadId??(saved?.workspaceMigratedFrom?saved.threadId:null)
+     if(!entry.archived&&threadId&&(!args.nativeProjectId||saved?.nativeProjectId===args.nativeProjectId)&&!page.sessions.some(t=>t.threadId===threadId)){
+      page.sessions.push({threadId,name:entry.name,cwd:this.manager.workspaceFor(entry.key)})
      }
     }
    }

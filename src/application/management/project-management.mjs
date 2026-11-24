@@ -67,7 +67,7 @@ export function openConversation(context,owner,caller,args,operation='open_conve
   const session=bound&&context.manager.sessions.get(bound.key)
   const reader=session?.rpc&&!session.rpc.closed?session.rpc:rpc
   const thread=args.threadId?await conversations.backendPort.readConversation(reader,args.threadId):null
-  if(args.threadId&&(thread?.id!==args.threadId||project&&thread.projectId!==project.id||thread.ephemeral||thread.parentThreadId||!['idle','notLoaded'].includes(thread.status?.type)||thread.archived||thread.path?.replaceAll('\\','/').includes('/archived_sessions/')))throw Error('MANAGEMENT_STALE_TARGET')
+  if(args.threadId&&(thread?.id!==args.threadId||project&&thread.projectId!==project.id||thread.ephemeral||thread.parentThreadId&&!bound||!['idle','notLoaded'].includes(thread.status?.type)||thread.archived||thread.path?.replaceAll('\\','/').includes('/archived_sessions/')))throw Error('MANAGEMENT_STALE_TARGET')
   if(thread&&args.workspaceToken)throw Error('MANAGEMENT_WORKSPACE_SELECTION_INVALID')
   const workspace=thread?.cwd??(args.workspaceToken?await verifyChoice(context,owner,args.workspaceToken):args.workspace??(project?.roots.length===1?project.roots[0]:null))
   if(!workspace||!thread&&project&&!project.roots.includes(workspace))throw Error('MANAGEMENT_WORKSPACE_SELECTION_REQUIRED')

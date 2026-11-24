@@ -1,4 +1,35 @@
 import {randomUUID} from 'node:crypto'
+import {realpath} from 'node:fs/promises'
+import {workspaceInProject} from './workspace.mjs'
+
+// A persisted Codex thread keeps its original cwd. Resume's cwd override is
+// insufficient evidence that the stored thread moved, so retain its history in
+// a fork before changing the WeChat binding. The original remains recoverable.
+export async function repairLegacyProjectWorkspace(context,key,rpc,thread){
+ const saved=context.manager.state.users[key],projectId=saved?.nativeProjectId,api=context.backendPort?.nativeProjects
+ if(!projectId||!thread?.id||!api)return false
+ const project=await api.read(rpc,projectId)
+ if(await workspaceInProject(thread.cwd,project)){
+  if(saved.workspace!==thread.cwd){saved.workspace=thread.cwd;await context.manager.save()}
+  return false
+ }
+ if(!['idle','notLoaded'].includes(thread.status?.type))throw Error('MANAGEMENT_TARGET_UNAVAILABLE')
+ if(project.roots.length!==1)throw Error('MANAGEMENT_WORKSPACE_SELECTION_REQUIRED')
+ const target=await realpath(project.roots[0])
+ const queue=await rpc.request('thread/queue/list',{threadId:thread.id,limit:1})
+ if(!Array.isArray(queue.data)||queue.data.length||queue.nextCursor)throw Error('MANAGEMENT_TARGET_UNAVAILABLE')
+ const result=await rpc.request('thread/fork',{threadId:thread.id,cwd:target,excludeTurns:true,deferGoalContinuation:true})
+ const fork=result?.thread
+ if(!fork?.id||fork.id===thread.id||!await workspaceInProject(fork.cwd,project))throw Error('CODEX_WORKSPACE_FORK_UNCONFIRMED')
+ if(fork.projectId!==projectId)await api.assignThread(rpc,fork.id,projectId)
+ const confirmed=await context.backendPort.readConversation(rpc,fork.id)
+ if(confirmed?.id!==fork.id||!await workspaceInProject(confirmed.cwd,project)||confirmed.projectId!==projectId)throw Error('CODEX_WORKSPACE_FORK_UNCONFIRMED')
+ const previous={...saved}
+ saved.previous=[...new Set([...(saved.previous??[]),thread.id])].slice(-20)
+ saved.threadId=fork.id;saved.workspace=target;saved.nativeProjectId=projectId;saved.workspaceMigratedFrom=thread.id
+ try{await context.manager.save()}catch(error){context.manager.state.users[key]=previous;throw error}
+ return true
+}
 
 // Keep the local delivery key and the exact native thread. Project names alone
 // cannot establish membership, especially when several projects share a root.
