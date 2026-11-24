@@ -15,7 +15,7 @@ Complete model authorization and WeChat sign-in on the installation computer as 
 - “Stop the toolbox project's current task.” — verifies the target without stopping other projects.
 - “Show the knowledge project's previous result.” — reads it; files are resent only on an explicit request.
 
-Projects retain their own directories, context and queues. Labelled progress, approval prompts and results return to the same WeChat entry. Queued does not mean completed. Background results are not automatically inserted into the current model context; the assistant queries task results when asked to summarize. Reliable voice transcripts work as text. Cross-project submissions currently accept text only; attachments are not implicitly transferred.
+Projects retain their own directories, context and queues. Labelled progress, approval prompts and results return to the same WeChat entry. Queued does not mean completed. Background results are not automatically inserted into the current model context; the assistant queries task results when asked to summarize. Reliable voice transcripts work as text. Current-message attachments can be explicitly handed to a named project through private snapshots; historical attachments are not implicitly forwarded.
 
 ## Projects, history and schedules
 
@@ -48,8 +48,10 @@ See the [exact command reference](docs/reference/commands.en.md) for recovery pr
 
 Model selection: ask to use an available model for a project’s future tasks. The assistant validates the exact model ID and saves a project-scoped preference without interrupting the current turn. Fixed third-party providers remain managed through installation configuration.
 
-Independent entry routing classifies plain-text requests before project execution. Status/history/result reads bypass busy project queues; tasks for different projects can run separately, while each project remains sequential. Supplements bind to the original task and ambiguous targets require clarification. Attachments, quotes and interactive prompts retain their original flow. Classification adds a model call and falls back to the original queue when unavailable.
+Independent entry routing classifies plain-text requests before project execution. Status/history/result reads bypass busy project queues; tasks for different projects can run separately, while each project remains sequential. Supplements bind to the original task and ambiguous targets require clarification. Current attachments and quotes can be explicitly handed off; interactive prompts and attachment continuations retain their original flow. Classification adds a model call and falls back to the original queue when unavailable.
 
-Intent classification prefers available gpt-6-luna, then gpt-5.6-luna, with low reasoning and fast service tier (which may increase usage costs). It does not inherit the project execution model. If no budget candidate is available, or a fixed third-party provider is configured, it falls back to the original queue instead of selecting a premium model.
+Intent classification prefers available gpt-6-luna, then gpt-5.6-luna, with medium reasoning and fast service tier (which may increase usage costs). It does not inherit the project execution model. If no budget candidate is available, or a fixed third-party provider is configured, it falls back to the original queue instead of selecting a premium model.
 
 Task messages show the project name and a readable task title rather than an internal ID. Intent classification supplies a concise Chinese title; existing tasks fall back to a short excerpt of the original request. Progress and results retain the same title, while internal IDs remain available for reconciliation.
+
+The unified entry also supports evidence-backed progress, exact stop and pending-queue controls, bounded dependent project plans, and explicit current-attachment handoffs. See [unified entry details](docs/features/unified-entry.md) for recovery, privacy and validation boundaries.

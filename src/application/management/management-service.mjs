@@ -1,3 +1,5 @@
+import {projectProgress} from './progress-management.mjs'
+import {changeQueuedTask,cancelQueuedTasks} from './queue-management.mjs'
 import {requestModelSwitch} from './model-management.mjs'
 import {requestProjectArchive,executeProjectArchive} from './project-archive-management.mjs'
 import {maintenanceRead,requestMaintenance,executeMaintenance} from './maintenance-management.mjs'
@@ -16,8 +18,8 @@ const signatureFor=(name,args)=>createHmac('sha256','zerolink-operation-v1').upd
 
 // A management facade over the existing conversation/task state, not another queue.
 export class ManagementService{
- constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,maintenance,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
-  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,maintenance,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
+ constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,maintenance,routingStatus,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
+  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,maintenance,routingStatus,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
   manager.state.managementOperations??=[];this.operations=manager.state.managementOperations
   for(const op of this.operations)if(['pending','executing'].includes(op.status))op.status=op.status==='pending'?'not_executed':'unknown'
   pruneManagementOperations(this.operations,this.now())
@@ -32,12 +34,15 @@ export class ManagementService{
  exact(e,args){const s=this.manager.sessions.get(e.key);if(!s||!s.busy||s.traceId!==args.taskId||s.turnId!==args.turnId||s.rpc?.closed)throw Error('MANAGEMENT_STALE_TASK');return s}
  async call(caller,name,args){
   validateManagementCall(name,args);const owner=this.owner(caller)
+  if(name==='request_queue_cancel_all')return cancelQueuedTasks(this,owner,caller,args)
+  if(name==='request_queue_change')return changeQueuedTask(this,owner,caller,args)
   if(name==='request_model_switch')return requestModelSwitch(this,owner,caller,args)
   if(name==='request_project_archive')return requestProjectArchive(this,owner,caller,args)
   if(['get_service_status','get_installation_status','get_diagnostics','get_usage_guide','get_maintenance_status'].includes(name))return maintenanceRead(this,owner,name,args)
   if(['request_service_restart','request_upgrade'].includes(name))return requestMaintenance(this,owner,caller,name,args)
   const extended={submit_project_task:()=>submitProjectTask(this,owner,caller,args),list_workspace_choices:()=>workspaceChoices(this,owner,args),create_project:()=>createProject(this,owner,caller,args),rename_project:()=>renameProject(this,owner,caller,args),search_session_history:()=>searchHistory(this,owner,args),list_project_tasks:()=>listProjectTasks(this,owner,args),get_task_result:()=>getTaskResult(this,owner,args),request_result_redelivery:()=>requestResultRedelivery(this,owner,caller,args),request_task_reconciliation:()=>requestTaskReconciliation(this,owner,caller,args),check_updates:()=>checkUpdates(this,owner),skip_update:()=>skipUpdate(this,owner,caller,args),create_schedule:()=>createSchedule(this,owner,caller,args),list_schedules:()=>listSchedules(this,owner,args),cancel_schedule:()=>cancelSchedule(this,owner,caller,args)}
   if(extended[name])return extended[name]()
+  if(name==='get_entry_routing_status'){const root=this.conversations.root[owner];const classifier=this.routingStatus?.();return {classifier:classifier?{model:classifier.model??null,reasoningEffort:classifier.reasoningEffort??null,serviceTier:classifier.serviceTier??null}:null,metrics:root.entryRoutingMetrics??{},scope:'已保存记录，不等同于当前活跃进程数量',pending:Object.values(root.entryRoutes??{}).filter(r=>['deciding','classifying','decided'].includes(r.status)).length,recent:Object.values(root.entryRoutes??{}).slice(-5).map(r=>({status:r.status,title:r.decision?.title??null,createdAt:r.createdAt}))}}
   if(name==='get_management_operation'){const op=this.operations.find(op=>op.id===args.operationId&&op.owner===owner);if(!op)throw Error('MANAGEMENT_OPERATION_NOT_FOUND');return this.result(op)}
   if(name==='list_projects')return {callerProjectId:this.conversations.entry(caller).id,projects:this.entries(owner).map(e=>this.snapshot(owner,e))}
   if(name==='resolve_target'){
@@ -49,6 +54,7 @@ export class ManagementService{
   }
   if(name==='list_models')return this.conversations.withBackend(owner,rpc=>this.manager.protocol.listModels(rpc))
   const e=this.target(owner,args.projectId)
+  if(name==='get_project_progress')return projectProgress(this,owner,args)
   if(name==='get_project_status')return {...this.snapshot(owner,e),operationsTotal:this.operations.filter(o=>o.owner===owner&&o.projectId===e.id).length,operations:this.operations.filter(o=>o.owner===owner&&o.projectId===e.id).slice(-20).map(op=>({...this.result(op),name:op.name,requestId:op.requestId,createdAt:op.createdAt}))}
   if(name==='get_session_history')return this.history(owner,e,args.cursor)
   // Serialize duplicate writes until their uncertain intent has reached durable storage.

@@ -29,7 +29,7 @@ test('current project tasks use its existing queue while independent queries byp
  const f=await fixture(t,{action:'task',projectId:'1',question:null});await f.router.process(f.message,f.token)
  assert.equal(f.jobs.pending()[0].owner,'alice')
  const q=await fixture(t,{action:'status',projectId:'1',question:null});await q.router.process(q.message,q.token)
- assert.equal(q.jobs.pending().length,0);assert.match(q.sent[0],/任务执行中/)
+ assert.equal(q.jobs.pending().length,0);assert.match(q.sent[0],/进行中：当前任务/)
 })
 test('foreign and invalid decisions fall back without dispatch; ambiguity only asks a question',async t=>{
  const f=await fixture(t,{action:'task',projectId:'foreign',question:null});assert.equal(await f.router.process(f.message,f.token),false);assert.equal(f.jobs.pending().length,0)
@@ -84,7 +84,7 @@ test('original entry tasks retain management rights without permitting nested pr
 })
 test('a crash after enqueue reuses the persisted operation and queue identity',async t=>{
  const f=await fixture(t,{action:'task',projectId:'2',question:null});let snapshot,saves=0
- f.manager.save=async()=>{saves++;if(saves===6)throw Error('crash before notice');snapshot=structuredClone({state:f.manager.state,root:f.root})}
+ f.manager.save=async()=>{saves++;if(saves===8)throw Error('crash before notice');snapshot=structuredClone({state:f.manager.state,root:f.root})}
  await assert.rejects(f.router.process(f.message,f.token));assert.equal(f.jobs.pending().length,1)
  f.manager.state=snapshot.state;Object.assign(f.root,snapshot.root);f.manager.save=async()=>{}
  const restored=new ManagementService({manager:f.manager,conversations:f.service.conversations,enqueueTask:(...args)=>f.jobs.add(...args)});t.after(()=>restored.close());f.router.service=restored

@@ -1,3 +1,4 @@
+import {attachmentHandoffs} from '../infrastructure/media/attachment-handoff.mjs'
 import {EntryRouting} from '../application/intake/entry-routing.mjs'
 import {createManagementMaintenanceController} from '../interfaces/controllers/management-maintenance-controller.mjs'
 import {managementPlugin} from '../setup/management-plugin.mjs'
@@ -121,7 +122,7 @@ const mediaDependencies={
  log,
  prepare:async(message,token)=>{const start=Date.now(),messageId=message.raw?.message_id??message.raw?.client_id,trace_id=message._traceId;log('attachments.download_started',{trace_id,messageId});try{const r=await runtime.track('media',()=>infrastructure.media.prepare(message,stateDir,undefined,token?.signal));log('attachments.download_completed',{trace_id,messageId,duration_ms:Date.now()-start,count:r.attachments.length,bytes:r.attachments.reduce((n,a)=>n+(a.bytes??0),0),status:r.errors.length?'partial':'ok'});return r}catch(e){log('attachments.download_failed',{trace_id,messageId,duration_ms:Date.now()-start,...errorFields(e)});throw e}},
  compose:input=>runtime.track('media',()=>infrastructure.media.compose(input)),
- submit:(owner,input,token,ingressId)=>{if(token.current())durable.submit(owner,input,ingressId,[ingressId].filter(Boolean))},
+ submit:async(owner,input,token,ingressId,message)=>{if(!token.current())return;if(message&&await entryRouting.process(message,token,input))return;durable.submit(owner,input,ingressId,[ingressId].filter(Boolean))},
 }
 const outgoing=infrastructure.wechat.createOutbound({bot,conversations,runtime,store:manager.outputStore,log})
 const view=createWeChatPresenter({bot,conversations,outgoing,runtime})
@@ -132,7 +133,7 @@ try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime
  track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 const managementInstallation=await managementPlugin({accountId:account.id,codexHome:agent.sessionOptions.codexHome,stateDir})
-const managementService=new ManagementService({manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
+const managementService=new ManagementService({routingStatus:()=>agent.classifyEntry?.statistics?.(),manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
 // Persist restart reconciliation and private-payload cleanup before accepting MCP calls.
 await manager.save()
 const management=createManagementMcpController({manager,service:managementService,configuration:capability=>managementConfiguration({socket:account.socket,capability,controlToken:runtime.token})})
@@ -162,7 +163,10 @@ durable=new DurableIntake({jobs,manager,conversations,log,reply:(userId,value,op
 manager.wakeRecovery=owner=>durable.wake(owner)
 manager.lifecycle.onCancel(userId=>{pending.cancel(userId);durable.cancel(userId);typingStatus.sync(new Set([...typingOwners(manager)].map(key=>conversations.recipient(key))))})
 bot.on('error', error => log('wechat.error',errorFields(error)))
-const entryRouting=new EntryRouting({manager,conversations,jobs,service:managementService,classify:agent.classifyEntry,deliver:(...args)=>view.deliver(...args),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
+const handoffs=attachmentHandoffs(stateDir,jobs)
+const handoffCleanup=setInterval(()=>{void runtime.track('management',()=>handoffs.cleanup()).catch(()=>log('attachment_handoff.cleanup_failed',{code:'HANDOFF_CLEANUP_FAILED'}))},3600000);handoffCleanup.unref()
+await handoffs.cleanup().catch(()=>log('attachment_handoff.cleanup_failed',{code:'HANDOFF_CLEANUP_FAILED'}))
+const entryRouting=new EntryRouting({prepareHandoff:args=>handoffs.prepare(args),manager,conversations,jobs,service:managementService,classify:agent.classifyEntry,deliver:(...args)=>view.deliver(...args),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
 const handleMessage=createMessageProcessor({entryRouting,view,manager,jobs,conversations,runtime,log,stateDir,accountId:account.id,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,mediaDependencies,durable,classifyMessage,infrastructure,diagnosticServices:new ServiceManager(),diagnosticService:account.service,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
 intakeHandler=nonBlockingHandler(async message => {
   try {
@@ -182,7 +186,7 @@ intakeHandler=nonBlockingHandler(async message => {
 bot.onMessage(inbound.onMessage)
 
 // 退出时停止新工作，等待微信上下文与会话状态落盘，再关闭控制端点。
-async function shutdown(signal){if(stopping)return;stopping=true;await entryRouting.close();management.close();updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
+async function shutdown(signal){if(stopping)return;stopping=true;clearInterval(handoffCleanup);await entryRouting.close();management.close();updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})
 
 // 登录并核查账号身份后恢复积压消息，最后才启动微信轮询。

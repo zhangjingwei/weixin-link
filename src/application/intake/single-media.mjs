@@ -12,6 +12,6 @@ export async function singleMedia(message,token,{prepare,compose,submit,log=()=>
  if(message._receiptDeferred)input.receiptDeferred=true
  input.traceId=message._traceId
  log('attachments.job_submit',{trace_id:message._traceId,messageId})
- await submit(message.userId,input,token,message._ingressId)
+ await submit(message.userId,input,token,message._ingressId,message)
  return true
 }

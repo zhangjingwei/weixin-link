@@ -16,3 +16,5 @@ MCP 是接口，管理用例复用既有会话、投递、计划和版本服务�
 maintenance-management 与 project-archive-management 分别处理回执后的维护调度和归档/还原；组合根通过窄端口接入原维护工作进程，不在应用层导入 setup。
 
 model-management 保存按项目隔离的后续轮次模型偏好；复用原模型查询、管理操作去重与会话存储，不中断当前轮次，不切换供应商。
+
+progress-management 只组织可核实结果证据和当前状态；queue-management 用精确任务快照操作原持久队列，不修改运行任务。入口状态是既有会话状态的只读投影。

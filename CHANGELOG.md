@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Complete unified entry with evidence-backed progress, exact task stop and pending-queue controls, bounded multi-project plans with dependencies, and explicit private attachment handoffs.
+- Reuse the restricted classifier per account, cache model discovery, expose routing diagnostics, and validate requested project names; retain budget Luna with medium reasoning and fast tier after synthetic live comparisons.
+
 ## 1.9.1 — 2026-11-23
 
 - 任务进度、结果与排队回执显示“项目名 · 中文任务标题”，用简短意图代替难懂的哈希编号。

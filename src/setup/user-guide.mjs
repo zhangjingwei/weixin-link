@@ -15,7 +15,7 @@ export const USER_GUIDE=`微信助手使用说明
 - “停止工具箱当前任务。”——核对项目和任务后请求停止，不影响其他项目。
 - “查一下知识库上次的结果。”——只读结果；只有明确说“把原文件再发一次”才重发。
 
-各项目保留自己的目录、上下文和队列。进度、审批提示和结果带项目与任务标识返回。排队表示已接受任务，不表示已经完成。后台结果不会自动写入当前模型上下文，需要汇总时助手会查询对应任务。语音有可靠文字转写时也可这样表达；跨项目提交目前仅支持文字，附件原件不会隐式转交。
+各项目保留自己的目录、上下文和队列。进度、审批提示和结果带项目与任务标识返回。排队表示已接受任务，不表示已经完成。后台结果不会自动写入当前模型上下文，需要汇总时助手会查询对应任务。语音有可靠文字转写时也可这样表达；可明确把本条附件交给指定项目，系统建立私有交接副本；不会隐式转交历史附件。
 
 ## 项目、历史与计划
 
@@ -66,7 +66,7 @@ Complete model authorization and WeChat sign-in on the installation computer as 
 - “Stop the toolbox project's current task.” — verifies the target without stopping other projects.
 - “Show the knowledge project's previous result.” — reads it; files are resent only on an explicit request.
 
-Projects retain their own directories, context and queues. Labelled progress, approval prompts and results return to the same WeChat entry. Queued does not mean completed. Background results are not automatically inserted into the current model context; the assistant queries task results when asked to summarize. Reliable voice transcripts work as text. Cross-project submissions currently accept text only; attachments are not implicitly transferred.
+Projects retain their own directories, context and queues. Labelled progress, approval prompts and results return to the same WeChat entry. Queued does not mean completed. Background results are not automatically inserted into the current model context; the assistant queries task results when asked to summarize. Reliable voice transcripts work as text. Current-message attachments can be explicitly handed to a named project through private snapshots; historical attachments are not implicitly forwarded.
 
 ## Projects, history and schedules
 
@@ -99,4 +99,4 @@ Send help for the full manual command entry. Natural-language management require
 `
 
 // First-login guidance emphasizes natural language; exact commands remain a fallback.
-export function quickStartGuide(language='zh'){return language==='en'?"Getting started\n\n• Describe your task: ask for project progress or ask a named project to improve search.\n• No project switching is needed; labelled progress and results return here. Cross-project submission currently accepts text only.\n• Ask to check updates, upgrade to the checked release, or restart this account. Scheduled does not mean completed.\n• If the model is unavailable, stop, status and install-help remain available.\n• Ask how to use the assistant whenever needed.\n\nIf model setup is incomplete, rerun the installer on your computer and choose Configure model.":"使用说明 · 快速上手\n\n• 直接说需求，例如“知识库做到哪了”“让工具箱优化搜索页面”。\n• 无需切换项目；进度和结果带项目标识返回。跨项目提交目前仅支持文字。\n• 可以说“看看有没有更新”“升级到刚才的新版本”或“重启当前账号”。已安排不等于完成。\n• 模型不可用时仍可发送“停止”“状态”“安装帮助”。\n• 需要帮助时说“再介绍一下怎么用”。\n\n若尚未配置模型，请在安装电脑运行安装程序，选择“配置模型”。"}
+export function quickStartGuide(language='zh'){return language==='en'?"Getting started\n\n• Describe your task: ask for project progress or ask a named project to improve search.\n• No project switching is needed; labelled progress and results return here. Current-message attachments can be explicitly handed to a named project.\n• Ask to check updates, upgrade to the checked release, or restart this account. Scheduled does not mean completed.\n• If the model is unavailable, stop, status and install-help remain available.\n• Ask how to use the assistant whenever needed.\n\nIf model setup is incomplete, rerun the installer on your computer and choose Configure model.":"使用说明 · 快速上手\n\n• 直接说需求，例如“知识库做到哪了”“让工具箱优化搜索页面”。\n• 无需切换项目；进度和结果带项目标识返回。可明确将本条附件交给指定项目。\n• 可以说“看看有没有更新”“升级到刚才的新版本”或“重启当前账号”。已安排不等于完成。\n• 模型不可用时仍可发送“停止”“状态”“安装帮助”。\n• 需要帮助时说“再介绍一下怎么用”。\n\n若尚未配置模型，请在安装电脑运行安装程序，选择“配置模型”。"}
