@@ -110,7 +110,8 @@ try {
     $bootstrapUrl = 'https://api.github.com/repos/zhangjingwei/weixin-link/zipball/' + [Uri]::EscapeDataString($bootstrapDownloadRef)
     Invoke-WebRequest -UseBasicParsing -Uri $bootstrapUrl -OutFile $bootstrapArchive
     $bootstrapExpanded = Join-Path $bootstrapTemp 'expanded'
-    Expand-Archive -LiteralPath $bootstrapArchive -DestinationPath $bootstrapExpanded
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory($bootstrapArchive, $bootstrapExpanded)
     $bootstrapRoots = @(Get-ChildItem -LiteralPath $bootstrapExpanded -Force)
     if ($bootstrapRoots.Count -ne 1 -or !$bootstrapRoots[0].PSIsContainer) {
         throw 'Downloaded archive has an unexpected layout.'

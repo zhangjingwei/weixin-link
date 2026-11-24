@@ -20,7 +20,8 @@ if(!(Test-Path $node) -or [int](& $node -p 'process.versions.node.split(".")[0]'
   $s=(Invoke-WebRequest "https://nodejs.org/dist/$version/SHASUMS256.txt").Content
   $line=($s -split "`n"|Where-Object {$_ -match "  $([regex]::Escape($archive))\s*$"})
   if(!$line -or (Get-FileHash (Join-Path $stage $archive) -Algorithm SHA256).Hash.ToLower() -ne ($line -split '\s+')[0]){throw 'NODE_CHECKSUM_MISMATCH'}
-  Expand-Archive (Join-Path $stage $archive) $stage
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $stage $archive), $stage)
   $nodeDir=Join-Path $tools 'node';if(Test-Path $nodeDir){throw 'MANAGED_NODE_EXISTS_REQUIRES_REVIEW'}
   Move-Item (Join-Path $stage "node-$version-win-x64") $nodeDir;$node=Join-Path $nodeDir 'node.exe'
  }finally{Remove-Item $stage -Recurse -Force}

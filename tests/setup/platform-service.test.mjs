@@ -45,7 +45,8 @@ test('Linux personal installation leaves an unrelated named-service template alo
  const regular=join(dir,'wechat-ping-bot.service'),template=join(dir,'wechat-ping-bot@.service')
  const original='# Managed by wechat-assistant setup v1\nexisting config\n'
  await writeFile(regular,original);await writeFile(template,'[Service]\nExecStart=/legacy/bot\n')
- await installServices({home,root:'/new/source',platform:'linux',run:async()=>{}})
- assert.match(await readFile(regular,'utf8'),/new\/source/)
+ const root=join(home,'new','source')
+ await installServices({home,root,platform:'linux',run:async()=>{}})
+ assert.ok((await readFile(regular,'utf8')).includes('WorkingDirectory='+JSON.stringify(root)))
  assert.equal(await readFile(template,'utf8'),'[Service]\nExecStart=/legacy/bot\n')
 })
