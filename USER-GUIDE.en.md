@@ -55,3 +55,5 @@ Intent classification uses available gpt-6.1-terra with medium reasoning and Sta
 Task messages show the project name and a readable task title rather than an internal ID. Intent classification supplies a concise Chinese title; existing tasks fall back to a short excerpt of the original request. Progress and results retain the same title, while internal IDs remain available for reconciliation.
 
 The unified entry also supports evidence-backed progress, exact stop and pending-queue controls, bounded dependent project plans, and explicit current-attachment handoffs. See [unified entry details](docs/features/unified-entry.md) for recovery, privacy and validation boundaries.
+
+When a task produces user-facing JSON, HTML, reports or similar deliverables, the assistant proactively sends actual WeChat file attachments. HTML is sent unchanged for opening in a browser after download. Project source, configuration and credentials are not automatically bundled. Delivery copies use private storage: temporary originals are cleaned after the entire delivery is confirmed, replay snapshots remain for 7 days, and failed or unknown deliveries are retained for reconciliation.

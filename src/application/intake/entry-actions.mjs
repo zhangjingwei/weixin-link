@@ -12,7 +12,7 @@ export async function entryAction(context,message,record,step,index){
   if(dependencies.some(id=>!id))throw Error('ENTRY_DEPENDENCY_UNCONFIRMED')
   const text=record.steps.length>1?'用户原始请求（只有下方指定片段属于本项目任务，其他项目仅作上下文）：\n'+record.text+'\n本任务只执行以下原文片段，并遵守原请求中的共同约束：\n'+step.text:record.text
   let preparedInput=step.useAttachments===true||step.useAttachments===undefined&&record.steps.length===1?record.preparedInput:record.preparedInput?.references?{references:record.preparedInput.references}:undefined
-  if(preparedInput?.attachments?.length&&context.prepareHandoff)preparedInput=await context.prepareHandoff({sourceKey:caller,targetKey:target.key,ingressId:message._ingressId,input:preparedInput})
+  if(preparedInput?.attachments?.length&&context.prepareHandoff)preparedInput=await context.prepareHandoff({sourceKey:record.materialSourceKey??caller,targetKey:target.key,ingressId:record.materialIngressId??message._ingressId,input:preparedInput})
   const result=await submitProjectTask(service,owner,caller,{...args,text,requestId},{allowCurrent:true,title:step.title,dependencies,preparedInput})
   record.receipts??={};record.receipts[index]=result.data
   return result.status==='queued'?`已提交到${conversations.displayName(owner,target)}：「${result.data.title}」。${dependencies.length?'等待前置任务确认成功后执行。':'结果会在这里返回。'}`:'任务未确认入队；未自动重试。'

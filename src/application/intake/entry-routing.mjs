@@ -2,7 +2,6 @@ import {taskDisplayTitle} from '../../domain/tasks/task-label.mjs'
 import {entryPlan} from '../../domain/tasks/entry-plan.mjs'
 import {entryAction} from './entry-actions.mjs'
 import {progressText} from '../management/progress-management.mjs'
-import {submitProjectTask} from '../management/project-task-management.mjs'
 import {taskId} from '../../domain/messages/message-identity.mjs'
 
 // The classifier has no execution authority. All effects use existing owner-bound
@@ -32,19 +31,24 @@ export class EntryRouting{
   const projects=this.service.entries(owner).map(e=>this.service.snapshot(owner,e)),source=this.conversations.entry(message.userId)
   if(!source)return false
   if(!record&&Object.keys(root.entryRoutes).length>=1000)return false
-  if(!record){record=root.entryRoutes[id]={createdAt:Date.now(),status:'deciding',currentProjectId:source.id,preparedInput:preparedInput?structuredClone(preparedInput):message.references?.length?{references:structuredClone(message.references)}:undefined,pendingClarification:root.entryClarification?.createdAt>Date.now()-600000?structuredClone(root.entryClarification):null};await this.manager.save()}
+  const queuedSnapshot=()=>Object.fromEntries(projects.map(p=>[p.projectId,(this.jobs.pending?.()??[]).filter(j=>j.owner===this.service.target(owner,p.projectId).key&&j.state==='pending').map(j=>({taskId:j.id,title:taskDisplayTitle(j.input,j.input?.projectDispatch?.title)}))]))
+  if(!record){record=root.entryRoutes[id]={createdAt:Date.now(),status:'deciding',currentProjectId:source.id,queuedSnapshot:queuedSnapshot(),materialSourceKey:message.userId,materialIngressId:id,preparedInput:preparedInput?structuredClone(preparedInput):message.references?.length?{references:structuredClone(message.references)}:undefined,pendingClarification:root.entryClarification?.createdAt>Date.now()-600000&&(!root.entryClarification.materialSourceKey||root.entryClarification.materialSourceKey===message.userId)?structuredClone(root.entryClarification):null};await this.manager.save()}
   if(!record.decision){
+   record.queuedSnapshot??=queuedSnapshot()
+   const candidateInput=record.preparedInput??record.pendingClarification?.preparedInput
    let decision;const started=Date.now();root.entryRoutingMetrics??={classified:0,fallbacks:0};record.status='classifying';await this.manager.save()
-   try{decision=await this.classify({text:message.text,references:(message.references??[]).slice(0,3).map(r=>({title:r.title,text:r.text?.slice(0,500)})),currentAttachments:(preparedInput?.attachments??[]).map(a=>({name:a.name,kind:a.kind})),currentProjectId:record.currentProjectId,pendingClarification:record.pendingClarification,projects:projects.map(p=>({projectId:p.projectId,name:p.name,archived:p.archived,state:p.state,task:p.task,queued:p.queued,queuedTasks:(this.jobs.pending?.()??[]).filter(j=>j.owner===this.service.target(owner,p.projectId).key&&j.state==='pending').slice(0,5).map(j=>({taskId:j.id,title:taskDisplayTitle(j.input,j.input?.projectDispatch?.title)}))}))})}
+   try{decision=await this.classify({text:message.text,references:(message.references??[]).slice(0,3).map(r=>({title:r.title,text:r.text?.slice(0,500)})),currentAttachments:(candidateInput?.attachments??[]).map(a=>({name:a.name,kind:a.kind})),currentProjectId:record.currentProjectId,pendingClarification:record.pendingClarification,projects:projects.map(p=>({projectId:p.projectId,name:p.name,archived:p.archived,state:p.state,task:p.task,queued:p.queued,queuedTasks:(record.queuedSnapshot[p.projectId]??[]).slice(0,5)}))})}
    catch(error){record.fallbackCode=/^ENTRY_ROUTER_[A-Z_]+$/.test(error.message)?error.message:'ENTRY_ROUTER_CLASSIFICATION_FAILED';root.entryRoutingMetrics.lastFallbackCode=record.fallbackCode;root.entryRoutingMetrics.fallbacks++;root.entryRoutingMetrics.lastLatencyMs=Date.now()-started;if(!current())return true;record.status='fallback';await this.manager.save();return false}
    root.entryRoutingMetrics.classified++;root.entryRoutingMetrics.lastLatencyMs=Date.now()-started
    if(!current())return true
+   const continuation=decision.useClarification===true&&record.pendingClarification
+   record.text=continuation?continuation.text+'\n用户对目标的补充澄清：'+message.text:message.text
+   if(continuation&&!record.preparedInput){record.preparedInput=structuredClone(continuation.preparedInput);record.materialSourceKey=continuation.materialSourceKey??message.userId;record.materialIngressId=continuation.materialIngressId??id}
    let steps
-   try{steps=entryPlan(decision,message.text,projects)}catch(error){if(error.message==='ENTRY_TARGET_UNCONFIRMED')steps=[{action:'clarify',question:'未定位到唯一匹配项目，请明确项目名称。',dependsOn:[]}];else{record.status='fallback';await this.manager.save();return false}}
-   record.text=decision.useClarification&&record.pendingClarification?record.pendingClarification.text+'\n用户对目标的补充澄清：'+message.text:message.text
-   record.steps=steps.map(step=>{const target=projects.find(p=>p.projectId===step.projectId);const entry=target&&this.service.target(owner,target.projectId);return {...step,title:taskDisplayTitle(record.text,step.title),threadId:target?.threadId??null,task:target?.task??null,queuedTasks:entry?(this.jobs.pending?.()??[]).filter(j=>j.owner===entry.key&&j.state==='pending').map(j=>({taskId:j.id})):[]}})
+   try{steps=entryPlan(decision,record.text,projects)}catch(error){if(error.message==='ENTRY_TARGET_UNCONFIRMED')steps=[{action:'clarify',question:'未定位到唯一匹配项目，请明确项目名称。',dependsOn:[]}];else{record.status='fallback';await this.manager.save();return false}}
+   record.steps=steps.map(step=>{const target=projects.find(p=>p.projectId===step.projectId);const entry=target&&this.service.target(owner,target.projectId);return {...step,title:taskDisplayTitle(record.text,step.title),threadId:target?.threadId??null,task:target?.task??null,queuedTasks:entry?record.queuedSnapshot[step.projectId]??[]:[]}})
    record.decision=record.steps[0]
-   if(record.decision.action==='clarify')root.entryClarification={text:record.text,question:record.decision.question,createdAt:Date.now()}
+   if(record.decision.action==='clarify')root.entryClarification={text:record.text,question:record.decision.question,createdAt:Date.now(),preparedInput:record.preparedInput,materialSourceKey:record.materialSourceKey,materialIngressId:record.materialIngressId}
    else delete root.entryClarification
    record.task=record.decision.task;record.threadId=record.decision.threadId;record.status='decided';await this.manager.save()
   }

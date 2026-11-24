@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Preserve explicitly handed-off attachments and original multi-project requests across target clarification; bind cancel-all to the queue snapshot taken before classification.
+- Require proactive WeChat attachment delivery of user-facing JSON, HTML and reports, with private copies and unchanged file bytes.
+
 - 意图识别改用 Terra 中档推理和普通速度，精简分类输入与结构化计划，保留完整原始任务及执行边界。
 - Complete unified entry with evidence-backed progress, exact task stop and pending-queue controls, bounded multi-project plans with dependencies, and explicit private attachment handoffs.
 - Reuse the restricted classifier per account, cache model discovery, expose routing diagnostics, and validate requested project names; use Terra with medium reasoning and Standard speed, with compact classification context and explicit model comparisons.

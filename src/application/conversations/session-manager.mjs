@@ -171,7 +171,7 @@ export class SessionManager {
     const workspaceRules=await this.protocol.workspaceRules(this.workspaceFor(userId))
     const store=this.outputStoreFor(userId)
     const deliveryDir=typeof userId==='string'?store.deliveryPath?.(userId):undefined
-    const deliveryRules=deliveryDir?'\n\n本会话临时交付目录：'+JSON.stringify(deliveryDir)+'。先按需创建此目录并设为仅当前用户可访问（0700）。新生成的报告、压缩包、图片等交付副本必须优先写在此私有目录，避免进入项目仓库；最终用绝对路径链接交付。不得把项目源文件当作临时文件删除。临时原件在整组投递获接口确认后清理，重发快照保留7天；失败或结果未知时保留。':''
+    const deliveryRules=deliveryDir?'\n\n本会话临时交付目录：'+JSON.stringify(deliveryDir)+'。先按需创建此目录并设为仅当前用户可访问（0700）。新生成的 JSON、HTML、报告、压缩包、图片等面向用户的成果交付副本必须优先写在此私有目录，避免进入项目仓库；最终主动用绝对路径 Markdown 链接交付实际微信附件，不只回复文件名。不得把项目源文件当作临时文件删除。临时原件在整组投递获接口确认后清理，重发快照保留7天；失败或结果未知时保留。':''
     return this.instructions+(this.managementGuidance?'\n\n'+this.managementGuidance:'')+(this.backend?.kind === 'host' && this.scheduleGuidance ? '\n\n'+this.scheduleGuidance : '')+(guidance?'\n\n'+guidance:'')+workspaceRules+deliveryRules
   }
   async startProvider(session) {

@@ -97,3 +97,43 @@ test('the intent title is persisted and used instead of the task hash in user no
  const job=f.jobs.pending()[0]
  assert.equal(job.input.projectDispatch.title,'修复搜索功能');assert.match(f.sent[0],/修复搜索功能/);assert(!f.sent[0].includes(job.id.slice(0,8)))
 })
+
+test('clarification retains original material identity and prepared attachments',async t=>{
+ const f=await fixture(t,{action:'clarify',projectId:null,question:'Which project?'})
+ await f.router.process(f.message,f.token,{text:'file metadata',attachments:[{path:'/private/example.pdf',name:'example.pdf'}]})
+ let handoff;f.router.prepareHandoff=async args=>{handoff=args;return args.input}
+ const answer={...f.message,text:'Project',raw:{message_id:'review-answer'}};answer._ingressId=f.jobs.capture(answer)
+ f.router.classify=async()=>({action:'task',projectId:'2',useClarification:true,useAttachments:true})
+ await f.router.process(answer,f.token)
+ assert.equal(f.jobs.pending().length,1)
+ assert.equal(f.jobs.pending()[0].input.attachments[0].name,'example.pdf')
+ assert.equal(handoff.sourceKey,'alice');assert.equal(handoff.ingressId,f.message._ingressId)
+})
+test('multi-project clarification validates original task spans and retains dependencies',async t=>{
+ const f=await fixture(t,{action:'clarify',projectId:null,question:'Which projects?'})
+ f.message.text='Current check search, Project update page'
+ await f.router.process(f.message,f.token)
+ const answer={...f.message,text:'Current and Project',raw:{message_id:'review-batch-answer'}};answer._ingressId=f.jobs.capture(answer)
+ f.router.classify=async()=>({action:'batch',useClarification:true,steps:[{action:'task',projectId:'1',text:'Current check search',dependsOn:[]},{action:'task',projectId:'2',text:'Project update page',dependsOn:[0]}]})
+ assert.equal(await f.router.process(answer,f.token),true)
+ const jobs=f.jobs.pending();assert.equal(jobs.length,2);assert.deepEqual(jobs[1].input.dependencies,[jobs[0].id])
+})
+test('cancel-all excludes jobs added during classification',async t=>{
+ const f=await fixture(t,{action:'cancel_all',projectId:'2'})
+ const old=f.jobs.add('project',{text:'old'},'old');let fresh,selected
+ f.router.classify=async()=>{fresh=f.jobs.add('project',{text:'new after request'},'fresh');return {action:'cancel_all',projectId:'2'}}
+ f.service.call=async(caller,name,args)=>{selected=args.taskIds;return {status:'confirmed',data:{cancelled:args.taskIds.length}}}
+ await f.router.process(f.message,f.token)
+ assert.deepEqual(new Set(selected),new Set([old]))
+})
+
+test('unrelated or expired clarification never forwards historical material',async t=>{
+ for(const expired of [false,true]){
+ const f=await fixture(t,{action:'clarify',projectId:null,question:'Which project?'})
+ await f.router.process(f.message,f.token,{text:'file metadata',attachments:[{path:'/private/example.pdf',name:'example.pdf'}]})
+ if(expired)f.root.alice.entryClarification.createdAt=Date.now()-600001
+ const answer={...f.message,text:'A new task',raw:{message_id:'unrelated'}};answer._ingressId=f.jobs.capture(answer)
+ f.router.classify=async input=>{if(expired)assert.equal(input.pendingClarification,null);return {action:'task',projectId:'2',useClarification:expired,useAttachments:true}}
+ await f.router.process(answer,f.token);assert.equal(f.jobs.pending()[0].input.attachments,undefined)
+ }
+})

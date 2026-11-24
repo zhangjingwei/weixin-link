@@ -79,6 +79,16 @@ test('HTML is sent as a file with exact bytes and filename, not zipped or interp
  assert.equal((await transport.deliver('owner',packet)).status,'accepted');assert.equal(calls[1].fileName,'document.html');assert.equal(calls[1].file.toString(),html)
 }))
 
+test('JSON and HTML deliverables are both sent as actual files with exact bytes',()=>fixture(async({cwd,store})=>{
+ const files=[['result.json','{"结论":"完成","count":2}\n'],['report.html','<!doctype html><meta charset="utf-8"><h1>结果</h1>']]
+ for(const [name,body] of files)await writeFile(join(cwd,name),body)
+ const packet=await store.package('owner',files.map(([name])=>`[${name}](${join(cwd,name)})`).join('\n')),sent=[]
+ const transport=new OutputTransport({store,send:async(_u,value)=>sent.push(value)})
+ assert.equal((await transport.deliver('owner',packet)).status,'accepted')
+ assert.deepEqual(sent.filter(value=>typeof value!=='string').map(value=>[value.fileName,value.file.toString()]),files)
+ assert.ok(packet.attachments.every(file=>file.kind==='file'&&file.status==='accepted'))
+}))
+
 test('long PNG image is delivered as an image with original bytes and resolution',()=>fixture(async({cwd,store})=>{
  const path=join(cwd,'long-image.png');const original=await sharp({create:{width:880,height:6000,channels:3,background:'#e5f4ea'}}).png().toBuffer();await writeFile(path,original)
  const packet=await store.package('a',`![长图](${path})`);assert.equal(packet.errors.length,0);assert.equal(packet.attachments[0].kind,'image');const data=await store.bytes('a',packet.attachments[0]);assert.deepEqual(data,original);assert.equal((await sharp(data).metadata()).height,6000)
