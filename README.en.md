@@ -22,6 +22,8 @@ Research, plan, and get results.
 
 **Smarter AI:** Choose the model; the agent does the work. It plans, uses tools, and takes complex tasks from start to finish.
 
+**Start with an idea:** Design discussion helps you work out what you need; the delivery assistant carries it through. Code, campaigns or reports can start with a plain-language request.
+
 <table align="center">
   <tr><th align="center">Clarify a city · Check the weather</th><th align="center">Transcribe speech · Write a story</th></tr>
   <tr>
@@ -109,13 +111,19 @@ If the model is unavailable, stop, service-status and install-help remain availa
 
 ## Built-in workflows
 
-Three bundled skills work together for coding and other tasks:
+### 💡 Design discussion: start before you have every detail
 
-- **Design discussion:** Compare options and clarify choices that affect the outcome, with ❓ questions, 💡 recommendations and 📋 agreed plans.
-- **Delivery assistant:** Locate the target project, implement a clear request, verify it and deliver usable results. 🛠️ indicates work in progress, 📦 delivery and ⚠️ an action needed from you. Blueprint approval or step-by-step pauses apply when explicitly requested.
-- **Message layout:** Short paragraphs and lists for reading; standalone text blocks for meeting notes and copy-ready drafts; language-tagged code blocks preserve indentation and blank lines. Delivery links stay outside code blocks.
+You do not need a finished requirements document. Say “I want an equipment inspection system,” and the assistant helps compare approaches, spot missing details and clarify choices that affect the design, such as what happens when the workshop loses connectivity. It carries the agreed goal, approach and acceptance criteria into the work that follows.
 
-For example: “Compare offline inspection designs first,” “Implement the agreed approach,” or “Format these meeting notes so I can copy them.” Simple questions receive direct answers.
+### 📦 Delivery assistant: turn the agreed plan into something usable
+
+Say “Build it using this plan.” The assistant uses the context you have already agreed on, locates the project, breaks complex work into manageable steps, checks the results and delivers code, documents or files. You can see what was completed, how to use it and what remains unfinished without repeating the brief. Ask explicitly if you want to approve a blueprint first or review each stage.
+
+### 📝 Message layout: easy to read, ready to reuse
+
+Clear lists for steps, preserved indentation for code, and separate copy-ready text blocks for meeting notes and drafts. Images, videos and files are delivered directly, so you spend less time reformatting results or removing explanatory text from a draft.
+
+These workflows also help with campaigns, research and reports. Simple questions still get direct answers. Execution depends on your authorization, available tools and environment; incomplete or unverified work is identified.
 
 Code-block copy controls, image viewing/saving and short MP4 playback have been tested in the current client. Explanatory text arrives before separate media messages, rather than inline media. Other clients and media encodings require validation. Tables become readable text records; do not rely on complex Markdown styling or LaTeX rendering.
 
