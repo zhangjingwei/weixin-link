@@ -27,9 +27,9 @@ async function removeStaleSocket(path){
 
 /** Private, live control plane. Logs never participate in restart decisions. */
 export class RuntimeControl {
- constructor({snapshot,ready=()=>false,startup=()=>undefined,onSeal,onResume,onDrainRelease=()=>{},onSchedule=async()=>{throw Error('Unavailable')},onManagement=async()=>{throw Error('MANAGEMENT_UNAVAILABLE')},features={},backend=null,controlTokenFile,now=Date.now}={}){
+ constructor({snapshot,ready=()=>false,startup=()=>undefined,onSeal,onResume,onDrainRelease=()=>{},onManagement=async()=>{throw Error('MANAGEMENT_UNAVAILABLE')},features={},backend=null,controlTokenFile,now=Date.now}={}){
   this.canSeal=typeof snapshot==='function'&&typeof onSeal==='function'&&typeof onResume==='function'
-  Object.assign(this,{snapshot:snapshot??(()=>({})),ready,startup,onSeal:onSeal??(()=>{}),onResume:onResume??(()=>{}),onDrainRelease,onSchedule,onManagement,features,backend,controlTokenFile,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
+  Object.assign(this,{snapshot:snapshot??(()=>({})),ready,startup,onSeal:onSeal??(()=>{}),onResume:onResume??(()=>{}),onDrainRelease,onManagement,features,backend,controlTokenFile,now});this.instance=randomUUID();this.counts={};this.lease=null;this.sealed=false
  }
  get draining(){
   if(this.lease&&!this.sealed&&this.lease.expires<=this.now()){this.lease=null;queueMicrotask(()=>{if(!this.lease)this.onDrainRelease()})}
@@ -75,11 +75,6 @@ export class RuntimeControl {
      req.setEncoding('utf8')
      let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>65536)throw Object.assign(Error('MANAGEMENT_INVALID_ARGUMENTS'),{statusCode:413})}
      result=await this.track('management',()=>this.onManagement(JSON.parse(body)))
-    }
-    else if(req.method==='POST'&&req.url==='/schedules'){
-     if(this.sealed||this.draining)throw Object.assign(Error('Unavailable'),{statusCode:409})
-     let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>4096)throw Object.assign(Error('Too large'),{statusCode:413})}
-     result=await this.track('schedule',()=>this.onSchedule(JSON.parse(body)))
     }
     else if(req.method==='POST'&&['/drain','/seal','/resume'].includes(req.url)){
      let body='';for await(const chunk of req){body+=chunk;if(body.length>512)throw Object.assign(Error('Too large'),{statusCode:413})}

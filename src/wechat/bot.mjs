@@ -68,11 +68,9 @@ if (testing && !/^[a-zA-Z0-9_-]+$/.test(testName)) throw new Error('Invalid test
 const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-logs':'logs')})
 const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:testing?'test':'live'})
-const systemTimeZone=Intl.DateTimeFormat().resolvedOptions().timeZone
-const scheduleGuidance=`服务当前系统时区为 ${systemTimeZone}。用户未指定时区时，按此时区理解本地时间；单次计划的 at 须使用目标日期对应偏移的 ISO 8601 时间。以下 +08:00 仅用于说明格式。定时能力由接入层保存和触发。只有用户明确要求时，调用源码目录 ${JSON.stringify(join(import.meta.dirname, '../interfaces/cli/schedule-cli.mjs'))}；通过标准输入传 JSON。单次提醒：{"action":"create","kind":"reminder","at":"2027-01-01T09:00:00+08:00","text":"开会"}。定时提交任务：{"action":"create","kind":"task","at":"2027-01-01T09:00:00+08:00","text":"汇总今日新闻"}。每天重复可用 "repeat":{"frequency":"daily","time":"09:00","timeZone":${JSON.stringify(systemTimeZone)}} 代替 at；每周重复把 frequency 改为 weekly 并传 weekdays（周一=1 至周日=7）。查看 {"action":"list"}（可传 offset 和 limit，单页最多 10 条），取消 {"action":"cancel","id":"计划 ID"}。kind=task 在到期时向原会话的持久任务队列提交原样文字，由该会话对应的任务执行链路处理；不预先声称任务完成。命令从环境读取当前会话标识，不能自行指定收件人或会话。创建后以工具返回的 ID 和下次时间为准。`
 
 // 会话编排由应用层负责；底座协议由所选 agent.sessionOptions 注入。
-const manager = await new SessionManager({log, completionMarkers:true, scheduleGuidance, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, ...agent.sessionOptions }).init()
+const manager = await new SessionManager({log, completionMarkers:true, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, ...agent.sessionOptions }).init()
 const agentSwitcher=new AgentSwitcher({account})
 const upgrader=new ChatUpgrader()
 
@@ -122,7 +120,6 @@ const runtime=new RuntimeControl({
  backend:{id:backend.id,kind:backend.kind,agentKind:agent.kind,memoryMode:backend.memoryMode??'wechat'},
  features:{setup_commands:true,native_memory:backend.memoryMode==='native',conversation_unread_delivery:true,same_turn_supplements:true,text_conversations:true,original_long_jpeg:true,original_long_png:true,merged_completion_footer:true,conversation_resume:true,wechat_plain_text:true,reviewed_notification_filter:true,native_typing_lifecycle:true,weixin_protocol_v2:true,lossless_message_ids:true,durable_cursor_checkpoint:true,quoted_messages:true,weixin_reliability_v2:true,voice_output:false,audio_file_output:true,native_voice_experimental:process.env.WECHAT_NATIVE_VOICE_EXPERIMENTAL==='1',native_tool_status:process.env.WECHAT_NATIVE_TOOL_STATUS_EXPERIMENTAL==='1',native_tool_status_opt_in:true,weixin_quote_tool_audited:true,concise_notifications:true,material_prompt_compact:true,material_binding:true,intake_reliability:true,redundancy_cleanup:true,attachment_task_continuation:true,ingress_trace:true,independent_messages:true,explicit_collection:false,clear_recovery:true,semantic_turn_memory:false,compact_auto_memory:false,memory_v2:false,isolated_user_memory:false,woen_persona:true,concise_verify_workflow:true,account_fault_isolation:true,multi_account:true,task_labels:true,cancel_generation_guard:true,stage_progress:true,completion_markers:true,durable_inbox:true,delivery_failure_diagnostics:true,chunked_text:false,update_notice:true},
  onManagement:request=>management.onRequest(request),
- onSchedule:request=>{if(!schedules)throw Error('SCHEDULE_STATE_UNAVAILABLE');return schedules.onRequest(request)},
  ready:()=>loggedIn&&loginValidity.valid&&bot.isRunning&&!stopping,
   startup:()=>startupPhase,
  snapshot:()=>({sessions:[...manager.sessions.values()].filter(s=>s.connecting||s.busy||s.finishing||s.queue.length).length,intake_queues:pending.users.size+(durable?.users.size??0),saves:manager.pendingSaves,outbound_queues:outgoing.queues.size,rpc:[...manager.sessions.values()].reduce((n,s)=>n+(s.rpc.pending?.size??0),0)}),
@@ -156,7 +153,7 @@ const updates=createUpdateController({stateDir,sourceDir:join(import.meta.dirnam
  ready:()=>runtime.ready()&&runtime.status().idle&&!runtime.draining&&!runtime.sealed&&!stopping,view,log})
 let schedules
 try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,
- track:work=>runtime.track('schedule',work),manager,conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
+ track:work=>runtime.track('schedule',work),conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
 const managementInstallation=await managementPlugin({accountId:account.id,codexHome:agent.sessionOptions.codexHome,stateDir})
 const desktop=createDesktopClient({account,providerKind:agent.providerKind,codexHome:agent.sessionOptions.codexHome,binary:installation.codexBinary,workspace:installation.workspace})

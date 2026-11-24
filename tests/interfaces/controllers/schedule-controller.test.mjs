@@ -20,8 +20,8 @@ test('schedule controller routes due reminders to the presenter and tasks to the
     log: () => {},
   })
   const at = new Date(now + 1000).toISOString()
-  await controller.onRequest({action: 'create', threadId: 'thread-alice', kind: 'reminder', at, text: '喝水'})
-  await controller.onRequest({action: 'create', threadId: 'thread-alice', kind: 'task', at, text: '汇总新闻'})
+  await controller.createForOwner('alice', {kind: 'reminder', at, text: '喝水'}, 'alice')
+  await controller.createForOwner('alice', {kind: 'task', at, text: '汇总新闻'}, 'alice')
   now += 1000
   await controller.tick()
   assert.deepEqual(notices, [['alice', '⏰ 提醒：喝水']])
@@ -29,7 +29,7 @@ test('schedule controller routes due reminders to the presenter and tasks to the
   assert.equal(submissions[0][0], 'alice')
   assert.deepEqual(submissions[0][1], {text: '汇总新闻'})
   assert.match(submissions[0][2], /^schedule:/)
-  assert.deepEqual(controller.onRequest({action: 'list', threadId: 'thread-alice'}).items.map(item => item.status), ['accepted', 'accepted'])
+  assert.deepEqual(controller.listForOwner('alice').items.map(item => item.status), ['accepted', 'accepted'])
   controller.close()
 })
 
@@ -45,10 +45,10 @@ test('scheduled tasks enter the account queue', async t => {
     enqueueTask: (...args) => {submissions.push(args); return 'queued-codex'},
     backend: {kind: 'host'}, view: {notice: () => {throw Error('must not notify')}}, log: () => {},
   })
-  await controller.onRequest({action: 'create', threadId: 'thread-alice', kind: 'task', at: new Date(now + 1000).toISOString(), text: 'x'})
+  await controller.createForOwner('alice', {kind: 'task', at: new Date(now + 1000).toISOString(), text: 'x'}, 'alice')
   now += 1000
   await controller.tick()
-  assert.equal(controller.onRequest({action: 'list', threadId: 'thread-alice'}).items[0].status, 'accepted')
+  assert.equal(controller.listForOwner('alice').items[0].status, 'accepted')
   assert.equal(submissions.length, 1)
   assert.equal(submissions[0][0], 'alice')
   controller.close()

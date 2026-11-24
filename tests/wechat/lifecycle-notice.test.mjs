@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join,basename} from 'node:path'
-import {LifecycleNotice,WELCOME_MESSAGE,welcomeMessage,upgradeMessage} from '../../src/wechat/lifecycle-notice.mjs'
+import {LifecycleNotice,welcomeMessage,upgradeMessage} from '../../src/wechat/lifecycle-notice.mjs'
 
 const a='a'.repeat(40),b='b'.repeat(40)
 async function fixture(t,{welcomePending=false,commit=a}={}){
@@ -19,7 +19,7 @@ async function fixture(t,{welcomePending=false,commit=a}={}){
 }
 test('fresh install sends one welcome immediately without waiting for inbound',async t=>{
  const f=await fixture(t,{welcomePending:true});await f.notice.start()
- assert.deepEqual(f.sent,[['owner',WELCOME_MESSAGE+'\n\n'+quickStartGuide('zh')]])
+ assert.deepEqual(f.sent,[['owner',welcomeMessage('zh')+'\n\n'+quickStartGuide('zh')]])
  assert.match(f.sent[0][1],/使用说明 · 快速上手/)
  assert.equal(await f.notice.onInbound('owner'),null);assert.equal(f.sent.length,1);assert.equal((await f.saved()).status,'accepted')
 })

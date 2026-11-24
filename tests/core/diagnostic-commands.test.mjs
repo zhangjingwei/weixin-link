@@ -3,9 +3,8 @@ import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {diagnosticCommand,handleDiagnostic,readDiagnostics} from '../../src/application/diagnostics/diagnostic-commands.mjs'
+import {handleDiagnostic,readDiagnostics} from '../../src/application/diagnostics/diagnostic-commands.mjs'
 import {createManagementMaintenanceController} from '../../src/interfaces/controllers/management-maintenance-controller.mjs'
-test('exact commands only',()=>{assert.equal(diagnosticCommand('诊断'),'diagnose');assert.equal(diagnosticCommand(' 运行诊断 '),null);assert.equal(diagnosticCommand('请解释运行诊断'),null)})
 test('account scoped report excludes raw secret fields and handles malformed records',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'diagnostic-'));try{
  await mkdir(join(dir,'logs'));await writeFile(join(dir,'logs/events.jsonl'),JSON.stringify({timestamp:'2026-11-06T01:00:00.000Z',event:'turn.started',trace_id:'secret-token',level:'error',message:'secret-token',token:'secret-token',code:'secret-token'})+'\nbad\nnull\n')

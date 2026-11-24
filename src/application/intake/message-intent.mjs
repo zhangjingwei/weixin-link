@@ -16,8 +16,6 @@ export function messageIntent(message, {hasMedia, diagnostic, setup, agent, upgr
   for (const [kind, parse] of [
     ['diagnostic', diagnostic],
     ['setup', setup],
-    ['agent', agent],
-    ['upgrade', upgrade],
     ['conversation', conversation],
     ['session', session],
   ]) {

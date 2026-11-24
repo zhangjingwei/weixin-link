@@ -7,12 +7,11 @@ import {deliveryError} from '../infrastructure/wechat/delivery-error.mjs'
 import {installerCommand} from '../setup/setup-locale.mjs'
 
 const RELEASE=/^(?:[0-9a-f]{7,40}|[0-9a-f]{64})$/
-export const WELCOME_MESSAGE='微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 '+installerCommand('setup',{language:'zh'})+'。'
 export const welcomeMessage=(language,accountId='default')=>language==='en'?'Weixin Link is connected. Complete model setup in your computer terminal with '+installerCommand('setup',{accountId,language:'en'})+' if needed.':'微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 '+installerCommand('setup',{accountId,language:'zh'})+'。'
 export const upgradeMessage=(commit,language='zh',release)=>(language==='en'?`Weixin Link upgraded to ${release?.tag??commit.slice(0,7)} and is connected. You can ask how your tasks are progressing, whether the service is working, or how to use the assistant.`:`微信助手已升级到 ${release?.tag??commit.slice(0,7)}，服务已连接。可以直接说你的需求，例如“看看任务进展”“检查助手是否正常”或“介绍一下怎么用”。`)+(release?'\n\n'+release.details:'')
 
 export class LifecycleNotice{
- constructor({stateDir,sourceDir,owners,welcomePending=false,loginId,welcomeText=async()=>WELCOME_MESSAGE,language='zh',send,log=()=>{}}){Object.assign(this,{stateDir,sourceDir,owners:[...new Set(owners)],welcomePending,loginId,welcomeText,language,send,log});this.locks=new Map();this.commit=null;this.started=false}
+ constructor({stateDir,sourceDir,owners,welcomePending=false,loginId,welcomeText,language='zh',send,log=()=>{}}){Object.assign(this,{stateDir,sourceDir,owners:[...new Set(owners)],welcomePending,loginId,welcomeText:welcomeText??(async()=>welcomeMessage(language)),language,send,log});this.locks=new Map();this.commit=null;this.started=false}
  path(owner){return join(this.stateDir,'lifecycle-notice-'+createHash('sha256').update(owner).digest('hex').slice(0,24)+'.json')}
  async legacyWelcomed(owner){try{return JSON.parse(await readFile(join(this.stateDir,'welcome-'+createHash('sha256').update(owner).digest('hex').slice(0,24)+'.json'),'utf8')).state==='accepted'}catch{return false}}
  async release(){

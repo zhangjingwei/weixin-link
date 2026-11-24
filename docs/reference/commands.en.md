@@ -1,4 +1,4 @@
-# Legacy and emergency command reference
+# Emergency fallback command reference
 
 Daily use is described in [the user guide](../../USER-GUIDE.en.md). These exact commands remain available when the model is unavailable or for manual recovery.
 
@@ -136,6 +136,6 @@ Projects can share a folder. If they edit the same file at the same time, their 
 
 Submit a text task to a named project from the current entry without switching. Labelled progress, approval prompts and results return directly. Queued means accepted by the queue, not completed. Explicitly name the target for supplements and stops; attachments are not forwarded implicitly.
 
-Ask for progress in a named project, switch to it, supplement its running task, or stop that task. The management MCP and Skill only access your registered conversations and clarify ambiguous names. Queries never switch projects. Pending/requested does not confirm completion; check system confirmation and the original task state. Existing commands remain available. Reliable voice transcripts follow the same workflow. See the [management guide](../features/management-mcp.md).
+Ask for progress in a named project, switch to it, supplement its running task, or stop that task. The management MCP and Skill only access your registered conversations and clarify ambiguous names. Queries never switch projects. Pending/requested does not confirm completion; check system confirmation and the original task state. Daily management uses natural language and MCP; stop, service status and installation help remain emergency fallbacks. Reliable voice transcripts follow the same workflow. See the [management guide](../features/management-mcp.md).
 
 Management also supports project creation and renaming, bounded history search, read-only results, explicit snapshot redelivery, targeted reconciliation, schedules, and version-specific update dismissal. Creating a project does not switch to it. Reading a result does not resend files. Cancelling a schedule does not stop a submitted task. See the [management guide](../features/management-mcp.md).

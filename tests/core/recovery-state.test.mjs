@@ -4,7 +4,7 @@ import {mkdtemp,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
-import {SessionManager,controlCommand} from '../../src/wechat/session-manager.mjs'
+import {SessionManager} from '../../src/wechat/session-manager.mjs'
 import {recoveryText} from '../../src/application/tasks/recovery-state.mjs'
 test('recheck only reopens uncertain owner-linked work for reconciliation',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'recheck-')),jobs=new DurableJobs(join(dir,'jobs.sqlite'))
@@ -25,6 +25,5 @@ test('partial and unknown sends preserve delivery uncertainty',async()=>{
  assert.equal(unknown.lastDelivery.status,'unknown')
  assert.match(recoveryText({execution:'failed',delivery:'recovered'}),/执行失败/)
  assert.match(recoveryText({execution:'completed',delivery:'failed'}),/发送失败.*结果/)
- assert.equal(controlCommand('恢复').action,'recover')
  }finally{await rm(dir,{recursive:true,force:true})}
 })

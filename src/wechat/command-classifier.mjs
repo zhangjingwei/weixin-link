@@ -1,8 +1,6 @@
 import {messageIntent} from '../application/intake/message-intent.mjs'
 import {hasMedia} from '../infrastructure/media/media-input.mjs'
 import {diagnosticCommand} from '../application/diagnostics/diagnostic-commands.mjs'
-import {agentSwitchCommand} from '../setup/agent-switch.mjs'
-import {chatUpgradeCommand} from '../setup/chat-upgrade.mjs'
 import {conversationCommand} from '../interfaces/wechat/conversation-command.mjs'
 import {controlCommand} from '../interfaces/wechat/control-command.mjs'
 
@@ -12,8 +10,6 @@ export function createCommandClassifier() {
     hasMedia,
     diagnostic: (_message, text) => diagnosticCommand(text),
     setup: message => message._setupAction,
-    agent: (_message, text) => agentSwitchCommand(text),
-    upgrade: (_message, text) => chatUpgradeCommand(text),
     conversation: (message, text) => Object.hasOwn(message,'_conversationCommand')?message._conversationCommand:conversationCommand(text),
     session: (message, text) => message._sessionCommand??controlCommand(text),
   }

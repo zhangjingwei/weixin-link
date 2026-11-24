@@ -6,7 +6,7 @@ import {readProviderProfile} from './provider-profile.mjs'
 import {readTerminalSetupStatus,terminalSetupFingerprint} from './terminal-setup-status.mjs'
 import {installerCommand} from './setup-locale.mjs'
 
-export function setupCommand(text){const commands={'不升级':'skipUpdate','取消':'skipUpdate',cancel:'skipUpdateEn','skip-update':'skipUpdateEn','检查更新':'updates','check-updates':'updatesEn','使用说明':'manual',guide:'manualEn','安装向导':'wizardInfo',setup:'wizardInfoEn','安装状态':'status','setup-status':'statusEn','安装智能体':'install','install-agent':'installEn','登录智能体':'login','login-agent':'loginEn','验收智能体':'check','check-agent':'checkEn','安装帮助':'help','install-help':'helpEn'};return typeof text==='string'?commands[text.trim().toLowerCase()]??null:null}
+export function setupCommand(text){const commands={'使用说明':'manual',guide:'manualEn','安装向导':'wizardInfo',setup:'wizardInfoEn','安装智能体':'install','install-agent':'installEn','登录智能体':'login','login-agent':'loginEn','验收智能体':'check','check-agent':'checkEn','安装帮助':'help','install-help':'helpEn'};return typeof text==='string'?commands[text.trim().toLowerCase()]??null:null}
 
 export class SetupController{
  constructor({stateDir,accountId,home=(process.env.HOME||platformHome()),runDoctor=doctor,runInstall=installCodex,runCheck=checkCodex,runModelTest,checkUpdates,skipUpdate}={}){

@@ -2,7 +2,7 @@ import {readFile,mkdir,writeFile} from 'node:fs/promises'
 import {join,resolve} from 'node:path'
 import {randomUUID,createHash} from 'node:crypto'
 import {accountPaths} from '../../infrastructure/accounts/account-store.mjs'
-const commands={'诊断':'diagnose',diagnose:'diagnose','服务状态':'service','service-status':'service','查看最近错误':'errors','recent-errors':'errors','导出诊断报告':'export','export-diagnostics':'export'}
+const commands={'服务状态':'service','service-status':'service'}
 export const diagnosticCommand=text=>typeof text==='string'?commands[text.trim().toLowerCase()]??null:null
 const knownCodes=new Set(['EPIPE','ECONNRESET','ECONNREFUSED','ETIMEDOUT','ENOENT','EACCES','ENOSPC','EIO','ABORT_ERR'])
 const apiReasons=new Set(['prepare_failed','unknown_error'])

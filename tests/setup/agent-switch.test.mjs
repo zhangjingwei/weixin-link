@@ -3,13 +3,8 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm,readFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
-import {agentSwitchCommand,AgentSwitcher,readAgentSwitch,scheduleAgentSwitch} from '../../src/setup/agent-switch.mjs'
+import {AgentSwitcher,readAgentSwitch,scheduleAgentSwitch} from '../../src/setup/agent-switch.mjs'
 import {performAgentSwitch} from '../../src/setup/agent-switch-worker.mjs'
-
-test('only the restart command is accepted',()=>{
- assert.deepEqual(agentSwitchCommand('重启'),{action:'restart',target:null})
- for(const value of ['切换智能体','切换智能体 Codex','切换智能体 X','/agent X'])assert.equal(agentSwitchCommand(value),null)
-})
 
 test('restart schedules only the current account once',async t=>{
  const stateDir=await mkdtemp(join(tmpdir(),'agent-restart-command-'));t.after(()=>rm(stateDir,{recursive:true,force:true}))

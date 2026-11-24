@@ -14,12 +14,6 @@ const exec=promisify(execFile)
 const root=fileURLToPath(new URL('../../',import.meta.url))
 export const agentSwitchPath=account=>join(account.stateDir,'agent-switch.json')
 
-export function agentSwitchCommand(text=''){
- const value=text.trim().replace(/[。！!]$/,'')
- if(value==='重启'||value.toLowerCase()==='restart')return {action:'restart',target:null}
- return null
-}
-
 export async function readAgentSwitch(account){
  const text=await readPrivateFile(agentSwitchPath(account))
  if(text===null)return null

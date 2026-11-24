@@ -52,41 +52,11 @@ test('inbound trace is retained through message logging and durable submission',
  assert.equal(events.find(e=>e.event==='message.received').trace_id,'message-trace-123')
  assert.equal(f.submitted[0][1].traceId,'message-trace-123')
 })
-test('diagnostic controls bypass missing model/backend and never submit inference',async()=>{
- const f=fixture();f.deps.stateDir='/nonexistent-wechat-diagnostic-test';f.deps.manager.sessions.clear();f.deps.backend.kind='remote';f.deps.backend.preflight=()=>{throw Error('must not invoke backend')};f.deps.runtime.track=async(kind,fn)=>fn()
- await f.handle({userId:'owner',text:'查看最近错误',_ingressId:'diagnostic-id'})
- assert.equal(f.submitted.length,0);assert.deepEqual(f.acked,['diagnostic-id']);assert.equal(f.sent.length,1);assert.match(f.sent[0][1],/诊断日志|诊断未完成/)
-})
-test('restart command bypasses inference and acknowledges after the reply',async()=>{
- const f=fixture(),events=[]
- f.deps.runtime.track=async(kind,work)=>{events.push('track:'+kind);return work()}
- f.deps.manager.acceptMessage=async()=>true
- f.deps.agentSwitcher={handle:async(command,reply)=>{events.push(command.target);await reply('切换请求已安排')}}
- f.handle=createMessageProcessor(f.deps)
- await f.handle({userId:'owner',text:'重启',_ingressId:'agent-switch-id'})
- assert.deepEqual(f.sent,[['owner','切换请求已安排']])
- assert.deepEqual(f.acked,['agent-switch-id'])
- assert.deepEqual(f.submitted,[])
- assert(events.includes('track:setup'))
-})
-test('short restart and upgrade commands bypass inference and acknowledge after reply',async()=>{
- const f=fixture(),actions=[]
- f.deps.runtime.track=async(kind,work)=>work();f.deps.manager.acceptMessage=async()=>true
- f.deps.agentSwitcher={handle:async(command,reply)=>{actions.push(command.action);await reply('重启已安排')}}
- f.deps.upgrader={handle:async reply=>{actions.push('upgrade');await reply('升级已安排')}}
- f.handle=createMessageProcessor(f.deps)
- await f.handle({userId:'owner',text:'重启',_ingressId:'restart-id'})
- await f.handle({userId:'owner',text:'升级',_ingressId:'upgrade-id'})
- assert.deepEqual(actions,['restart','upgrade']);assert.deepEqual(f.acked,['restart-id','upgrade-id']);assert.deepEqual(f.submitted,[])
-})
-test('recovered maintenance commands are not submitted again',async()=>{
- const f=fixture();f.deps.runtime.track=async(kind,work)=>work()
- f.deps.agentSwitcher={handle:async()=>{throw Error('must not restart')}}
- f.deps.upgrader={handle:async()=>{throw Error('must not upgrade')}}
- f.handle=createMessageProcessor(f.deps)
- await f.handle({userId:'owner',text:'重启',_recovered:true,_ingressId:'restart-recovered'})
- await f.handle({userId:'owner',text:'升级',_recovered:true,_ingressId:'upgrade-recovered'})
- assert.deepEqual(f.acked,['restart-recovered','upgrade-recovered']);assert.equal(f.sent.length,2);assert.deepEqual(f.submitted,[])
+test('retired diagnostic and maintenance phrases enter durable model intake',async()=>{
+ const f=fixture()
+ for(const [index,text] of ['查看最近错误','重启','升级'].entries())await f.handle({userId:'owner',text,_ingressId:'request-'+index})
+ assert.deepEqual(f.submitted.map(([,input])=>input.text),['查看最近错误','重启','升级'])
+ assert.deepEqual(f.sent,[])
 })
 test('a new ordinary message resends a definitively rejected prior text result before submission',async()=>{
  const f=fixture(),record=f.deps.manager.state.users.owner
@@ -135,13 +105,12 @@ test('voice status enters normal model intake and stop bypasses maintenance gati
  f.deps.runtime.draining=true;await f.handle(voice('停止。'))
  assert.deepEqual(handled,[['owner','停止']]);assert.deepEqual(f.submitted.map(args=>args[1].text),['状态。'])
 })
-test('voice upgrade uses maintenance handler and recovered request does not repeat',async()=>{
- const f=fixture();let calls=0
- f.deps.manager.acceptMessage=async()=>true;f.deps.runtime.track=async(kind,work)=>work()
- f.deps.upgrader={handle:async()=>{calls++}};f.handle=createMessageProcessor(f.deps)
+test('transcribed voice upgrade request enters durable model intake',async()=>{
+ const f=fixture()
  const message={userId:'owner',type:'voice',text:'[voice]',voices:[{text:'升级。'}],_ingressId:'voice-upgrade'}
- await f.handle(message);await f.handle({...message,_recovered:true})
- assert.equal(calls,1);assert.deepEqual(f.submitted,[]);assert.match(f.sent[0][1],/没有重复执行/)
+ await f.handle(message)
+ assert.equal(f.submitted.length,1)
+ assert.equal(f.submitted[0][1].text,'升级。')
 })
 
 test('standalone greeting replies locally once, even when the model is unavailable',async()=>{

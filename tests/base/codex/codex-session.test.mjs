@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { SessionManager as ActualSessionManager, controlCommand, codexProviderOptions } from '../../../src/wechat/session-manager.mjs'
+import { SessionManager as ActualSessionManager, codexProviderOptions } from '../../../src/wechat/session-manager.mjs'
 
 // Fake-RPC tests must not inherit live provider settings or contact remote hosts.
 class SessionManager extends ActualSessionManager { constructor(options){super({providerEnv:{},remoteControl:async()=>({stop_confirmed:true,tasks:[]}),...options})} }
@@ -18,21 +18,6 @@ test('custom provider profile overrides resumed model and disables unsupported s
   assert.throws(()=>codexProviderOptions({WECHAT_CODEX_REASONING_EFFORT:'unsafe value'}))
   assert.deepEqual(codexProviderOptions({},{subscriptionTransport:'auto'}).thread,{})
   assert.throws(()=>codexProviderOptions({WECHAT_CODEX_PROVIDER:'bad/path'}))
-})
-
-test('only session controls are intercepted; business requests go to Codex verbatim', () => {
-  assert.equal(controlCommand('停止').action, 'stop')
-  assert.equal(controlCommand('进度').action, 'progress')
-  assert.equal(controlCommand('进度？').action, 'progress')
-  assert.equal(controlCommand('命令列表').action,'help')
-  assert.deepEqual(controlCommand('批准'),{action:'prompt',target:'approvalChoice',decision:'approve'})
-  assert.deepEqual(controlCommand('回答'),{action:'prompt',target:'approvalChoice',decision:'answer'})
-  assert.equal(controlCommand('批准 abc123'),null)
-  assert.equal(controlCommand('回答 abc123 内容'),null)
-  assert.equal(controlCommand('帮我检查项目进度'), null)
-  assert.equal(controlCommand('请连接 spark 然后进入项目'), null)
-  assert.equal(controlCommand('搜索今天天气和新闻'), null)
-  for(const alias of ['/codex stop','/stop','/status','/result','/recover','/models','/help','/exit','/new','/reset','/批准 abc123','/回答 abc123 内容','/balance extra'])assert.equal(controlCommand(alias),null)
 })
 
 test('owner isolation, deduplication, queue, stop, questions, persistence, and failure', async () => {
@@ -91,7 +76,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     assert.ok(output.includes('正在检查项目配置。'))
     assert.equal(replyOptions.at(-1).traceId,'known-trace-123')
     const callsBeforeProgress=first.calls.length
-    await manager.handle('owner', '进度', reply, 3)
+    await manager.handle('owner', '进度', reply, 3, undefined, {action:'progress'})
     assert.match(output.at(-1), /正在处理[\s\S]*最近进展：正在检查项目配置。/)
     assert.equal(first.calls.length,callsBeforeProgress)
     assert.equal(manager.sessions.get('owner').queue.length,0)
@@ -114,7 +99,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     await complete(first, '第一条回答')
     assert.equal(first.calls.at(-1).params.input[0].text, '下一条')
     assert.deepEqual(first.calls.at(-1).params.input[1], { type: 'localImage', path: '/tmp/test.png' })
-    await manager.handle('owner', '进度', reply, 4)
+    await manager.handle('owner', '进度', reply, 4, undefined, {action:'progress'})
     assert.match(output.at(-1), /尚无新的阶段信息/)
     assert.doesNotMatch(output.at(-1), /正在检查项目配置/)
     await manager.handle('owner', '应清空的队列', reply)
@@ -132,7 +117,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     assert.ok(second.calls.some(c => c.method === 'thread/resume' && c.params.threadId === 'thread-1'))
     await complete(second, '', 'failed')
     assert.ok(output.some(text => text.includes('任务失败：test failure')))
-    await manager.handle('owner', '重置会话', reply)
+    await manager.handle('owner', '重置会话', reply, undefined, undefined, {action:'new'})
     assert.equal(manager.state.users.owner.threadId, 'thread-2')
     assert.deepEqual(manager.state.users.owner.previous, ['thread-1'])
     await manager.handle('owner', '这个任务应被关闭', reply)
@@ -254,33 +239,12 @@ test('state persistence failure does not suppress final delivery or leave the se
  assert.equal(session.finishing,false);assert.equal(session.busy,false);assert.ok(output[0].startsWith('任务结果'));assert.ok(output[0].includes('会话状态保存失败'));assert.ok(events.includes('state.save_failed'));assert.ok(!output[0].includes('private-path'))
 })
 
-test('models is an explicit control and status is conversational; commands with other arguments remain user text',()=>{
- assert.equal(controlCommand('状态'),null);assert.equal(controlCommand('任务状态'),null)
- for(const input of ['/states','/state','/codex states'])assert.equal(controlCommand(input),null)
- assert.equal(controlCommand('模型').action,'models');assert.equal(controlCommand('/codex models'),null);assert.equal(controlCommand('/models extra'),null)
-})
-test('models reads actual paginated RPC catalogue without starting a turn or changing model',async()=>{
- const output=[],calls=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={}
- const s={userId:'owner',threadId:'thread',model:'model-a',busy:true,rpc:{closed:false,request:async(method,params)=>{calls.push({method,params});assert.equal(method,'model/list');return params.cursor?{data:[{model:'model-b',hidden:false,inputModalities:['text'],supportedReasoningEfforts:[]}],nextCursor:null}:{data:[{model:'model-a',isDefault:true,inputModalities:['text','image'],supportedReasoningEfforts:[{reasoningEffort:'medium'}]}],nextCursor:'next'}}}}
- manager.sessions.set('owner',s);await manager.handle('owner','模型',async text=>output.push(text));assert.equal(calls.length,2);assert.equal(calls[1].params.cursor,'next');assert.ok(output[0].includes('model-a [当前] [默认]'));assert.ok(output[0].includes('model-b'));assert.equal(s.model,'model-a');assert.equal(s.busy,true)
-})
-test('models failures do not fabricate a catalogue or launch model inference',async()=>{
- const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={};manager.sessions.set('owner',{userId:'owner',threadId:'thread',rpc:{closed:false,request:async()=>{throw Error('model catalogue unavailable')}}});await manager.handle('owner','模型',async text=>output.push(text));assert.equal(output.length,1);assert.ok(output[0].includes('unavailable'));assert.ok(!output[0].includes('gpt-'))
-})
-test('stop clears queued instructions during final delivery; new respects finishing state',async()=>{
- const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={};const s={userId:'owner',threadId:'thread',busy:false,finishing:true,queue:['queued'],rpc:{closed:false,close(){throw Error('must not close during final delivery')}}};manager.sessions.set('owner',s)
- await manager.handle('owner','停止',async text=>output.push(text));assert.equal(s.queue.length,0);assert.ok(output.at(-1).includes('已清空'));await manager.handle('owner','重置会话',async text=>output.push(text));assert.ok(output.at(-1).includes('仍在发送'))
-})
 test('partial answers do not suppress the final answer or intervening tool events',async()=>{
  const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{};manager.state.users.owner={};const s={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>output.push(text)}
  for(const [phase,text] of [['partial_answer','中途答案'],['final_answer','真正最终答案']]){await manager.event(s,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:phase,type:'agentMessage',phase,text}}});if(phase==='partial_answer'){assert.ok(!s.finalReceived);await manager.event(s,{method:'item/started',params:{threadId:'thread',turnId:'turn',item:{id:'tool',type:'commandExecution'}}});assert.ok(s.items.has('tool'))}}
  await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.equal(output[0],'中途答案\n\n真正最终答案')
 })
 
-test('stop cancels an intake still connecting; model queries wait for initialization',async()=>{
- let release;const calls=[],output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method){calls.push(method);if(method==='initialize'){await new Promise(resolve=>{release=resolve});return {}}if(method==='thread/memoryMode/set')return {};if(method==='thread/start')return {model:'real-model',thread:{id:'thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};if(method==='model/list')return {data:[{model:'real-model'}],nextCursor:null};throw Error('must not start inference')}})});manager.save=async()=>{}
- const first=manager.handle('owner','本条应取消',async t=>output.push(t));await new Promise(resolve=>setImmediate(resolve));const models=manager.handle('owner','模型',async t=>output.push(t));await manager.handle('owner','停止',async t=>output.push(t));assert.deepEqual(calls,['initialize']);release();await Promise.all([first,models]);assert.ok(!calls.includes('turn/start'));assert.ok(calls.includes('model/list'));assert.ok(output.some(t=>t.includes('已取消待启动')));manager.close()
-})
 
 test('one durable ingress deduplicates media and text across process restarts and isolates owners',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'wechat-ingress-'))
@@ -328,7 +292,7 @@ test('reset invalidates connecting session even when closing the process is asyn
  let release,count=0;const calls=[]
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>{const n=++count;return {closed:false,write(){},close(){},async request(method){calls.push([n,method]);if(method==='initialize'){if(n===1)await new Promise(r=>{release=r});return {}}if(method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'new-thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};throw Error('unexpected inference')}}}});manager.save=async()=>{}
  const old=manager.handle('owner','old work',async()=>{});await new Promise(r=>setImmediate(r))
- await manager.handle('owner','重置会话',async()=>{});release();await old
+ await manager.handle('owner','重置会话',async()=>{},undefined,undefined,{action:'new'});release();await old
  assert.ok(!calls.some(([n,m])=>n===1&&m==='thread/start'));assert.ok(!calls.some(([,m])=>m==='turn/start'));assert.equal(manager.sessions.get('owner').threadId,'new-thread');manager.close()
 })
 test('all pre-stop connecting messages are cancelled; a later message still starts',async()=>{
@@ -356,7 +320,7 @@ test('rejected new conversation does not cancel current work or pending attachme
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{}
  const token=manager.lifecycle.capture('owner');let cancelled=false;manager.lifecycle.onCancel(()=>{cancelled=true})
  manager.sessions.set('owner',{userId:'owner',busy:true,queue:['retained'],rpc:{closed:false}})
- const output=[];await manager.handle('owner','重置会话',async t=>output.push(t));assert.equal(token.current(),true);assert.equal(cancelled,false);assert.deepEqual(manager.sessions.get('owner').queue,['retained']);assert.ok(output[0].includes('停止'))
+ const output=[];await manager.handle('owner','重置会话',async t=>output.push(t),undefined,undefined,{action:'new'});assert.equal(token.current(),true);assert.equal(cancelled,false);assert.deepEqual(manager.sessions.get('owner').queue,['retained']);assert.ok(output[0].includes('停止'))
 })
 
 test('deltas are silent and authoritative final text is delivered once',async()=>{

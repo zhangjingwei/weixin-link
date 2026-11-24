@@ -1,35 +1,13 @@
 import {isCatalogQuestion,isResultLookup} from '../../application/intake/catalog-question.mjs'
 import {controlCommand,completeControlPrompt} from './control-command.mjs'
 
-const english={
- 'new-project':'新建项目',folder:'当前目录',list:'列表',new:'新建',archive:'归档',restore:'还原',delete:'删除',
- history:'历史',rename:'命名',older:'翻页',search:'搜索',
-}
-
 // Information requests can be answered without consuming the text prompt.
 const promptInfoCommands=new Set([
- '检查更新','check-updates','使用说明','guide','安装状态','setup-status','安装帮助','install-help',
- '诊断','diagnose','服务状态','service-status','查看最近错误','recent-errors',
+ '使用说明','guide','安装帮助','install-help','服务状态','service-status',
 ])
 const promptInfoActions=new Set(['help','progress','agentStatus','models'])
 
 export function conversationCommand(text=''){
- const raw=text.trim(),s=english[raw.toLowerCase()]??raw;let m;
- if(s==='新建项目')return {action:'prompt',target:'newProject'};
- if(s==='当前目录')return {action:'workspace'};
- if(s==='列表')return {action:'list'};
- if(s==='新建')return {action:'prompt',target:'new'};
- if(raw.toLowerCase()==='switch')return {action:'prompt',target:'switch'};
- if(/^(?:我想|帮我)?(?:接着|继续)(?:(?:电脑|桌面|终端)(?:上|端)?的?)?(?:刚才|刚刚|上次|最近)(?:在(?:电脑|桌面|终端)上?)?(?:的)?(?:那条|那个|那次|那段)?(?:会话|对话|聊的|聊)(?:继续聊|聊下去)?[。！!？?]?$/u.test(raw))return {action:'personalResume'};
- if(s==='历史')return {action:'prompt',target:'history'};
- if(s==='命名')return {action:'prompt',target:'rename'};
- if(s==='归档')return {action:'prompt',target:'archive'};
- if(s==='还原')return {action:'prompt',target:'unarchive'};
- if(s==='删除')return {action:'prompt',target:'delete'};
- if((m=s.match(/^(归档|删除|还原)\s*(\d+)$/)))return {action:m[1]==='还原'?'unarchive':m[1]==='删除'?'delete':'archive',id:m[2]};
- if((m=raw.match(/^(archive|delete|restore)(\d+)$/i)))return {action:m[1].toLowerCase()==='restore'?'unarchive':m[1].toLowerCase(),id:m[2]};
- if(s==='翻页')return {action:'older'};
- if(s==='搜索')return {action:'prompt',target:'search'};
  return null;
 }
 

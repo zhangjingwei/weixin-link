@@ -1,18 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises'
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {Readable} from 'node:stream'
 import {ScheduleService} from '../../src/application/schedules/schedule-service.mjs'
 import {createScheduleStateStore} from '../../src/infrastructure/storage/schedule-state.mjs'
 import {nextOccurrence} from '../../src/domain/schedules/recurrence.mjs'
-import {scheduleCommand} from '../../src/interfaces/controllers/schedule-controller.mjs'
-import {runScheduleCommand} from '../../src/interfaces/cli/schedule-cli.mjs'
-import {RuntimeControl, controlRequest} from '../../src/infrastructure/runtime/runtime-control.mjs'
-import {accountPaths} from '../../src/infrastructure/accounts/account-store.mjs'
 import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
-import {SessionManager} from '../../src/wechat/session-manager.mjs'
 
 async function fixture(t, send = async () => ({status: 'accepted'})) {
   const stateDir = await mkdtemp(join(tmpdir(), 'reminders-'))
@@ -111,53 +105,6 @@ test('reminders for a removed owner remain stored but are not delivered', async 
   assert.deepEqual(restarted.list('alice').items, [])
 })
 
-test('Codex command reaches only the current account control endpoint and requires a thread', async t => {
-  const home = await mkdtemp('/tmp/rctl-')
-  t.after(() => rm(home, {recursive: true, force: true}))
-  const account = accountPaths('default', home)
-  await mkdir(account.stateDir, {recursive: true})
-  const calls = [], runtime = new RuntimeControl({onSchedule: async request => {calls.push(request); return {ok: true}}})
-  try {
-    await runtime.listen(account.socket)
-    await assert.rejects(runScheduleCommand(Readable.from(['{"action":"list"}']), {home, threadId: ''}), /SCHEDULE_SESSION_REQUIRED/)
-    assert.deepEqual(await runScheduleCommand(Readable.from(['{"action":"list"}']), {home, threadId: 'thread-123'}), {ok: true})
-    assert.deepEqual(calls, [{action: 'list', threadId: 'thread-123'}])
-  } finally {await runtime.close()}
-})
-
-test('schedule command is counted as active during maintenance drain', async t => {
-  const dir = await mkdtemp('/tmp/sctl-')
-  t.after(() => rm(dir, {recursive: true, force: true}))
-  const socket = join(dir, 'runtime.sock')
-  let release
-  const runtime = new RuntimeControl({onSchedule: () => new Promise(resolve => {release = () => resolve({ok: true})})})
-  try {
-    await runtime.listen(socket)
-    const request = controlRequest(socket, 'POST', '/schedules', {action: 'list', threadId: 'thread-123'})
-    for (let attempt = 0; !release && attempt < 100; attempt++) await new Promise(resolve => setTimeout(resolve, 1))
-    assert.ok(release)
-    runtime.command('drain', 'schedule-lease')
-    assert.equal(runtime.status().idle, false)
-    assert.throws(() => runtime.command('seal', 'schedule-lease'), error => error.statusCode === 409)
-    release()
-    assert.deepEqual(await request, {ok: true})
-    runtime.command('resume', 'schedule-lease')
-  } finally {await runtime.close()}
-})
-
-test('reminder command resolves the real owner from an active session', async t => {
-  const {service, at} = await fixture(t)
-  const manager = {sessions: new Map([['alice#conversation#one', {threadId: 'thread-alice', userId: 'alice#conversation#one'}]])}
-  const conversations = {recipient: key => key.split('#')[0], realOwners: new Set(['alice'])}
-  const context = {manager, conversations, service}
-  assert.throws(() => scheduleCommand({action: 'create', threadId: 'thread-bob', at: at(1000), text: 'x'}, context), /SCHEDULE_SESSION_NOT_FOUND/)
-  assert.throws(() => scheduleCommand({action: 'create', threadId: 'thread-alice', owner: 'bob', at: at(1000), text: 'x'}, context), /SCHEDULE_ARGUMENTS_INVALID/)
-  const item = await scheduleCommand({action: 'create', threadId: 'thread-alice', at: at(1000), text: 'x'}, context)
-  assert.equal(service.list('alice').items[0].id, item.id)
-  assert.equal(service.list('bob').items.length, 0)
-  assert.equal(scheduleCommand({action: 'list', threadId: 'thread-alice'}, context).items.length, 1)
-})
-
 test('scheduled task enters the durable queue once with the original conversation', async t => {
   const stateDir = await mkdtemp(join(tmpdir(), 'scheduled-task-'))
   t.after(() => rm(stateDir, {recursive: true, force: true}))
@@ -217,12 +164,4 @@ test('repeating task advances after queue acceptance and unavailable target paus
   await service.tick(); await service.tick()
   assert.equal(service.list('alice').items[0].status, 'failed')
   assert.equal(calls, 2)
-})
-
-test('schedule instructions are available to the local Codex backend', async t => {
-  const {stateDir} = await fixture(t)
-  const guidance = 'SCHEDULE_TOOL_MARKER'
-  const make = backend => new SessionManager({stateDir, cwd: stateDir, owners: [], backend, scheduleGuidance: guidance})
-  assert.match(await make({kind: 'host'}).sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
-  assert.doesNotMatch(await make({kind: 'remote'}).sessionInstructions(), /SCHEDULE_TOOL_MARKER/)
 })

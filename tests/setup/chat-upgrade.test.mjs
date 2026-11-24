@@ -3,15 +3,10 @@ import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join,dirname} from 'node:path'
-import {ChatUpgrader,chatUpgradeCommand,readChatUpgrade,scheduleChatUpgrade} from '../../src/setup/chat-upgrade.mjs'
+import {ChatUpgrader,readChatUpgrade,scheduleChatUpgrade} from '../../src/setup/chat-upgrade.mjs'
 import {performChatUpgrade,upgradeFailureCode} from '../../src/setup/chat-upgrade-worker.mjs'
 
 const oldCommit='a'.repeat(40),newCommit='b'.repeat(40)
-test('upgrade command matches only the exact short command',()=>{
- assert.deepEqual(chatUpgradeCommand(' 升级 '),{action:'upgrade'})
- assert.equal(chatUpgradeCommand('升级微信机器人'),null)
- assert.equal(chatUpgradeCommand('帮我升级'),null)
-})
 test('upgrade request checks main release and schedules once without invoking installer',async t=>{
  const home=await mkdtemp(join(tmpdir(),'chat-upgrade-'));t.after(()=>rm(home,{recursive:true,force:true}))
  const target=join(home,'source');await mkdir(target)
