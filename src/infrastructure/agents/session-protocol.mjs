@@ -3,6 +3,7 @@ import {codexInput} from '../../base/codex/codex-input.mjs'
 import {initializeCodex} from '../../base/codex/protocol-operations.mjs'
 import {codexProviderOptions,providerEventCode} from '../../base/codex/provider-options.mjs'
 import {nativeMemoryConfig,enableThreadMemory,publicMemoryText} from '../../base/codex/native-memory.mjs'
+import {workflowTurnGuidance} from './workflow-turn.mjs'
 
 const clientInfo={name:'wechat_codex',title:'WeChat',version:'3.0.0'}
 
@@ -86,7 +87,7 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   supportsRemoteTaskRecovery:true,
   // Collaboration mode is stored on the Codex thread. Always select it for
   // each turn, otherwise a normal request after a plan can remain in Plan Mode.
-  startTurn:(rpc,{threadId,input,deliveryId,model,fastMode})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},collaborationMode:{mode:'default',settings:{model,reasoning_effort:null,developer_instructions:null}},...typeof fastMode==='boolean'?{serviceTier:fastMode?'fast':'auto'}:{}}),
+  startTurn:(rpc,{threadId,input,deliveryId,model,fastMode,workflowRequest})=>rpc.request('turn/start',{threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},collaborationMode:{mode:'default',settings:{model,reasoning_effort:null,developer_instructions:workflowTurnGuidance(workflowRequest)}},...typeof fastMode==='boolean'?{serviceTier:fastMode?'fast':'auto'}:{}}),
   startReview:(rpc,threadId,target)=>rpc.request('review/start',{threadId,target}),
   goal:async(rpc,threadId,command)=>{
    if(command.op==='get')return (await rpc.request('thread/goal/get',{threadId})).goal
