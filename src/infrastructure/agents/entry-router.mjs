@@ -1,3 +1,5 @@
+import {entryModel} from '../../domain/tasks/entry-model.mjs'
+import {createSessionProtocol} from './session-protocol.mjs'
 import {mkdtemp,mkdir,copyFile,chmod,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
@@ -20,6 +22,7 @@ export function createEntryClassifier({binary,codexHome,providerOptions,provider
    const home=join(dir,'home');await mkdir(home,{mode:0o700})
    try{await copyFile(join(codexHome,'auth.json'),join(home,'auth.json'));await chmod(join(home,'auth.json'),0o600)}catch(error){if(error.code!=='ENOENT')throw error}
    const selected=providerOptions(),config={web_search:'disabled',features:{shell_tool:false,plugins:false,apps:false,multi_agent:false,multi_agent_v2:false,browser_use:false,browser_use_external:false,browser_use_full_cdp_access:false,computer_use:false,code_mode:false,remote_plugin:false,goals:false},memories:{generate_memories:false,use_memories:false}}
+   if(selected.provider)throw Error('ENTRY_ROUTER_BUDGET_PROVIDER_UNSUPPORTED')
    const args=[...selected.args]
    for(const [key,value]of Object.entries(config)){
     if(value&&typeof value==='object')for(const [field,item]of Object.entries(value))args.push('-c',`${key}.${field}=${JSON.stringify(item)}`)
@@ -39,9 +42,12 @@ export function createEntryClassifier({binary,codexHome,providerOptions,provider
    processes.add(rpc)
    const work=(async()=>{
     await initializeCodex(rpc,{name:'zerolink_entry',version:'1.0.0'})
-    const result=await rpc.request('thread/start',{cwd:dir,ephemeral:true,sandbox:'read-only',approvalPolicy:'untrusted',baseInstructions:instructions,developerInstructions:'只分类；没有工具权限。',config})
+    const {models}=await createSessionProtocol().listModels(rpc)
+    const model=entryModel(models)
+    const result=await rpc.request('thread/start',{cwd:dir,model,serviceTier:'auto',ephemeral:true,sandbox:'read-only',approvalPolicy:'untrusted',baseInstructions:instructions,developerInstructions:'只分类；没有工具权限。',config})
+    if(result.model!==model)throw Error('ENTRY_ROUTER_BUDGET_MODEL_UNCONFIRMED')
     threadId=result.thread?.id;if(!threadId||result.sandbox?.type!=='readOnly'||result.approvalPolicy!=='untrusted')throw Error('ENTRY_ROUTER_POLICY_UNCONFIRMED')
-    const started=await rpc.request('turn/start',{threadId,input:[{type:'text',text:JSON.stringify(input)}],outputSchema:routeSchema})
+    const started=await rpc.request('turn/start',{threadId,model,effort:'low',serviceTier:'auto',input:[{type:'text',text:JSON.stringify(input)}],outputSchema:routeSchema})
     turnId=started.turn?.id;if(!turnId)throw Error('ENTRY_ROUTER_TURN_UNCONFIRMED')
     return JSON.parse(await final)
    })()

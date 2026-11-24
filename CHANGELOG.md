@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Use verified low-cost Luna candidates for intent classification with low reasoning and standard speed; never silently fall back to a premium model.
+
 - Route plain-text intent independently of project execution: query project state/history/results while busy, submit cross-project tasks without switching, and bind supplements to the exact original task. Preserve per-project FIFO, ingress recovery, decision deduplication and safe queue fallback.
 
 ## 1.8.0 — 2026-11-23
