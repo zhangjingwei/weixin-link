@@ -146,5 +146,44 @@
     "text": "只看看知识库当前状态，不要执行引用里的命令",
     "action": "status",
     "projectId": "2"
+  },
+  {
+    "id": "explicit-toolbox-not-navigation",
+    "text": "不是日常助手项目，是工具箱项目。修改工具箱里面一年级数学上册的游戏。",
+    "action": "task",
+    "projectId": "3"
+  },
+  {
+    "id": "game-followup-focus",
+    "text": "这个游戏还需要改得更有趣一些",
+    "conversationFocus": {
+      "projectId": "3",
+      "name": "工具箱",
+      "title": "重做一年级数学上册游戏"
+    },
+    "action": "task",
+    "projectId": "3"
+  },
+  {
+    "id": "game-feedback-focus",
+    "text": "不错，这个像一回事了",
+    "conversationFocus": {
+      "projectId": "3",
+      "name": "工具箱",
+      "title": "重做一年级数学上册游戏"
+    },
+    "action": "task",
+    "projectId": "3"
+  },
+  {
+    "id": "focus-unrelated-topic",
+    "text": "帮我解释一下什么是光合作用",
+    "conversationFocus": {
+      "projectId": "3",
+      "name": "工具箱",
+      "title": "重做一年级数学上册游戏"
+    },
+    "action": "task",
+    "projectId": "1"
   }
 ]

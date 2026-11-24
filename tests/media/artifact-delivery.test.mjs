@@ -103,3 +103,11 @@ test('partial and cancelled bundles retain all managed originals',()=>fixture(as
  assert.equal((await transport.deliver('owner',cancelled,{current:()=>false})).status,'cancelled')
  await access(source)
 }))
+test('execution instructions identify the actual project independently of the selected navigation',()=>fixture(async({cwd,stateDir})=>{
+ const manager=await new SessionManager({stateDir,cwd,owners:['owner']}).init()
+ manager.state.textConversations={owner:{active:'3',entries:[{id:'3',key:'owner',name:'weixin-link'},{id:'5',key:'toolbox',name:'个人工具箱'}]}}
+ const instructions=await manager.sessionInstructions('toolbox')
+ assert.match(instructions,/"projectId":"5","name":"个人工具箱"/)
+ assert.doesNotMatch(instructions,/"projectId":"3"/)
+ assert.match(instructions,/不要因 active=true/)
+}))

@@ -151,3 +151,15 @@ test('desktop status reads outside the task queue without opening an application
  f.service.desktop={status:async()=>({enabled:false,supported:true})}
  await f.router.process(f.message,f.token);assert.equal(f.jobs.pending().length,0);assert.match(f.sent[0],/尚未就绪/)
 })
+
+test('successful dispatch supplies follow-up focus without changing navigation; explicit switch expires it',async t=>{
+ const f=await fixture(t,{action:'task',projectId:'2',title:'重做教材游戏'});await f.router.process(f.message,f.token)
+ assert.equal(f.root.alice.active,'1')
+ const follow={...f.message,text:'不错，这个像一回事了',raw:{message_id:'follow'}};follow._ingressId=f.jobs.capture(follow)
+ f.router.classify=async input=>{assert.equal(input.currentProjectId,'1');assert.equal(input.conversationFocus.projectId,'2');return {action:'task',projectId:'2',title:'游戏反馈'}}
+ await f.router.process(follow,f.token);assert.equal(f.jobs.pending().at(-1).owner,'project')
+ f.root.alice.selectionVersion=1
+ const next={...f.message,text:'新的话题',raw:{message_id:'new'}};next._ingressId=f.jobs.capture(next)
+ f.router.classify=async input=>{assert.equal(input.conversationFocus,undefined);return {action:'task',projectId:'1'}}
+ await f.router.process(next,f.token);assert.equal(f.root.alice.active,'1')
+})
