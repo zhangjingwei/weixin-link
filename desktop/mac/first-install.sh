@@ -15,8 +15,13 @@ mkdir "$lock" || exit 42
 trap 'rmdir "$lock"' EXIT
 if ! exists "$dest"; then
  for path in "$state" "$HOME"/Library/LaunchAgents/com.wechat-assistant.wechat-*.plist; do exists "$path" && exit 41; done
- mkdir "$dest"; touch "$marker"
- /usr/bin/tar -xzf "$resources/service.tar.gz" -C "$dest"
+ if launchctl print "gui/$(id -u)/com.wechat-assistant.wechat-ping-bot" >/dev/null 2>&1; then exit 41; fi
+ # Validate the full archive before reserving the final directory.
+ staging=$(mktemp -d "$base/weixin-link/.first-source.XXXXXX")
+ trap 'rm -rf "$staging"; rmdir "$lock"' EXIT
+ /usr/bin/tar -xzf "$resources/service.tar.gz" -C "$staging"
+ touch "$staging/.mac-first-install"
+ mkdir "$dest"; /bin/cp -R "$staging/." "$dest/"
 else
  test ! -L "$dest" && test -f "$marker" && test ! -L "$marker" || exit 41
 fi

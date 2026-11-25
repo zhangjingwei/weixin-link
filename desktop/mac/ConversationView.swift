@@ -312,7 +312,7 @@ private let surface = Color(nsColor: .controlBackgroundColor)
           inspector.frame(width: min(geo.size.width * 0.34, 470))
         }
       }
-    }.frame(minWidth: 680, minHeight: 440).tint(leaf).task(id: selected) {
+    }.frame(minWidth: 680, minHeight: 440).tint(leaf).onDisappear { editRevision=nil }.task(id: selected) {
       let p = selected
       while !Task.isCancelled {
         await refresh(p)
