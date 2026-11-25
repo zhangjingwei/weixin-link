@@ -4,7 +4,6 @@ import {integrationGuidance} from '../integrations/runtime.mjs'
 import {materialInput} from '../infrastructure/agents/material-context.mjs'
 import {flowInput, stripTaskFlow} from '../infrastructure/agents/task-flow.mjs'
 import {ASSISTANT_INSTRUCTIONS} from '../infrastructure/agents/assistant-policy.mjs'
-import {discussionReplyPrefix} from '../infrastructure/agents/workflow-turn.mjs'
 import {OutputStore, outputLinks} from '../infrastructure/media/outbound-media.mjs'
 import {CancellationScopes} from '../infrastructure/runtime/cancellation-scopes.mjs'
 import {installConfig} from '../setup/install-config.mjs'
@@ -18,7 +17,6 @@ import {recentCommits} from '../infrastructure/agents/recent-commits.mjs'
 // use-case formatting and external adapters. The engine imports none of them.
 export const sessionPorts = Object.freeze({
   assistantInstructions: ASSISTANT_INSTRUCTIONS,
-  discussionReplyPrefix,
   integrationGuidance, materialInput, flowInput, stripTaskFlow,
   outputStore: options => new OutputStore(options), outputLinks,
   cancellationScopes: () => new CancellationScopes(),

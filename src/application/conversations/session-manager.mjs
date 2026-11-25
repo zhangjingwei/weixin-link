@@ -773,9 +773,6 @@ export class SessionManager {
       const handoff=!awaitingAttachment&&!receivedWhileWaiting
         ?handoffReply(this.state,this.submissions,session):null
       if(handoff)reply=handoff+(p.turn.status==='failed'?'\n源会话本轮处理失败；目标任务状态以以上记录为准。':'')
-      const discussionPrefix=!handoff&&p.turn.status==='completed'&&!awaitingAttachment&&!receivedWhileWaiting&&session.finals.length
-        ?this.ports.discussionReplyPrefix?.(session.requestText,reply,session.workflowMode)??'':''
-      reply=discussionPrefix+reply
       // The footer describes execution completion, not delivery acceptance.
       const mergedCompletion=this.completionMarkers&&!awaitingAttachment&&!handoff&&(session.workToken?.current()??true)
       const footerOffset=mergedCompletion?reply.length:null
@@ -805,7 +802,7 @@ export class SessionManager {
       this.diagnostic(session,'turn.completed',{status:p.turn.status,provider:session.provider,model:session.executionModel,model_provider:session.modelProvider,duration_ms:Date.now()-(session.startedAt??Date.now()),chars:Array.from(reply).length})
       if (session.exited) return
       if (session.exiting) { await this.finishExit(session, p.turn.status === 'interrupted' ? '当前任务已停止。' : '本轮任务已结束。', p.turn.status); return }
-      const display=receivedWhileWaiting||handoff?reply:discussionPrefix+(session.displayFinals??session.finals).join('\n\n')+reply.slice(discussionPrefix.length+session.finals.join('\n\n').length)
+      const display=receivedWhileWaiting||handoff?reply:(session.displayFinals??session.finals).join('\n\n')+reply.slice(session.finals.join('\n\n').length)
       if(session.nativeQueueTurn&&!this.submissions.claimReceipt('native-final:'+session.taskId)){
         session.lastDelivery={status:'unknown',updated:new Date().toISOString()}
       }else if(receivedWhileWaiting){this.diagnostic(session,'notification.suppressed',{reason:'attachment_already_pending'})}

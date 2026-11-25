@@ -131,7 +131,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
   } finally { manager.close(); await manager.saving; await rm(dir, { recursive: true, force: true }) }
 })
 
-test('design advice gets one visible marker in the saved and delivered final',async()=>{
+test('design advice is saved and delivered without adding a marker',async()=>{
  const output=[]
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']})
  manager.save=async()=>{}
@@ -141,9 +141,8 @@ test('design advice gets one visible marker in the saved and delivered final',as
  try{
   await manager.event(session,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'answer',type:'agentMessage',phase:'final_answer',text:'建议先验证移动端网页需求。'}}})
   await manager.event(session,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
-  assert.match(output[0],/^💡 Zero · 方案讨论\n建议先验证移动端网页需求。/)
-  assert.match(manager.state.users.owner.lastReply,/^💡 Zero · 方案讨论\n建议先验证移动端网页需求。/)
-  assert.equal((output[0].match(/💡 Zero · 方案讨论/g)??[]).length,1)
+  assert.equal(output[0],'建议先验证移动端网页需求。')
+  assert.equal(manager.state.users.owner.lastReply,'建议先验证移动端网页需求。')
  }finally{manager.close()}
 })
 
