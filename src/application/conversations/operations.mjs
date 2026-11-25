@@ -49,7 +49,7 @@ export async function selectConversation(context,message,reply){
 
 export async function archive(context,owner,entry,archived,reply){
   if(!entry){await reply('没有找到这个项目。你可以说“我有哪些项目”，再说明要操作哪一个。');return {status:'not_executed',reason:'TARGET_NOT_FOUND'};}
-  if(context.manager.agentFor?.(entry.key)==='claude'){await reply('Claude Code 原生会话暂不支持归档或还原；未执行。');return {status:'not_executed',reason:'UNSUPPORTED'}}
+  if(['claude','workbuddy'].includes(context.manager.agentFor?.(entry.key))){await reply('当前智能体原生会话暂不支持归档或还原；未执行。');return {status:'not_executed',reason:'UNSUPPORTED'}}
   if(entry.deleted||entry.deleteIntent){await reply(entry.deleted?'该会话已永久删除，不能归档或还原。':'该会话的删除结果尚未确认，先用“列表”核对。');return {status:'not_executed',reason:'TARGET_DELETED'};}
   const r=context.ensure(owner),session=context.manager.sessions.get(entry.key),saved=context.manager.state.users[entry.key];
   const blocked=()=>hasUnfinishedWork(context,entry.key);
@@ -98,7 +98,7 @@ export function markDeleted(context,threadId){
  }
 
 export async function deleteConversation(context,owner,entry,reply){
-  if(entry&&context.manager.agentFor?.(entry.key)==='claude'){await reply('Claude Code 原生会话暂不支持永久删除；未执行。');return}
+  if(entry&&['claude','workbuddy'].includes(context.manager.agentFor?.(entry.key))){await reply('当前智能体原生会话暂不支持永久删除；未执行。');return}
   if(!entry||context.find(owner,entry.id)?.key!==entry.key){await reply('会话不存在，请先查看列表。');return;}
   if(entry.deleted){await reply(`会话${entry.id}已永久删除，不能还原。`);return;}
   const r=context.ensure(owner),session=context.manager.sessions.get(entry.key),saved=context.manager.state.users[entry.key],tid=saved?.threadId;

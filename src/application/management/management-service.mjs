@@ -107,7 +107,7 @@ export class ManagementService{
    }
    return page
   }
-  if(name==='list_models'&&this.manager.agentFor?.(caller)==='claude'){const session=await this.manager.connect(caller,this.manager.sessions.get(caller)?.reply??(()=>{}));return this.manager.protocol.listModels(session.rpc)}
+  if(name==='list_models'&&['claude','workbuddy'].includes(this.manager.agentFor?.(caller))){const session=await this.manager.connect(caller,this.manager.sessions.get(caller)?.reply??(()=>{}));return this.manager.protocol.listModels(session.rpc)}
   if(name==='list_models')return this.conversations.withBackend(owner,rpc=>this.manager.protocol.listModels(rpc))
   const e=this.target(owner,args.projectId)
   if(name==='get_project_progress')return projectProgress(this,owner,args)
@@ -201,7 +201,7 @@ export class ManagementService{
  sign(value){const data=Buffer.from(JSON.stringify(value)).toString('base64url');return data+'.'+createHmac('sha256',this.cursorKey).update(data).digest('base64url')}
  decode(cursor){try{const [data,sig,...rest]=cursor.split('.'),expected=createHmac('sha256',this.cursorKey).update(data).digest(),actual=Buffer.from(sig,'base64url');if(rest.length||actual.length!==expected.length||!timingSafeEqual(actual,expected))throw Error();return JSON.parse(Buffer.from(data,'base64url'))}catch{throw Error('MANAGEMENT_INVALID_CURSOR')}}
  async history(owner,e,cursor){
-  if(this.manager.agentFor?.(e.key)==='claude')throw Error('MANAGEMENT_UNSUPPORTED')
+  if(['claude','workbuddy'].includes(this.manager.agentFor?.(e.key)))throw Error('MANAGEMENT_UNSUPPORTED')
   if(!this.conversations.backendPort?.capabilities.history)throw Error('MANAGEMENT_UNSUPPORTED')
   const threadId=this.manager.state.users[e.key]?.threadId
   if(!threadId)return {messages:[],nextCursor:null}

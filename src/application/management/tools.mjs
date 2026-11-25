@@ -11,7 +11,7 @@ export const managementTools=[
  define('request_project_workspace','用户明确确认平台项目目录时使用。凭目录选择凭据登记边界；要求关联会话均在边界内且无执行或未确认任务。不移动目录、不连接智能体。',{platformProjectId:string(),workspaceToken:string(4096),...write},['platformProjectId','workspaceToken','requestId']),
  define('request_task_input','本轮确实需要等待用户提供附件或回答时调用。仅修改调用者所属的精确持久任务，必须从 get_conversation_context 获取 sourceTaskId、turnId。确认后用自然语言说明缺少什么；正文不会改变任务状态。',{...project,sourceTaskId:string(),turnId:string(),kind:{...string(),enum:['attachment','answer']},...write},['projectId','sourceTaskId','turnId','kind','requestId']),
  define('get_conversation_agents','查看同一条对话关联的原生会话和可用智能体；不切换。',project,['projectId']),
- define('request_agent_switch','用户明确要求换智能体接着做时调用。保留同一逻辑对话，切回恢复原生会话并交接最近结果。当前任务成功结束后才执行后续请求；queued不是切换完成。不复制或重跑原任务。text须保留用户的要求和批评，不宣称原方案已获认可。',{...project,agentKind:{...string(),enum:['codex','claude']},text:string(8000),...write},['projectId','agentKind','text','requestId']),
+ define('request_agent_switch','用户明确要求换智能体接着做时调用。保留同一逻辑对话，切回恢复原生会话并交接最近结果。当前任务成功结束后才执行后续请求；queued不是切换完成。不复制或重跑原任务。text须保留用户的要求和批评，不宣称原方案已获认可。',{...project,agentKind:{...string(),enum:['codex','claude','workbuddy']},text:string(8000),...write},['projectId','agentKind','text','requestId']),
  define('get_thread_goal','查询会话原生长任务目标、状态和预算。',thread,['threadId']),
  define('request_goal_update','设置长任务目标或调整状态和预算。',{...thread,objective:string(4000),status:{...string(),enum:['active','paused','complete']},tokenBudget:integer(1,1000000000),...write},['threadId','status','requestId']),
  define('request_goal_clear','清除指定会话的长任务目标。',{...thread,...write},['threadId','requestId']),

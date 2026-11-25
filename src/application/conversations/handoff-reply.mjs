@@ -13,7 +13,7 @@ export function handoffReply(state,jobs,session){
  const job=op.data?.taskId&&jobs?.get?.(op.data.taskId)
  if(op.name==='request_agent_switch'){
   if(!job||job.owner!==session.userId||!job.input?.internalHandoff||job.input.agentKind!==op.data?.agentKind)return '智能体交接记录尚未确认，未确认目标已开始执行。'
-  const name=op.data.agentKind==='claude'?'Claude Code':'Codex'
+  const name=op.data.agentKind==='workbuddy'?'WorkBuddy':op.data.agentKind==='claude'?'Claude Code':'Codex'
   if(job.state==='pending')return `已为 ${name} 排队后续任务；原任务结束后继续，结果仍在本对话返回。`
   if(['starting','bound','submitted'].includes(job.state))return `${name} 已开始接续处理；结果仍在本对话返回。`
   if(job.state==='done'&&job.outcome==='completed')return `${name} 的接续任务已结束，请查看本对话结果。`

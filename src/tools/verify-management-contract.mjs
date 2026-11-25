@@ -3,7 +3,7 @@ import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {mkdtemp,mkdir,readFile,readdir,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
-import {join} from 'node:path'
+import {join,sep} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {findCodex} from '../infrastructure/config/install-config.mjs'
 import {CodexRpc} from '../base/codex/codex-rpc.mjs'
@@ -95,6 +95,8 @@ try{
  const schema=JSON.parse(await readFile(join(schemaDir,'ClientRequest.json'),'utf8'))
  const literalMethods=new Set()
  for(const file of await sourceFiles(join(root,'src'))){
+  // These adapters own different wire contracts; ACP methods are not Codex RPC.
+  if(file.startsWith(join(root,'src','infrastructure','agents','workbuddy')+sep)||file.startsWith(join(root,'src','infrastructure','agents','claude')+sep))continue
   const source=await readFile(file,'utf8')
   for(const match of source.matchAll(/\.(?:request|call)\('([A-Za-z]+\/[A-Za-z/]+)'/g))literalMethods.add(match[1])
  }

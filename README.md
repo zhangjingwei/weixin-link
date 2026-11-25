@@ -107,6 +107,8 @@ Windows x64（PowerShell）：
 
 可选接入个人订阅登录的 Claude Code CLI，配置方式与首版能力边界见 [Claude Code 接入](docs/features/claude-code.md)。Codex 保持默认；两种底座的会话和队列独立保存。
 
+也可接入自己的 WorkBuddy / CodeBuddy CLI 账号，使用官方 ACP stdio 接口；注册、手动登录与能力边界见 [WorkBuddy 接入](docs/features/workbuddy.md)。同一对话可保留各智能体独立的原生会话。
+
 微信助手供一个人使用，沿用个人 Codex 的登录和会话目录。卸载会保留微信数据和工作区。
 
 支持 Linux（x64、arm64）、macOS（Intel、Apple Silicon）和 Windows（x64）。

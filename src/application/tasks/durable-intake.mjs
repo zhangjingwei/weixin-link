@@ -95,9 +95,9 @@ export class DurableIntake {
      }
     }else{executionStarted=true;token.activate?.();if(job.context?.nativeQueue)await awaitNativeTurn(this,job,reply,token);else await this.recover(job,reply,token)}
    }catch(error){if(this.closed)return;if(token.current()){
-    if(job.state==='pending'&&/^CLAUDE_(?:CLI_|LOGIN_|SUBSCRIPTION_|INITIALIZATION_)/.test(error.code??'')){
+    if(job.state==='pending'&&(/^CLAUDE_(?:CLI_|LOGIN_|SUBSCRIPTION_|INITIALIZATION_)/.test(error.code??'')||['WORKBUDDY_LOGIN_REQUIRED','WORKBUDDY_CLI_UNAVAILABLE','WORKBUDDY_CLI_VERSION_UNSUPPORTED','WORKBUDDY_RESUME_UNSUPPORTED'].includes(error.code))){
      this.jobs.mark(job.id,'cancelled')
-     await reply('未能连接 Claude Code，本条尚未提交。请在主机核对 CLI 版本及官方账号登录；不会自动重试。')
+     await reply('未能连接 '+(error.code?.startsWith('WORKBUDDY_')?'WorkBuddy':'Claude Code')+'，本条尚未提交。请在主机核对 CLI 版本及官方账号登录；不会自动重试。')
      continue
     }
     if(job.state==='pending'&&error.code==='CODEX_CONNECT_FAILED'){

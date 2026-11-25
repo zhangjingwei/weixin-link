@@ -9,7 +9,7 @@ export function syncNativeSession(record,fallback='codex'){
  return record.nativeSessions
 }
 export function selectNativeSession(record,kind,fallback='codex'){
- if(!['codex','claude'].includes(kind))throw Error('AGENT_UNAVAILABLE')
+ if(!['codex','claude','workbuddy'].includes(kind))throw Error('AGENT_UNAVAILABLE')
  syncNativeSession(record,fallback)
  if(record.activeAgent===kind)return false
  for(const key of fields)delete record[key]

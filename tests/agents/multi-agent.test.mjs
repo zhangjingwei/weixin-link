@@ -18,7 +18,7 @@ function protocol(kind,starts){return {kind,name:kind,supportsNativeCommands:kin
  createRpc:options=>({...options,closed:false,close(){this.closed=true}}),initialize:async()=>{},open:async(rpc,{saved})=>({thread:{id:saved.threadId??kind+'-native'},model:kind+'-model'}),
  startTurn:async(rpc,options)=>{const turnId=kind+'-'+starts.length;starts.push({rpc,options,turnId});return {turn:{id:turnId}}},read:async(rpc,id)=>({id,cwd:rpc.cwd,status:{type:'idle'}})}}
 async function fixture(t){
- const dir=await mkdtemp(join(tmpdir(),'native-links-')),starts=[],mux=createMultiAgentProtocol({codex:protocol('codex',starts),claude:protocol('claude',starts)})
+ const dir=await mkdtemp(join(tmpdir(),'native-links-')),starts=[],mux=createMultiAgentProtocol({codex:protocol('codex',starts),claude:protocol('claude',starts),workbuddy:protocol('workbuddy',starts)})
  const manager=await new SessionManager({stateDir:dir,cwd:dir,owners:['owner'],sessionProtocol:mux}).init(),jobs=new DurableJobs(join(dir,'queue.sqlite'))
  manager.submissions=jobs
  const intake=new DurableIntake({manager,jobs,reply:async()=>({status:'accepted'})})
@@ -34,7 +34,7 @@ test('legacy identity migrates; switching back preserves models, project and thr
  assert.deepEqual(nativeThreadIds(record),['old-codex','new-claude']);assert.equal(activeAgent({agentKind:'claude'}),'claude');assert.deepEqual(nativeThreadIds({threadId:'other'}),['other'])
 })
 test('connections route immutably, unsupported native operations fail closed',async()=>{
- const starts=[],mux=createMultiAgentProtocol({codex:protocol('codex',starts),claude:protocol('claude',starts)}),rpc=mux.createRpc({agentKind:'claude'})
+ const starts=[],mux=createMultiAgentProtocol({codex:protocol('codex',starts),claude:protocol('claude',starts),workbuddy:protocol('workbuddy',starts)}),rpc=mux.createRpc({agentKind:'claude'})
  assert.equal((await mux.open(rpc,{saved:{}})).thread.id,'claude-native');assert.throws(()=>mux.goal(rpc,'x',{}),/UNSUPPORTED/);assert.throws(()=>mux.createRpc({agentKind:'missing'}),/UNAVAILABLE/)
 })
 test('durable follow-up waits for source, restores both native sessions, and Mac keeps shared history on reopen',async t=>{
@@ -134,4 +134,29 @@ test('replaying an existing pending submission never changes its frozen agent',a
  manager.state.users.owner={activeAgent:'codex'}
  assert.equal(intake.submit('owner',{text:'different',agentKind:'codex'},'same'),id)
  assert.equal(jobs.get(id).input.agentKind,'claude');assert.equal(jobs.get(id).input.text,'original')
+})
+
+test('WorkBuddy switch verifies session without inference, restores Codex on auth failure and retains both native histories',async t=>{
+ const f=await fixture(t),{manager,intake,starts,jobs,mux}=f
+ const first=intake.submit('owner',{text:'original'},'wb-source');await until(()=>starts.length===1);await f.finish(0);await until(()=>jobs.get(first).state==='done')
+ const target=mux.forAgent('workbuddy'),open=target.open
+ target.open=async()=>{throw Object.assign(Error('WORKBUDDY_LOGIN_REQUIRED'),{code:'WORKBUDDY_LOGIN_REQUIRED'})}
+ await assert.rejects(manager.selectAgent('owner','workbuddy'),/LOGIN_REQUIRED/)
+ assert.equal(manager.agentFor('owner'),'codex');assert.equal(manager.state.users.owner.threadId,'codex-native');assert.equal(starts.length,1)
+ assert.equal(JSON.parse(await readFile(join(f.dir,'assistant-sessions.json'),'utf8')).users.owner.activeAgent??'codex','codex')
+ target.open=open;await manager.selectAgent('owner','workbuddy');assert.equal(starts.length,1)
+ assert.equal(manager.sessions.get('owner').threadId,'workbuddy-native')
+ const second=intake.submit('owner',{text:'continue',agentKind:'workbuddy'},'wb-target');await until(()=>starts.length===2)
+ assert.equal(starts[1].rpc.agentKind,'workbuddy');assert.ok(starts[1].options.input.some(i=>i.text?.includes('answer 0')))
+ await f.finish(1);await until(()=>jobs.get(second).state==='done');await manager.selectAgent('owner','codex')
+ assert.equal(manager.state.users.owner.threadId,'codex-native');assert.equal(manager.state.users.owner.nativeSessions.workbuddy.threadId,'workbuddy-native')
+})
+test('WorkBuddy title navigation stays local; its native ID never reaches Codex catalog',async t=>{
+ const {manager}=await fixture(t)
+ const {TextConversations}=await import('../../src/application/conversations/text-conversations.mjs'),{createCodexConversationBackend}=await import('../../src/infrastructure/agents/codex-conversation-backend.mjs')
+ const conversations=new TextConversations(manager,['owner'],()=>({}),createCodexConversationBackend(manager))
+ await manager.selectAgent('owner','workbuddy');manager.createCatalogRpc=()=>assert.fail('must not send WorkBuddy ID to Codex')
+ await conversations.selectConversation({_conversationOwner:'owner',userId:'owner',_conversationCommand:{action:'switch',id:'1'}},()=>{})
+ await conversations.rename(conversations.find('owner','1'),'WorkBuddy 任务',()=>{})
+ assert.equal(conversations.find('owner','1').name,'WorkBuddy 任务')
 })

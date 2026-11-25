@@ -1,6 +1,7 @@
 import {createMultiAgentProtocol} from './multi-agent-protocol.mjs'
 import {join} from 'node:path'
 import {readAgentSelection} from './agent-selection.mjs'
+import {createWorkbuddyProtocol} from './workbuddy/protocol.mjs'
 import {createClaudeProtocol} from './claude/protocol.mjs'
 import {createSessionProtocol} from './session-protocol.mjs'
 import {ensureAccountCodexHome} from '../accounts/codex-home.mjs'
@@ -19,7 +20,9 @@ export async function loadAgentAdapter(account,workspace,installation){
   const provider=providerEnvironment(profile)
   protocols.codex=createSessionProtocol({rpcFactory:backend.rpcFactory,providerEnv:provider.options,providerSecrets:provider.secrets,codexBinary:()=>installation.codexBinary,codexHome})
  }
+ const workbuddyBinary=selected.workbuddyBinary??(kind==='workbuddy'?selected.binary:null)
+ if(workbuddyBinary)protocols.workbuddy=createWorkbuddyProtocol({binary:workbuddyBinary})
  const claudeBinary=selected.claudeBinary??(kind==='claude'?selected.binary:null)
  if(claudeBinary){const {query}=await import('@anthropic-ai/claude-agent-sdk');protocols.claude=createClaudeProtocol({binary:claudeBinary,query})}
- return {kind,name:kind==='claude'?'Claude Code':'Codex',backend,sessionOptions:{codexHome,sessionProtocol:createMultiAgentProtocol(protocols,kind)},catalog:'official',providerKind:kind==='claude'?'claude-subscription':profile?.kind??'subscription'}
+ return {kind,name:kind==='workbuddy'?'WorkBuddy':kind==='claude'?'Claude Code':'Codex',backend,sessionOptions:{codexHome,sessionProtocol:createMultiAgentProtocol(protocols,kind)},catalog:'official',providerKind:kind==='workbuddy'?'workbuddy-account':kind==='claude'?'claude-subscription':profile?.kind??'subscription'}
 }

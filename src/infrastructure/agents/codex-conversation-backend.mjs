@@ -87,7 +87,7 @@ export function createCodexConversationBackend(manager){
   connectionFor(session,fallback){return session?.rpc&&!session.rpc.closed?session.rpc:fallback},
   closeSession(session){if(manager.detachRpc)manager.detachRpc(session,session.rpcAttempt);else session.rpc?.close?.()},
   async readConversation(handle,threadId){return (await connection(handle).request('thread/read',{threadId,includeTurns:false})).thread},
-  async confirmSession(session,threadId){return session.rpc?.agentKind==='claude'?manager.protocol.read(session.rpc,threadId):this.readConversation(session,threadId)},
+  async confirmSession(session,threadId){return ['claude','workbuddy'].includes(session.rpc?.agentKind)?manager.protocol.read(session.rpc,threadId):this.readConversation(session,threadId)},
   async renameConversation(handle,threadId,name){await connection(handle).request('thread/name/set',{threadId,name})},
   async setArchived(handle,threadId,archived){await connection(handle).request(archived?'thread/archive':'thread/unarchive',{threadId})},
   async deleteConversation(handle,threadId){await connection(handle).request('thread/delete',{threadId})},

@@ -327,8 +327,8 @@ export class SessionManager {
     },Math.max(recheck?1000:0,remaining))
     session.idleReleaseTimer.unref()
   }
-  async connect(userId, reply) {
-    if(this.agentSelections.has(userId))throw Error('AGENT_SWITCH_BLOCKED')
+  async connect(userId, reply, selectionOwner=false) {
+    if(this.agentSelections.has(userId)&&!selectionOwner)throw Error('AGENT_SWITCH_BLOCKED')
     if(this.releasing.has(userId))await this.releasing.get(userId)
     if(this.state.desktopHandoff||this.desktopTransition)throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')
     if (!this.owners.has(userId)) throw new Error('当前微信账号未获授权。')
@@ -923,8 +923,17 @@ export class SessionManager {
       if(session){clearTimeout(session.idleReleaseTimer);this.detachRpc(session,session.rpcAttempt);this.sessions.delete(userId)}
       selectNativeSession(record,kind,from)
       record.agentHandoff=context
+      // Verify the new native session before committing a WorkBuddy selection.
+      // This performs initialize/new/load only, never a model prompt.
+      if(kind==='workbuddy')await this.connect(userId,session?.reply??(()=>{}),true)
       await this.save()
-    }catch(error){this.state.users[userId]=previous;throw error}
+    }catch(error){
+      const target=this.sessions.get(userId)
+      if(target&&target!==session){clearTimeout(target.idleReleaseTimer);this.detachRpc(target,target.rpcAttempt);this.sessions.delete(userId)}
+      this.state.users[userId]=previous
+      try{await this.save()}catch{}
+      throw error
+    }
     finally{this.agentSelections.delete(userId);if(session)session.selecting=false}
   }
   async acceptMessage(userId,messageId) {
@@ -938,7 +947,7 @@ export class SessionManager {
     return true
   }
   async steer(userId, text, reply, token, expected, chatReceipt) {
-    if(this.protocolFor(userId).kind==='claude'){await reply('Claude Code 首版尚未确认执行中补充能力；请等当前任务结束再发送新消息。本条未提交。');return {status:'not_sent'}}
+    if(['claude','workbuddy'].includes(this.protocolFor(userId).kind)){await reply('当前智能体尚未确认执行中补充能力；请等当前任务结束再发送新消息。本条未提交。');return {status:'not_sent'}}
     if(!text){await reply('请说明要补充的内容，以及要补充到哪个任务。');return}
     const session=this.sessions.get(userId)
     if(expected&&(!session||session.traceId!==expected.traceId||session.turnId!==expected.turnId))throw Error('MANAGEMENT_STALE_TASK')

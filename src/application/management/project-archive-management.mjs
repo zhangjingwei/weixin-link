@@ -3,7 +3,7 @@ import {managementWrite} from './management-writes.mjs'
 export function requestProjectArchive(context,owner,caller,args){return managementWrite(context,owner,caller,'request_project_archive',args,async op=>{
  if(!context.conversations.backendPort?.capabilities.catalog)throw Error('MANAGEMENT_UNSUPPORTED')
  const entry=context.target(owner,args.projectId)
- if(context.manager.agentFor?.(entry.key)==='claude')throw Error('MANAGEMENT_UNSUPPORTED')
+ if(['claude','workbuddy'].includes(context.manager.agentFor?.(entry.key)))throw Error('MANAGEMENT_UNSUPPORTED')
  if(entry.deleteIntent||entry.archiveIntent!==undefined||context.conversations.archiveLocks?.has(entry.key))throw Error('MANAGEMENT_TARGET_UNAVAILABLE')
  op.threadId=context.manager.state.users[entry.key]?.threadId??null;op.archived=args.archived
  op.callerTask=context.manager.sessions.get(caller)?.traceId;op.status='pending'
