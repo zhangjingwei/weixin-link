@@ -226,7 +226,7 @@ private let surface = Color(nsColor: .controlBackgroundColor)
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 22) {
             Text("最近的会话记录").font(.caption).foregroundStyle(.secondary)
-            ForEach(Array(view.messages.enumerated()), id: \.offset) { i, m in messageRow(m).id(m.resultId ?? "line-\(i)") }
+            ForEach(Array(view.messages.enumerated()), id: \.offset) { i, m in messageRow(m).id(m.resultId ?? m.messageId ?? "line-\(i)") }
             if view.messages.allSatisfy({ $0.files == nil }) { files(view.files) }
             if view.diff != nil {
               Button {
@@ -245,7 +245,7 @@ private let surface = Color(nsColor: .controlBackgroundColor)
           if let id = focusedResult, view.messages.contains(where: { $0.resultId == id }) { reader.scrollTo(id,anchor:.top) }
           else { reader.scrollTo("end",anchor:.bottom) }
         }.onChange(
-          of: view.messages.last?.time
+          of: view.messages.last.map { $0.messageId ?? $0.resultId ?? String($0.time ?? 0) }
         ) { _ in if preview == nil && focusedResult == nil { reader.scrollTo("end", anchor: .bottom) } }
       }.id(view.project)
       VStack(alignment: .leading, spacing: 7) {

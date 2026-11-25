@@ -101,3 +101,17 @@ test('a Mac-originated ordinary message appears once and its WeChat echo uses th
  const args={action:'send',project:'5',thread:'thread',turn:'',revision:1,id:randomUUID(),text:'Mac 新问题'}
  await run(args);await run(args);assert.deepEqual((await run({action:'view'})).messages.map(m=>m.text),[args.text]);assert.deepEqual(notices,[['account','Mac 发来：'+args.text]])
 })
+
+test('passive Mac reads durable inbound text before dispatch; replay, supplements and handoff keep the original bubble once after reopening',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'mac-ingress-')),path=join(dir,'inbox.sqlite');let jobs=new DurableJobs(path)
+ t.after(async()=>{jobs.close();await rm(dir,{recursive:true,force:true})})
+ const entries=[{id:'5',key:'source'},{id:'8',key:'target'}],catalog={active:'5',entries},state={users:{source:{threadId:'s'},target:{threadId:'t'}}}
+ const manager={state,sessions:new Map(),save:async()=>{},lifecycle:{capture:()=>({current:()=>true})}},conversations={realOwners:new Set(['phone']),ensure:()=>catalog,bind:m=>({...m,userId:'source',_conversationOwner:'phone',_sessionCommand:m.text.startsWith('补充：')?{action:'steer',text:m.text.slice(3)}:null})}
+ const received=[],bot={parser:{parse:m=>m}},controller=createWeChatController({bot,manager,jobs,conversations,runtime:{},setupController:{command:()=>null},setupReceipts:{get:()=>null},quote:()=>[],normalizeVoice:m=>m,traceWire:()=>'',traceMessage:()=>'',classifyMessage:m=>m._sessionCommand?{kind:'session',value:m._sessionCommand}:null,dispatch:m=>received.push(m)})
+ const read=async(project='5')=>(await macCompanion({owner:'phone',access:{read:()=>({writer:'wechat'})},conversations,manager,jobs,stateDir:dir})({action:'view',project})).messages
+ const wire=text=>({userId:'phone',text,raw:{message_id:randomUUID()}}),one=wire('第一条原文'),two=wire('补充：核对顺序')
+ await controller.prepareBatch([one,two]);const before=await read();assert.deepEqual(before.map(m=>m.text),[one.text,two.text]);assert.deepEqual(received,[])
+ controller.onMessage(bot.parser.parse(one));controller.onMessage(bot.parser.parse(two));const [a,b]=received;assert.ok(b._chatReceipt);assert.ok(!jobs.rawCurrent(b._chatReceipt));state.users.source.supplements=[{threadId:'s',text:'核对顺序',chatReceipt:b._chatReceipt,status:'accepted',created:new Date().toISOString()}]
+ const job=jobs.add('source',{text:'转交的执行上下文'},a._ingressId,[a._ingressId]);jobs.add('target',{text:'目标执行上下文'},'separate-job');await controller.prepareBatch([one,two]);assert.deepEqual((await read()).map(m=>m.messageId),before.map(m=>m.messageId));assert.deepEqual((await read('8')).map(m=>m.text),['目标执行上下文'])
+ state.users.source.threadId='replacement';assert.deepEqual(await read(),[]);state.users.source.threadId='s';jobs.bind(job,'s');jobs.close();jobs=new DurableJobs(path);assert.deepEqual((await read()).map(m=>m.text),[one.text,two.text])
+})

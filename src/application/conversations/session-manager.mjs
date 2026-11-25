@@ -854,7 +854,7 @@ export class SessionManager {
     try{await this.save()}catch(error){if(record.seen===accepted)record.seen=previous;throw error}
     return true
   }
-  async steer(userId, text, reply, token, expected) {
+  async steer(userId, text, reply, token, expected, chatReceipt) {
     if(!text){await reply('请说明要补充的内容，以及要补充到哪个任务。');return}
     const session=this.sessions.get(userId)
     if(expected&&(!session||session.traceId!==expected.traceId||session.turnId!==expected.turnId))throw Error('MANAGEMENT_STALE_TASK')
@@ -864,7 +864,7 @@ export class SessionManager {
     if(!session.turnReady||!session.turnStarted||!session.turnId){await reply('当前任务仍在启动，补充尚未提交；请等任务开始后再补充。');return {status:'not_sent'}}
     const {threadId,turnId,traceId,rpc}=session
     const record=this.state.users[userId]
-    const entry={id:randomBytes(12).toString('hex'),threadId,turnId,text,status:'unknown',created:new Date().toISOString()}
+    const entry={id:randomBytes(12).toString('hex'),threadId,turnId,text,...chatReceipt?{chatReceipt}:{},...expected?.requestId?{requestId:expected.requestId}:{},status:'unknown',created:new Date().toISOString()}
     record.supplements=[...(record.supplements??[]).slice(-49),entry]
     // Persist the uncertain write before sending. Never replay turn/steer after a crash.
     await this.save()
@@ -898,7 +898,7 @@ export class SessionManager {
       if(command?.action==='reviewCommit'){
         command=this.resolveReviewCommit(userId,command.selection)
       }
-      if(command?.action==='steer'){await this.steer(userId,command.text,reply,token);return}
+      if(command?.action==='steer'){await this.steer(userId,command.text,reply,token,undefined,command.chatReceipt);return}
       if(command?.action==='memory'){
         if(!this.protocol.supportsMemory){await reply(await this.protocol.memory(null,null,command));return}
         const session=await this.connect(userId,reply)

@@ -135,7 +135,7 @@ return async function handleMessage(message) {
   }
   if(control){
     const command=capturedStop?{...control,stopIngressId:message._ingressId,stopTrace:message._stopTrace}:control
-    await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token,command)
+    await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token,control.action==='steer'&&message._chatReceipt?{...command,chatReceipt:message._chatReceipt}:command)
     if(nativeKind==='mutation'||capturedStop)jobs.acknowledge([message._ingressId].filter(Boolean))
     return
   }

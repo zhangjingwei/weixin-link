@@ -1,3 +1,4 @@
+import {entryRequestId} from '../../src/domain/messages/message-identity.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,rm} from 'node:fs/promises'
@@ -38,7 +39,7 @@ test('foreign and invalid decisions fall back without dispatch; ambiguity only a
 test('supplements bind the original task snapshot; stale tasks never turn into new work',async t=>{
  const f=await fixture(t,{action:'supplement',projectId:'1',question:null});let received
  f.manager.steer=async(_,text,reply,token,expected)=>{received=expected;return {status:'accepted'}}
- await f.router.process(f.message,f.token);assert.deepEqual(received,{traceId:'trace',turnId:'turn'});assert.equal(f.jobs.pending().length,0)
+ await f.router.process(f.message,f.token);assert.deepEqual(received,{traceId:'trace',turnId:'turn',requestId:entryRequestId(f.message._ingressId)});assert.equal(f.jobs.pending().length,0)
  const q=await fixture(t,{action:'supplement',projectId:'1',question:null});q.router.classify=async()=>{q.manager.sessions.get('alice').turnId='new-turn';return {action:'supplement',projectId:'1',question:null}}
  await q.router.process(q.message,q.token);assert.equal(q.jobs.pending().length,0);assert.match(q.sent[0],/未确认执行/)
 })

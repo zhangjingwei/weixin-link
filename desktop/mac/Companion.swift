@@ -3,7 +3,7 @@ import AppKit
 
 struct Snapshot: Decodable {
     struct ResultLink: Decodable { let project, result: String }
-    struct Message: Decodable { let role, text: String; let time: Double?; let resultId, delivery, legacyFooter: String?; let updates: [String]?; let route: ResultLink?; let truncated: Bool?; let files: [File]? }
+    struct Message: Decodable { let role, text: String; let time: Double?; let messageId, resultId, delivery, legacyFooter: String?; let updates: [String]?; let route: ResultLink?; let truncated: Bool?; let files: [File]? }
     struct Conversation: Decodable, Identifiable { let id, name: String; let group, groupLabel: String? }
     struct File: Decodable, Hashable { let name, path: String; let root, sourcePath, delivery: String? }
     let name, project, thread, turn, writer: String

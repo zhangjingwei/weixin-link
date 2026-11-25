@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto'
 import {basename,join,resolve,sep} from 'node:path'
+import {entryRequestId,taskId} from '../../domain/messages/message-identity.mjs'
 import {historyInputText} from './history.mjs'
 
 const states=new Set(['accepted','partial','failed','unknown','cancelled','deferred','pending','sending','not_required'])
@@ -33,11 +34,33 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
    const routes=routedResults(manager.state.managementOperations,owner,key,entries,manager.state.users)
    const messages=[],files=[],hash=createHash('sha256').update(key).digest('hex').slice(0,24)
    const addFiles=(parts,folder)=>{const start=files.length;for(const item of parts??[]){const root=join(stateDir,folder,hash)+sep;if(typeof item.path==='string'&&resolve(item.path).startsWith(root))files.push({name:basename(item.fileName??item.name??item.path),path:resolve(item.path),root:root.slice(0,-1),...(folder==='outgoing'&&delivery(item.status)?{delivery:item.status}:{}),...(folder==='outgoing'&&typeof item.sourcePath==='string'?{sourcePath:item.sourcePath}:{})})}return files.slice(start)}
-   for(const job of jobs.companionMessages(key,thread)){
-    const text=historyInputText(job.text??'').split(/\n\n附件接入说明：|来源会话中已商定的方案（供落实本轮原始请求，沿用原授权范围）：/u,1)[0]
-    messages.push({role:'你',text:text||'附件',time:job.created,files:addFiles(JSON.parse(job.files),'attachments')})
+   const queued=jobs.companionMessages(key,thread),byJob=new Map(queued.map(j=>[j.id,j])),seenJobs=new Set(),supplementReceipts=new Map()
+   for(const receipt of jobs.companionIngress?.(key,thread)??[]){
+    const route=catalog.entryRoutes?.[receipt.id],job=byJob.get(receipt.chat_job??taskId(key,receipt.id))
+    const steps=route?.currentProjectId===entry.id?(route.steps??[]):[]
+    const sameThread=step=>step.projectId===entry.id&&step.threadId===thread
+    if(receipt.chat_thread!==thread){
+     if(receipt.chat_thread||!(job&&job.thread_id===thread)&&!queued.some(j=>j.ingress_id===receipt.id&&j.thread_id===thread)&&!steps.some(sameThread))continue
+    }
+    const matching=[...new Set([job,...queued.filter(j=>j.ingress_id===receipt.id),...steps.flatMap((step,i)=>sameThread(step)?[byJob.get(route.receipts?.[i]?.taskId)]:[])].filter(Boolean))]
+    for(const item of matching)seenJobs.add(item.id)
+    // New supplements retain their exact request identity, even after routing records expire.
+    const bubble={role:'你',text:receipt.text||'附件',time:receipt.created,messageId:receipt.id,files:addFiles(matching.flatMap(j=>JSON.parse(j.files)),'attachments')}
+    messages.push(bubble)
+    supplementReceipts.set(receipt.id,bubble)
+    supplementReceipts.set(entryRequestId(receipt.id),bubble)
+    for(const [i,step] of steps.entries())if(i&&sameThread(step)&&step.action==='supplement')supplementReceipts.set(entryRequestId(receipt.id+':'+i),bubble)
    }
-   for(const item of record.supplements??[]){if(item.threadId===thread)messages.push({role:'补充 · '+item.status,text:item.text,time:Date.parse(item.created)})}
+   for(const job of queued){
+    if(seenJobs.has(job.id))continue
+    const text=historyInputText(job.text??'').split(/\n\n附件接入说明：|来源会话中已商定的方案（供落实本轮原始请求，沿用原授权范围）：/u,1)[0]
+    messages.push({role:'你',text:text||'附件',time:job.created,messageId:job.id,files:addFiles(JSON.parse(job.files),'attachments')})
+   }
+   for(const item of record.supplements??[]){
+    if(item.threadId!==thread)continue
+    const original=supplementReceipts.get(item.chatReceipt)??supplementReceipts.get(item.requestId)
+    if(original){original.role='补充 · '+item.status;continue}
+    messages.push({role:'补充 · '+item.status,text:item.text,time:Date.parse(item.created),messageId:item.id})}
    for(const result of results(record)){
     if(!result.lastReply||result.identity?.threadId!==thread)continue
     const {execution,footerOffset}=result.identity
