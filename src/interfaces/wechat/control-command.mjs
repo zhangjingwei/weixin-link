@@ -31,6 +31,14 @@ export function controlCommand(text) {
   return null
 }
 
+// Only recovery controls are interpreted before the model sees a new message.
+export function recoveryControlCommand(text) {
+  const value=text.trim().toLowerCase().replace(/[。？！!?]$/u,'')
+  if(value==='stop'||value==='停止')return {action:'stop'}
+  if(value==='exit'||value==='退出')return {action:'exit'}
+  return null
+}
+
 export function completeControlPrompt(target,text){
  const value=text.trim()
  if(!value)return {error:'请输入内容。'}

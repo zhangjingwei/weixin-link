@@ -18,21 +18,6 @@ test('management setup claims one receipt and does not repeat a recovered operat
   assert.deepEqual(events, [['ack', ['inbox']]])
 })
 
-test('management switch failure uses a bounded public code and acknowledges once', async () => {
-  const events = [], sent = []
-  const management = createManagementController({
-    jobs: {acknowledge: ids => events.push(['ack', ids])},
-    runtime: {track: async (_kind, work) => work()},
-    agentSwitcher: {handle: async () => {throw Error('secret details: token=private')}},
-    view: {},
-    log: (event, fields) => events.push([event, fields]),
-  })
-  await management.agent({action: 'switch'}, {userId: 'owner', _ingressId: 'inbox'}, async text => sent.push(text), 'trace-1')
-  assert.match(sent[0], /AGENT_SWITCH_FAILED/)
-  assert.doesNotMatch(sent[0], /private/)
-  assert.deepEqual(events.at(-1), ['ack', ['inbox']])
-})
-
 test('configuration entry validates the command boundary and delegates schema reads', async () => {
   const schema = await runConfigurationAction('config-schema', ['ha'])
   assert.equal(schema.properties.version.const, 1)

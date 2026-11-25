@@ -17,7 +17,7 @@ export function conversationInput(text='',{pending}={}){
  const value=input.trim()
  if(pending){
   if(value==='取消'||value.toLowerCase()==='cancel')return {command:{action:'promptCancel'},promptResult:'done'}
-  if(['stop','exit','停止','退出','关闭'].includes(value.toLowerCase()))return {sessionCommand:controlCommand(value),promptResult:'done'}
+  if(['stop','exit','停止','退出'].includes(value.toLowerCase()))return {sessionCommand:controlCommand(value),promptResult:'done'}
   const info=controlCommand(input)
   if(info&&(promptInfoActions.has(info.action)||info.action==='goal'&&info.op==='get'||info.action==='memory'&&info.op==='list'))return {sessionCommand:info,promptResult:'keep'}
   if(/^(?:状态|status)[。？！!?]?$/iu.test(value)||isResultLookup(value)||promptInfoCommands.has(value.toLowerCase()))return {command:null,promptResult:'keep'}
@@ -68,6 +68,5 @@ export function conversationInput(text='',{pending}={}){
   else {const completed=completeControlPrompt(pending.target,value);result=completed.error?completed:{sessionCommand:completed.command}}
   return result.error?{command:{action:'promptInvalid',text:result.error},promptResult:'retry'}:{...result,promptResult:'done'}
  }
- const command=conversationCommand(input),control=command?null:controlCommand(input)
- return {command:command??(control?.action==='prompt'?control:null)}
+ return {command:conversationCommand(input)}
 }

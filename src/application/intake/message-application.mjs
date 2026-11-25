@@ -22,8 +22,6 @@ return async function handleMessage(message) {
   try{await lifecycleNotice?.onInbound(conversations.recipient(message.userId))}catch(error){log('lifecycle_notice.failed',{trace_id,...errorFields(error)})}
   const intent=classifyMessage(message)
   const diagnosticAction=intent?.kind==='diagnostic'?intent.value:null
-  const agentAction=intent?.kind==='agent'?intent.value:null
-  const upgradeAction=intent?.kind==='upgrade'?intent.value:null
   const initialControl=intent?.value
   const nativeKind=nativeCommandKind(intent)
   if(runtime.sealed)return
@@ -89,17 +87,11 @@ return async function handleMessage(message) {
     await runtime.track('delivery',()=>deliver('上次原生命令的执行结果待核对，未重复执行。请查询对应状态后再决定是否重新发送。',{conversationControl:true}))
     jobs.acknowledge([message._ingressId].filter(Boolean));return
   }
-  if(message._recovered&&(agentAction?.action==='restart'||upgradeAction)){
-   await runtime.track('delivery',()=>deliver('上次维护操作是否完成还不确定，没有重复执行。你可以说“检查助手服务是否正常”。',{conversationControl:true}))
-   jobs.acknowledge([message._ingressId].filter(Boolean));return
-  }
   let recoveryDelivery
   if(!initialControl&&!hasMedia(message)&&!message._recovered&&!isResultLookup(text)){
    try{recoveryDelivery=await recoverFailedFinal(manager,message.userId,(key,value)=>view.deliver(key,value,{conversationControl:true,traceId:trace_id}),confirmedRejection);if(recoveryDelivery)log('delivery.recovery_attempt',{trace_id,status:recoveryDelivery})}
    catch(error){log('delivery.recovery_failed',{trace_id,...errorFields(error)})}
   }
-  if(agentAction){await management.agent(agentAction,message,deliver,trace_id);return}
-  if(upgradeAction){await management.upgrade(message,deliver,trace_id);return}
   if(!hasMedia(message)&&await conversations.control(message,reply)){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   let control = intent?.kind==='session'?intent.value:null
   if(control?.action==='reviewCommit'){

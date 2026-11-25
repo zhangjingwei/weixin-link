@@ -195,7 +195,7 @@ manager.lifecycle.onCancel((userId,{queueAlreadyCancelled}={})=>{pending.cancel(
 bot.on('error', error => log('wechat.error',errorFields(error)))
 const handoffCleanup=setInterval(()=>{void runtime.track('management',()=>handoffs.cleanup()).catch(()=>log('attachment_handoff.cleanup_failed',{code:'HANDOFF_CLEANUP_FAILED'}))},3600000);handoffCleanup.unref()
 await handoffs.cleanup().catch(()=>log('attachment_handoff.cleanup_failed',{code:'HANDOFF_CLEANUP_FAILED'}))
-const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,accountId:account.id,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,mediaDependencies,durable,classifyMessage,infrastructure,diagnosticServices:new ServiceManager(),diagnosticService:account.service,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
+const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,accountId:account.id,lifecycleNotice,setupReceipts,setupController,backend,owners,mediaDependencies,durable,classifyMessage,infrastructure,diagnosticServices:new ServiceManager(),diagnosticService:account.service,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
 intakeHandler=nonBlockingHandler(async message => {
   try {
     message=voiceCommandInput(message)

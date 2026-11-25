@@ -1,10 +1,7 @@
-import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 import {installerCommand} from '../../setup/setup-locale.mjs'
 
-/** Management commands from WeChat. Installation and upgrades remain outside
- * the ordinary model task queue.
- */
-export function createManagementController({manager, jobs, runtime, setupReceipts, setupController, agentSwitcher, upgrader, view, log}) {
+/** Recovery commands from WeChat when model setup is unavailable. */
+export function createManagementController({manager, jobs, runtime, setupReceipts, setupController, view}) {
   const acknowledge = message => jobs.acknowledge([message._ingressId].filter(Boolean))
   const desktopBlocked=async(message,deliver)=>{
     if(!manager?.state?.desktopHandoff)return false
@@ -34,26 +31,6 @@ export function createManagementController({manager, jobs, runtime, setupReceipt
       }))
       setupReceipts.finish(receipt.id)
       acknowledge(message)
-    },
-    async agent(action, message, deliver, traceId) {
-      if(await desktopBlocked(message,deliver))return
-      await runtime.track('setup', async () => {
-        try { await agentSwitcher.handle(action, value => runtime.track('delivery', () => deliver(value, {conversationControl: true}))) }
-        catch (error) {
-          log('agent.switch_failed', {trace_id: traceId, ...errorFields(error)})
-          await deliver('智能体切换未完成；当前底座未确认改变。错误代码：' + (/^[A-Z0-9_]+$/.test(error.message) ? error.message : 'AGENT_SWITCH_FAILED'), {conversationControl: true})
-        } finally { acknowledge(message) }
-      })
-    },
-    async upgrade(message, deliver, traceId) {
-      if(await desktopBlocked(message,deliver))return
-      await runtime.track('setup', async () => {
-        try { await upgrader.handle(value => runtime.track('delivery', () => deliver(value, {conversationControl: true})), {traceId}) }
-        catch (error) {
-          log('upgrade.request_failed', {trace_id: traceId, ...errorFields(error)})
-          await deliver('升级未安排。错误代码：' + (/^[A-Z0-9_]+$/.test(error.message) ? error.message : 'CHAT_UPGRADE_FAILED'), {conversationControl: true})
-        } finally { acknowledge(message) }
-      })
     },
   }
 }

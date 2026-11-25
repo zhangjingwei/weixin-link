@@ -52,10 +52,11 @@ test('inbound trace is retained through message logging and durable submission',
  assert.equal(events.find(e=>e.event==='message.received').trace_id,'message-trace-123')
  assert.equal(f.submitted[0][1].traceId,'message-trace-123')
 })
-test('retired diagnostic and maintenance phrases enter durable model intake',async()=>{
+test('ordinary management and native session requests enter durable model intake',async()=>{
  const f=fixture()
- for(const [index,text] of ['查看最近错误','重启','升级'].entries())await f.handle({userId:'owner',text,_ingressId:'request-'+index})
- assert.deepEqual(f.submitted.map(([,input])=>input.text),['查看最近错误','重启','升级'])
+ const requests=['查看最近错误','重启','升级','看看我的计划','代码审查','压缩上下文','分叉会话','开启快速模式','记忆']
+ for(const [index,text] of requests.entries())await f.handle({userId:'owner',text,_ingressId:'request-'+index})
+ assert.deepEqual(f.submitted.map(([,input])=>input.text),requests)
  assert.deepEqual(f.sent,[])
 })
 test('a new ordinary message resends a definitively rejected prior text result before submission',async()=>{

@@ -4,7 +4,7 @@
  * deliberately transient: replayed inbox rows are classified again using the
  * same rules, while the original message and job remain the durable records.
  */
-export function messageIntent(message, {hasMedia, diagnostic, setup, agent, upgrade, conversation, session}) {
+export function messageIntent(message, {hasMedia, diagnostic, setup, conversation, session}) {
   if (hasMedia(message)) return null
   const text = message.text?.trim() ?? ''
   if (message._promptReply) {
