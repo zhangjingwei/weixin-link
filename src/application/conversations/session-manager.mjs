@@ -465,7 +465,6 @@ export class SessionManager {
       this.diagnostic(session,'materials.context',{count:materials.length,queue_depth:pendingMaterials,reason:session.attachmentContinuation?'continuation':materials.length?'current':'unbound'})
       const runtimeInput=this.backend?.prepareInput?await this.backend.prepareInput(text,{signal:token.signal}):text
       const turnParams={threadId:session.threadId,input:[...this.protocol.input(runtimeInput),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
-      if(native?.action==='plan')turnParams.input.push({type:'text',text:'用户选择了微信的“计划”：本轮仅调研和制定方案，等用户明确要求实施后再改动项目。'})
       result=native?.action==='review'
         ?await this.protocol.startReview(session.rpc,session.threadId,native.target)
         :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,model:executionModel,fastMode:this.state.users[session.userId]?.fastMode})
@@ -924,7 +923,7 @@ export class SessionManager {
         const session=await this.connect(userId,reply)
         await reply(await this.protocol.models(session.rpc,session.model));return
       }
-      if(['goal','plan','review','compact','fork','agentStatus','fast'].includes(command?.action)){
+      if(['goal','review','compact','fork','agentStatus','fast'].includes(command?.action)){
         if(!this.protocol.supportsNativeCommands){await reply(`当前 ${this.agentName} 底座未接入这项原生命令；没有执行。`);return}
         const session=await this.connect(userId,reply)
         if(!token.current())return
@@ -983,7 +982,7 @@ export class SessionManager {
           }finally{session.selecting=false}
         }
         const reviewText=command.target?.type==='commit'?'请审查选定的提交。':command.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
-        await this.send(session,command.action==='plan'?{text:command.text,nativeCommand:command}:reviewText,token,command)
+        await this.send(session,reviewText,token,command)
         return
       }
       if (command?.action === 'help') {
@@ -991,8 +990,8 @@ export class SessionManager {
           '微信命令列表：',
           '【当前任务】',
           '进度（progress）', '补充（supplement）', '停止（stop）', '恢复（recover）', '退出（exit）',
-          '【长任务与计划】',
-          '长任务（goal）', '长任务状态（goal-status）', '暂停长任务（goal-pause）', '继续长任务（goal-resume）', '完成长任务（goal-complete）', '清除长任务（goal-clear）', '计划（plan）',
+          '【长任务】',
+          '长任务（goal）', '长任务状态（goal-status）', '暂停长任务（goal-pause）', '继续长任务（goal-resume）', '完成长任务（goal-complete）', '清除长任务（goal-clear）',
           '【代码审查】',
           '代码审查（review）', '对比审查（compare）', '审查提交（commit-review）',
           '【会话】',

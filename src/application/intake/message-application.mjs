@@ -126,11 +126,11 @@ return async function handleMessage(message) {
   }
   if(!control&&media){await singleMedia(message,token,mediaDependencies);return}
   // Controls must not wait behind a slow turn/start or an earlier message send.
-  if(control&&['plan','review'].includes(control.action)){
+  if(control?.action==='review'){
     if(!manager.supportsNativeCommands){await reply(`当前 ${manager.agentName} 底座未接入这项原生命令；没有执行。`);jobs.acknowledge([message._ingressId].filter(Boolean));return}
     if(!token.current())return
-    const input=control.action==='plan'?quoteInput(control.text,message.references):control.target?.type==='commit'?'请审查选定的提交。':control.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
-    durable.submit(message.userId,{...(typeof input==='string'?{text:input}:input),nativeCommand:control,traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
+    const input=control.target?.type==='commit'?'请审查选定的提交。':control.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
+    durable.submit(message.userId,{text:input,nativeCommand:control,traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
     return
   }
   if(control){

@@ -19,12 +19,12 @@ test('a rejected skill root registration fails session initialization',async()=>
  await assert.rejects(createSessionProtocol().initialize(rpc),error)
 })
 
-test('plan-only input preserves its authorization boundary without forcing a skill',async()=>{
- const input=[{type:'text',text:'一起设计搜索机制'},{type:'text',text:'用户选择了微信的“计划”：本轮仅调研和制定方案，等用户明确要求实施后再改动项目。'}]
+test('design requests preserve their input without forcing a skill',async()=>{
+ const input=[{type:'text',text:'一起设计搜索机制'}]
  const rpc={request:async(method,params)=>params}
  const turn=await createSessionProtocol().startTurn(rpc,{threadId:'t',input})
  assert.deepEqual(turn.input,input)
- assert.equal(input.length,2)
+ assert.equal(input.length,1)
 })
 
 test('ordinary requests and short follow-ups reach the same thread without extra instructions',async()=>{
