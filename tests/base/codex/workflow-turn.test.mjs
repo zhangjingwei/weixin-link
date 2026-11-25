@@ -19,19 +19,18 @@ test('a rejected skill root registration fails session initialization',async()=>
  await assert.rejects(createSessionProtocol().initialize(rpc),error)
 })
 
-test('an explicit plan command attaches the native design skill to the original input',async()=>{
- const input=[{type:'text',text:'一起设计搜索机制'}]
+test('plan-only input preserves its authorization boundary without forcing a skill',async()=>{
+ const input=[{type:'text',text:'一起设计搜索机制'},{type:'text',text:'用户选择了微信的“计划”：本轮仅调研和制定方案，等用户明确要求实施后再改动项目。'}]
  const rpc={request:async(method,params)=>params}
- const turn=await createSessionProtocol().startTurn(rpc,{threadId:'t',input,workflowMode:'plan'})
- const path=fileURLToPath(new URL('../../../src/infrastructure/agents/skills/discussing-designs/SKILL.md',import.meta.url))
- assert.deepEqual(turn.input,[input[0],{type:'skill',name:'discussing-designs',path}])
- assert.equal(input.length,1)
+ const turn=await createSessionProtocol().startTurn(rpc,{threadId:'t',input})
+ assert.deepEqual(turn.input,input)
+ assert.equal(input.length,2)
 })
 
 test('ordinary requests and short follow-ups reach the same thread without extra instructions',async()=>{
  const protocol=createSessionProtocol()
  const rpc={request:async(method,params)=>{assert.equal(method,'turn/start');return params}}
- for(const text of ['想一起讨论搜索机制','对','继续','结果']){
+ for(const text of ['我给10个人做值班表，用表格还是网页','想一起讨论搜索机制','对','继续','结果']){
   const input=[{type:'text',text}]
   const turn=await protocol.startTurn(rpc,{threadId:'same-thread',input,model:'test-model'})
   assert.equal(turn.threadId,'same-thread')

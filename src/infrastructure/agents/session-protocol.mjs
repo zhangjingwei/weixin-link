@@ -1,5 +1,4 @@
 import {fileURLToPath} from 'node:url'
-import {join} from 'node:path'
 import {CodexRpc} from '../../base/codex/codex-rpc.mjs'
 import {codexInput} from '../../base/codex/codex-input.mjs'
 import {initializeCodex} from '../../base/codex/protocol-operations.mjs'
@@ -93,12 +92,9 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   supportsRemoteTaskRecovery:true,
   // Collaboration mode is stored on the Codex thread. Explicitly select the
   // default mode on every WeChat turn, including resumed threads.
-  startTurn(rpc,{threadId,input,deliveryId,model,fastMode,workflowMode}){
-   const items=workflowMode==='plan'
-    ? [...input,{type:'skill',name:'discussing-designs',path:join(skillRoot,'discussing-designs','SKILL.md')}]
-    : input
+  startTurn(rpc,{threadId,input,deliveryId,model,fastMode}){
    return rpc.request('turn/start',{
-    threadId,input:items,...deliveryId?{clientUserMessageId:deliveryId}:{},
+    threadId,input,...deliveryId?{clientUserMessageId:deliveryId}:{},
     collaborationMode:{mode:'default',settings:{model,reasoning_effort:null,developer_instructions:null}},
     ...typeof fastMode==='boolean'?{serviceTier:fastMode?'fast':'auto'}:{},
    })
