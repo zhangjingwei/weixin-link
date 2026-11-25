@@ -9,19 +9,13 @@ export class DurableJobs {
   this.db=new DatabaseSync(path)
   chmodSync(path,0o600)
   this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=3000;
-   CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,owner TEXT NOT NULL,input TEXT NOT NULL,state TEXT NOT NULL,thread_id TEXT,turn_id TEXT,created INTEGER NOT NULL);
-   CREATE TABLE IF NOT EXISTS ingress(id TEXT PRIMARY KEY,owner TEXT NOT NULL,payload TEXT NOT NULL,state TEXT NOT NULL,created INTEGER NOT NULL);
+   CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,owner TEXT NOT NULL,input TEXT NOT NULL,state TEXT NOT NULL,thread_id TEXT,turn_id TEXT,created INTEGER NOT NULL,stop_request TEXT,priority INTEGER NOT NULL DEFAULT 0,outcome TEXT,context TEXT);
+   CREATE TABLE IF NOT EXISTS ingress(id TEXT PRIMARY KEY,owner TEXT NOT NULL,payload TEXT NOT NULL,state TEXT NOT NULL,created INTEGER NOT NULL,chat_thread TEXT,chat_job TEXT);
    CREATE TABLE IF NOT EXISTS receipt_notices(id TEXT PRIMARY KEY);
    CREATE INDEX IF NOT EXISTS job_owner ON jobs(owner,created);
-   CREATE INDEX IF NOT EXISTS ingress_external_identity ON ingress(COALESCE(json_extract(payload,'$._conversationOwner'),json_extract(payload,'$.raw.from_user_id'),owner),CAST(COALESCE(json_extract(payload,'$.raw.message_id'),json_extract(payload,'$.raw.client_id')) AS TEXT),created);`)
-  const hasColumn=(table,name)=>this.db.prepare(`PRAGMA table_info(${table})`).all().some(row=>row.name===name)
-  if(!hasColumn('ingress','chat_thread'))this.db.exec('ALTER TABLE ingress ADD COLUMN chat_thread TEXT')
-  if(!hasColumn('ingress','chat_job'))this.db.exec('ALTER TABLE ingress ADD COLUMN chat_job TEXT')
-  this.db.exec('CREATE INDEX IF NOT EXISTS ingress_chat ON ingress(owner,chat_thread,created); CREATE INDEX IF NOT EXISTS ingress_chat_job ON ingress(owner,chat_job) WHERE chat_job IS NOT NULL')
-  if(!hasColumn('jobs','stop_request'))this.db.exec('ALTER TABLE jobs ADD COLUMN stop_request TEXT')
-  if(!hasColumn('jobs','priority'))this.db.exec('ALTER TABLE jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0')
-  if(!hasColumn('jobs','outcome'))this.db.exec('ALTER TABLE jobs ADD COLUMN outcome TEXT')
-  if(!hasColumn('jobs','context'))this.db.exec('ALTER TABLE jobs ADD COLUMN context TEXT')
+   CREATE INDEX IF NOT EXISTS ingress_external_identity ON ingress(COALESCE(json_extract(payload,'$._conversationOwner'),json_extract(payload,'$.raw.from_user_id'),owner),CAST(COALESCE(json_extract(payload,'$.raw.message_id'),json_extract(payload,'$.raw.client_id')) AS TEXT),created);
+   CREATE INDEX IF NOT EXISTS ingress_chat ON ingress(owner,chat_thread,created);
+   CREATE INDEX IF NOT EXISTS ingress_chat_job ON ingress(owner,chat_job) WHERE chat_job IS NOT NULL;`)
  }
  add(owner,input,key,ingressIds=[]){const id=key?taskId(owner,key):randomUUID(),text=JSON.stringify(input);if(Buffer.byteLength(text)>2*1024*1024)throw Error('INPUT_TOO_LARGE');this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('INSERT OR IGNORE INTO jobs(id,owner,input,state,thread_id,turn_id,created) VALUES(?,?,?,\'pending\',NULL,NULL,?)').run(id,owner,text,Date.now());for(const ingress of ingressIds)this.db.prepare('UPDATE ingress SET chat_job=? WHERE owner=? AND id=?').run(id,owner,ingress);this.acknowledge(ingressIds);this.db.exec('COMMIT');return id}catch(error){this.db.exec('ROLLBACK');throw error}}
  get(id){const r=this.db.prepare('SELECT * FROM jobs WHERE id=?').get(id);return r?{...r,input:JSON.parse(r.input),context:r.context?JSON.parse(r.context):null}:null}

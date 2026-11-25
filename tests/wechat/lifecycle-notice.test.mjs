@@ -43,10 +43,10 @@ test('a branch install without release metadata does not format a null upgrade',
  assert.deepEqual(sent,[])
  assert.equal((await f.saved()).commit,a)
 })
-test('an account already welcomed by the old flow receives an upgrade notice',async t=>{
+test('an account already welcomed by the old flow does not receive an upgrade notice',async t=>{
  const f=await fixture(t,{welcomePending:true});const legacy=join(f.notice.stateDir,basename(f.notice.path('owner')).replace('lifecycle-notice-','welcome-'))
  await writeFile(legacy,JSON.stringify({state:'accepted'}));await f.notice.start()
- assert.match(f.sent[0][1],/已升级到/);assert.equal((await f.saved()).kind,'upgrade')
+ assert.deepEqual(f.sent,[]);assert.equal((await f.saved()).status,'suppressed')
 })
 test('definitive context rejection defers until a fresh inbound, unknown is not retried',async t=>{
  const f=await fixture(t);f.state.result=Object.assign(Error('rejected'),{name:'ApiError',errcode:-2,payload:{ret:-2}})

@@ -12,7 +12,6 @@ export const upgradeMessage=(commit,language='zh',release)=>(language==='en'?`We
 export class LifecycleNotice{
  constructor({stateDir,sourceDir,owners,welcomePending=false,loginId,welcomeText,language='zh',send,log=()=>{}}){Object.assign(this,{stateDir,sourceDir,owners:[...new Set(owners)],welcomePending,loginId,welcomeText:welcomeText??(async()=>welcomeMessage(language)),language,send,log});this.locks=new Map();this.commit=null;this.started=false}
  path(owner){return join(this.stateDir,'lifecycle-notice-'+createHash('sha256').update(owner).digest('hex').slice(0,24)+'.json')}
- async legacyWelcomed(owner){try{return JSON.parse(await readFile(join(this.stateDir,'welcome-'+createHash('sha256').update(owner).digest('hex').slice(0,24)+'.json'),'utf8')).state==='accepted'}catch{return false}}
  async release(){
   try{this.installed=await readInstalledNotice(this.sourceDir,this.language)}catch{this.installed=null}
   return this.installed?.commit??null
@@ -33,7 +32,7 @@ export class LifecycleNotice{
   let value=await this.read(owner)
   const newLogin=this.loginId && value?.loginId!==this.loginId
   if(newLogin || !value || value.commit!==this.commit){
-   const welcome=newLogin || (!value && this.welcomePending && !await this.legacyWelcomed(owner))
+   const welcome=newLogin || (!value && this.welcomePending)
    if(!welcome && !this.commit)return null
    value={version:1,kind:welcome?'welcome':'upgrade',commit:this.commit,status:'pending',loginId:this.loginId??value?.loginId}
    await this.write(owner,value)

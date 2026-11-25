@@ -81,18 +81,10 @@ test('target resolution uses the actual conversation name',async t=>{
  assert.equal(found.resolution,'not_found')
  assert.equal((await service.call('alice','resolve_target',{query:'聊天天地'})).resolution,'unique')
 })
-test('history search spans text chunks and explicitly reports a 50-turn search boundary',async t=>{
+test('history search reports unsupported when native search is unavailable',async t=>{
  const {service,backend}=await fixture(t)
- const text='x'.repeat(9998)+'needle'+'x'.repeat(6000)
- backend.listTurns=async()=>({data:[{id:'turn',startedAt:123,items:[{type:'agentMessage',text}]}]})
- const first=await service.call('alice','search_session_history',{projectId:'1',query:'needle'})
- assert.equal(first.matches.length,0);assert(first.nextCursor);assert.equal(first.complete,false)
- const second=await service.call('alice','search_session_history',{projectId:'1',query:'needle',cursor:first.nextCursor})
- assert.equal(second.matches[0].offset,9998);assert.equal(second.scannedTurns,1);assert.equal(second.complete,true)
- backend.listTurns=async(rpc,threadId,{cursor}={})=>{const index=Number(cursor??0);return {data:[{id:'t'+index,items:[{type:'agentMessage',text:'no match'}]}],nextCursor:String(index+1)}}
- let cursor,page
- do{page=await service.call('alice','search_session_history',{projectId:'1',query:'absent',...(cursor?{cursor}:{})});cursor=page.nextCursor}while(cursor)
- assert.equal(page.scannedTurns,50);assert.equal(page.limited,true);assert.equal(page.complete,false)
+ backend.listTurns=async()=>assert.fail('history fallback must not run')
+ await assert.rejects(service.call('alice','search_session_history',{projectId:'1',query:'needle'}),/MANAGEMENT_NATIVE_SEARCH_UNAVAILABLE/)
 })
 function resultFixture(manager){
  const record=manager.state.users.alice;record.lastReply='原结果 [文件](/private/result.md)';record.lastOutput={kind:'bundle',id:'packet-original',text:'原结果',attachments:[{id:'file',fileName:'result.md',path:'/private/snapshot',bytes:5,sha256:'hash',kind:'file'}],errors:[],textParts:[]}
