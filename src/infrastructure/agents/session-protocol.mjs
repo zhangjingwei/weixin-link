@@ -119,20 +119,20 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
    const models=[],cursors=new Set();let cursor
    for(let page=0;page<10;page++){
     const result=await rpc.request('model/list',{limit:50,includeHidden:false,...cursor?{cursor}:{}})
-    if(!Array.isArray(result.data))throw Error('Codex 未返回有效的模型列表。')
+    if(!Array.isArray(result.data))throw Error('返回了无效的模型列表结构。')
     models.push(...result.data);cursor=result.nextCursor
     if(!cursor)break
-    if(cursors.has(cursor))throw Error('Codex 模型列表分页异常，请稍后重试。')
+    if(cursors.has(cursor))throw Error('模型列表分页异常。')
     cursors.add(cursor)
    }
-   if(cursor)throw Error('模型列表超过查询上限，请在主机查看。')
+   if(cursor)throw Error('模型列表超过查询上限。')
    const entries=[...new Map(models.filter(m=>typeof m.model==='string'&&!m.hidden).map(m=>[m.model,m])).values()]
    return {models:entries.map(({model,displayName,isDefault,inputModalities,supportedReasoningEfforts})=>({model,displayName,isDefault,inputModalities,supportedReasoningEfforts}))}
   },
   async models(rpc,currentModel){
    const {models:entries}=await this.listModels(rpc)
    const lines=entries.map(m=>`${m.model}${currentModel===m.model?' [当前]':''}${m.isDefault?' [默认]':''}\n输入：${Array.isArray(m.inputModalities)?m.inputModalities.join('、'):'未提供'}；推理档位：${(m.supportedReasoningEfforts??[]).map(e=>e.reasoningEffort).join('、')||'未提供'}`)
-   return 'Codex 返回的模型列表（只查询，不切换）：\n'+(lines.join('\n\n')||'当前未返回可显示的模型。')
+   return '模型列表：\n'+(lines.join('\n\n')||'当前未返回可显示的模型。')
   },
  }
 }
