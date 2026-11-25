@@ -113,18 +113,26 @@ test('transcribed voice upgrade request enters durable model intake',async()=>{
  assert.equal(f.submitted[0][1].text,'升级。')
 })
 
-test('standalone greeting replies locally once, even when the model is unavailable',async()=>{
- const f=fixture(),claims=new Set()
- f.deps.manager.sessions.clear()
- f.deps.entryRouting={process:async()=>assert.fail('unexpected model routing')}
- f.deps.jobs.claimReceipt=id=>!claims.has(id)&&!!claims.add(id)
- f.deps.outgoing.deliver=async(id,text)=>{f.sent.push([id,text]);return {status:'unknown'}}
- const handle=createMessageProcessor(f.deps)
- const message={userId:'owner',text:'你好！',_ingressId:'hello'}
- await handle(message)
- await handle({...message,_recovered:true})
- assert.deepEqual(f.sent,[['owner','你好！有什么可以帮你？']])
- assert.deepEqual(f.submitted,[])
+test('standalone greetings reach the current model unchanged in first and existing sessions',async()=>{
+ for(const existing of [false,true]){
+  const f=fixture();if(!existing)f.deps.manager.sessions.clear()
+  f.deps.entryRouting={process:async()=>assert.fail('greeting must stay in current conversation')}
+  const handle=createMessageProcessor(f.deps)
+  for(const [i,text] of ['hi','hello','你好','您好！','嗨','哈喽','HI!'].entries())await handle({userId:'owner',text,_ingressId:'greeting-'+i})
+  assert.deepEqual(f.submitted.map(args=>[args[0],args[1].text]),['hi','hello','你好','您好！','嗨','哈喽','HI!'].map(text=>['owner',text]))
+  assert.deepEqual(f.sent,[]);assert.deepEqual(f.acked,[])
+ }
+})
+
+test('greetings retain permission and cancellation gates, while explicit stop stays a command',async()=>{
+ const f=fixture(),handled=[]
+ f.deps.manager.acceptMessage=async()=>true
+ f.deps.manager.handle=async(owner,text)=>handled.push([owner,text])
+ f.handle=createMessageProcessor(f.deps)
+ await f.handle({userId:'stranger',text:'hi'})
+ await f.handle({userId:'owner',text:'hello',_intakeToken:{current:()=>false}})
+ await f.handle({userId:'owner',text:'停止'})
+ assert.deepEqual(f.submitted,[]);assert.deepEqual(handled,[['owner','停止']])
 })
 
 test('greetings with requests, quotes or pending clarification retain normal routing',async()=>{

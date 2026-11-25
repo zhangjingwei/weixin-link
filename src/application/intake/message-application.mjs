@@ -109,15 +109,8 @@ return async function handleMessage(message) {
     catch(error){await reply(error.message);jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
   if(!control&&!token.current())return
-  if(greeting){
-    // Claim before sending so an interrupted or uncertain delivery is never repeated on replay.
-    if(!message._ingressId||jobs.claimReceipt(message._ingressId)){
-      await deliver(/^(?:hi|hello)/i.test(text)?'Hi! How can I help?':'你好！有什么可以帮你？',{conversationControl:true,current:()=>token.current()})
-    }
-    jobs.acknowledge([message._ingressId].filter(Boolean))
-    return
-  }
-  if(!control&&!media&&entryRouting&&await entryRouting.process(message,token))return
+  // Standalone greetings are ordinary conversation, never an entry-routing action or canned notice.
+  if(!control&&!greeting&&!media&&entryRouting&&await entryRouting.process(message,token))return
   const notice=receiptPolicy({media,busy:manager.sessions.get(message.userId)?.busy,waiting:!!manager.state.users[message.userId]?.waitingAttachment})
   message._receiptDeferred=notice==='defer'
   if(!control&&notice!=='defer'&&jobs.claimReceipt(message._ingressId)&&notice==='send'){
