@@ -10,7 +10,7 @@ export function createClaudeProtocol({binary,query,inspect=inspectClaude,env=pro
   startTurn:(rpc,options)=>rpc.start(options),
   read:async(rpc,id)=>{
    if(rpc.id!==id||rpc.closed)throw Error('CLAUDE_SESSION_UNAVAILABLE')
-   return {id,status:{type:rpc.phase==='active'&&Date.now()-(rpc.observedAt??0)>90000?'unknown':rpc.phase,activeFlags:rpc.pending.size?['waitingOnApproval']:[]}}
+   return {id,status:{type:rpc.phase==='active'&&(rpc.observedAt==null||Date.now()-rpc.observedAt>90000)?'unknown':rpc.phase,activeFlags:rpc.pending.size?['waitingOnApproval']:[]}}
   },
   interrupt:(rpc,threadId,turnId)=>rpc.interrupt(threadId,turnId),
   // Absence of an authoritative terminal record is unknown; never re-submit a prompt.

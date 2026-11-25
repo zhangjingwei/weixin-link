@@ -34,10 +34,8 @@ export class ClaudeSession {
   if(model&&model!=='default'){try{await this.handle.setModel(model)}catch{throw Error('CLAUDE_MODEL_CHANGE_FAILED')}}
   const hex=deliveryId?createHash('sha256').update('claude:'+deliveryId).digest('hex'):null
   const uuid=hex?`${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`:randomUUID()
-  this.turn={id:randomUUID(),uuid,texts:[],stopping:false};this.phase='active';this.observedAt=Date.now();const turn=this.turn
-  // Publish start after the caller can persist its submission identity.
+  this.turn={id:randomUUID(),uuid,texts:[],stopping:false,started:false};this.phase='active';this.observedAt=null;const turn=this.turn
   this.input.push({type:'user',session_id:this.id,uuid:turn.uuid,message:{role:'user',content},parent_tool_use_id:null})
-  queueMicrotask(()=>{void this.emit('turn/started',{turn:{id:turn.id}})})
   return {turn:{id:turn.id},deliveryId}
  }
  async pump(){
@@ -45,8 +43,17 @@ export class ClaudeSession {
    if(this.closed)break
    if(m.session_id&&m.session_id!==this.id)throw Error('CLAUDE_SESSION_ID_MISMATCH')
    const turn=this.turn;if(!turn)continue
-   this.observedAt=Date.now()
    if(m.parent_tool_use_id)continue // Subagent prose is not the main answer.
+   if(m.type==='result'){
+    if(m.user_message_uuid&&m.user_message_uuid!==turn.uuid)continue
+    if(m.user_message_uuids?.length&&!m.user_message_uuids.includes(turn.uuid))continue
+    const key=m.uuid?'result:'+m.uuid:Number.isInteger(m.result_index)?'result-index:'+m.result_index:null
+    if(key&&this.seen.has(key))continue
+   }
+   if(['assistant','stream_event','result'].includes(m.type)){
+    this.observedAt=Date.now()
+    if(!turn.started){turn.started=true;await this.emit('turn/started',{turn:{id:turn.id}})}
+   }
    if(m.type==='system'&&m.subtype==='init'&&typeof m.model==='string'){await this.emit('model/rerouted',{turnId:turn.id,toModel:m.model})}
    else if(m.type==='assistant'){
     for(const [index,block] of (m.message?.content??[]).entries()){
@@ -89,6 +96,8 @@ export class ClaudeSession {
  approve(name,input,{signal,toolUseID}={}){
   if(this.closed||!this.turn||this.pending.size>=16)return Promise.resolve({behavior:'deny',message:'任务不可审批。'})
   const id=randomUUID(),turnId=this.turn.id
+  this.observedAt=Date.now()
+  if(!this.turn.started){this.turn.started=true;void this.emit('turn/started',{turn:{id:turnId}})}
   return new Promise(resolve=>{
    const finish=result=>{if(!this.pending.delete(id))return;signal?.removeEventListener('abort',abort);resolve(result);if(!this.closed)void this.emit('thread/status/changed',{status:{type:'active',activeFlags:this.pending.size?['waitingOnApproval']:[]}})}
    const abort=()=>finish({behavior:'deny',message:'审批已取消。'})

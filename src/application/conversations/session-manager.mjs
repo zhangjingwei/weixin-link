@@ -435,6 +435,8 @@ export class SessionManager {
     }
     transition(session,'running')
     session.lastProgress=null
+    session.executionEvidenceAt=null
+    session.progressStartedAt=Date.now();session.lastUserNoticeAt=Date.now();session.lastWaitNoticeAt=0
     session.tokenUsage=null
     session.nativeQueueTurn=false
     session.contextRejected=false

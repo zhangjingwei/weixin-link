@@ -20,6 +20,7 @@ function harness(){
 const flush=()=>new Promise(resolve=>setImmediate(resolve))
 test('multi-turn stream preserves session, returns authoritative result once and never exposes subagent or partial text',async()=>{
  const h=harness(),saved={};await h.rpc.open(saved,'rules');const first=await h.rpc.start({threadId:h.rpc.id,input:[{type:'text',text:'hello'}]});await flush()
+ assert.equal(h.events.some(e=>e.method==='turn/started'),false)
  assert.equal(saved.agentKind,'claude');assert.equal(h.submitted[0].message.content[0].text,'hello')
  h.push({type:'assistant',session_id:h.rpc.id,uuid:'nested',parent_tool_use_id:'agent',message:{content:[{type:'text',text:'private nested'}]}})
  h.push({type:'stream_event',session_id:h.rpc.id,event:{delta:{text:'partial'}}})
@@ -106,6 +107,7 @@ test('a live Claude approval can be answered through the owned WeChat conversati
  const conversations=new TextConversations(manager,['owner'],conversationInput,createClaudeConversationBackend(manager)),reply=async()=>({status:'accepted'})
  assert.equal(conversations.bind({userId:'owner',text:'批准'})._conversationCommand,null)
  const task=manager.ask('owner','task',reply,10000);for(let i=0;i<30&&!h.submitted.length;i++)await new Promise(r=>setTimeout(r,5))
+ h.push({type:'stream_event',session_id:manager.sessions.get('owner').threadId});await flush()
  const permission=h.options.options.canUseTool('Bash',{command:'echo test'},{signal:new AbortController().signal,toolUseID:'tool'});await flush()
  const first=conversations.bind({userId:'owner',text:'批准'});assert.equal(first._conversationCommand.target,'approvalChoice');await conversations.control(first,reply)
  const selected=conversations.bind({userId:'owner',text:'1'});assert.equal(selected._sessionCommand.action,'approval');await manager.handle('owner',selected.text,reply,undefined,manager.lifecycle.capture('owner'),selected._sessionCommand)
