@@ -1,0 +1,15 @@
+id: reproduce
+name: 交付后在电脑复验
+inputs:
+  prompt: 已知工具箱任务结果：🛠️ Zero · 制作中 已结束，最终状态为 📦 Zero · 交付。搜索页已修复；项目工作目录是 /work/toolbox，复验命令是 npm test。用户在微信追问：“修了什么？我在电脑上怎么复验？”直接回复用户。
+graders:
+  - type: text
+    name: fix
+    config:
+      regex_match:
+        - "搜索"
+  - type: text
+    name: copy
+    config:
+      regex_match:
+        - "(?m)^```[^\\n`]*\\ncd /work/toolbox\\nnpm test\\n```"

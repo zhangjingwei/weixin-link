@@ -1,0 +1,15 @@
+id: project-status
+name: 两项目进度
+inputs:
+  prompt: 本轮已查询到：知识库的 PDF 索引任务正在执行；工具箱的搜索页修复已排队，尚未开始。用户在微信问：“两个项目各做到哪了？我手机上扫一眼。”直接根据查询结果回复。
+graders:
+  - type: text
+    name: kb
+    config:
+      regex_match:
+        - "知识库[^\\n]*(?:进行|执行|处理中|正在|索引中)"
+  - type: text
+    name: toolbox
+    config:
+      regex_match:
+        - "工具箱[^\\n]*(?:排队|队列|等待)"

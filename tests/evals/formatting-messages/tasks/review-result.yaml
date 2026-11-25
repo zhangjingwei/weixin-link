@@ -1,0 +1,15 @@
+id: review-result
+name: 只看上次结果
+inputs:
+  prompt: 知识库上一条交付记录：📦 Zero · 交付。检查了 12 份 PDF，其中 2 份缺页。交付文件为 /work/kb/outputs/check.csv。用户在微信问：“看看上次的结果，文件先不用再发。”把已有交付简短回显给用户。
+graders:
+  - type: text
+    name: marker
+    config:
+      regex_match:
+        - "📦 Zero · 交付"
+  - type: text
+    name: facts
+    config:
+      regex_match:
+        - "(?s)12.*2.*缺页|12.*缺页.*2"

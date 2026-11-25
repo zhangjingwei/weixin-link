@@ -1,0 +1,18 @@
+name: formatting-messages
+skill: formatting-messages
+config:
+  executor: copilot-sdk
+  model: auto
+  trials_per_task: 3
+  max_attempts: 1
+  timeout_seconds: 180
+tasks:
+  - tasks/reproduce.yaml
+  - tasks/project-status.yaml
+  - tasks/review-result.yaml
+  - tasks/resend-csv.yaml
+metrics:
+  - name: task_completion
+    weight: 1
+    threshold: 1
+graders: []
