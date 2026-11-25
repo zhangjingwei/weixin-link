@@ -37,7 +37,7 @@ async function liveAnswers(scenario,{model,codex_home}){
    providerOptions:{args:[codexCli,'app-server']},
    onEvent:message=>{
     if(!pending)return
-    if(message.method==='item/completed'&&message.params?.item?.type==='agentMessage'&&message.params.item.phase==='final_answer')pending.parts.push(message.params.item.text??'')
+    if(message.method==='item/completed'&&message.params?.item?.type==='agentMessage'&&(!message.params.item.phase||message.params.item.phase==='final_answer'))pending.parts.push(message.params.item.text??'')
     if(message.method==='turn/completed'){
      const current=pending;pending=null;clearTimeout(current.timer)
      message.params?.turn?.status==='completed'
@@ -62,7 +62,7 @@ async function liveAnswers(scenario,{model,codex_home}){
     const timer=setTimeout(()=>{pending=null;reject(Error('Codex turn timed out'))},120000)
     pending={resolve,reject,timer,parts:[]}
    })
-   try{await rpc.request('turn/start',{threadId,input})}
+   try{await rpc.request('turn/start',{threadId,input,collaborationMode:{mode:'default',settings:{model:model??null,reasoning_effort:null,developer_instructions:null}}})}
    catch(error){if(pending){clearTimeout(pending.timer);pending=null}completion.catch(()=>{});throw error}
    replies.push(await completion)
   }

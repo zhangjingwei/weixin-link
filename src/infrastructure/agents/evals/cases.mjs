@@ -2,7 +2,7 @@
 // share one thread so that the final answer can use earlier decisions.
 export const cases=[
  {
-  id:'discussion-advice',skill:'discussing-designs',
+  id:'discussion-advice',
   steps:[{prompt:'我想给十人的小团队安排值班。用共享表格还是做网页？请直接建议一个起步方案。',
    expect:{startsWith:'💡 Zero · 方案讨论',contains:['表格'],notContains:['📋 Zero · 方案共识','📦 Zero · 交付']}}],
  },
@@ -25,7 +25,7 @@ export const cases=[
    expect:{contains:['24'],notContains:['Zero · 方案讨论','Zero · 方案共识','Zero · 交付']}}],
  },
  {
-  id:'delivery-text-result',skill:'delivering-results',
+  id:'delivery-text-result',
   steps:[{prompt:'请直接交付一份三点的会议议程，主题是下周团队复盘。只需要文字，不要创建文件。',
    expect:{startsWith:'📦 Zero · 交付',contains:['复盘'],notContains:['📋 Zero · 交付蓝图','⚠️ Zero · 需要你处理']}}],
  },
