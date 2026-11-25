@@ -2,9 +2,9 @@ import SwiftUI
 import AppKit
 
 struct Snapshot: Decodable {
-    struct Message: Decodable { let role, text: String; let time: Double?; let truncated: Bool?; let files: [File]? }
+    struct Message: Decodable { let role, text: String; let time: Double?; let legacyFooter: String?; let truncated: Bool?; let files: [File]? }
     struct Conversation: Decodable, Identifiable { let id, name: String; let group, groupLabel: String? }
-    struct File: Decodable, Hashable { let name, path: String; let root: String? }
+    struct File: Decodable, Hashable { let name, path: String; let root, sourcePath: String? }
     let name, project, thread, turn, writer: String
     let revision: Int
     let progress: [String]?

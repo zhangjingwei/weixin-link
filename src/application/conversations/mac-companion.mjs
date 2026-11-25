@@ -14,7 +14,7 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
   const identity={project:entry.id,thread,turn}
   if(request.action==='view'){
    const messages=[],files=[],hash=createHash('sha256').update(key).digest('hex').slice(0,24)
-   const addFiles=(parts,folder)=>{const start=files.length;for(const item of parts??[]){const root=join(stateDir,folder,hash)+sep;if(typeof item.path==='string'&&resolve(item.path).startsWith(root))files.push({name:basename(item.fileName??item.name??item.path),path:resolve(item.path),root:root.slice(0,-1)})}return files.slice(start)}
+   const addFiles=(parts,folder)=>{const start=files.length;for(const item of parts??[]){const root=join(stateDir,folder,hash)+sep;if(typeof item.path==='string'&&resolve(item.path).startsWith(root))files.push({name:basename(item.fileName??item.name??item.path),path:resolve(item.path),root:root.slice(0,-1),...(folder==='outgoing'&&typeof item.sourcePath==='string'?{sourcePath:item.sourcePath}:{})})}return files.slice(start)}
    for(const job of jobs.companionMessages(key,thread)){
     const text=historyInputText(job.text??'').split(/\n\n附件接入说明：|来源会话中已商定的方案（供落实本轮原始请求，沿用原授权范围）：/u,1)[0]
     messages.push({role:'你',text:text||'附件',time:job.created,files:addFiles(JSON.parse(job.files),'attachments')})
@@ -22,7 +22,14 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
    for(const item of record.supplements??[]){if(item.threadId===thread)messages.push({role:'补充 · '+item.status,text:item.text,time:Date.parse(item.created)})}
    for(const result of [...(record.resultArchive??[]).filter(item=>item.identity.id!==record.resultIdentity?.id),{identity:record.resultIdentity,lastReply:record.lastReply,lastOutput:record.lastOutput}]){
     if(!result.lastReply||result.identity?.threadId!==thread)continue
-    messages.push({role:'助手',text:result.lastReply.slice(0,16000),truncated:result.lastReply.length>16000,time:Date.parse(result.identity.createdAt),files:addFiles(result.lastOutput?.attachments,'outgoing')})
+    const {execution,footerOffset}=result.identity
+    const marker={completed:'✅ 本轮回答结束。',failed:'⚠️ 本轮执行失败，回答已结束。',interrupted:'⏹ 本轮已停止。'}[execution]
+    const suffix='\n\n'+marker
+    const exact=marker&&Number.isSafeInteger(footerOffset)&&footerOffset>=0&&result.lastReply.startsWith(suffix,footerOffset)
+    const body=exact?result.lastReply.slice(0,footerOffset)+result.lastReply.slice(footerOffset+suffix.length):result.lastReply
+    // Old records lack provenance. Let the client fold, but retain, a matching standalone status.
+    const legacyFooter=footerOffset===undefined&&marker&&body.endsWith(suffix)?marker:undefined
+    messages.push({role:'助手',text:body.slice(0,16000),legacyFooter:body.length<=16000?legacyFooter:undefined,truncated:body.length>16000,time:Date.parse(result.identity.createdAt),files:addFiles(result.lastOutput?.attachments,'outgoing')})
    }
    const progress=turn&&session.threadId===thread&&session.lastProgress?.turnId===turn?session.lastProgress.recent:undefined
    return {...identity,...state,progress,diff:turn&&session.threadId===thread&&session.companionDiff?.turn===turn?session.companionDiff.text:undefined,name:entry.name,activeProject:catalog.active,conversations:entries.map(({id,key,name})=>{const saved=manager.state.users[key];return {id,name,group:saved?.nativeProjectId??null,groupLabel:saved?.nativeProjectId?(basename(saved.workspace??'')||saved.nativeProjectId):null}}),messages:messages.sort((left,right)=>left.time-right.time).slice(-40),files:files.slice(-40)}

@@ -49,7 +49,9 @@ extension Snapshot.File {
   }
 }
 struct AttachmentRow: View {
-  let file: Snapshot.File, selected: Bool, open: () -> Void
+  let file: Snapshot.File, selected: Bool
+  var caption: String? = nil
+  let open: () -> Void
   var body: some View {
     Button(action: open) {
       HStack(spacing: 12) {
@@ -66,6 +68,7 @@ struct AttachmentRow: View {
             .resizable().frame(width: 34, height: 34)
         }
         VStack(alignment: .leading) {
+          if let caption { Text(verbatim:caption).font(.subheadline.weight(.medium)).fixedSize(horizontal:false,vertical:true) }
           Text(verbatim: file.name).lineLimit(1).truncationMode(.middle)
           if let url = file.url, let n = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
             Text(ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file)).font(

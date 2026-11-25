@@ -69,21 +69,31 @@ enum ReplyBlock: Equatable {
 
 struct ReplyBody: View {
   let text: String
+  var paths: Set<String> = []
+  var legacyFooter: String? = nil
+  var openFile: (String)->Void = { _ in }
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      ForEach(Array(ReplyBlock.parse(text).enumerated()), id: \.offset) { _, block in
+      let blocks = ReplyBlock.parse(text)
+      ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
         switch block {
-        case .paragraph(let value): inlineLinks(value)
+        case .paragraph(let value):
+          if value == legacyFooter && text.hasSuffix("\n\n" + value) && index == blocks.count - 1 {
+            DisclosureGroup("执行状态") { Text(verbatim:value) }.font(.caption).foregroundStyle(.secondary)
+          } else {
+            let visible = value.components(separatedBy:"\n").filter { !onlyFileLinks($0,paths:paths) }.joined(separator:"\n")
+            if !visible.isEmpty { prose(visible) }
+          }
         case .heading(let level, let value):
-          Text(verbatim: value).font(.system(size: level < 3 ? 19 : 16, weight: .semibold)).padding(
+          prose(value).font(.system(size: level < 3 ? 19 : 16, weight: .semibold)).padding(
             .top, 3)
         case .bullet(let marker, let value):
-          HStack(alignment: .firstTextBaseline, spacing: 8) {
+          if !onlyFileLinks(value,paths:paths) { HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(marker.count == 1 ? "•" : marker).foregroundStyle(.secondary)
-            inlineLinks(value)
-          }.padding(.leading, 5)
+            prose(value)
+          }.padding(.leading, 5) }
         case .quote(let value):
-          inlineLinks(value).foregroundStyle(.secondary).padding(.leading, 12).overlay(
+          prose(value).foregroundStyle(.secondary).padding(.leading, 12).overlay(
             alignment: .leading
           ) { Capsule().fill(Color.secondary.opacity(0.35)).frame(width: 3) }
         case .code(let language, let raw): CodeCard(language: language, raw: raw)
@@ -91,6 +101,26 @@ struct ReplyBody: View {
       }
     }.frame(maxWidth: .infinity, alignment: .leading).font(.system(size: 15)).lineSpacing(3)
   }
+  private func prose(_ value: String) -> some View {
+    let spans = replySpans(value,paths:paths)
+    return Group {
+      if spans.contains(where: { if case .web = $0 { return true }; if case .file = $0 { return true }; return false }) {
+        InlineFlow {
+          ForEach(Array(spans.enumerated()),id: \.offset) { _, span in
+            switch span {
+            case .web(let label,let url): Button { NSWorkspace.shared.open(url) } label: { Text(verbatim:label).underline() }.buttonStyle(.plain).foregroundStyle(Color.accentColor).accessibilityAddTraits(.isLink)
+            case .file(let label,let key): Button { openFile(key) } label: { Text(verbatim:label).underline() }.buttonStyle(.plain).foregroundStyle(Color.accentColor).accessibilityAddTraits(.isLink)
+            default: styled(span)
+            }
+          }
+        }
+      } else { spans.reduce(Text("")) { $0 + styled($1) }.textSelection(.enabled) }
+    }
+  }
+  private func styled(_ span: ReplySpan) -> Text {
+    switch span { case .plain(let s):return Text(verbatim:s); case .strong(let s):return Text(verbatim:s).bold(); case .code(let s):return Text(verbatim:s).font(.system(size:14,design:.monospaced)); default:return Text("") }
+  }
+
 }
 
 func copyCode(_ raw: String, to pasteboard: NSPasteboard) -> Bool {
@@ -126,40 +156,6 @@ private struct CodeCard: View {
   }
 }
 
-// Preserve plain prose; only explicit web links are interactive.
-@ViewBuilder func inlineLinks(_ source: String) -> some View {
-  let value = webLinkText(source)
-  if value.runs.contains(where: { $0.link != nil }) {
-    ClickableWebProse(value: value)
-  } else {
-    Text(verbatim: source).textSelection(.enabled)
-  }
-}
-private struct ClickableWebProse: View {
-  let value: AttributedString
-  var body: some View {
-    let pieces = value.runs.flatMap { run -> [(String, URL?)] in
-      let text = String(value[run.range].characters)
-      if let url = run.link { return [(text, url)] }
-      return text.split(separator: " ", omittingEmptySubsequences: false).enumerated().map {
-        ($0.offset == 0 ? String($0.element) : " " + $0.element, nil)
-      }
-    }
-    InlineFlow {
-      ForEach(Array(pieces.enumerated()), id: \.offset) { _, piece in
-        if let url = piece.1 {
-          Button {
-            NSWorkspace.shared.open(url)
-          } label: {
-            Text(verbatim: piece.0).underline().foregroundStyle(.blue)
-          }.buttonStyle(.plain).accessibilityAddTraits(.isLink)
-        } else {
-          Text(verbatim: piece.0)
-        }
-      }
-    }
-  }
-}
 private struct InlineFlow: Layout {
   func positions(_ width: CGFloat, _ subviews: Subviews) -> ([CGPoint], CGFloat) {
     var x: CGFloat = 0
@@ -194,28 +190,53 @@ private struct InlineFlow: Layout {
     }
   }
 }
-func webLinkText(_ source: String) -> AttributedString {
+// Link destinations are matched inside one message. Only the archived file is opened by the caller.
+private let inlinePattern = try! NSRegularExpression(pattern: #"(`+)([^\n]*?)\1(?!`)|!?\[([^\]\n]+)\]\((?:<([^>\n]+)>|([^\s)]+))\)|(https?://[^\s<>，。；）]+)|\*\*([^*\n]+)\*\*"#)
+enum ReplySpan: Equatable {
+  case plain(String), strong(String), code(String), web(String, URL), file(String, String)
+}
+func replySpans(_ source: String, paths: Set<String>) -> [ReplySpan] {
   let ns = source as NSString
-  let pattern = #"\[([^\]\n]+)\]\((https?://[^\s)]+)\)|(https?://[^\s<>，。；）]+)"#
-  var value = AttributedString()
-  var start = 0
-  for m in (try! NSRegularExpression(pattern: pattern)).matches(
-    in: source, range: NSRange(location: 0, length: ns.length))
-  {
-    value.append(
-      AttributedString(
-        ns.substring(with: NSRange(location: start, length: m.range.location - start))))
-    let markdown = m.range(at: 1).location != NSNotFound
-    let target = ns.substring(with: m.range(at: markdown ? 2 : 3))
-    var label = AttributedString(markdown ? ns.substring(with: m.range(at: 1)) : target)
-    if let url = URL(string: target), url.host != nil {
-      label.link = url
-      label.foregroundColor = .blue
-      label.underlineStyle = .single
+  var spans: [ReplySpan] = [], start = 0
+  for match in inlinePattern.matches(in: source, range: NSRange(location: 0, length: ns.length)) {
+    func field(_ i: Int) -> String? { let r = match.range(at: i); return r.location == NSNotFound ? nil : ns.substring(with: r) }
+    if start < match.range.location { spans.append(.plain(ns.substring(with: NSRange(location:start,length:match.range.location-start)))) }
+    if let code = field(2) { spans.append(.code(code)) }
+    else if let strong = field(7) { spans.append(.strong(strong)) }
+    else if let target = field(4) ?? field(5) ?? field(6) {
+      let label = field(3) ?? target
+      let path = target.hasPrefix("sandbox:/") ? String(target.dropFirst(8)) : target
+      if paths.contains(path) { spans.append(.file(label,path)) }
+      else if let u = URL(string:target), ["https","http"].contains(u.scheme?.lowercased()), u.host != nil { spans.append(.web(label,u)) }
+      else if path.hasPrefix("/") { spans.append(.plain(label)) }
+      else { spans.append(.plain(field(0)!)) }
     }
-    value.append(label)
-    start = NSMaxRange(m.range)
+    start = NSMaxRange(match.range)
   }
-  value.append(AttributedString(ns.substring(from: start)))
-  return value
+  if start < ns.length { spans.append(.plain(ns.substring(from:start))) }
+  return spans
+}
+func onlyFileLinks(_ line: String, paths: Set<String>) -> Bool {
+  let spans = replySpans(line,paths:paths)
+  return spans.contains { if case .file = $0 { return true }; return false } && spans.allSatisfy {
+    switch $0 { case .file: return true; case .plain(let s): return s.trimmingCharacters(in:CharacterSet.whitespaces.union(CharacterSet(charactersIn:"·、|"))).isEmpty; default: return false }
+  }
+}
+
+func conversationTitle(_ raw: String, _ id: String) -> String {
+  let clean = raw.replacingOccurrences(of: #"(?s)(?:接入层(?:任务状态|记忆)元数据\s*nonce=.*|接入层任务状态(?:元(?:数(?:据)?)?)?(?:…|\.{3})?)$"#,with:"",options:.regularExpression).trimmingCharacters(in:.whitespacesAndNewlines)
+  return clean.isEmpty || UUID(uuidString:clean) != nil ? "会话 " + id : clean
+}
+
+// Preserve descriptive labels from rows compacted into attachment cards.
+func attachmentCaptions(_ source: String, paths: Set<String>) -> [String:[String]] {
+  var labels: [String:[String]] = [:]
+  for block in ReplyBlock.parse(source) {
+    let text: String
+    switch block { case .paragraph(let s), .bullet(_,let s): text = s; default: continue }
+    for line in text.components(separatedBy:"\n") where onlyFileLinks(line,paths:paths) {
+      for case .file(let label,let key) in replySpans(line,paths:paths) where !(labels[key] ?? []).contains(label) { labels[key,default:[]].append(label) }
+    }
+  }
+  return labels
 }

@@ -85,6 +85,13 @@ private let surface = Color(nsColor: .controlBackgroundColor)
     if (selected ?? snapshot?.project) == project { await refresh(selected) }
   }
 
+  func groupName(_ row: Snapshot.Conversation?) -> String {
+    guard let row, let group = row.group else { return "独立会话" }
+    if let label = row.groupLabel, !label.isEmpty, UUID(uuidString:label) == nil { return label }
+    let first = rows.filter { $0.group == group }.map(\.id).min { $0.localizedStandardCompare($1) == .orderedAscending }
+    return "项目 " + (first ?? row.id)
+  }
+
   var sidebar: some View {
     VStack(alignment: .leading, spacing: 14) {
       HStack {
@@ -104,8 +111,8 @@ private let surface = Color(nsColor: .controlBackgroundColor)
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
           let matches = rows.filter {
-            search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)
-              || ($0.groupLabel ?? "独立会话").localizedCaseInsensitiveContains(search)
+            search.isEmpty || conversationTitle($0.name,$0.id).localizedCaseInsensitiveContains(search)
+              || groupName($0).localizedCaseInsensitiveContains(search)
           }
           let groups = matches.reduce(into: [String]()) { a, r in
             let g = r.group ?? ""
@@ -120,7 +127,7 @@ private let surface = Color(nsColor: .controlBackgroundColor)
                 Image(systemName: collapsed.contains(g) ? "chevron.right" : "chevron.down").font(
                   .caption)
                 Image(systemName: "folder")
-                Text(members.first?.groupLabel ?? "独立会话").lineLimit(1)
+                Text(groupName(members.first)).lineLimit(1)
                 Spacer()
                 Text("\(members.count)").font(.caption).foregroundStyle(.secondary)
               }
@@ -133,7 +140,7 @@ private let surface = Color(nsColor: .controlBackgroundColor)
                 } label: {
                   HStack {
                     Image(systemName: "bubble.left")
-                    Text(r.name).lineLimit(1)
+                    Text(conversationTitle(r.name,r.id)).lineLimit(1)
                     Spacer()
                     if r.id == phone {
                       Image(systemName: "iphone").font(.caption).foregroundStyle(.secondary)
@@ -152,12 +159,13 @@ private let surface = Color(nsColor: .controlBackgroundColor)
     }.padding(.horizontal, 14).frame(minWidth: 185, idealWidth: 222, maxWidth: 246).background(
       Color(nsColor: .windowBackgroundColor))
   }
-  @ViewBuilder func files(_ items: [Snapshot.File]) -> some View {
+  @ViewBuilder func files(_ items: [Snapshot.File], captions: [String:[String]] = [:]) -> some View {
     if !items.isEmpty {
       VStack(alignment: .leading, spacing: 7) {
         Text("附件 \(items.count) 个").font(.subheadline.weight(.medium))
         ForEach(Array(items.enumerated()), id: \.offset) { _, f in
-          AttachmentRow(file: f, selected: preview == f) {
+          let labels = ((captions[f.path] ?? []) + (f.sourcePath.flatMap { captions[$0] } ?? [])).filter { $0 != f.name }
+          AttachmentRow(file: f, selected: preview == f, caption:labels.isEmpty ? nil : labels.joined(separator:" · ")) {
             diffTurn = nil
             preview = f
           }
@@ -176,14 +184,21 @@ private let surface = Color(nsColor: .controlBackgroundColor)
       }
       VStack(alignment: assistant ? .leading : .trailing, spacing: 10) {
         if assistant {
-          ReplyBody(text: m.text).padding(14).background(
+          let aliases = (m.files ?? []).flatMap { f in Set([f.path,f.sourcePath].compactMap { $0 }).map { ($0,f) } }
+          let scoped = Dictionary(grouping:aliases,by:{ $0.0 }).compactMapValues { items in
+            Set(items.map { $0.1 }).count == 1 ? items.first?.1 : nil
+          }
+          ReplyBody(text:m.text, paths:Set(scoped.keys), legacyFooter:m.legacyFooter) { key in
+            if let f = scoped[key] { diffTurn = nil; preview = f }
+          }.padding(14).background(
             RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.2)))
+          if m.truncated == true { Text("仅显示长回复开头").font(.caption) }
+          files(m.files ?? [], captions:attachmentCaptions(m.text,paths:Set(scoped.keys)))
         } else {
           Text(verbatim: m.text).textSelection(.enabled).padding(12).background(
             leaf.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+          files(m.files ?? [])
         }
-        if m.truncated == true { Text("仅显示长回复开头").font(.caption) }
-        files(m.files ?? [])
       }
       if !assistant {
         Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(.secondary)
@@ -195,8 +210,8 @@ private let surface = Color(nsColor: .controlBackgroundColor)
     let writable = active && view.writer == "mac" && online && editRevision == view.revision
     return VStack(alignment: .leading, spacing: 0) {
       VStack(alignment: .leading, spacing: 4) {
-        Text(view.name).font(.title2.bold())
-        Text(rows.first { $0.id == view.project }?.groupLabel ?? "独立会话").font(.subheadline)
+        Text(conversationTitle(view.name,view.project)).font(.title2.bold())
+        Text(groupName(rows.first { $0.id == view.project })).font(.subheadline)
           .foregroundStyle(.secondary)
       }.padding(18)
       Divider()

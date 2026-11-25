@@ -777,6 +777,7 @@ export class SessionManager {
       reply=discussionPrefix+reply
       // The footer describes execution completion, not delivery acceptance.
       const mergedCompletion=this.completionMarkers&&!awaitingAttachment&&!handoff&&(session.workToken?.current()??true)
+      const footerOffset=mergedCompletion?reply.length:null
       if(mergedCompletion){
         const marker=p.turn.status==='failed'?'⚠️ 本轮执行失败，回答已结束。':p.turn.status==='interrupted'?'⏹ 本轮已停止。':'✅ 本轮回答结束。'
         reply+='\n\n'+localCompletion(marker,session.localTask)
@@ -795,6 +796,7 @@ export class SessionManager {
       this.state.users[session.userId].lastOutput=typeof output==='string'?undefined:output
       this.state.users[session.userId].recovery={task:session.localTask,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending',updated:new Date().toISOString()}
       recordTaskResult(this.state.users[session.userId],{taskId:session.taskId??session.traceId,threadId:session.threadId,turnId:session.turnId,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending'})
+      this.state.users[session.userId].resultIdentity.footerOffset=footerOffset
       this.state.users[session.userId].lastTask=session.localTask
       this.state.users[session.userId].lastReply = reply
       try { await this.save() } catch(error) { this.diagnostic(session,'state.save_failed',this.ports.errorFields(error));reply+='\n（微信会话状态保存失败，本轮回复可能无法在重启后恢复。）';this.state.users[session.userId].lastReply=reply }

@@ -28,7 +28,7 @@ test('Mac sidebar reads only the selected owned conversation; browsing cannot re
 test('phone file, passive Mac view, contested takeover, same-turn supplement and phone return', {skip:process.platform==='win32'},async context=>{
  const dir=await mkdtemp(join(tmpdir(),'companion-')),socket=join(dir,'runtime.sock'),jobs=new DurableJobs(join(dir,'inbox.db')),access=new CompanionAccess(jobs.db)
  const owner='owner',entry={id:'1',key:owner,name:'Shared'},notices=[],submitted=[],calls=[],phoneReplies=[]
- const manager=await new SessionManager({stateDir:dir,cwd:dir,owners:[owner],providerEnv:{},remoteControl:async()=>({active:true}),rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method,params){
+ const manager=await new SessionManager({completionMarkers:true,stateDir:dir,cwd:dir,owners:[owner],providerEnv:{},remoteControl:async()=>({active:true}),rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method,params){
   calls.push(method)
   if(method==='thread/start')return {thread:{id:'one'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'}
   if(method==='turn/start')return {turn:{id:'turn'}}
@@ -60,11 +60,24 @@ test('phone file, passive Mac view, contested takeover, same-turn supplement and
  assert.equal((await call(steer)).status,'accepted');assert.equal((await call(steer)).status,'unknown');assert.deepEqual(submitted,[{thread:'one',turn:'turn',text:'只看第二页'}])
  await manager.event(session,{method:'item/completed',params:{threadId:'one',turnId:'turn',item:{id:'answer',type:'agentMessage',phase:'final_answer',text:'第二页结果'}}})
  await manager.event(session,{method:'turn/completed',params:{threadId:'one',turn:{id:'turn',status:'completed'}}})
- assert.deepEqual(phoneReplies,['第二页结果']);assert.equal(calls.filter(method=>method==='turn/start').length,1);assert.ok(!calls.includes('turn/interrupt'))
+ assert.deepEqual(phoneReplies,['第二页结果\n\n✅ 本轮回答结束。']);assert.equal(calls.filter(method=>method==='turn/start').length,1);assert.ok(!calls.includes('turn/interrupt'))
  assert.equal((await call({action:'view'})).messages.some(item=>item.text==='第二页结果'),true)
  assert.equal((await call({action:'view'})).progress,undefined);assert.equal((await call({action:'view'})).diff,undefined)
  const reclaim=wire('微信接手 '+active.revision);await inbound(reclaim);await inbound(reclaim);assert.equal(access.read().writer,'wechat')
  await assert.rejects(call(steer),error=>error.statusCode===409);await inbound(blocked);await inbound(wire('延迟旧消息',1));assert.equal(received.length,1)
  await inbound(wire('继续'));assert.equal(received.length,2);assert.equal(jobs.listForOwner(owner).items.length,1)
  assert.equal(hasMedia(received[0]),true)
+})
+
+test('historical and current assistant display keep original results and scope source aliases to an attachment',async()=>{
+ const marker='✅ 本轮回答结束。',original=`举例：\n\n${marker}`,threadId='thread',createdAt='2026-01-01T00:00:00Z'
+ const root='/data/outgoing/'+createHash('sha256').update('owner').digest('hex').slice(0,24),file={fileName:'图.png',sourcePath:'/delivery/图.jpg',path:root+'/abc.png'}
+ const identity={threadId,execution:'completed',createdAt},archived={identity:{...identity,id:'old'},lastReply:original,lastOutput:{attachments:[file,{...file,path:'/foreign/abc.png'}]}}
+ const record={threadId,resultArchive:[archived],resultIdentity:{...identity,id:'new',footerOffset:original.length},lastReply:original+'\n\n'+marker}
+ const run=macCompanion({owner:'owner',access:{read:()=>({})},conversations:{ensure:()=>({active:'1',entries:[{id:'1',key:'owner'}]})},manager:{state:{users:{owner:record}},sessions:new Map()},jobs:{companionMessages:()=>[]},stateDir:'/data'})
+ const [old,current]=(await run({action:'view'})).messages
+ assert.equal(old.text,original);assert.equal(old.legacyFooter,marker);assert.equal(current.text,original);assert.equal(current.legacyFooter,undefined)
+ assert.deepEqual(old.files,[{name:'图.png',path:file.path,root,sourcePath:file.sourcePath}]);assert.deepEqual(current.files,[])
+ assert.equal(record.lastReply,original+'\n\n'+marker);record.resultIdentity.footerOffset=null;record.lastReply=original
+ assert.equal((await run({action:'view'})).messages.at(-1).text,original)
 })
