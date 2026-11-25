@@ -2,6 +2,9 @@ import AppKit
 
 @main struct ReplyBlocksTest {
     static func main() {
+        let links=webLinkText("见[设计文档](https://example.org/design)，原文件 [本机](file:///tmp/test) 不自动打开。")
+        precondition(links.runs.compactMap { $0.link?.absoluteString } == ["https://example.org/design"])
+        precondition(String(links.characters).contains("[本机](file:///tmp/test)"))
         let source = "## 结论\n两行\n正文\n\n1. 一项\n> 摘录\n````swift\n    let s = 1\n\n```\n````\n结束"
         precondition(ReplyBlock.parse(source) == [.heading(2,"结论"), .paragraph("两行\n正文"), .bullet("1.","一项"), .quote("摘录"), .code("swift","    let s = 1\n\n```\n"), .paragraph("结束")])
         let raw = "\tfirst\r\n\r\n    last\r\n"

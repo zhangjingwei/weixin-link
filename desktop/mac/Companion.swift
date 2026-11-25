@@ -2,12 +2,13 @@ import SwiftUI
 import AppKit
 
 struct Snapshot: Decodable {
-    struct Message: Decodable { let role, text: String; let time: Double?; let truncated: Bool? }
-    struct Conversation: Decodable, Identifiable { let id, name: String }
-    struct File: Decodable { let name, path: String }
+    struct Message: Decodable { let role, text: String; let time: Double?; let truncated: Bool?; let files: [File]? }
+    struct Conversation: Decodable, Identifiable { let id, name: String; let group, groupLabel: String? }
+    struct File: Decodable, Hashable { let name, path: String; let root: String? }
     let name, project, thread, turn, writer: String
     let revision: Int
     let progress: [String]?
+    let diff:String?
     let messages: [Message], files: [File]
     let conversations: [Conversation], activeProject: String
     var target: String { "\(project)/\(thread)/\(turn)/\(revision)" }
@@ -36,5 +37,5 @@ func call(_ request: Request) async throws -> Data {
 }
 
 @main struct CompanionApp: App {
-    var body: some Scene { Window("Weixin Link", id: "conversation") { ConversationView() }.defaultSize(width: 980, height: 650).windowStyle(.hiddenTitleBar) }
+    var body: some Scene { Window("Weixin Link", id: "conversation") { ConversationView() }.defaultSize(width: 1120, height: 720).windowStyle(.hiddenTitleBar) }
 }

@@ -37,10 +37,10 @@ struct ReplyBody: View {
         VStack(alignment:.leading,spacing:10) {
             ForEach(Array(ReplyBlock.parse(text).enumerated()),id:\.offset) { _,block in
                 switch block {
-                case let .paragraph(value): Text(verbatim:value)
+                case let .paragraph(value): inlineLinks(value)
                 case let .heading(level,value): Text(verbatim:value).font(.system(size:level < 3 ? 19 : 16,weight:.semibold)).padding(.top,3)
-                case let .bullet(marker,value): HStack(alignment:.firstTextBaseline,spacing:8) { Text(marker.count == 1 ? "•" : marker).foregroundStyle(.secondary); Text(verbatim:value) }.padding(.leading,5)
-                case let .quote(value): Text(verbatim:value).foregroundStyle(.secondary).padding(.leading,12).overlay(alignment:.leading){Capsule().fill(Color.secondary.opacity(0.35)).frame(width:3)}
+                case let .bullet(marker,value): HStack(alignment:.firstTextBaseline,spacing:8) { Text(marker.count == 1 ? "•" : marker).foregroundStyle(.secondary); inlineLinks(value) }.padding(.leading,5)
+                case let .quote(value): inlineLinks(value).foregroundStyle(.secondary).padding(.leading,12).overlay(alignment:.leading){Capsule().fill(Color.secondary.opacity(0.35)).frame(width:3)}
                 case let .code(language,raw): CodeCard(language:language,raw:raw)
                 }
             }
@@ -62,4 +62,19 @@ private struct CodeCard: View {
             Divider(); ScrollView(.horizontal) { Text(verbatim:raw.hasSuffix("\n") ? String(raw.dropLast()) : raw).font(.system(size:13,design:.monospaced)).fixedSize().padding(12) }
         }.background(Color.secondary.opacity(0.07),in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(Color.secondary.opacity(0.2))).onChange(of:raw){ _ in copied=false }
     }
+}
+
+// Preserve plain prose; only explicit web links are interactive.
+func inlineLinks(_ source:String)->Text {
+    Text(webLinkText(source))
+}
+func webLinkText(_ source:String)->AttributedString {
+    let ns=source as NSString
+    let pattern=#"\[([^\]\n]+)\]\((https?://[^\s)]+)\)|(https?://[^\s<>，。；）]+)"#
+    var value=AttributedString(), start=0
+    for m in (try! NSRegularExpression(pattern:pattern)).matches(in:source,range:NSRange(location:0,length:ns.length)) {
+        value.append(AttributedString(ns.substring(with:NSRange(location:start,length:m.range.location-start))))
+        let markdown=m.range(at:1).location != NSNotFound, target=ns.substring(with:m.range(at:markdown ? 2:3));var label=AttributedString(markdown ? ns.substring(with:m.range(at:1)):target)
+        if let url=URL(string:target),url.host != nil {label.link=url;label.foregroundColor = .blue;label.underlineStyle = .single};value.append(label);start=NSMaxRange(m.range)
+    };value.append(AttributedString(ns.substring(from:start)));return value
 }

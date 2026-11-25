@@ -581,6 +581,7 @@ export class SessionManager {
         text=`计划已完成 ${plan.filter(step=>step.status==='completed').length}/${plan.length} 步`+(current?'，正在'+String(current.step).slice(0,200):'')
       }else if(message.method==='turn/diff/updated'){
         const count=typeof p.diff==='string'?(p.diff.match(/^diff --git /gm)??[]).length:0
+        session.companionDiff=count && p.diff.length<=32000 ? {turn:p.turnId,text:p.diff}:null
         if(!count)return
         text=`本轮已有 ${count} 个文件发生修改。`
       }else{
