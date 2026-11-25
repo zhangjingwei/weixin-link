@@ -61,7 +61,7 @@ test('phone file, passive Mac view, contested takeover, same-turn supplement and
  await manager.event(session,{method:'item/completed',params:{threadId:'one',turnId:'turn',item:{id:'progress',type:'agentMessage',phase:'commentary',text:'正在核对第二页'}}})
  await manager.event(session,{method:'item/completed',params:{threadId:'one',turnId:'turn',item:{id:'answer',type:'agentMessage',phase:'final_answer',text:'第二页结果'}}})
  await manager.event(session,{method:'turn/completed',params:{threadId:'one',turn:{id:'turn',status:'completed'}}})
- assert.deepEqual((await call({action:'view'})).messages.find(m=>m.role==='助手').updates,['正在核对第二页']);assert.deepEqual(phoneReplies,['正在核对第二页','第二页结果\n\n✅ 本轮回答结束。']);assert.equal(calls.filter(method=>method==='turn/start').length,1);assert.ok(!calls.includes('turn/interrupt'))
+ assert.deepEqual((await call({action:'view'})).messages.find(m=>m.role==='助手').updates,['正在核对第二页']);assert.deepEqual(phoneReplies,['正在核对第二页','第二页结果']);assert.equal(calls.filter(method=>method==='turn/start').length,1);assert.ok(!calls.includes('turn/interrupt'))
  assert.equal((await call({action:'view'})).messages.some(item=>item.text==='第二页结果'),true)
  assert.equal((await call({action:'view'})).progress,undefined);assert.equal((await call({action:'view'})).diff,undefined)
  const reclaim=wire('微信接手 '+active.revision);await inbound(reclaim);await inbound(reclaim);assert.equal(access.read().writer,'wechat')

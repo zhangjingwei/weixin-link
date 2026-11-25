@@ -431,7 +431,6 @@ export class SessionManager {
       if (session.queue.length >= 5) throw new Error('已排队 5 条消息，请等待当前任务完成。')
       session.queue.push({input:text,token})
       this.diagnostic(session,'turn.queued',{queue_depth:session.queue.length})
-      await this.notify(session, `消息已排队（第 ${session.queue.length} 条）。`)
       return
     }
     transition(session,'running')
@@ -786,8 +785,8 @@ export class SessionManager {
       if(handoff)reply=handoff+(p.turn.status==='failed'?'\n源会话本轮处理失败；目标任务状态以以上记录为准。':'')
       // The footer describes execution completion, not delivery acceptance.
       const mergedCompletion=this.completionMarkers&&!awaitingAttachment&&!handoff&&(session.workToken?.current()??true)
-      const footerOffset=mergedCompletion?reply.length:null
-      if(mergedCompletion){
+      const footerOffset=mergedCompletion&&p.turn.status!=='completed'?reply.length:null
+      if(footerOffset!==null){
         const marker=p.turn.status==='failed'?'⚠️ 本轮执行失败，回答已结束。':p.turn.status==='interrupted'?'⏹ 本轮已停止。':'✅ 本轮回答结束。'
         reply+='\n\n'+localCompletion(marker,session.localTask)
       }

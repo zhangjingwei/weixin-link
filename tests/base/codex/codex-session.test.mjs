@@ -351,7 +351,7 @@ test('multi-sentence commentary is sent once when its item completes',async()=>{
 test('completion marker follows final delivery once and never marks an active partial answer complete',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'end-marker-')),output=[],manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],completionMarkers:true}).init();manager.state.users.owner={}
  const s={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>{output.push(text);return {status:'accepted'}}}
- try{await manager.event(s,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'partial',type:'agentMessage',phase:'partial_answer',text:'仍在处理。'}}});assert.equal(output.length,0);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.deepEqual(output,['仍在处理。\n\n✅ 本轮回答结束。']);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.equal(output.length,1);assert.equal(manager.state.users.owner.lastReply,'仍在处理。\n\n✅ 本轮回答结束。')}finally{manager.close();await rm(dir,{recursive:true,force:true})}
+ try{await manager.event(s,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'partial',type:'agentMessage',phase:'partial_answer',text:'仍在处理。'}}});assert.equal(output.length,0);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.deepEqual(output,['仍在处理。']);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.equal(output.length,1);assert.equal(manager.state.users.owner.lastReply,'仍在处理。')}finally{manager.close();await rm(dir,{recursive:true,force:true})}
 })
 test('confirmed routed source turn replaces model completion with one queued status',async()=>{
  const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],completionMarkers:true})
@@ -426,7 +426,7 @@ test('connection close drains a queued completion before declaring the result un
  callbacks.event({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
  callbacks.close()
  await session.events
- assert.deepEqual(output,['最终结果。\n\n✅ 本轮回答结束。'])
+ assert.deepEqual(output,['最终结果。'])
  assert.equal(manager.state.users.owner.recovery.execution,'completed')
  assert.equal(manager.state.users.owner.recovery.delivery,'accepted')
  assert.ok(!events.includes('delivery.suppressed'))
@@ -509,7 +509,7 @@ test('waiting attachment preserves logical task and produces only one completion
  await m.event(s,{method:'turn/started',params:{threadId:'t',turn:{id:s.turnId}}})
  await m.event(s,{method:'item/completed',params:{threadId:'t',item:{type:'agentMessage',phase:'final_answer',text:'文件总结完成。'}}})
  await m.event(s,{method:'turn/completed',params:{threadId:'t',turn:{id:s.turnId,status:'completed'}}})
- assert.equal(out.filter(t=>t.includes('本轮回答结束')).length,1);assert.equal(m.state.users.u.waitingAttachment,undefined)
+ assert.equal(out.filter(t=>t.includes('本轮回答结束')).length,0);assert.equal(m.state.users.u.waitingAttachment,undefined)
  }finally{await rm(dir,{recursive:true,force:true})}
 })
 

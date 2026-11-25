@@ -19,8 +19,7 @@ return async function handleMessage(message) {
   if(!message._recovered)manager.recordUserInput?.(message.userId)
   message=normalizeVoice(message)
   if(message._voiceTranscribed)log('voice.transcript_forwarded',{trace_id,userId:message.userId,status:'wechat_asr_text'})
-  let lifecycleDelivery
-  try{lifecycleDelivery=await lifecycleNotice?.onInbound(conversations.recipient(message.userId))}catch(error){log('lifecycle_notice.failed',{trace_id,...errorFields(error)})}
+  try{await lifecycleNotice?.onInbound(conversations.recipient(message.userId))}catch(error){log('lifecycle_notice.failed',{trace_id,...errorFields(error)})}
   const intent=classifyMessage(message)
   const diagnosticAction=intent?.kind==='diagnostic'?intent.value:null
   const agentAction=intent?.kind==='agent'?intent.value:null
@@ -70,10 +69,9 @@ return async function handleMessage(message) {
   const conversation = manager.state.textConversations?.[owner]
   const greeting = !intent && !media && !message.references?.length && !message._promptReply &&
     !manager.state.users[message.userId]?.waitingAttachment && !conversation?.entryClarification &&
-    !conversation?.entryRoutes?.[message._ingressId] && /^(?:你好|您好|嗨|哈喽|hi|hello)[！!。.]*$/iu.test(text)
+    !conversation?.entryRoutes?.[message._ingressId] && /^(?:你好|您好|嗨|哈喽|hi|hello|ping)[！!。.]*$/iu.test(text)
   if (!media && !message.text?.trim()){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const reply = (value,options) => deliver(options?.checkpoint?value:systemNotice(value),options)
-  if (!media && text.toLowerCase() === 'ping') { await reply('pong');jobs.acknowledge([message._ingressId].filter(Boolean)); return }
   if (text.length > 12_000) { await reply('消息过长，请拆成几条发送。');jobs.acknowledge([message._ingressId].filter(Boolean)); return }
   const token=message._intakeToken??manager.lifecycle.capture(message.userId)
   const messageId = message.raw?.message_id ?? message.raw?.client_id
@@ -113,10 +111,6 @@ return async function handleMessage(message) {
   if(!control&&!greeting&&!media&&entryRouting&&await entryRouting.process(message,token))return
   const notice=receiptPolicy({media,busy:manager.sessions.get(message.userId)?.busy,waiting:!!manager.state.users[message.userId]?.waitingAttachment})
   message._receiptDeferred=notice==='defer'
-  if(!control&&notice!=='defer'&&jobs.claimReceipt(message._ingressId)&&notice==='send'){
-    if(lifecycleDelivery==='accepted'||recoveryDelivery==='accepted')log('receipt.suppressed',{trace_id,reason:'other_notice_sent'})
-    else try{void Promise.resolve(reply(media?'已收到附件，正在接收。':manager.sessions.get(message.userId)?.busy?'已收到，已排队。':'已收到，正在处理。')).catch(error=>log('receipt.delivery_unconfirmed',{trace_id,...errorFields(error)}))}catch(error){log('receipt.delivery_unconfirmed',{trace_id,...errorFields(error)})}
-  }
   if(!control&&media){await singleMedia(message,token,mediaDependencies);return}
   // Controls must not wait behind a slow turn/start or an earlier message send.
   if(control?.action==='review'){

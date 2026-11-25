@@ -1,5 +1,4 @@
 import {readWelcomeRequest,recordWelcomeRequest} from '../../src/infrastructure/wechat/welcome-request.mjs'
-import {quickStartGuide} from '../../src/setup/user-guide.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises'
@@ -17,27 +16,17 @@ async function fixture(t,{welcomePending=false,commit=a}={}){
  const saved=async()=>JSON.parse(await readFile(notice.path('owner'),'utf8'))
  return {notice,state,sent,saved,release}
 }
-test('fresh install sends one welcome immediately without waiting for inbound',async t=>{
- const f=await fixture(t,{welcomePending:true});await f.notice.start()
- assert.deepEqual(f.sent,[['owner',welcomeMessage('zh')+'\n\n'+quickStartGuide('zh')]])
- assert.match(f.sent[0][1],/使用说明 · 快速上手/)
- assert.equal(await f.notice.onInbound('owner'),null);assert.equal(f.sent.length,1);assert.equal((await f.saved()).status,'accepted')
-})
-test('English lifecycle copy covers connection and upgrade notices',()=>{
- assert(welcomeMessage('en').includes('connected'))
- assert(upgradeMessage(a,'en').includes('upgraded'))
-})
-test('first welcome can report terminal verification without opening a chat wizard',async t=>{
+test('fresh pairing is silent across start, inbound and restart, without claiming delivery',async t=>{
  const f=await fixture(t,{welcomePending:true})
- f.notice.welcomeText=async()=> '微信助手已连接，模型已通过安装终端的真实推理测试。'
- await f.notice.start();assert.match(f.sent[0][1],/安装终端的真实推理测试/);assert.match(f.sent[0][1],/使用说明 · 快速上手/)
- await f.notice.start();assert.equal(f.sent.length,1)
+ f.notice.welcomeText=async()=>assert.fail('must not compose automatic help')
+ await Promise.all([f.notice.start(),f.notice.onInbound('owner')]);await f.notice.start()
+ assert.deepEqual(f.sent,[]);assert.equal((await f.saved()).status,'suppressed')
+ const next=new LifecycleNotice({stateDir:f.notice.stateDir,sourceDir:f.notice.sourceDir,owners:['owner'],welcomePending:true,send:async()=>assert.fail('no welcome replay')})
+ await next.start();await next.onInbound('owner')
 })
-test('unknown first-welcome delivery is not resent automatically',async t=>{
- const f=await fixture(t,{welcomePending:true});f.state.result='unknown'
- await f.notice.start()
- assert.equal((await f.saved()).status,'unknown')
- await f.notice.onInbound('owner');assert.equal(f.sent.length,1)
+test('persisted pending welcome is retired without replay or user-text loss',async t=>{
+ const f=await fixture(t);await writeFile(f.notice.path('owner'),JSON.stringify({version:1,kind:'welcome',commit:a,status:'deferred'}))
+ await f.notice.onInbound('owner');assert.deepEqual(f.sent,[]);assert.equal((await f.saved()).status,'suppressed')
 })
 test('upgrade sends one status message for a new commit and not a plain restart',async t=>{
  const f=await fixture(t);await f.notice.start()
@@ -68,15 +57,6 @@ test('definitive context rejection defers until a fresh inbound, unknown is not 
  await f.notice.onInbound('owner');assert.equal(f.sent.length,3)
 })
 
-test('English first login includes a short guide once and restart or upgrade does not repeat it',async t=>{
- const f=await fixture(t,{welcomePending:true});f.notice.language='en';f.notice.welcomeText=async()=>welcomeMessage('en')
- await f.notice.start();assert.match(f.sent[0][1],/Getting started/);assert.match(f.sent[0][1],/stop, service-status and install-help remain available/)
- assert.ok(Array.from(f.sent[0][1]).length<1800)
- const restarted=new LifecycleNotice({stateDir:f.notice.stateDir,sourceDir:f.notice.sourceDir,owners:['owner'],welcomePending:true,language:'en',send:async(_owner,text)=>{f.sent.push(['owner',text]);return {status:'accepted'}}})
- await restarted.start();assert.equal(f.sent.length,1)
- await f.release(b);await restarted.start();assert.equal(f.sent.length,2);assert.doesNotMatch(f.sent[1][1],/Getting started/)
-});
-
 test('tagged release upgrade reports its own changelog once, without a network dependency',async t=>{
  const f=await fixture(t);await f.notice.start()
  await writeFile(join(f.notice.sourceDir,'.weixin-link-release.json'),JSON.stringify({version:1,repository:'zhangjingwei/weixin-link',ref:'v1.2.0',commit:b}))
@@ -94,25 +74,12 @@ test('tagged release without changelog explicitly reports absent highlights',asy
 })
 
 
-test('each completed pairing gets one welcome even when a local preview replaces a release',async t=>{
- const f=await fixture(t,{welcomePending:true})
- await f.notice.start()
- const {stateDir,sourceDir,send}=f.notice
- const restart=async()=>new LifecycleNotice({stateDir,sourceDir,send,owners:['owner'],...await readWelcomeRequest(stateDir)})
- await writeFile(join(stateDir,'welcome-pending.json'),JSON.stringify({pending:true}))
- await (await restart()).start()
- assert.equal(f.sent.length,1)
- await rm(join(sourceDir,'.weixin-link-release.json'))
+test('new pairing login identities remain silent on local snapshots',async t=>{
+ const f=await fixture(t,{welcomePending:true});await rm(join(f.notice.sourceDir,'.weixin-link-release.json'))
  for(let i=0;i<2;i++){
-  const id=await recordWelcomeRequest(stateDir)
-  const notice=await restart()
-  if(i===1)f.state.result='unknown'
-  await Promise.all([notice.start(),notice.onInbound('owner')])
-  await (await restart()).start()
-  assert.equal(f.sent.length,i+2)
-  assert.equal((await f.saved()).loginId,id)
-  assert.equal((await f.saved()).kind,'welcome')
-  assert.equal((await f.saved()).status,i===1?'unknown':'accepted')
+  const loginId=await recordWelcomeRequest(f.notice.stateDir)
+  const next=new LifecycleNotice({stateDir:f.notice.stateDir,sourceDir:f.notice.sourceDir,owners:['owner'],...await readWelcomeRequest(f.notice.stateDir),send:async()=>assert.fail('no pairing announcement')})
+  await Promise.all([next.start(),next.onInbound('owner')]);assert.equal((await f.saved()).loginId,loginId);assert.equal((await f.saved()).status,'suppressed')
  }
 })
 
