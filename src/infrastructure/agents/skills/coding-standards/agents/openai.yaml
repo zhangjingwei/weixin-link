@@ -1,0 +1,4 @@
+interface:
+  display_name: "代码规范"
+  short_description: "依据仓库约定编写和修改代码，核对兼容性、失败路径与验证结果"
+  default_prompt: "使用 $coding-standards 按当前仓库的约定修改代码并验证。"

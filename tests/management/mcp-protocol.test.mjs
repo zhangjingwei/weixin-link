@@ -10,7 +10,7 @@ import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js'
 import {controlEndpoint,isPipe} from '../../src/infrastructure/runtime/control-endpoint.mjs'
 import {RuntimeControl,controlRequest} from '../../src/infrastructure/runtime/runtime-control.mjs'
 import {createSessionProtocol} from '../../src/infrastructure/agents/session-protocol.mjs'
-import {managementConfiguration} from '../../src/infrastructure/agents/management-plugin.mjs'
+import {managementConfiguration} from '../../src/infrastructure/agents/management-mcp.mjs'
 
 test('real MCP stdio handshake, tools/list, tools/call and post-response activation use private socket',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'zlm-')),socket=controlEndpoint(dir),calls=[]

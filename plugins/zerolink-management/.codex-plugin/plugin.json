@@ -1,7 +1,0 @@
-{
-  "name": "zerolink-management",
-  "version": "1.5.0",
-  "description": "ZeroLink 微信项目与任务管理；由账号服务注入可信会话上下文。",
-  "skills": "./skills/",
-  "mcpServers": "./.mcp.json"
-}
