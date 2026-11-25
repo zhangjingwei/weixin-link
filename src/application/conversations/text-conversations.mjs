@@ -135,11 +135,7 @@ export class TextConversations{
     if(!this.manager.conversationIds(message.userId).length){delete this.ensure(owner).prompt;await this.manager.save();await reply('暂无可恢复的会话。');return true}
     await this.manager.listConversations(message.userId,reply,{selecting:true});return true
    }
-   if(cmd.target==='reviewCommit'){
-    if(!await this.manager.listRecentCommits(message.userId,reply)){delete this.ensure(owner).prompt;await this.manager.save()}
-    return true
-   }
-   const prompts={steer:'请输入要补充的信息。',goal:'请输入长任务目标；可在末尾加“| 预算 10000”。',reviewBranch:'请输入要对比的分支名称，例如 main。',new:'请输入项目名称。',newProject:'请给新项目起个名字。',rename:'请输入新的会话名称。',search:'请输入搜索词。'}
+   const prompts={steer:'请输入要补充的信息。',new:'请输入项目名称。',newProject:'请给新项目起个名字。',rename:'请输入新的会话名称。',search:'请输入搜索词。'}
    await reply(`${prompts[cmd.target]}下一条纯文字将作为输入；发送“取消”放弃。`);return true
   }
   if(cmd.action==='projectFolderPrompt'){

@@ -5,8 +5,8 @@ import {promisify} from 'node:util'
 import {join} from 'node:path'
 import {parseConfig} from '../config/config-schema.mjs'
 import {readPrivateFile} from '../config/config-files.mjs'
-import {initializeCodex} from '../../base/codex/protocol-operations.mjs'
-import {CodexRpc} from '../../base/codex/codex-rpc.mjs'
+import {initializeCodex} from './codex/protocol-operations.mjs'
+import {CodexRpc} from './codex/rpc.mjs'
 const exec=promisify(execFile)
 const failure=code=>Error('MANAGEMENT_DESKTOP_'+code)
 

@@ -10,8 +10,8 @@ const root=fileURLToPath(new URL('../..',import.meta.url)),dir=await mkdtemp(joi
 try{
  await mkdir(join(dir,'profile'),{mode:0o700})
  const code=`
- import {CodexRpc} from './src/base/codex/codex-rpc.mjs';
- import {initializeCodex} from './src/base/codex/protocol-operations.mjs';
+ import {CodexRpc} from './src/infrastructure/agents/codex/rpc.mjs';
+ import {initializeCodex} from './src/infrastructure/agents/codex/protocol-operations.mjs';
  const clients=[],cwd=${JSON.stringify(dir)},codexHome=cwd+'/profile';
  const create=async()=>{const rpc=new CodexRpc({binary:process.execPath,providerOptions:{args:[${JSON.stringify(join(root,'node_modules/@openai/codex/bin/codex.js'))},'app-server']},cwd,codexHome});clients.push(rpc);await initializeCodex(rpc,{name:'desktop_profile_test',version:'1.0.0'});return rpc};
  try{const first=await create(),started=await first.request('thread/start',{cwd,ephemeral:false});const id=started.thread.id;

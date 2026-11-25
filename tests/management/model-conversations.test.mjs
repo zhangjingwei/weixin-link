@@ -1,4 +1,4 @@
-import {codexInput} from '../../src/base/codex/codex-input.mjs'
+import {codexInput} from '../../src/infrastructure/agents/codex/input.mjs'
 import {handoffReply} from '../../src/application/conversations/handoff-reply.mjs'
 import {createHash} from 'node:crypto'
 import {attachmentHandoffs} from '../../src/infrastructure/media/attachment-handoff.mjs'

@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {once} from 'node:events'
-import {CodexRpc} from '../../../src/base/codex/codex-rpc.mjs'
-import {CodexProtocolClient} from '../../../src/base/codex/protocol-client.mjs'
+import {CodexRpc} from '../../../../src/infrastructure/agents/codex/rpc.mjs'
+import {CodexProtocolClient} from '../../../../src/infrastructure/agents/codex/protocol-client.mjs'
 function wire(target){return {closed:false,sent:[],send(message){this.sent.push(message);if(message.method&&message.id!==undefined)queueMicrotask(()=>this.onMessage({id:message.id,result:{target,method:message.method,params:message.params}}))},close(){this.closed=true;this.onClose?.()}}}
 test('injected wires use the same protocol and keep concurrent destinations isolated',async()=>{
  const a=wire('local'),b=wire('remote'),local=new CodexRpc({binary:'/must-not-spawn',transport:a}),remote=new CodexRpc({binary:'/must-not-spawn',transport:b})

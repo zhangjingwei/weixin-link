@@ -1,5 +1,5 @@
-import {initializeCodex} from '../../base/codex/protocol-operations.mjs'
-import {listCodexProjects,nativeProjects} from './codex-projects.mjs'
+import {initializeCodex} from './protocol-operations.mjs'
+import {listCodexProjects,nativeProjects} from './projects.mjs'
 
 function archiveStatus(thread){
  const path=thread.path?.replaceAll('\\','/')

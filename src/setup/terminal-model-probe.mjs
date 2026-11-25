@@ -6,7 +6,7 @@ import {execFile} from 'node:child_process'
 import {findCodex} from './install-config.mjs'
 import {ensureAccountCodexHome} from '../infrastructure/accounts/codex-home.mjs'
 import {accountProviderProfile,providerEnvironment} from './provider-profile.mjs'
-import {codexProviderOptions} from '../base/codex/provider-options.mjs'
+import {codexProviderOptions} from '../infrastructure/agents/codex/provider-options.mjs'
 
 export const MODEL_PROBE_TIMEOUT_MS=180000
 const timedOut=error=>error.code==='ETIMEDOUT'||error.killed&&error.signal==='SIGTERM'&&(error.code===null||error.code===undefined)

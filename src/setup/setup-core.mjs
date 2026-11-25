@@ -12,7 +12,7 @@ import {promisify} from 'node:util'
 import {createInterface} from 'node:readline'
 import {installConfig,findCodex,projectRoot} from './install-config.mjs'
 import {ensureAccountCodexHome} from '../infrastructure/accounts/codex-home.mjs'
-import {codexProviderOptions} from '../base/codex/provider-options.mjs'
+import {codexProviderOptions} from '../infrastructure/agents/codex/provider-options.mjs'
 import {accountProviderProfile,providerEnvironment} from './provider-profile.mjs'
 export const CODEX_VERSION='0.172.0'
 const exec=promisify(execFile)

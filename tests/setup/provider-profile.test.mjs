@@ -5,7 +5,7 @@ import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {saveProviderProfile,clearProviderProfile,readProviderProfile,providerEnvironment} from '../../src/setup/provider-profile.mjs'
 import {accountPaths} from '../../src/infrastructure/accounts/account-store.mjs'
-import {codexProviderOptions} from '../../src/base/codex/provider-options.mjs'
+import {codexProviderOptions} from '../../src/infrastructure/agents/codex/provider-options.mjs'
 
 test('DeepSeek profile is account private and generates Responses options without exposing its key',async t=>{
  const home=await mkdtemp(join(tmpdir(),'provider-profile-'));t.after(()=>rm(home,{recursive:true,force:true}))

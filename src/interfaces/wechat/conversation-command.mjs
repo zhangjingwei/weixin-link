@@ -1,11 +1,10 @@
 import {isCatalogQuestion,isResultLookup} from '../../application/intake/catalog-question.mjs'
-import {controlCommand,completeControlPrompt} from './control-command.mjs'
+import {controlCommand,recoveryControlCommand,completeControlPrompt} from './control-command.mjs'
 
 // Information requests can be answered without consuming the text prompt.
 const promptInfoCommands=new Set([
  '使用说明','guide','安装帮助','install-help','服务状态','service-status',
 ])
-const promptInfoActions=new Set(['help','progress','agentStatus','models'])
 
 export function conversationCommand(text=''){
  return null;
@@ -17,9 +16,8 @@ export function conversationInput(text='',{pending}={}){
  const value=input.trim()
  if(pending){
   if(value==='取消'||value.toLowerCase()==='cancel')return {command:{action:'promptCancel'},promptResult:'done'}
-  if(['stop','exit','停止','退出'].includes(value.toLowerCase()))return {sessionCommand:controlCommand(value),promptResult:'done'}
-  const info=controlCommand(input)
-  if(info&&(promptInfoActions.has(info.action)||info.action==='goal'&&info.op==='get'||info.action==='memory'&&info.op==='list'))return {sessionCommand:info,promptResult:'keep'}
+  const recovery=recoveryControlCommand(input)
+  if(recovery)return {sessionCommand:recovery,promptResult:'done'}
   if(/^(?:状态|status)[。？！!?]?$/iu.test(value)||isResultLookup(value)||promptInfoCommands.has(value.toLowerCase()))return {command:null,promptResult:'keep'}
   const navigation=conversationCommand(input)
   if(isCatalogQuestion(input) && ['switch','history','archive','unarchive','delete','projectFolder','approvalChoice'].includes(pending.target))return {command:null,promptResult:'keep'}

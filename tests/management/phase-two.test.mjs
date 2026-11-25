@@ -275,7 +275,7 @@ test('restart removes pending and previously unexecuted payloads but keeps unkno
 
 test('native topic and message searches use read-only RPCs with scope-bound pagination',async t=>{
  const {service,backend}=await fixture(t)
- const {createCodexConversationBackend}=await import('../../src/infrastructure/agents/codex-conversation-backend.mjs')
+ const {createCodexConversationBackend}=await import('../../src/infrastructure/agents/codex/conversation-backend.mjs')
  backend.searchHistory=createCodexConversationBackend({}).searchHistory
  const calls=[]
  backend.withConnection=async(_,recipient,work)=>work({request:async(method,params)=>{

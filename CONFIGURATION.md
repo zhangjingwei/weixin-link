@@ -32,7 +32,7 @@ Windows PowerShell 安装命令：
 
 终端向导提供订阅登录、DeepSeek、Qwen（百炼按量付费）和 Kimi（国际平台）。默认检查 Codex 连接与协议；真实模型回复测试需运行 `node src/setup/setup.mjs wizard --verify-model`，或在微信使用“验收智能体”。非交互式安装会跳过模型配置，可随后从安装菜单选择“配置模型”。第三方密钥只在本机终端输入，不要发到微信。
 
-Codex 订阅连接方式由 `src/base/codex/subscription-transport.json` 设置，当前默认为 HTTP。本地升级试用可用 `./upgrade-local.sh --auto` 选择自动连接方式；这项选择只作用于该次本地升级快照。
+Codex 订阅连接方式由 `src/infrastructure/agents/codex/subscription-transport.json` 设置，当前默认为 HTTP。本地升级试用可用 `./upgrade-local.sh --auto` 选择自动连接方式；这项选择只作用于该次本地升级快照。
 
 ## 微信操作与底层配置
 

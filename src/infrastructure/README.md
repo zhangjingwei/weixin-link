@@ -15,7 +15,7 @@
 | `runtime/` | 账号私有控制端点、维护租约、服务忙闲状态、按用户隔离的取消信号 | 原账号控制 socket；取消信号仅在进程内 |
 | `diagnostics/` | 脱敏事件记录和有界轮转 | 原账号诊断日志 |
 
-媒体下载、文件解码工具、预处理和出站实现均位于 `media/`；测试和运行调用方直接引用所属模块。集成运行时位于 `src/integrations/runtime.mjs`；底座协议位于 `src/base/`，会话编排与对话数据位于 `src/application/`。
+媒体下载、文件解码工具、预处理和出站实现均位于 `media/`；测试和运行调用方直接引用所属模块。集成运行时位于 `src/integrations/runtime.mjs`；Codex 协议和 Claude SDK 适配均位于 `src/infrastructure/agents/`，会话编排与对话数据位于 `src/application/`。
 
 端口不把微信 SDK、凭据或远程配置传给应用用例；调用方传入本次账号和任务上下文。集成授权仍在每次调用时由原集成运行时复核；媒体下载范围、未知投递结果和锁文件行为均沿用原实现。
 

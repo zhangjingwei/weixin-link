@@ -32,7 +32,7 @@ import {createInfrastructurePorts} from './infrastructure-ports.mjs'
 import {AgentSwitcher} from '../setup/agent-switch.mjs'
 import {ChatUpgrader} from '../setup/chat-upgrade.mjs'
 import {TextConversations} from '../application/conversations/text-conversations.mjs'
-import {createCodexConversationBackend} from '../infrastructure/agents/codex-conversation-backend.mjs'
+import {createCodexConversationBackend} from '../infrastructure/agents/codex/conversation-backend.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
 import {accountPaths,assertAccount,rememberIdentity} from '../infrastructure/accounts/account-store.mjs'
@@ -63,7 +63,7 @@ const diagnostic=createDiagnosticLog({dir:join(stateDir,'logs')})
 const log=(event,fields)=>{void diagnostic.log(event,fields)}
 log('service.started',{status:'live'})
 
-// 会话编排由应用层负责；底座协议由所选 agent.sessionOptions 注入。
+// 会话编排由应用层负责；智能体协议由所选 agent.sessionOptions 注入。
 const manager = await new SessionManager({log, completionMarkers:true, stateDir: runtimeStateDir, cwd:backend.cwd, owners, backend, ...agent.sessionOptions }).init()
 const agentSwitcher=new AgentSwitcher({account})
 const upgrader=new ChatUpgrader()

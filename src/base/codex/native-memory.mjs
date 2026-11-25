@@ -1,8 +1,0 @@
-// Official Codex memory only. No local facts database or extraction protocol.
-export const nativeMemoryConfig={'features.memories':true,'memories.generate_memories':true,'memories.use_memories':true}
-export function memoryCommand(text){
- const chinese=text.trim().replace(/[。！!]$/,'');if(chinese==='开启记忆'||chinese==='关闭记忆')return {action:'memory',op:'auto',on:chinese==='开启记忆'}
- if(/^(?:忘掉|删除)第?\s*\d+\s*条记忆[。！!]?$/u.test(text.trim())||/^把第?\s*\d+\s*条记忆改(?:为|成)/u.test(text.trim()))return {action:'memory',op:'unsupported'}
- return null
-}
-export async function enableThreadMemory(rpc,threadId){await rpc.request('thread/memoryMode/set',{threadId,mode:'enabled'})}

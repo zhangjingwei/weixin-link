@@ -1,14 +1,38 @@
-import {ASSISTANT_INSTRUCTIONS} from '../../../src/infrastructure/agents/assistant-policy.mjs'
+import {ASSISTANT_INSTRUCTIONS} from '../../../../src/infrastructure/agents/assistant-policy.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { SessionManager as ActualSessionManager } from '../../../src/wechat/session-manager.mjs'
-import {codexProviderOptions} from '../../../src/base/codex/provider-options.mjs'
+import { SessionManager as ActualSessionManager } from '../../../../src/wechat/session-manager.mjs'
+import {codexProviderOptions} from '../../../../src/infrastructure/agents/codex/provider-options.mjs'
 
 // Fake-RPC tests must not inherit live provider settings or contact remote hosts.
 class SessionManager extends ActualSessionManager { constructor(options){super({providerEnv:{},remoteControl:async()=>({stop_confirmed:true,tasks:[]}),...options})} }
+
+test('help requests are answered by the selected agent rather than a fixed command list',async()=>{
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']}),sent=[]
+ manager.connect=async()=>({rpc:{},threadId:'thread'})
+ manager.send=async(_session,text)=>sent.push(text)
+ await manager.handle('owner','help',async()=>{},undefined,undefined,{action:'help'})
+ assert.deepEqual(sent,['help'])
+})
+
+
+test('legacy management words reach the agent without changing platform state',async()=>{
+ const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']}),sent=[]
+ const saved={threadId:'original',fastMode:true},token=manager.lifecycle.capture('owner')
+ manager.state.users.owner=saved
+ manager.connect=async()=>({rpc:{},threadId:'original'})
+ manager.send=async(_session,text)=>sent.push(text)
+ const texts=['代码审查','对比审查','审查提交','压缩上下文','分叉会话','旁支会话','开启快速模式','关闭快速模式','长任务','模型','进度','恢复任务','重置会话','关闭','review','compact','fork','fast-on']
+ for(const text of texts)await manager.handle('owner',text,async()=>{})
+ assert.deepEqual(sent,texts)
+ assert.equal(manager.state.users.owner,saved)
+ assert.deepEqual(saved,{threadId:'original',fastMode:true})
+ assert.equal(token.current(),true)
+ manager.close()
+})
 
 test('custom provider profile overrides resumed model and disables unsupported search', () => {
   const options=codexProviderOptions({WECHAT_CODEX_BASE_URL:'https://provider.example.com',WECHAT_CODEX_MODEL:'configured-model',WECHAT_CODEX_PROVIDER:'custom',WECHAT_CODEX_API_KEY_ENV:'CUSTOM_API_KEY',WECHAT_CODEX_REASONING_EFFORT:'high',WECHAT_CODEX_WEB_SEARCH:'disabled'})
@@ -77,11 +101,6 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     await first.event({ method: 'item/completed', params: { threadId: 'thread-1', item: { id: 'progress', type: 'agentMessage', phase: 'commentary', text: '正在检查项目配置。' } } })
     assert.ok(output.includes('正在检查项目配置。'))
     assert.equal(replyOptions.at(-1).traceId,'known-trace-123')
-    const callsBeforeProgress=first.calls.length
-    await manager.handle('owner', '进度', reply, 3, undefined, {action:'progress'})
-    assert.match(output.at(-1), /正在处理[\s\S]*最近进展：正在检查项目配置。/)
-    assert.equal(first.calls.length,callsBeforeProgress)
-    assert.equal(manager.sessions.get('owner').queue.length,0)
     manager.sessions.get('owner').lastUpdate = Date.now() - 16_000
     await first.event({ method: 'item/started', params: { threadId: 'thread-1', item: { id: 'cmd', type: 'commandExecution', command: 'secret command' } } })
     assert.ok(!output.includes('Codex 正在执行命令…'))
@@ -101,9 +120,6 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     await complete(first, '第一条回答')
     assert.equal(first.calls.at(-1).params.input[0].text, '下一条')
     assert.deepEqual(first.calls.at(-1).params.input[1], { type: 'localImage', path: '/tmp/test.png' })
-    await manager.handle('owner', '进度', reply, 4, undefined, {action:'progress'})
-    assert.match(output.at(-1), /尚无新的阶段信息/)
-    assert.doesNotMatch(output.at(-1), /正在检查项目配置/)
     await manager.handle('owner', '应清空的队列', reply)
     await manager.handle('owner', '停止', reply)
     assert.equal(first.calls.at(-1).method, 'turn/interrupt')
@@ -119,10 +135,6 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
     assert.ok(second.calls.some(c => c.method === 'thread/resume' && c.params.threadId === 'thread-1'))
     await complete(second, '', 'failed')
     assert.ok(output.some(text => text.includes('任务失败：test failure')))
-    await manager.handle('owner', '重置会话', reply, undefined, undefined, {action:'new'})
-    assert.equal(manager.state.users.owner.threadId, undefined)
-    assert.equal(manager.sessions.get('owner').threadId, 'thread-2')
-    assert.deepEqual(manager.state.users.owner.previous, ['thread-1'])
     await manager.handle('owner', '这个任务应被关闭', reply)
     const third = clients.at(-1)
     await manager.handle('owner', '退出', reply)
@@ -290,13 +302,6 @@ test('state save failure after successful turn start does not kill a running tas
  const s={userId:'owner',threadId:'thread',busy:false,queue:[],items:new Map(),reply:async t=>output.push(t),rpc:{closed:false,request:async()=>({turn:{id:'running'}}),close(){throw Error('must not kill task')}}}
  await manager.send(s,'work');assert.equal(s.busy,true);assert.equal(s.turnId,'running');assert.ok(output[0].includes('任务继续执行'))
 })
-test('reset invalidates connecting session even when closing the process is asynchronous',async()=>{
- let release,count=0;const calls=[]
- const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>{const n=++count;return {closed:false,write(){},close(){},async request(method){calls.push([n,method]);if(method==='initialize'){if(n===1)await new Promise(r=>{release=r});return {}}if(method==='skills/extraRoots/set'||method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'new-thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};throw Error('unexpected inference')}}}});manager.save=async()=>{}
- const old=manager.handle('owner','old work',async()=>{});await new Promise(r=>setImmediate(r))
- await manager.handle('owner','重置会话',async()=>{},undefined,undefined,{action:'new'});release();await old
- assert.ok(!calls.some(([n,m])=>n===1&&m==='thread/start'));assert.ok(!calls.some(([,m])=>m==='turn/start'));assert.equal(manager.sessions.get('owner').threadId,'new-thread');manager.close()
-})
 test('all pre-stop connecting messages are cancelled; a later message still starts',async()=>{
  let release;const calls=[];const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],rpcFactory:()=>({closed:false,write(){},close(){this.closed=true},async request(method){calls.push(method);if(method==='initialize'){await new Promise(r=>{release=r});return {}}if(method==='skills/extraRoots/set'||method==='thread/memoryMode/set')return {};if(method==='thread/start')return {thread:{id:'thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};if(method==='turn/start')return {turn:{id:'fresh'}};throw Error('unexpected')}})});manager.save=async()=>{}
  const first=manager.handle('owner','old one',async()=>{});await new Promise(r=>setImmediate(r));const second=manager.handle('owner','old two',async()=>{})
@@ -318,13 +323,6 @@ test('a message captured before stop cannot re-enter after persistence or attach
  const old=manager.lifecycle.capture('owner');await manager.handle('owner','停止',async()=>{})
  await manager.handle('owner',{text:'late attachment',images:[]},async()=>{},undefined,old);assert.equal(manager.sessions.size,0)
 })
-test('rejected new conversation does not cancel current work or pending attachments',async()=>{
- const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']});manager.save=async()=>{}
- const token=manager.lifecycle.capture('owner');let cancelled=false;manager.lifecycle.onCancel(()=>{cancelled=true})
- manager.sessions.set('owner',{userId:'owner',busy:true,queue:['retained'],rpc:{closed:false}})
- const output=[];await manager.handle('owner','重置会话',async t=>output.push(t),undefined,undefined,{action:'new'});assert.equal(token.current(),true);assert.equal(cancelled,false);assert.deepEqual(manager.sessions.get('owner').queue,['retained']);assert.ok(output[0].includes('停止'))
-})
-
 test('deltas are silent and authoritative final text is delivered once',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'wechat-stream-')),output=[]
  const manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],remoteControl:async()=>({active:true}),rpcFactory:()=>({closed:false,request:async m=>m==='thread/start'?{thread:{id:'thread'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'}:m==='turn/start'?{turn:{id:'turn'}}:{},write(){},close(){this.closed=true}})}).init()
@@ -584,8 +582,8 @@ test('quiet turn reports elapsed stage time only while the same turn is active',
 
 test('App Server diagnostics report pending input, retry and throttled stream activity without payloads',async t=>{
  t.mock.timers.enable({apis:['Date','setTimeout']})
- const {safeRecord}=await import('../../../src/infrastructure/diagnostics/diagnostic-log.mjs')
- const {formatEvent}=await import('../../../src/tools/debug-logs.mjs')
+ const {safeRecord}=await import('../../../../src/infrastructure/diagnostics/diagnostic-log.mjs')
+ const {formatEvent}=await import('../../../../src/tools/debug-logs.mjs')
  const rows=[]
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u'],log:(event,fields)=>rows.push(safeRecord(event,fields))})
  const session={userId:'u',threadId:'t',busy:true,items:new Map()}
@@ -648,7 +646,7 @@ test('a stalled reply does not push partial text and preserves the authoritative
 
 test('stream retry diagnostics aggregate per turn and recover only on model output',async t=>{
  t.mock.timers.enable({apis:['Date','setTimeout']})
- const {formatEvent}=await import('../../../src/tools/debug-logs.mjs')
+ const {formatEvent}=await import('../../../../src/tools/debug-logs.mjs')
  const rows=[]
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u'],log:(event,fields)=>rows.push({event,...fields,timestamp:new Date()})})
  const session=id=>({threadId:id,turnId:id,userId:'u',turnReady:true,busy:true})

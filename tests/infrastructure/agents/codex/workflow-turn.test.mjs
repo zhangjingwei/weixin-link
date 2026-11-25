@@ -1,15 +1,15 @@
 import test from 'node:test'
 import {fileURLToPath} from 'node:url'
 import assert from 'node:assert/strict'
-import {createSessionProtocol} from '../../../src/infrastructure/agents/session-protocol.mjs'
-import {ASSISTANT_INSTRUCTIONS} from '../../../src/infrastructure/agents/assistant-policy.mjs'
+import {createSessionProtocol} from '../../../../src/infrastructure/agents/session-protocol.mjs'
+import {ASSISTANT_INSTRUCTIONS} from '../../../../src/infrastructure/agents/assistant-policy.mjs'
 
 test('session initialization registers the bundled skill root before opening threads',async()=>{
  const calls=[]
  const rpc={request:async(method,params)=>calls.push({method,params}),write:message=>calls.push(message)}
  await createSessionProtocol().initialize(rpc)
  assert.deepEqual(calls.map(call=>call.method),['initialize','initialized','skills/extraRoots/set'])
- assert.deepEqual(calls[2].params.extraRoots,[fileURLToPath(new URL('../../../src/infrastructure/agents/skills',import.meta.url))])
+ assert.deepEqual(calls[2].params.extraRoots,[fileURLToPath(new URL('../../../../src/infrastructure/agents/skills',import.meta.url))])
  assert.doesNotMatch(ASSISTANT_INSTRUCTIONS,/description:|❓ Zero · 想问你|📦 Zero · 交付|route_conversation_request/)
 })
 

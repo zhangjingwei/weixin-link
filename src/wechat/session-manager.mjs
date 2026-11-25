@@ -10,8 +10,7 @@ import {installConfig} from '../setup/install-config.mjs'
 import {errorFields} from '../infrastructure/diagnostics/diagnostic-log.mjs'
 import {deliveryError, deliveryFailureState} from '../infrastructure/wechat/delivery-error.mjs'
 import {systemNotice} from '../interfaces/views/system-notice.mjs'
-import {controlCommand} from '../interfaces/wechat/control-command.mjs'
-import {recentCommits} from '../infrastructure/agents/recent-commits.mjs'
+import {recoveryControlCommand} from '../interfaces/wechat/control-command.mjs'
 
 // The account composition boundary supplies the shared session engine with
 // use-case formatting and external adapters. The engine imports none of them.
@@ -21,13 +20,17 @@ const sessionPorts = Object.freeze({
   outputStore: options => new OutputStore(options), outputLinks,
   cancellationScopes: () => new CancellationScopes(),
   codexBinary: () => installConfig().codexBinary,
-  errorFields, deliveryError, deliveryFailureState, systemNotice, controlCommand, recentCommits,
+  errorFields, deliveryError, deliveryFailureState, systemNotice,
 })
 
 class ConfiguredSessionManager extends SessionManager {
   constructor(options) {
     const {rpcFactory,providerEnv,sessionProtocol,...rest}=options
     super({sessionPorts,...rest,sessionProtocol:sessionProtocol??createSessionProtocol({rpcFactory,providerEnv,codexBinary:sessionPorts.codexBinary})})
+  }
+  handle(userId,text,reply,messageId,token,parsedCommand) {
+    const command=parsedCommand??(typeof text==='string'?recoveryControlCommand(text):null)
+    return super.handle(userId,text,reply,messageId,token,command)
   }
 }
 export {ConfiguredSessionManager as SessionManager}

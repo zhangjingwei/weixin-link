@@ -3,7 +3,7 @@ import {promisify} from 'node:util'
 import {mkdtemp,readFile,rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
-import {codexInput} from '../base/codex/codex-input.mjs'
+import {codexInput} from '../infrastructure/agents/codex/input.mjs'
 import {findCodex} from '../infrastructure/config/install-config.mjs'
 const exec=promisify(execFile),binary=findCodex(),dir=await mkdtemp(join(tmpdir(),'codex-input-contract-'))
 try{

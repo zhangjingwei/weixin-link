@@ -1,5 +1,5 @@
-import {CodexRpc} from '../base/codex/codex-rpc.mjs'
-import {initializeCodex} from '../base/codex/protocol-operations.mjs'
+import {CodexRpc} from '../infrastructure/agents/codex/rpc.mjs'
+import {initializeCodex} from '../infrastructure/agents/codex/protocol-operations.mjs'
 import {createSessionProtocol} from '../infrastructure/agents/session-protocol.mjs'
 import {ensureAccountCodexHome} from '../infrastructure/accounts/codex-home.mjs'
 import {findCodex} from './install-config.mjs'

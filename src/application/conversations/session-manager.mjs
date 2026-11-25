@@ -11,8 +11,6 @@ import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 
-const goalStatusText=status=>({active:'已启用',paused:'已暂停',blocked:'遇到阻碍',usageLimited:'已达到用量限制',budgetLimited:'已达到预算限制',complete:'已完成'})[status]??'未知'
-
 const streamKinds=new Map([
   ['item/agentMessage/delta','reply'],
   ['item/reasoning/summaryTextDelta','reasoningSummary'],
@@ -24,7 +22,7 @@ const SESSION_IDLE_MS=10*60_000
 export class SessionManager {
   constructor({ stateDir, cwd, owners, backend = null, codexHome, sessionProtocol, sessionPorts, completionMarkers = false, log = () => {} }) {
     if (typeof sessionPorts?.assistantInstructions !== 'string' ||
-      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','controlCommand','cancellationScopes'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
+      ['integrationGuidance','materialInput','flowInput','stripTaskFlow','outputStore','outputLinks','errorFields','deliveryError','deliveryFailureState','systemNotice','cancellationScopes'].some(name=>typeof sessionPorts[name]!=='function')) throw Error('SESSION_PORTS_REQUIRED')
     this.ports=sessionPorts
     this.log = log
     if(!sessionProtocol)throw Error('SESSION_PROTOCOL_REQUIRED')
@@ -378,20 +376,6 @@ export class SessionManager {
     this.state.users[userId].conversationChoices=ids;await this.save()
     await reply('你保存的会话：\n'+lines.join('\n')+(selecting?'\n回复编号即可切换；发送“取消”放弃。':'\n需要恢复列表中的旧会话时，备用入口是“恢复会话”，再按编号选择。'))
   }
-  async listRecentCommits(userId,reply){
-    const cwd=this.workspaceFor(userId),commits=await this.ports.recentCommits(cwd)
-    if(!commits.length){await reply('没有找到可审查的提交，请检查当前项目目录。');return false}
-    this.state.users[userId]??={}
-    this.state.users[userId].reviewChoices={cwd,ids:commits.map(commit=>commit.sha)}
-    await this.save()
-    await reply('最近的提交：\n'+commits.map((commit,index)=>`${index+1}. ${commit.title}`).join('\n')+'\n回复编号开始审查；发送“取消”放弃。')
-    return true
-  }
-  resolveReviewCommit(userId,selection){
-    const choices=this.state.users[userId]?.reviewChoices,index=Number(selection)-1
-    if(!/^\d{1,2}$/.test(String(selection))||!choices||choices.cwd!==this.workspaceFor(userId)||!choices.ids?.[index])throw Error('请重新发送“审查提交”并选择列表中的编号。')
-    return {action:'review',target:{type:'commit',sha:choices.ids[index]}}
-  }
   async resumeConversation(userId,selection,reply,token) {
     if(!selection){await this.listConversations(userId,reply);return}
     const saved=this.state.users[userId]??{},ids=this.conversationIds(userId)
@@ -498,6 +482,7 @@ export class SessionManager {
         this.state.users[session.userId].nativeSessionState='submission_pending'
       }
       if(session.provisionalThread){await this.save();session.provisionalThread=false}
+      // Keep execution compatibility for review jobs already in the durable queue.
       result=native?.action==='review'
         ?await this.protocol.startReview(session.rpc,session.threadId,native.target)
         :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,model:executionModel,fastMode:this.state.users[session.userId]?.fastMode})
@@ -983,20 +968,12 @@ export class SessionManager {
   async handle(userId, text, reply, messageId, token = this.lifecycle.capture(userId), parsedCommand) {
     if (!this.owners.has(userId)) { await reply('当前微信账号未获授权。'); return }
     if (!await this.acceptMessage(userId,messageId)) return
-    let command = parsedCommand??(typeof text === 'string' ? this.ports.controlCommand(text) : null)
+    const command = parsedCommand??null
     if(!command&&!token.current())return
-    if(this.state.desktopHandoff&&!['progress','help'].includes(command?.action)){await reply('桌面正在接续这个账号的工作，微信暂不执行操作。请先关闭桌面，再说“回到微信继续”。');return}
+    if(this.state.desktopHandoff){await reply('桌面正在接续这个账号的工作，微信暂不执行操作。请先关闭桌面，再说“回到微信继续”。');return}
     this.log('message.handled',{userId,messageId,kind:command?.action??(typeof text==='string'?'text':'media')})
     try {
-      if(command?.action==='reviewCommit'){
-        command=this.resolveReviewCommit(userId,command.selection)
-      }
       if(command?.action==='steer'){await this.steer(userId,command.text,reply,token,undefined,command.chatReceipt);return}
-      if(command?.action==='memory'){
-        if(!this.protocolFor(userId).supportsMemory){await reply(await this.protocolFor(userId).memory(null,null,command));return}
-        const session=await this.connect(userId,reply)
-        await reply(await this.protocol.memory(session.rpc,session.threadId,command));return
-      }
       if (['approval', 'answer'].includes(command?.action)) {
         const question = this.questions.get(command.code)
         if (!question || question.session.userId !== userId) throw new Error('请求已过期、不存在或不属于当前账号。')
@@ -1016,112 +993,7 @@ export class SessionManager {
         return
       }
       if(command?.action==='resume'){await this.resumeConversation(userId,command.selection,reply,token);return}
-      if(command?.action==='models'){
-        if(!this.protocolFor(userId).supportsModels){await reply(await this.protocol.models(null));return}
-        const session=await this.connect(userId,reply)
-        await reply(await this.protocol.models(session.rpc,session.model));return
-      }
-      if(['goal','review','compact','fork','agentStatus','fast'].includes(command?.action)){
-        if(!this.protocolFor(userId).supportsNativeCommands){await reply(`当前 ${this.agentNameFor(userId)} 底座未接入这项原生命令；没有执行。`);return}
-        const session=await this.connect(userId,reply)
-        if(!token.current())return
-        if(command.action==='goal'){
-          if(command.op==='invalidBudget'){await reply('长任务预算必须是正整数，最多 9 位。');return}
-          const goal=await this.protocol.goal(session.rpc,session.threadId,command)
-          const next=(command.op==='create'||command.op==='resume')?'\n目标已保存；直接发送具体任务才会执行。':''
-          await reply(goal?`长任务：${goal.objective??'未提供目标'}\n状态：${goalStatusText(goal.status)}。${next}`:'当前没有长任务。');return
-        }
-        if(command.action==='agentStatus'){
-          const thread=await this.protocol.read(session.rpc,session.threadId)
-          if(session.compacting&&!session.compactionStarting&&thread.status?.type!=='active')await this.clearCompaction(session)
-          const goal=await this.protocol.goal(session.rpc,session.threadId,{op:'get'})
-          await reply(`会话：${thread.id}\n状态：${thread.status?.type??'未知'}\n长任务：${goal?goalStatusText(goal.status):'无'}\n上下文压缩：${session.compacting?'进行中或待核对':'无待确认'}\n快速模式：${this.state.users[userId]?.fastMode?'开启':'关闭'}。`);return
-        }
-        if(command.action==='fast'){
-          if(session.busy||session.finishing||session.queue.length)throw Error('请等待当前任务及排队消息结束后再切换快速模式。')
-          const saved=this.state.users[userId],before=saved.fastMode
-          saved.fastMode=command.enabled
-          try{await this.save()}catch(error){saved.fastMode=before;throw error}
-          await reply(`快速模式已${command.enabled?'开启':'关闭'}；下一轮 Codex 任务生效。`);return
-        }
-        if(session.busy||session.finishing||session.connecting||session.selecting||session.queue.length||(this.submissions?.pending?.()??[]).some(j=>j.owner===userId)||this.submissions?.uncertainCount?.(userId))throw Error('当前仍有执行、排队或未确认任务，请先核对后再操作。')
-        if(session.compactionStarting)throw Error('Codex 正在启动上下文压缩，请稍后再操作。')
-        if(session.compacting){
-          const thread=await this.protocol.read(session.rpc,session.threadId)
-          if(thread?.status?.type==='active')throw Error('Codex 正在压缩上下文，请完成后再操作。')
-          await this.clearCompaction(session)
-        }
-        if(command.action==='compact'){
-          const saved=this.state.users[userId],before=saved.compaction
-          session.compactionStarting=true
-          saved.compaction={threadId:session.threadId,requestedAt:new Date().toISOString()}
-          try{await this.save()}catch(error){saved.compaction=before;session.compactionStarting=false;throw error}
-          session.compacting=true
-          try{await this.protocol.compact(session.rpc,session.threadId)}finally{session.compactionStarting=false}
-          await reply('Codex 已接受上下文压缩请求；完成后可继续提交任务。');return
-        }
-        if(command.action==='fork'){
-          session.selecting=true
-          try{
-            const sourceId=session.threadId,result=await this.protocol.fork(session.rpc,sourceId),id=result?.thread?.id
-            if(!id||id===sourceId||result.thread.cwd&&result.thread.cwd!==this.workspaceFor(userId))throw Error('底座未确认同目录的新会话，未切换。')
-            const saved=this.state.users[userId]
-            const withFork={...saved,previous:[...(saved.previous??[]),id].slice(-20)}
-            this.state.users[userId]=withFork
-            try{await this.save()}catch(error){this.state.users[userId]=saved;throw Error(`已创建会话 ${id}，但保存归属失败；请在主机核对后恢复。`,{cause:error})}
-            if(!command.switchTo){await reply(`已创建旁支会话 ${id}。当前会话不变，需要进入旁支时可说明要切换到哪个会话。`);return}
-            const resumed=await this.protocol.resume(session.rpc,{threadId:id,cwd:this.workspaceFor(userId),instructions:await this.sessionInstructions(userId),provider:this.providerOptions(userId)})
-            if(!token.current())return
-            const next={...withFork,threadId:id,previous:[...(saved.previous??[]),sourceId].slice(-20),hasMessages:true}
-            this.state.users[userId]=next;session.threadId=id
-            try{await this.save()}catch(error){this.state.users[userId]=withFork;session.threadId=sourceId;throw error}
-            this.lifecycle.cancel(userId);this.clearQuestions(session);session.items.clear();session.finals=[];session.turnId=null;session.model=resumed.model;session.modelProvider=resumed.modelProvider??session.modelProvider
-            await reply(`已分叉并切换到会话 ${id}。`);return
-          }finally{session.selecting=false}
-        }
-        const reviewText=command.target?.type==='commit'?'请审查选定的提交。':command.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
-        await this.send(session,reviewText,token,command)
-        return
-      }
-      if (command?.action === 'help') {
-        await reply([
-          '微信命令列表：',
-          '【当前任务】',
-          '进度（progress）', '补充（supplement）', '停止（stop）', '恢复（recover）', '退出（exit）',
-          '【长任务】',
-          '长任务（goal）', '长任务状态（goal-status）', '暂停长任务（goal-pause）', '继续长任务（goal-resume）', '完成长任务（goal-complete）', '清除长任务（goal-clear）',
-          '【代码审查】',
-          '代码审查（review）', '对比审查（compare）', '审查提交（commit-review）',
-          '【会话】',
-          '会话状态（session-status）', '恢复会话（resume-session）', '重置会话（reset-session）', '压缩上下文（compact）', '分叉会话（fork）', '旁支会话（branch）',
-          '【项目】',
-          '列表（list）', '新建（new）', '切换（switch）', '命名（rename）', '历史（history）', '搜索（search）', '归档（archive）', '还原（restore）', '删除（delete）', '当前目录（folder）', '新建项目（new-project）',
-          '【模型与记忆】',
-          '模型（models）', '开启快速模式（fast-on）', '关闭快速模式（fast-off）', '记忆（memory）', '开启记忆（memory-on）', '关闭记忆（memory-off）',
-          '【服务】',
-          '安装状态（setup-status）', '安装向导（setup）', '安装智能体（install-agent）', '登录智能体（login-agent）', '验收智能体（check-agent）', '重启（restart）', '升级（upgrade）', '诊断（diagnose）', '服务状态（service-status）', '查看最近错误（recent-errors）', '导出诊断报告（export-diagnostics）', '安装帮助（install-help）', '检查更新（check-updates）', '不升级（skip-update）', '命令列表（help）', '使用说明（guide）',
-          '【交互答复】',
-          '批准（approve）', '拒绝（reject）', '回答（answer）',
-          '远程主机和设备配置可以直接描述需求。',
-          '日常直接描述需求即可，例如“看看项目进展”或“把上次的文件再发一次”。这些命令用于备用操作。',
-        ].join('\n'))
-        return
-      }
       const runtime = this.sessions.get(userId)
-      if(command?.action==='progress'){
-        const queued=(runtime?.queue.length??0)+(this.submissions?.pending().filter(j=>j.owner===userId&&j.state==='pending').length??0)
-        const state=runtime?.state??(runtime?.connecting?'connecting':runtime?.busy?'running':runtime?.finishing?'delivering':'idle')
-        const label=({connecting:'正在连接智能体',running:'正在处理',stopping:'正在停止',delivering:'正在发送最终回复',closed:'连接已断开',idle:'当前没有正在执行的任务'})[state]??'当前没有正在执行的任务'
-        const latest=['running','delivering'].includes(state)&&runtime?.lastProgress?.turnId===runtime.turnId?`\n最近进展：${runtime.lastProgress.text}`:''
-        await reply(`${label}${queued?`；排队 ${queued} 条`:''}。${latest||(['running','connecting'].includes(state)?'\n尚无新的阶段信息。':'')}`)
-        return
-      }
-      if(command?.action==='recover'){
-        const n=this.submissions?.recheck?.(userId)??0
-        if(n)this.wakeRecovery?.(userId)
-        await reply(n?`已安排核对 ${n} 条未确认任务，只查询原任务，不重新执行。稍后用 “状态” 查看。`:'没有可自动核对的未确认任务；缺少会话关联的记录不能安全重提。')
-        return
-      }
       if (command?.action === 'stop' || command?.action === 'exit') {
         if(command.expected&&(!runtime?.busy||runtime.traceId!==command.expected.traceId||runtime.turnId!==command.expected.turnId))throw Error('MANAGEMENT_STALE_TASK')
         if(command.stopIngressId){
@@ -1167,21 +1039,6 @@ export class SessionManager {
           await reply('正在停止任务并断开会话。')
           try { await interruptOnce() } catch { await this.finishExit(runtime, '停止请求未获确认，连接已断开。') }
         } else await this.finishExit(runtime)
-        return
-      }
-      if (['new', 'reset'].includes(command?.action)) {
-        if(runtime?.selecting)throw new Error('正在切换对话，请稍后再试。')
-        if(runtime?.finishing)throw new Error('上一轮最终回复仍在发送，请稍后再新建对话。')
-        if (runtime?.busy) throw new Error('当前仍有任务，请先发 “停止”。')
-        this.lifecycle.cancel(userId)
-        if(runtime)transition(runtime,'closed')
-        runtime?.rpc.close()
-        this.sessions.delete(userId)
-        const saved = this.state.users[userId]
-        this.state.users[userId] = { activeAgent:saved?.activeAgent,agentKind:saved?.agentKind,nativeSessions:saved?.nativeSessions,workspace:saved?.workspace,seen: saved?.seen, previous: [...(saved?.previous ?? []), ...(saved?.threadId ? [saved.threadId] : [])].slice(-20) }
-        await this.save()
-        await this.connect(userId, reply)
-        await reply(`已新建 ${this.agentNameFor(userId)} 对话。`)
         return
       }
       const session = await this.connect(userId, reply)

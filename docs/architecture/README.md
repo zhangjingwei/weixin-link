@@ -14,12 +14,12 @@
 | `src/application/` | 收件与意图分流、持久任务、会话与投递、远程任务、计划、通知和诊断用例；定义外部端口 | `intake/`、`tasks/`、`conversations/`、`ports/` |
 | `src/domain/` | 授权归属、消息身份、任务状态、取消代际、投递与计划等规则 | `conversations/`、`messages/`、`tasks/`、`delivery/` |
 | `src/infrastructure/` | 适配微信、Codex、媒体、存储、SSH 和私有运行端点 | `wechat/`、`agents/`、`media/`、`storage/`、`remote/` |
-| `src/base/`、`src/integrations/` | Codex 底层协议和按账号启用的可选集成 | 各自模块 |
+| `src/integrations/` | 按账号启用的可选集成 | 各自模块 |
 | `src/setup/`、`src/wechat/` | 安装、配置、服务入口、账号档案及组合根 | `src/setup/service-entry.mjs`、`src/wechat/bot.mjs` |
 
-普通运行模块的静态依赖按 `domain → base → infrastructure → application → integrations → setup → interfaces → wechat` 收敛；箭头表示更上层可以依赖更左侧模块，也允许跳过中间层。跨层协作优先使用应用层端口和组合根注入。领域层不读取微信原始字段或直接执行 I/O。`tests/domain/layer-dependencies.test.mjs` 检查跨层引用与循环。
+普通运行模块的静态依赖按 `domain → infrastructure → application → integrations → setup → interfaces → wechat` 收敛；箭头表示更上层可以依赖更左侧模块，也允许跳过中间层。跨层协作优先使用应用层端口和组合根注入。领域层不读取微信原始字段或直接执行 I/O。`tests/domain/layer-dependencies.test.mjs` 检查跨层引用与循环。
 
-`src/setup/service-entry.mjs` 是独立的 Windows 服务进程入口，用于启动 `wechat/bot.mjs`，不是供其他模块复用的库。账号目录保存收件、任务与投递状态；底座目录保存各自会话状态。不为新功能建立第二套账本。
+`src/setup/service-entry.mjs` 是独立的 Windows 服务进程入口，用于启动 `wechat/bot.mjs`，不是供其他模块复用的库。账号目录保存收件、任务与投递状态；智能体适配保留各自会话状态。不为新功能建立第二套账本。
 
 ## 消息主链路
 
@@ -51,7 +51,7 @@
 
 等待由 `request_task_input` 登记，业务结果由 `report_task_result` 登记。两者校验所属用户、逻辑会话、持久任务、原生会话、轮次与取消代际，状态保存到现有任务 context。恢复只读取持久控制和原生协议事件，不从正文或旧 XML 标记重建状态。旧标记只做精确的展示兼容清理，不能驱动状态转换。未知状态码映射 unknown；取消请求不等于已停止；任务队列入队不等于完成。
 
-智能体自行理解需求、规划、调用工具和验证工作。平台负责身份、授权、队列、双端操作权、控制状态、结果与附件归属、交接和投递。自然语言管理意图由智能体理解，再调用严格结构化工具；平台不新增基于助手正文的状态猜测或意图策略。
+智能体自行理解需求、规划、调用工具和验证工作。微信入口仅保留停止/退出应急解析与已绑定的人工交互；SessionManager 不再解析普通文本中的审查、长任务、模型、压缩、分叉、快速模式或重置命令。管理操作通过 MCP 的结构化用例执行，人工会话恢复和审批回传仍保留。旧持久队列中的原生审查任务及旧压缩状态继续按原身份恢复。平台负责身份、授权、队列、双端操作权、控制状态、结果与附件归属、交接和投递。自然语言管理意图由智能体理解，再调用严格结构化工具；平台不新增基于助手正文的状态猜测或意图策略。
 
 任务依赖只在结构化业务完成或已确认转交回执时放行。仅有轮次结束、正文声称完成或旧数据缺少业务结果时，依赖保持未确认并阻止自动启动；不根据正文补全历史结论。
 

@@ -118,7 +118,7 @@ test('messages arriving after an explicit handoff retain the queued target; anot
 })
 test('Claude navigation and local title stay usable without sending its ID to the Codex catalog',async t=>{
  const f=await fixture(t),{manager}=f
- const {TextConversations}=await import('../../src/application/conversations/text-conversations.mjs'),{createCodexConversationBackend}=await import('../../src/infrastructure/agents/codex-conversation-backend.mjs')
+ const {TextConversations}=await import('../../src/application/conversations/text-conversations.mjs'),{createCodexConversationBackend}=await import('../../src/infrastructure/agents/codex/conversation-backend.mjs')
  const conversations=new TextConversations(manager,['owner'],()=>({}),createCodexConversationBackend(manager))
  await manager.selectAgent('owner','claude')
  manager.createCatalogRpc=()=>assert.fail('must not send Claude ID to Codex')
@@ -153,7 +153,7 @@ test('WorkBuddy switch verifies session without inference, restores Codex on aut
 })
 test('WorkBuddy title navigation stays local; its native ID never reaches Codex catalog',async t=>{
  const {manager}=await fixture(t)
- const {TextConversations}=await import('../../src/application/conversations/text-conversations.mjs'),{createCodexConversationBackend}=await import('../../src/infrastructure/agents/codex-conversation-backend.mjs')
+ const {TextConversations}=await import('../../src/application/conversations/text-conversations.mjs'),{createCodexConversationBackend}=await import('../../src/infrastructure/agents/codex/conversation-backend.mjs')
  const conversations=new TextConversations(manager,['owner'],()=>({}),createCodexConversationBackend(manager))
  await manager.selectAgent('owner','workbuddy');manager.createCatalogRpc=()=>assert.fail('must not send WorkBuddy ID to Codex')
  await conversations.selectConversation({_conversationOwner:'owner',userId:'owner',_conversationCommand:{action:'switch',id:'1'}},()=>{})

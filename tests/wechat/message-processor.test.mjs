@@ -54,7 +54,7 @@ test('inbound trace is retained through message logging and durable submission',
 })
 test('ordinary management and native session requests enter durable model intake',async()=>{
  const f=fixture()
- const requests=['查看最近错误','重启','升级','看看我的计划','代码审查','压缩上下文','分叉会话','开启快速模式','记忆']
+ const requests=['查看最近错误','重启','升级','看看我的计划','代码审查','压缩上下文','分叉会话','开启快速模式','记忆','开启记忆','关闭记忆']
  for(const [index,text] of requests.entries())await f.handle({userId:'owner',text,_ingressId:'request-'+index})
  assert.deepEqual(f.submitted.map(([,input])=>input.text),requests)
  assert.deepEqual(f.sent,[])

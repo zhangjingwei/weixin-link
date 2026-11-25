@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {DatabaseSync} from 'node:sqlite'
 import {WeChatBot} from 'wechatbot-zerolink'
 import {installWeixinProtocol as installProtocol,quotedContext,encodeVoice} from '../../src/infrastructure/wechat/weixin-protocol.mjs'
-import {codexInput} from '../../src/base/codex/codex-input.mjs'
+import {codexInput} from '../../src/infrastructure/agents/codex/input.mjs'
 const logger={child(){return this},debug(){},info(){},warn(){},error(){}}
 const bot=()=>new WeChatBot({storage:'memory',logger})
 const installWeixinProtocol=(client,options)=>installProtocol(client,{...options,prepareBatch:async()=>{}})

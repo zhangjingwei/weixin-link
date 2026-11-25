@@ -9,7 +9,7 @@ const root=fileURLToPath(new URL('../..',import.meta.url)),dir=await mkdtemp(joi
 try{
  await mkdir(join(dir,'codex'))
  const code=`
- import {CodexRpc} from './src/base/codex/codex-rpc.mjs';
+ import {CodexRpc} from './src/infrastructure/agents/codex/rpc.mjs';
  import {join} from 'node:path';
  import {managementTools} from './src/application/management/tools.mjs';
  import {createSessionProtocol} from './src/infrastructure/agents/session-protocol.mjs';

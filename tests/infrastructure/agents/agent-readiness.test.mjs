@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import {mkdtemp,rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
-import {SessionManager} from '../../src/wechat/session-manager.mjs'
-import {DurableIntake} from '../../src/application/tasks/durable-intake.mjs'
-import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
+import {SessionManager} from '../../../src/wechat/session-manager.mjs'
+import {DurableIntake} from '../../../src/application/tasks/durable-intake.mjs'
+import {DurableJobs} from '../../../src/infrastructure/storage/durable-jobs.mjs'
 
 test('failed initial handshake ends the queued task before submission and tells the sender',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'weixin-connect-'))

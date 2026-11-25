@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
-import {grade} from '../../../src/infrastructure/agents/evals/grade.mjs'
+import {grade} from '../../../../src/infrastructure/agents/evals/grade.mjs'
 
 test('skill grader detects missing headings, duplicate markers, extra questions and excessive consensus text',()=>{
  assert.equal(grade('💡 Zero · 方案讨论\n先用表格。',{startsWith:'💡 Zero · 方案讨论',contains:['表格']}).pass,true)
@@ -20,7 +20,7 @@ test('offline skill eval reads saved answers and reports pass or failure without
  const dir=await mkdtemp(join(tmpdir(),'zerolink-eval-test-'))
  t.after(()=>rm(dir,{recursive:true,force:true}))
  const responses=join(dir,'responses.json')
- const run=()=>promisify(execFile)(process.execPath,['src/tools/eval-agent-skills.mjs','--case','discussion-advice','--responses',responses],{cwd:new URL('../../..',import.meta.url)})
+ const run=()=>promisify(execFile)(process.execPath,['src/tools/eval-agent-skills.mjs','--case','discussion-advice','--responses',responses],{cwd:new URL('../../../..',import.meta.url)})
  await writeFile(responses,JSON.stringify({'discussion-advice':['💡 Zero · 方案讨论\n先用表格。']}))
  assert.match((await run()).stdout,/PASS discussion-advice/)
  await writeFile(responses,JSON.stringify({'discussion-advice':['先用表格。']}))

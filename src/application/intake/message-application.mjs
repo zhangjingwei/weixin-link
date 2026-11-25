@@ -89,22 +89,11 @@ return async function handleMessage(message) {
   }
   if(!hasMedia(message)&&await conversations.control(message,reply)){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   let control = intent?.kind==='session'?intent.value:null
-  if(control?.action==='reviewCommit'){
-    try{control=manager.resolveReviewCommit(message.userId,control.selection)}
-    catch(error){await reply(error.message);jobs.acknowledge([message._ingressId].filter(Boolean));return}
-  }
   if(!control&&!token.current())return
   const notice=receiptPolicy({media,busy:manager.sessions.get(message.userId)?.busy,waiting:!!manager.state.users[message.userId]?.waitingAttachment})
   message._receiptDeferred=notice==='defer'
   if(!control&&media){await singleMedia(message,token,mediaDependencies);return}
   // Controls must not wait behind a slow turn/start or an earlier message send.
-  if(control?.action==='review'){
-    if(!(manager.protocolFor?.(message.userId)?.supportsNativeCommands??manager.supportsNativeCommands)){await reply(`当前 ${manager.agentNameFor?.(message.userId)??manager.agentName} 底座未接入这项原生命令；没有执行。`);jobs.acknowledge([message._ingressId].filter(Boolean));return}
-    if(!token.current())return
-    const input=control.target?.type==='commit'?'请审查选定的提交。':control.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
-    durable.submit(message.userId,{text:input,nativeCommand:control,traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
-    return
-  }
   if(control){
     const command=capturedStop?{...control,stopIngressId:message._ingressId,stopTrace:message._stopTrace}:control
     await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token,control.action==='steer'&&message._chatReceipt?{...command,chatReceipt:message._chatReceipt}:command)

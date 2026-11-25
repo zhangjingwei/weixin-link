@@ -1,9 +1,9 @@
 import {fileURLToPath} from 'node:url'
-import {CodexRpc} from '../../base/codex/codex-rpc.mjs'
-import {codexInput} from '../../base/codex/codex-input.mjs'
-import {initializeCodex} from '../../base/codex/protocol-operations.mjs'
-import {codexProviderOptions,providerEventCode} from '../../base/codex/provider-options.mjs'
-import {nativeMemoryConfig,enableThreadMemory} from '../../base/codex/native-memory.mjs'
+import {CodexRpc} from './codex/rpc.mjs'
+import {codexInput} from './codex/input.mjs'
+import {initializeCodex} from './codex/protocol-operations.mjs'
+import {codexProviderOptions,providerEventCode} from './codex/provider-options.mjs'
+import {nativeMemoryConfig,enableThreadMemory} from './codex/native-memory.mjs'
 
 const skillRoot=fileURLToPath(new URL('./skills',import.meta.url))
 const clientInfo={name:'wechat_codex',title:'WeChat',version:'3.0.0'}
@@ -26,7 +26,7 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   return result
  }
  return {
-  name:'Codex',kind:'codex',supportsNativeCatalog:true,supportsMemory:true,supportsModels:true,supportsNativeCommands:true,providerOptions,
+  name:'Codex',kind:'codex',supportsNativeCatalog:true,supportsModels:true,supportsNativeCommands:true,providerOptions,
   createRpc(options){
    const management=options.management,selected=options.providerOptions??providerOptions(),args=[...selected.args]
    // Codex discovers MCP servers at app-server startup. Thread-only overrides
@@ -101,11 +101,6 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   fork:(rpc,threadId)=>rpc.request('thread/fork',{threadId,excludeTurns:true}),
   interrupt:(rpc,threadId,turnId)=>rpc.request('turn/interrupt',{threadId,turnId}),
   steer:(rpc,threadId,turnId,text)=>rpc.request('turn/steer',{threadId,expectedTurnId:turnId,input:[{type:'text',text}]}),
-  async memory(rpc,threadId,command){
-   if(command.op==='auto'){await rpc.request('thread/memoryMode/set',{threadId,mode:command.on?'enabled':'disabled'});return 'Codex已确认当前会话原生记忆模式：'+(command.on?'开启':'关闭')+'。'}
-   if(command.op==='list'){const status=await rpc.request('memory/status',{});return '当前使用Codex原生记忆。\n已整合会话：'+(status.v2ConsolidatedThreads??'未知')+'；就绪：'+(status.v2Ready?'是':'否')+'。\n当前不使用微信逐条记忆库；“开启记忆”或“关闭记忆” 控制当前会话原生记忆。'}
-   return '当前使用Codex原生记忆，未执行微信逐条记忆的修改或清空。可用“记忆” 查看状态。'
-  },
   async listModels(rpc){
    const models=[],cursors=new Set();let cursor
    for(let page=0;page<10;page++){
