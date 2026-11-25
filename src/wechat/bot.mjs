@@ -71,7 +71,7 @@ const upgrader=new ChatUpgrader()
 
 const setupController=await new SetupController({stateDir,accountId:account.id,checkUpdates:language=>updates.check(language),skipUpdate:(owner,language)=>updates.skip(owner,language),runModelTest:options=>setupModelTest(manager,options)}).init()
 const classifyMessage=createCommandClassifier()
-const conversationBackend=agent.kind==='claude'?createClaudeConversationBackend(manager):createCodexConversationBackend(manager)
+const conversationBackend=agent.catalog==='local'?createClaudeConversationBackend(manager):createCodexConversationBackend(manager)
 const conversations=new TextConversations(manager,owners,conversationInput,conversationBackend)
 await manager.save()
 const bot = infrastructure.wechat.createClient({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
@@ -151,7 +151,7 @@ managementService.resumeTasks=()=>durable.resume()
 // Persist restart reconciliation and private-payload cleanup before accepting MCP calls.
 await manager.save()
 const management=createManagementMcpController({manager,service:managementService,configuration:capability=>managementConfiguration({socket:account.socket,capability,controlToken:runtime.token})})
-if(agent.kind==='codex'){manager.managementBinding=(...args)=>management.bind(...args);manager.managementGuidance=managementGuidance}
+manager.managementBinding=(...args)=>management.bind(...args);manager.managementGuidance=managementGuidance
 await runtime.listen(account.socket)
 let welcomeRequest={}
 try{welcomeRequest=await readWelcomeRequest(stateDir)}catch{log('lifecycle_notice.failed',{code:'WELCOME_REQUEST_UNREADABLE'})}

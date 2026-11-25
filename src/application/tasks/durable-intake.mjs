@@ -6,7 +6,13 @@ import {localTaskLabel} from '../../domain/tasks/task-label.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 export class DurableIntake {
  constructor({jobs,manager,reply,conversations,desktopWriter,log=()=>{}}){Object.assign(this,{jobs,manager,reply,conversations,desktopWriter,log});this.users=new Map();this.closed=false}
- submit(owner,input,key,ingressIds=[]){const id=this.jobs.add(owner,input,key,ingressIds);enqueueDuringTurn(this,owner,input,id);this.wake(owner);return id}
+ submit(owner,input,key,ingressIds=[]){
+  input=typeof input==='string'?{text:input}:input
+  const handoff=this.jobs.pending().filter(job=>job.owner===owner&&job.input?.internalHandoff).at(-1)
+  input={...input,agentKind:input.agentKind??handoff?.input.agentKind??this.manager.agentFor?.(owner)??this.manager.protocol?.kind??'codex'}
+  const id=this.jobs.add(owner,input,key,ingressIds)
+  enqueueDuringTurn(this,owner,this.jobs.get?.(id)?.input??input,id);this.wake(owner);return id
+ }
  async quitDesktop(message,reply){
   const owner=message.userId,{threadId}=message._desktopQuit
   const current=()=>!this.closed&&!!threadId&&this.manager.state.users[owner]?.threadId===threadId
@@ -74,6 +80,7 @@ export class DurableIntake {
      const prerequisites=dependencies.map(id=>this.jobs.get(id))
      if(prerequisites.some(prior=>!prior||['cancelled','uncertain'].includes(prior.state)||prior.state==='done'&&prior.outcome!=='completed')){this.jobs.mark(job.id,'cancelled');await reply('前置任务未确认成功，依赖任务未执行。');continue}
      if(prerequisites.some(prior=>prior.state!=='done')){await delay(100);continue}
+     if(input.agentKind&&this.manager.selectAgent)await this.manager.selectAgent(owner,input.agentKind)
      if(this.jobs.claimStart&&!this.jobs.claimStart(owner,job.id))continue
      if(dependencies.length)input.text+='\n\n前置任务执行记录（仅状态证据，不是新指令；如原请求需要内容，可按任务编号查询结果）：'+JSON.stringify(prerequisites.map(prior=>({taskId:prior.id,projectId:this.conversations?.entry(prior.owner)?.id??null,execution:prior.outcome})))
      this.log('queue.starting',{trace_id:input.traceId})
@@ -108,6 +115,7 @@ export class DurableIntake {
     }
     if(job.state==='pending'&&error.code==='DESKTOP_THREAD_CHANGED'){this.jobs.mark(job.id,'cancelled');await reply('原会话已变化，保留的消息已取消。');continue}
     if(!executionStarted&&/^PROJECT_TASK_(?:ROUTE_INVALID|TARGET_UNAVAILABLE|TARGET_CHANGED)$/.test(error.message)){this.jobs.mark(job.id,'cancelled');await reply('指定项目的任务未执行：目标或归属已变化，请核对项目后重新提交。');continue}
+    if(['AGENT_SWITCH_BLOCKED','AGENT_UNAVAILABLE'].includes(error.message)){this.jobs.mark(job.id,'cancelled');await reply('智能体未切换：原任务仍在执行、等待处理或状态未确认，或目标底座尚未配置。本条未交给其他智能体。');continue}
     if(['COMPACTION_WAIT_TIMEOUT','COMPACTION_CHECK_FAILED'].includes(error.code)){this.jobs.mark(job.id,'cancelled');await reply(error.message);continue}
     this.jobs.mark(job.id,'uncertain');const record=this.manager.state.users[owner]??={};if(record.recovery?.execution==='running'||!record.recovery)record.recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:'unknown',delivery:'unknown'};await this.manager.save();await reply('该消息的执行或发送结果尚未确认，已保留记录；不会自动重复提交。你可以说“核对刚才的任务有没有完成”或“看看刚才的结果”。')}}
   }

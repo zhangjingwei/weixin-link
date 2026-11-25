@@ -5,7 +5,7 @@ export async function projectProgress(context,owner,args){
  const queued=(jobs?.pending?.()??[]).filter(job=>job.owner===entry.key&&job.state==='pending').slice(0,5).map(job=>({taskId:job.id,title:taskDisplayTitle(job.input,job.input?.projectDispatch?.title)}))
  const port=context.conversations.backendPort
  let nativeQueue
- if(port?.queuedTasks&&saved.threadId){
+ if(port?.queuedTasks&&saved.threadId&&context.manager.agentFor?.(entry.key)!=='claude'){
   try{nativeQueue=await context.conversations.withBackend(owner,rpc=>port.queuedTasks(rpc,saved.threadId,5))}
   catch{nativeQueue={unavailable:true,items:[]}}
  }

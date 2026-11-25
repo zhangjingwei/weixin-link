@@ -10,8 +10,8 @@ class InputStream {
 }
 // Compatibility events end at this adapter; no Codex request is sent to Claude.
 export class ClaudeSession {
- constructor({query,binary,cwd,onEvent=()=>{},onClose=()=>{},env=process.env}){
-  Object.assign(this,{query,binary,cwd,onEvent,onClose,env});this.closed=false;this.pending=new Map();this.seen=new Set();this.input=new InputStream();this.turn=null;this.phase='idle'
+ constructor({query,binary,cwd,onEvent=()=>{},onClose=()=>{},env=process.env,management}){
+  Object.assign(this,{query,binary,cwd,onEvent,onClose,env,management});this.closed=false;this.pending=new Map();this.seen=new Set();this.input=new InputStream();this.turn=null;this.phase='idle'
  }
  emit(method,params={},id){return Promise.resolve(this.onEvent({method,params:{threadId:this.id,...params},...(id?{id}:{})}))}
  async open(saved,instructions){
@@ -22,7 +22,7 @@ export class ClaudeSession {
   let timer
   try{this.handle=this.query({prompt:this.input,options:{pathToClaudeCodeExecutable:this.binary,cwd:this.cwd,env:{...claudeEnvironment(this.env),DISABLE_AUTOUPDATER:'1',CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:'1'},
    ...(resuming?{resume:this.id}:{sessionId:this.id}),permissionMode:'default',permissionPrompts:'host',
-   settingSources:['user','project'],disallowedTools:['Agent','Task','Monitor','CronCreate','ScheduleWakeup'],systemPrompt:{type:'preset',preset:'claude_code',append:instructions},
+   mcpServers:Object.fromEntries(Object.entries(this.management?.config??{}).map(([name,server])=>[name.replace(/^mcp_servers\./,''),{type:'stdio',command:server.command,args:server.args,env:this.management.environment}])),settingSources:['user','project'],disallowedTools:['Agent','Task','Monitor','CronCreate','ScheduleWakeup'],systemPrompt:{type:'preset',preset:'claude_code',append:instructions},
    includePartialMessages:true,canUseTool:(name,input,options)=>this.approve(name,input,options),stderr:()=>{}}})
   this.pumping=this.pump()
   const init=await Promise.race([this.handle.initializationResult(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('CLAUDE_INITIALIZE_TIMEOUT')),15000)})]);if(this.closed)throw Error('CLAUDE_CLOSED');if(init.account&&(init.account.apiProvider&&init.account.apiProvider!=='firstParty'||init.account.apiKeySource&&!['none','oauth'].includes(init.account.apiKeySource)))throw Error('CLAUDE_AUTH_SOURCE_CHANGED');this.models=init.models??[];saved.agentKind='claude';return {thread:{id:this.id},model:this.models.find(m=>m.isDefault)?.value??'default',modelProvider:'claude'}}
@@ -87,6 +87,7 @@ export class ClaudeSession {
     this.phase='idle'
     this.denyAll()
     this.turn=null
+    await this.emit('thread/status/changed',{status:{type:'idle',activeFlags:[]}})
     await this.emit('turn/completed',{turn:{id:turn.id,status,...status==='failed'?{error:{message:'Claude Code 执行失败，原会话记录已保留。'}}:{}}})
     if(this.turn===turn)this.turn=null
    }
@@ -95,6 +96,9 @@ export class ClaudeSession {
  }
  approve(name,input,{signal,toolUseID}={}){
   if(this.closed||!this.turn||this.pending.size>=16)return Promise.resolve({behavior:'deny',message:'任务不可审批。'})
+  // This bridge revalidates ownership, arguments and write intent server-side.
+  // It is the same scoped management channel used by Codex, not an arbitrary MCP.
+  if(this.management&&/^mcp__zerolink-management__[a-z_]+$/.test(name))return Promise.resolve({behavior:'allow',updatedInput:input})
   const id=randomUUID(),turnId=this.turn.id
   this.observedAt=Date.now()
   if(!this.turn.started){this.turn.started=true;void this.emit('turn/started',{turn:{id:turnId}})}

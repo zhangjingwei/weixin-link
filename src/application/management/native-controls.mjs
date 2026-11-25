@@ -40,6 +40,7 @@ export async function nativeControl(context,owner,caller,name,args){
   }
   if(name==='request_thread_revert'&&[...context.manager.sessions.values()].some(s=>s.threadId===threadId&&(s.busy||s.finishing)))throw Error('MANAGEMENT_THREAD_BUSY')
   const session=threadId&&[...context.manager.sessions.values()].find(s=>s.threadId===threadId&&!s.rpc?.closed&&context.conversations.recipient(s.userId)===owner)
+  if(session&&(context.manager.agentFor?.(session.userId)==='claude'||session.rpc?.agentKind==='claude'))throw Error('MANAGEMENT_UNSUPPORTED')
   const call=rpc=>rpc.request(method,params)
   let result
   try{result=session?.rpc?await call(session.rpc):await context.conversations.withBackend(owner,call)}

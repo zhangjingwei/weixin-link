@@ -1,4 +1,4 @@
-# Claude Code CLI 接入（首版）
+# Claude Code CLI 接入与同对话切换
 
 Codex 仍是默认底座。Claude Code 是显式选择的可选适配，使用用户自己的官方订阅登录及未修改的本机 CLI。当前验证组合为 Claude Code 2.1.319 与 `@anthropic-ai/claude-agent-sdk` 0.3.319；其他版本会拒绝启动，需要重新验证后更新适配，避免静默使用不同协议。
 
@@ -13,7 +13,10 @@ node src/setup/agent.mjs login claude --binary /absolute/path/to/claude
 # 查询当前选择。
 node src/setup/agent.mjs status
 
-# 先停止本机 Weixin Link 服务，再执行选择。服务在线时命令会拒绝。
+# 先停止本机 Weixin Link 服务，再注册可切换底座（保持 Codex 默认）。
+node src/setup/agent.mjs configure claude --binary /absolute/path/to/claude
+
+# 以下选择改变实例默认底座及其历史数据根，通常无需使用。服务在线时命令会拒绝。
 node src/setup/agent.mjs select claude --binary /absolute/path/to/claude
 
 # 启动服务后，新消息使用 Claude；切回前同样先停止服务。
@@ -24,11 +27,17 @@ node src/setup/agent.mjs select codex
 
 ## 数据与接续边界
 
-首版按本机实例选择底座，不是在同一会话中随意切换模型执行器。Claude 的会话、消息队列、附件与结果使用账号数据目录下的 `agents/claude/`；微信绑定和本地控制端点沿用现有账号。原 Codex 状态保持在原目录。切换不会把旧任务改派，切回后才继续原底座的待处理队列；切换前应先确认原任务已结束。
+同一条微信/Mac 逻辑对话可以分别关联 Codex 和 Claude Code 原生会话。注册 Claude 后，在微信明确说“换 Claude Code，接着核实刚才的实现”；模型通过 `get_conversation_agents` 查询，再用 `request_agent_switch` 提交带用户要求的持久后续任务。切回 Codex 时恢复该对话原来的 Codex ID，不创建替代会话。
+
+正在执行的源任务不会被中断或重跑；接续任务依赖源任务确认成功结束。源任务失败、取消、等待附件或状态不明时不会自动启动目标。有其他排队任务或待审批时拒绝新的交接。每条已入队任务固定其底座；交接后收到的普通消息沿用已排队的目标底座。queued 只是入队，实际底座和任务状态可继续查询，不能宣称切换或执行成功。
+
+交接使用本对话最近真实用户消息、最近四份结果与已授权附件引用，长度有界；不复制供应商内部推理或冒充已迁移全部原生历史。用户对原方案的批评由交接请求保留，旧模型的结论只是待核实历史。新底座应重新检查工作区和证据。切回也传递交接资料。
+
+旧实例默认选择与数据根保持兼容：Codex 使用原账号数据目录，原来以 Claude 作为实例默认底座的安装仍使用 `agents/claude/`。不会自动合并两个历史数据根。每个数据根中的一条逻辑对话可保存多个底座关联，旧 `threadId` 字段保留为当前关联的兼容投影。注册或选择命令不会自动停止、启动或升级服务；手动更新并重启后生效。
 
 Claude 原生会话 ID 作为不透明 ID 保存，并记录 `agentKind=claude`，不会填入 Codex 原生项目 ID。历史由 CLI 原生会话持久化；重启使用明确的 ID 恢复，不能按最近工作目录猜测。若崩溃发生在提交和结果保存之间，任务保持未确认，不能仅凭助手文字推断成功，也不会自动重跑。已保存的结果仍从既有结果记录恢复。
 
-Mac 与微信沿用同一收件和投递逻辑。Mac 可只读查看当前 Claude 会话、消息、附件与任务进展；显式接手规则不变。切回 Codex 会显示原有 Codex 会话，不把两种原生历史伪装成同一个会话。Claude 专属的原生项目浏览和 Claude Desktop 接续不在首版范围。
+Mac 与微信沿用同一收件和投递逻辑。Mac 可只读查看当前 Claude 会话、消息、附件与任务进展；显式接手规则不变。Mac 按逻辑对话汇总双方原有消息和结果，保留各自原生会话身份；切换不抢占 Mac/微信操作权。Claude 专属的原生项目浏览和 Claude Desktop 接续不在首版范围。
 
 ## 能力
 

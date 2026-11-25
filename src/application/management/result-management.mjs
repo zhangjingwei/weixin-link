@@ -25,6 +25,7 @@ export async function getTaskResult(context,owner,args){
  if(args.taskId&&value?.identity.taskId!==args.taskId){
   const job=context.manager.submissions?.get(args.taskId)
   if(!job||job.owner!==entry.key||!job.thread_id||!job.turn_id)throw Error('MANAGEMENT_RESULT_NOT_FOUND')
+  if(job.input?.agentKind==='claude'||job.thread_id===context.manager.state.users[entry.key]?.nativeSessions?.claude?.threadId)throw Error('MANAGEMENT_RESULT_NOT_FOUND')
   const turn=await context.conversations.withBackend(owner,rpc=>context.manager.protocol.recoverTurn(rpc,{threadId:job.thread_id,turnId:job.turn_id,deliveryId:job.id}))
   if(!turn||turn.id!==job.turn_id||['inProgress','in_progress'].includes(turn.status))throw Error('MANAGEMENT_RESULT_NOT_READY')
   const raw=(turn.items??[]).filter(i=>i.type==='agentMessage'&&i.phase!=='commentary').map(i=>context.manager.protocol.cleanOutputText(i.text)).join('\n\n')

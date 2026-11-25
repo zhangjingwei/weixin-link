@@ -88,7 +88,7 @@ test('Claude selection mounts an isolated engine directory and never imports Cod
  const dir=await mkdtemp(join(tmpdir(),'claude-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}))
  const old=JSON.stringify({version:1,users:{owner:{threadId:'codex-thread',hasMessages:true}}});await writeFile(join(dir,'assistant-sessions.json'),old)
  await saveAgentSelection(dir,{version:1,kind:'claude',binary:'/fake/claude'})
- const agent=await loadAgentAdapter({stateDir:dir},dir,{});assert.equal(agent.backend.stateDir,join(dir,'agents','claude'));assert.equal(agent.sessionOptions.sessionProtocol.enqueue,undefined);assert.equal(agent.sessionOptions.sessionProtocol.supportsNativeCommands,false)
+ const agent=await loadAgentAdapter({stateDir:dir},dir,{});assert.equal(agent.backend.stateDir,join(dir,'agents','claude'));assert.equal(agent.sessionOptions.sessionProtocol.forAgent('claude').enqueue,undefined);assert.equal(agent.sessionOptions.sessionProtocol.supportsNativeCommands,false)
  assert.equal(await readFile(join(dir,'assistant-sessions.json'),'utf8'),old)
 })
 
@@ -123,4 +123,10 @@ test('missing subscription login cancels an unsubmitted task instead of replayin
  const id=intake.submit('owner',{text:'question'},'missing-login')
  for(let i=0;i<50&&jobs.get(id).state!=='cancelled';i++)await new Promise(r=>setTimeout(r,5))
  assert.equal(jobs.get(id).state,'cancelled');assert.match(messages.join(''),/本条尚未提交/);assert.equal(jobs.get(id).turn_id,null)
+})
+test('Claude receives the scoped management MCP bridge without inheriting arbitrary server environment',async()=>{
+ const h=harness();h.rpc.management={config:{'mcp_servers.zerolink-management':{command:'/fake/node',args:['/fake/bridge']}},environment:{ZEROLINK_MANAGEMENT_SOCKET:'/private/socket',ZEROLINK_MANAGEMENT_CAPABILITY:'test-capability'}}
+ await h.rpc.open({},'rules')
+ assert.deepEqual(h.options.options.mcpServers['zerolink-management'],{type:'stdio',command:'/fake/node',args:['/fake/bridge'],env:h.rpc.management.environment})
+ h.rpc.close()
 })

@@ -7,13 +7,13 @@ import {currentMaterials,hasAttachments} from '../../domain/messages/material-as
 export function enqueueDuringTurn(context,owner,input,id){
  const {manager,jobs}=context,session=manager.sessions?.get(owner)
  if(!session?.busy||!session.turnReady||!session.threadId||session.exiting||manager.desktopTransition||
-    !manager.protocol?.enqueue||manager.backend?.prepareInput||hasAttachments(input)||input.nativeCommand||input.dependencies?.length||
+    !(manager.protocolFor?.(owner)??manager.protocol)?.enqueue||input.internalHandoff||input.agentKind&&manager.agentFor&&(input.agentKind!==manager.agentFor(owner))||manager.backend?.prepareInput||hasAttachments(input)||input.nativeCommand||input.dependencies?.length||
     input.projectDispatch||manager.state.users[owner]?.waitingAttachment)return
  if(!jobs.get(session.taskId)?.turn_id)return
  const earlier=jobs.pending().filter(job=>job.owner===owner&&job.id!==id&&job.id!==session.taskId)
  if(earlier.some(job=>!job.context?.nativeQueue))return
  const trace=input.traceId??id,materials=currentMaterials(input,id)
- const items=[...manager.protocol.input(input),manager.ports.flowInput(trace),manager.ports.materialInput({materials})]
+ const items=[...manager.protocol.input(input,manager.agentFor?.(owner)),manager.ports.flowInput(trace),manager.ports.materialInput({materials})]
  if(!jobs.claimNativeQueue(owner,id,session.threadId,{nativeQueue:true,flowNonce:trace,task:localTaskLabel(input,id),materials}))return
  // All state needed to reconcile a lost reply is durable before writing the RPC.
  void manager.protocol.enqueue(session.rpc,session.threadId,id,items).catch(error=>{

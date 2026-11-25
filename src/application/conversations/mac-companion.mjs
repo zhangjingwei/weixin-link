@@ -1,3 +1,4 @@
+import {nativeThreadIds} from '../../domain/conversations/native-sessions.mjs'
 import {taskProgress} from '../../domain/tasks/progress-state.mjs'
 import {createHash} from 'node:crypto'
 import {basename,join,resolve,sep} from 'node:path'
@@ -15,7 +16,7 @@ function routedResults(ops,owner,key,entries,users){
   if(op.owner!==owner||op.caller!==key||op.name!=='route_conversation_request'||op.status!=='queued'||!op.sourceTaskId||!op.data?.taskId)continue
   const target=entries.find(e=>e.id===op.data.projectId&&e.id===op.projectId&&e.key!==key),record=users[target?.key]
   if(!target||!record?.threadId)continue
-  const result=results(record).find(r=>r.lastReply&&r.identity?.threadId===record.threadId&&r.identity.taskId===op.data.taskId)
+  const result=results(record).find(r=>r.lastReply&&nativeThreadIds(record).includes(r.identity?.threadId)&&r.identity.taskId===op.data.taskId)
   if(result?.identity.id)targets.set(op.sourceTaskId,{project:target.id,result:result.identity.id})
  }
  return targets
@@ -29,17 +30,18 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
   const entry=entries.find(item=>item.id===selected)
   if(!entry||entry.deleted||entry.archived)throw Error('COMPANION_NO_CONVERSATION')
   const key=entry.key,record=manager.state.users[key]??{},session=manager.sessions.get(key),state=access.read()
+  const threads=nativeThreadIds(record),member=id=>threads.includes(id),historyThreads=threads.length>1?threads:record.threadId??''
   const thread=record.threadId??'',turn=session?.state==='running'&&!session.finalReceived?session.turnId??'':''
   const identity={project:entry.id,thread,turn}
   if(request.action==='view'){
    const routes=routedResults(manager.state.managementOperations,owner,key,entries,manager.state.users)
    const messages=[],files=[],hash=createHash('sha256').update(key).digest('hex').slice(0,24)
    const addFiles=(parts,folder)=>{const start=files.length;for(const item of parts??[]){const root=join(stateDir,folder,hash)+sep;if(typeof item.path==='string'&&resolve(item.path).startsWith(root))files.push({name:basename(item.fileName??item.name??item.path),path:resolve(item.path),root:root.slice(0,-1),...(folder==='outgoing'&&delivery(item.status)?{delivery:item.status}:{}),...(folder==='outgoing'&&typeof item.sourcePath==='string'?{sourcePath:item.sourcePath}:{})})}return files.slice(start)}
-   const queued=jobs.companionMessages(key,thread),byJob=new Map(queued.map(j=>[j.id,j])),seenJobs=new Set(),supplementReceipts=new Map()
-   for(const receipt of jobs.companionIngress?.(key,thread)??[]){
+   const queued=jobs.companionMessages(key,historyThreads),byJob=new Map(queued.map(j=>[j.id,j])),seenJobs=new Set(),supplementReceipts=new Map()
+   for(const receipt of jobs.companionIngress?.(key,historyThreads)??[]){
     const job=byJob.get(receipt.chat_job??taskId(key,receipt.id))
-    if(receipt.chat_thread!==thread){
-     if(receipt.chat_thread||!(job&&job.thread_id===thread)&&!queued.some(j=>j.ingress_id===receipt.id&&j.thread_id===thread))continue
+    if(!member(receipt.chat_thread)){
+     if(receipt.chat_thread||!(job&&member(job.thread_id))&&!queued.some(j=>j.ingress_id===receipt.id&&member(j.thread_id)))continue
     }
     const matching=[...new Set([job,...queued.filter(j=>j.ingress_id===receipt.id)].filter(Boolean))]
     for(const item of matching)seenJobs.add(item.id)
@@ -54,12 +56,12 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
     messages.push({role:'你',text:text||'附件',time:job.created,messageId:job.id,files:addFiles(JSON.parse(job.files),'attachments')})
    }
    for(const item of record.supplements??[]){
-    if(item.threadId!==thread)continue
+    if(!member(item.threadId))continue
     const original=supplementReceipts.get(item.chatReceipt)??supplementReceipts.get(item.requestId)
     if(original){original.role='补充 · '+item.status;continue}
     messages.push({role:'补充 · '+item.status,text:item.text,time:Date.parse(item.created),messageId:item.id})}
    for(const result of results(record)){
-    if(!result.lastReply||result.identity?.threadId!==thread)continue
+    if(!result.lastReply||!member(result.identity?.threadId))continue
     const {execution,footerOffset}=result.identity
     const marker={completed:'✅ 本轮回答结束。',failed:'⚠️ 本轮执行失败，回答已结束。',interrupted:'⏹ 本轮已停止。'}[execution]
     const suffix='\n\n'+marker
@@ -71,7 +73,7 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
    messages.sort((a,b)=>a.time-b.time)
    const window=messages.slice(-40),focus=typeof request.result==='string'&&messages.find(m=>m.resultId===request.result)
    if(focus&&!window.includes(focus))window.unshift(focus)
-   return {...identity,...state,taskStatus:taskProgress(session),progress,diff:turn&&session.threadId===thread&&session.companionDiff?.turn===turn?session.companionDiff.text:undefined,name:entry.name,activeProject:catalog.active,conversations:entries.map(({id,key,name})=>{const saved=manager.state.users[key];return {id,name,group:saved?.nativeProjectId??null,groupLabel:saved?.nativeProjectId?(basename(saved.workspace??'')||saved.nativeProjectId):null}}),messages:window,files:files.slice(-40)}
+   return {...identity,...state,activeAgent:manager.agentFor?.(key)??record.activeAgent??record.agentKind??'codex',nativeSessions:Object.fromEntries(Object.entries(record.nativeSessions??{}).map(([kind,item])=>[kind,{threadId:item.threadId??null}])),taskStatus:taskProgress(session),progress,diff:turn&&session.threadId===thread&&session.companionDiff?.turn===turn?session.companionDiff.text:undefined,name:entry.name,activeProject:catalog.active,conversations:entries.map(({id,key,name})=>{const saved=manager.state.users[key];return {id,name,group:saved?.nativeProjectId??saved?.nativeSessions?.codex?.nativeProjectId??null,groupLabel:(saved?.nativeProjectId??saved?.nativeSessions?.codex?.nativeProjectId)?(basename(saved.workspace??'')||saved?.nativeProjectId||saved?.nativeSessions?.codex?.nativeProjectId):null}}),messages:window,files:files.slice(-40)}
   }
   if(!ready()||manager.state.desktopHandoff||manager.desktopTransition)throw Error('COMPANION_UNAVAILABLE')
   if(request.project!==entry.id||request.thread!==thread||state.revision!==request.revision)stale()

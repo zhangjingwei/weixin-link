@@ -15,8 +15,8 @@ export class TextConversations{
  find(owner,id){const r=this.ensure(owner);return id?r.entries.find(e=>e.id.toLowerCase()===id.toLowerCase()||this.manager.state.users[e.key]?.threadId===id):r.entries.find(e=>e.id===r.active)}
  // Called synchronously at message arrival, before any asynchronous work or download.
  bind(message){const owner=message.userId,r=this.ensure(owner);const media=message.images?.length||message.files?.length||message.videos?.length||message.voices?.length,waiting=media?null:r.prompt,parsed=this.parseInput(message.text,{pending:waiting});
- // Claude has no Codex management MCP. Only a live, owned interaction enables this narrow reply path.
- if(this.manager.protocol?.kind==='claude'&&!media&&!parsed.command&&!parsed.sessionCommand&&
+ // Only a live, owned Claude interaction enables this narrow approval reply path.
+ if((this.manager.protocolFor?.(this.find(owner)?.key)??this.manager.protocol)?.kind==='claude'&&!media&&!parsed.command&&!parsed.sessionCommand&&
     [...this.manager.questions.values()].some(q=>this.recipient(q.session.userId)===owner)){
   const decision={批准:'approve',拒绝:'reject',回答:'answer',approve:'approve',reject:'reject',answer:'answer'}[message.text?.trim().toLowerCase()]
   if(decision)parsed.command={action:'prompt',target:'approvalChoice',decision}

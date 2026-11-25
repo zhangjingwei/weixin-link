@@ -20,13 +20,15 @@ export class DurableJobs {
  add(owner,input,key,ingressIds=[]){const id=key?taskId(owner,key):randomUUID(),text=JSON.stringify(input);if(Buffer.byteLength(text)>2*1024*1024)throw Error('INPUT_TOO_LARGE');this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('INSERT OR IGNORE INTO jobs(id,owner,input,state,thread_id,turn_id,created) VALUES(?,?,?,\'pending\',NULL,NULL,?)').run(id,owner,text,Date.now());for(const ingress of ingressIds)this.db.prepare('UPDATE ingress SET chat_job=? WHERE owner=? AND id=?').run(id,owner,ingress);this.acknowledge(ingressIds);this.db.exec('COMMIT');return id}catch(error){this.db.exec('ROLLBACK');throw error}}
  get(id){const r=this.db.prepare('SELECT * FROM jobs WHERE id=?').get(id);return r?{...r,input:JSON.parse(r.input),context:r.context?JSON.parse(r.context):null}:null}
  companionMessages(owner,thread){
+  if(Array.isArray(thread))return [...new Map(thread.flatMap(id=>this.companionMessages(owner,id)).map(item=>[item.id,item])).values()].sort((a,b)=>a.created-b.created).slice(-40)
   return this.db.prepare(`SELECT id,thread_id,json_extract(input,'$.chatIngressId') AS ingress_id,created,substr(CASE WHEN json_type(input)='text' THEN json_extract(input,'$') ELSE json_extract(input,'$.text') END,1,6000) AS text,
    (SELECT json_group_array(json_object('name',json_extract(value,'$.name'),'path',json_extract(value,'$.path'))) FROM json_each(jobs.input,'$.attachments') WHERE type='object' AND key<10) AS files
-   FROM jobs WHERE owner=? AND (thread_id=? OR thread_id IS NULL AND coalesce(json_extract(input,'$.projectDispatch.threadId'),?)=? AND NOT EXISTS(
+   FROM jobs WHERE owner=? AND NOT coalesce(json_extract(input,'$.internalHandoff'),0) AND (thread_id=? OR thread_id IS NULL AND coalesce(json_extract(input,'$.projectDispatch.threadId'),?)=? AND NOT EXISTS(
     SELECT 1 FROM ingress i WHERE i.owner=jobs.owner AND i.chat_job=jobs.id AND i.chat_thread<>'' AND i.chat_thread<>?)) ORDER BY created DESC,rowid DESC LIMIT 20`).all(owner,thread,thread,thread,thread).reverse()
  }
  // Return only user-facing fields. Legacy rows require independent thread evidence at the call site.
  companionIngress(owner,thread){
+  if(Array.isArray(thread))return [...new Map(thread.flatMap(id=>this.companionIngress(owner,id)).map(item=>[item.id,item])).values()].sort((a,b)=>a.created-b.created||a.sequence-b.sequence).slice(-80)
   const fields=`id,rowid AS sequence,created,chat_thread,chat_job,substr(json_extract(payload,'$.text'),1,24000) AS text`
   const visible=`json_extract(payload,'$._conversationOwner') IS NOT NULL AND json_extract(payload,'$._setupAction') IS NULL AND NOT coalesce(json_extract(payload,'$._promptReply'),0) AND json_extract(payload,'$._conversationCommand') IS NULL AND (json_extract(payload,'$._sessionCommand') IS NULL OR (chat_thread IS NOT NULL AND json_extract(payload,'$._sessionCommand.action')='steer'))`
   const read=(where,args)=>this.db.prepare(`SELECT ${fields} FROM ingress WHERE owner=? AND ${where} AND ${visible} ORDER BY created DESC,rowid DESC LIMIT 40`).all(owner,...args)

@@ -4,6 +4,7 @@ export function installOfficialHooks(context){
   context.manager.beforeConversationConnect=async key=>{
    if(context.archiveLocks?.has(key))throw Error('该会话正在更改归档状态，请稍后继续。');
    const e=context.entry(key),tid=context.manager.state.users[key]?.threadId;if(e?.deleted)throw Error('该会话已被Codex永久删除，不能继续或还原。');if(!e)return
+   if(context.manager.agentFor?.(key)==='claude')return
    if(e.pendingNativeProject){
     const entry=context.find(e.owner,e.id),intent=e.pendingNativeProject
     const workspace=await bindNewWorkspace(context,key,intent.path,{prepareOnly:true})
@@ -59,13 +60,13 @@ export async function withBackend(context,owner,work){
  }
 
 export async function officialCatalog(context,connection,owner){
-  const ownedThreads=owner?context.ensure(owner).entries.filter(e=>!e.deleted).map(e=>({key:e.key,threadId:context.manager.state.users[e.key]?.threadId})):[];
+  const ownedThreads=owner?context.ensure(owner).entries.filter(e=>!e.deleted&&context.manager.agentFor?.(e.key)!=='claude').map(e=>({key:e.key,threadId:context.manager.state.users[e.key]?.threadId})):[];
   return context.backendPort.list(connection,ownedThreads);
  }
 
 export function applyCatalog(context,owner,catalog,onlyThread){
   const r=context.ensure(owner);
-  for(const e of r.entries){const tid=context.manager.state.users[e.key]?.threadId;if(!tid||(onlyThread&&tid!==onlyThread))continue;const item=catalog.get(tid);
+  for(const e of r.entries){if(context.manager.agentFor?.(e.key)==='claude')continue;const tid=context.manager.state.users[e.key]?.threadId;if(!tid||(onlyThread&&tid!==onlyThread))continue;const item=catalog.get(tid);
    if(!item){if(e.deleteIntent)context.markDeleted(tid);else if(!e.deleted)e.archiveSync='missing';continue}
    if(e.deleted){e.deleteSync='conflict';continue;}
    // Persisted legacy hide flags never override the official store.
@@ -78,5 +79,6 @@ export function applyCatalog(context,owner,catalog,onlyThread){
  }
 
 export async function refreshTitles(context,owner){
+  if(context.ensure(owner).entries.every(e=>context.manager.agentFor?.(e.key)==='claude'))return
   await context.withBackend(owner,async connection=>{const catalog=await context.officialCatalog(connection,owner);context.applyCatalog(owner,catalog);await context.manager.save()});
  }

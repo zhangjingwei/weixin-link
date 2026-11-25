@@ -1,3 +1,4 @@
+import {conversationAgents,requestAgentSwitch} from './agent-management.mjs'
 import {conversationContext,repositoryContext,associateRepositoryConversations} from './conversation-management.mjs'
 import {desktopStatus,requestDesktop,executeDesktop} from './desktop-management.mjs'
 import {projectProgress} from './progress-management.mjs'
@@ -38,6 +39,8 @@ export class ManagementService{
  async call(caller,name,args){
   const spec=validateManagementCall(name,args);const owner=this.owner(caller)
   if(this.manager.state.desktopHandoff&&!spec.annotations.readOnlyHint&&!['request_desktop_handoff','request_desktop_return'].includes(name))throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')
+  if(name==='get_conversation_agents')return conversationAgents(this,owner,args)
+  if(name==='request_agent_switch')return requestAgentSwitch(this,owner,caller,args)
   if(name==='get_conversation_context')return conversationContext(this,owner,caller)
   if(name==='get_conversation_repository')return repositoryContext(this,owner,args)
   if(name==='associate_repository_conversations')return associateRepositoryConversations(this,owner,caller,args)
@@ -87,6 +90,7 @@ export class ManagementService{
    }
    return page
   }
+  if(name==='list_models'&&this.manager.agentFor?.(caller)==='claude'){const session=await this.manager.connect(caller,this.manager.sessions.get(caller)?.reply??(()=>{}));return this.manager.protocol.listModels(session.rpc)}
   if(name==='list_models')return this.conversations.withBackend(owner,rpc=>this.manager.protocol.listModels(rpc))
   const e=this.target(owner,args.projectId)
   if(name==='get_project_progress')return projectProgress(this,owner,args)
@@ -180,6 +184,7 @@ export class ManagementService{
  sign(value){const data=Buffer.from(JSON.stringify(value)).toString('base64url');return data+'.'+createHmac('sha256',this.cursorKey).update(data).digest('base64url')}
  decode(cursor){try{const [data,sig,...rest]=cursor.split('.'),expected=createHmac('sha256',this.cursorKey).update(data).digest(),actual=Buffer.from(sig,'base64url');if(rest.length||actual.length!==expected.length||!timingSafeEqual(actual,expected))throw Error();return JSON.parse(Buffer.from(data,'base64url'))}catch{throw Error('MANAGEMENT_INVALID_CURSOR')}}
  async history(owner,e,cursor){
+  if(this.manager.agentFor?.(e.key)==='claude')throw Error('MANAGEMENT_UNSUPPORTED')
   if(!this.conversations.backendPort?.capabilities.history)throw Error('MANAGEMENT_UNSUPPORTED')
   const threadId=this.manager.state.users[e.key]?.threadId
   if(!threadId)return {messages:[],nextCursor:null}

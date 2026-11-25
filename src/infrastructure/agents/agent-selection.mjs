@@ -3,7 +3,8 @@ import {join,isAbsolute} from 'node:path'
 import {randomUUID} from 'node:crypto'
 function validate(value){
  if(value?.version!==1||!['codex','claude'].includes(value.kind)||value.kind==='claude'&&(typeof value.binary!=='string'||!isAbsolute(value.binary)||/[\0\r\n]/.test(value.binary)))throw Error('INVALID_AGENT_SELECTION')
- return {version:1,kind:value.kind,...value.kind==='claude'?{binary:value.binary}:{}}
+ if(value.claudeBinary!==undefined&&(typeof value.claudeBinary!=='string'||!isAbsolute(value.claudeBinary)||/[\0\r\n]/.test(value.claudeBinary)))throw Error('INVALID_AGENT_SELECTION')
+ return {version:1,kind:value.kind,...value.kind==='claude'?{binary:value.binary}:{},...value.claudeBinary?{claudeBinary:value.claudeBinary}:{}}
 }
 export async function readAgentSelection(stateDir){
  const path=join(stateDir,'agent.json')
