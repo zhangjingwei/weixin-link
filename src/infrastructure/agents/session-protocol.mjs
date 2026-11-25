@@ -51,7 +51,7 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
    if(saved.threadId){
     result=await resume(rpc,{threadId:saved.threadId,cwd,instructions,provider})
    }
-   if(!result){result=verify(await rpc.request('thread/start',{...params(rpc,{cwd,instructions,provider}),...(saved.nativeProjectId?{projectId:saved.nativeProjectId}:{})}));if(saved.nativeProjectId&&result.thread.projectId!==saved.nativeProjectId)throw Error('CODEX_PROJECT_THREAD_UNCONFIRMED');await enableThreadMemory(rpc,result.thread.id)}
+   if(!result){result=verify(await rpc.request('thread/start',{...params(rpc,{cwd,instructions,provider}),...(saved.nativeProjectId?{projectId:saved.nativeProjectId}:{})}));if(saved.nativeProjectId&&result.thread.projectId!==saved.nativeProjectId)throw Error('CODEX_PROJECT_THREAD_UNCONFIRMED');await enableThreadMemory(rpc,result.thread.id);result={...result,provisional:true}}
    return result
   },
   unsubscribe:(rpc,threadId)=>rpc.request('thread/unsubscribe',{threadId},2000),

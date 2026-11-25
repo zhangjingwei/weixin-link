@@ -173,3 +173,89 @@ test('stopping an idle input wait journals cancellation so recovery cannot resto
  await intake.recover(f.jobs.get(id),async()=>{}, {current:()=>true})
  assert.equal(f.manager.state.users.alice.waitingInput,undefined);assert.equal(f.manager.state.users.alice.resultIdentity.taskOutcome,'cancelled')
 })
+test('history pages preserve full user messages, including non-BMP text, without changing Mac previews',async t=>{
+ const f=await fixture(t),text='中文🙂'.repeat(6000),id=f.jobs.add('alice',{text},'long-user')
+ f.jobs.bind(id,'t');f.manager.state.users.alice={threadId:'t'}
+ let cursor,combined='';do{const page=await f.service.call('alice','get_session_history',{projectId:'1',...(cursor?{cursor}:{})});combined+=page.messages.filter(m=>m.role==='user').map(m=>m.text).join('');cursor=page.nextCursor}while(cursor)
+ assert.equal(combined,text);assert.equal(Array.from(f.jobs.companionMessages('alice','t')[0].text).length,6000)
+})
+test('full ingress history reads the original text rather than its display preview',async t=>{
+ const f=await fixture(t),text='z'.repeat(32000)
+ f.manager.state.users.alice={threadId:'t'}
+ f.jobs.capture({userId:'alice',_conversationOwner:'alice',text,raw:{message_id:'long-inbound'}})
+ f.jobs.db.prepare("UPDATE ingress SET chat_thread='t' WHERE owner='alice'").run()
+ let cursor,combined='';do{const page=await f.service.call('alice','get_session_history',{projectId:'1',...(cursor?{cursor}:{})});combined+=page.messages.map(m=>m.text).join('');cursor=page.nextCursor}while(cursor)
+ assert.equal(combined,text);assert.equal(f.jobs.companionIngress('alice','t')[0].text.length,24000)
+})
+test('input arriving after a structured wait stays local and then resumes the original task',async t=>{
+ const f=await fixture(t),{id,s,args}=await f.begin('original goal'),original=s.localTask.id
+ await f.service.call('alice','request_task_input',{...args,kind:'answer'})
+ const {enqueueDuringTurn}=await import('../../src/application/tasks/native-queue.mjs')
+ const answer=f.jobs.add('alice',{text:'B'},'answer')
+ enqueueDuringTurn({manager:f.manager,jobs:f.jobs,log(){}},'alice',{text:'B'},answer)
+ assert.equal(f.jobs.get(answer).state,'pending')
+ await f.finish('Which option?');await f.manager.handle('alice',{text:'B',deliveryId:answer},async()=>({status:'accepted'}))
+ assert.equal(s.localTask.id,original);assert.equal(f.manager.state.users.alice.waitingInput,undefined)
+ await f.finish('answer processed')
+})
+test('an already queued answer consumes an exact predecessor wait and retains the original task',async t=>{
+ const f=await fixture(t),{id,s,args}=await f.begin('original goal'),original=s.localTask.id
+ const {enqueueDuringTurn}=await import('../../src/application/tasks/native-queue.mjs')
+ const answer=f.jobs.add('alice',{text:'B'},'queued-answer');enqueueDuringTurn({manager:f.manager,jobs:f.jobs,log(){}},'alice',{text:'B'},answer)
+ assert.equal(f.jobs.get(answer).state,'bound')
+ await f.service.call('alice','request_task_input',{...args,kind:'answer'});await f.finish('Choose')
+ await f.manager.event(s,{method:'item/started',params:{threadId:s.threadId,turnId:'queued-turn',item:{type:'userMessage',clientId:answer}}})
+ assert.equal(s.localTask.id,original);assert.equal(s.attachmentContinuation.request,'original goal');assert.equal(s.waitingUser,false);assert.equal(f.manager.state.users.alice.waitingInput,undefined)
+ assert.equal(f.jobs.get(answer).context.continuation.task.id,original)
+ await f.service.call('alice','report_task_result',{projectId:'1',sourceTaskId:answer,turnId:s.turnId,outcome:'completed',requestId:'answer-finished'})
+ await f.finish('done');assert.equal(f.manager.state.users.alice.resultIdentity.taskOutcome,'completed');assert.equal(f.manager.state.users.alice.waitingInput,undefined)
+})
+test('queued answer recovery uses the durable predecessor even when the start event was lost',async t=>{
+ const f=await fixture(t),{id,s,args}=await f.begin('original goal'),original=s.localTask.id
+ const {enqueueDuringTurn}=await import('../../src/application/tasks/native-queue.mjs')
+ const answer=f.jobs.add('alice',{text:'B'},'queued-before-crash');enqueueDuringTurn({manager:f.manager,jobs:f.jobs,log(){}},'alice',{text:'B'},answer)
+ await f.service.call('alice','request_task_input',{...args,kind:'answer'});await f.finish('Choose')
+ f.manager.protocol.recoverTurn=async()=>({id:'recovered-answer',status:'completed',items:[{type:'agentMessage',text:'done'}]})
+ const intake=new DurableIntake({jobs:f.jobs,manager:f.manager,reply:async()=>({status:'accepted'})})
+ await intake.recover(f.jobs.get(answer),async()=>({status:'accepted'}),{current:()=>true})
+ assert.equal(f.manager.state.users.alice.lastTask.id,original);assert.equal(f.manager.state.users.alice.waitingInput,undefined)
+ assert.equal(f.jobs.get(answer).context.continuation.task.id,original)
+})
+test('a queued job cannot consume a different or newer input wait',()=>{
+ return import('../../src/domain/tasks/queued-continuation.mjs').then(({queuedContinuation,consumeQueuedWaiting})=>{
+  const wait={kind:'answer',sourceTaskId:'source',turnId:'turn',threadId:'t',task:{id:'goal'}},record={waitingInput:wait}
+  assert.equal(queuedContinuation(record,{thread_id:'other',context:{predecessor:{taskId:'source',turnId:'turn'}}}),null)
+  assert.equal(queuedContinuation(record,{thread_id:'t',context:{predecessor:{taskId:'wrong',turnId:'turn'}}}),null)
+  assert.equal(queuedContinuation(record,{thread_id:'t',context:{}}),null)
+  assert.equal(consumeQueuedWaiting(record,{...wait,turnId:'old'}),false);assert.equal(record.waitingInput,wait)
+ })
+})
+test('empty thread is runtime-only, and first submission durably binds its identity before RPC',async t=>{
+ const f=await fixture(t),s=await f.manager.connect('alice',async()=>{})
+ assert.equal(s.provisionalThread,true);assert.equal(f.manager.state.users.alice.threadId,undefined)
+ let bound=false;const request=s.rpc.request.bind(s.rpc)
+ s.rpc.request=async(method,params)=>{if(method==='turn/start'){
+  const persisted=JSON.parse(await readFile(join(f.manager.stateDir,'assistant-sessions.json'),'utf8')).users.alice
+  assert.equal(persisted.threadId,s.threadId);assert.equal(persisted.nativeSessionState,'submission_pending');bound=true
+ }return request(method,params)}
+ const id=f.jobs.add('alice',{text:'first'},'first')
+ await f.manager.handle('alice',{text:'first',deliveryId:id},async()=>({status:'accepted'}))
+ assert.equal(bound,true);assert.equal(f.manager.state.users.alice.nativeSessionState,'submitted');await f.finish('done')
+})
+test('a failed pre-submission checkpoint never calls the model and cannot promote an empty identity silently',async t=>{
+ const f=await fixture(t),s=await f.manager.connect('alice',async()=>{});let started=false
+ const request=s.rpc.request.bind(s.rpc);s.rpc.request=async(method,params)=>{if(method==='turn/start')started=true;return request(method,params)}
+ f.manager.save=async()=>{throw Error('disk unavailable')}
+ await assert.rejects(f.manager.send(s,{text:'first'}),/disk unavailable/)
+ assert.equal(started,false);assert.equal(f.manager.state.users.alice.nativeSessionState,'submission_pending')
+})
+test('recovering an older answer cannot erase a newer wait for the same logical goal',async t=>{
+ const f=await fixture(t),{id,s}=await f.begin('same goal')
+ await f.finish('older result')
+ const newer={kind:'answer',task:s.localTask,request:'newer question',threadId:s.threadId,sourceTaskId:'newer-task',turnId:'newer-turn'}
+ f.manager.state.users.alice.waitingInput=newer
+ f.manager.protocol.recoverTurn=async()=>({id:s.turnId,status:'completed',items:[{type:'agentMessage',text:'older result'}]})
+ const intake=new DurableIntake({jobs:f.jobs,manager:f.manager,reply:async()=>{}})
+ await intake.recover(f.jobs.get(id),async()=>{}, {current:()=>true})
+ assert.equal(f.manager.state.users.alice.waitingInput,newer)
+})

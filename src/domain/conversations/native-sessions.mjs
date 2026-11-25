@@ -1,5 +1,5 @@
 // Native identities belong to a logical conversation; shared results and files do not.
-const fields=['threadId','hasMessages','previous','modelOverride','fastMode','nativeProjectId','compaction','agentKind']
+const fields=['threadId','hasMessages','previous','modelOverride','fastMode','nativeProjectId','compaction','agentKind','nativeSessionState']
 export function activeAgent(record, fallback='codex'){return record?.activeAgent??record?.agentKind??fallback}
 export function syncNativeSession(record,fallback='codex'){
  const kind=activeAgent(record,fallback)

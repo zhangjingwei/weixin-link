@@ -4,8 +4,8 @@ import {historyInputText,historyText} from './history.mjs'
 // A read model over existing inbox/jobs/results, not a second conversation store.
 export function platformHistory(context,owner,entry,cursor){
  const record=context.manager.state.users[entry.key]??{},threads=nativeThreadIds(record),jobs=context.manager.submissions
- const queue=jobs?.companionMessages?.(entry.key,threads.length?threads:'')??[]
- const receipts=jobs?.companionIngress?.(entry.key,threads.length?threads:'')??[]
+ const queue=jobs?.companionMessages?.(entry.key,threads.length?threads:'',{fullText:true})??[]
+ const receipts=jobs?.companionIngress?.(entry.key,threads.length?threads:'',{fullText:true})??[]
  const seen=new Set(),messages=[]
  for(const receipt of receipts){
   const matching=queue.filter(job=>job.id===receipt.chat_job||job.ingress_id===receipt.id)

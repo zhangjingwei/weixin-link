@@ -1,3 +1,4 @@
+import {queuedContinuation,consumeQueuedWaiting} from '../../domain/tasks/queued-continuation.mjs'
 import {turnExecution,taskOutcome,outcomeEvidence} from '../../domain/tasks/task-control.mjs'
 import {activeAgent,syncNativeSession,selectNativeSession,handoffContext,nativeThreadIds} from '../../domain/conversations/native-sessions.mjs'
 import {taskProgress,heartbeatDue} from '../../domain/tasks/progress-state.mjs'
@@ -273,7 +274,11 @@ export class SessionManager {
       session.provider=provider
       session.model=result.model
       session.modelProvider=result.modelProvider??attempt.providerOptions.provider??null
-      session.threadId=saved.threadId=result.thread.id
+      session.threadId=result.thread.id
+      session.provisionalThread=result.provisional===true
+      // An empty Codex thread exists only in this connection until its first input.
+      // Do not publish that temporary ID as a resumable persisted binding.
+      if(!session.provisionalThread)saved.threadId=session.threadId
       if(Object.hasOwn(result.thread,'projectId'))saved.nativeProjectId=result.thread.projectId
       session.compacting=saved.compaction?.threadId===session.threadId
       this.diagnostic(session,'provider.connected',{provider,model:session.model,model_provider:session.modelProvider})
@@ -488,11 +493,17 @@ export class SessionManager {
       const runtimeInput=this.backend?.prepareInput?await this.backend.prepareInput(text,{signal:token.signal}):text
       session.agentHandoff=this.state.users[session.userId]?.agentHandoff
       const turnParams={threadId:session.threadId,input:[...this.protocol.input(runtimeInput,this.agentFor(session.userId)),...(this.state.users[session.userId]?.agentHandoff?[{type:'text',text:this.state.users[session.userId].agentHandoff}]:[]),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:(session.attachmentContinuation.kind==='answer'?'当前回复':'当前附件')+'用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
+      if(session.provisionalThread){
+        this.state.users[session.userId].threadId=session.threadId
+        this.state.users[session.userId].nativeSessionState='submission_pending'
+      }
+      if(session.provisionalThread){await this.save();session.provisionalThread=false}
       result=native?.action==='review'
         ?await this.protocol.startReview(session.rpc,session.threadId,native.target)
         :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,model:executionModel,fastMode:this.state.users[session.userId]?.fastMode})
       if(!result?.turn?.id)throw Error('底座未确认任务标识，结果待核对。')
       if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
+      if(this.state.users[session.userId].nativeSessionState==='submission_pending')this.state.users[session.userId].nativeSessionState='submitted'
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment
       if(waiting&&this.state.users[session.userId]?.waitingInput===waiting)delete this.state.users[session.userId].waitingInput
     } catch(error) {
@@ -694,16 +705,23 @@ export class SessionManager {
       const job=this.submissions?.get?.(p.item.clientId)
       if(job?.context?.nativeQueue&&job.owner===session.userId&&job.thread_id===session.threadId&&
          ['bound','submitted'].includes(job.state)&&(!job.turn_id||job.turn_id===p.turnId)){
+        const record=this.state.users[session.userId],continuation=queuedContinuation(record,job)
+        const context=continuation?{...job.context,task:continuation.task,continuation}:job.context
+        if(continuation)this.submissions.context(job.id,context)
         this.submissions.submitted(job.id,p.turnId)
         transition(session,'running')
         Object.assign(session,{taskId:job.id,traceId:job.context.flowNonce,turnId:p.turnId,turnReady:true,turnStarted:true,
           nativeQueueTurn:true,modelRetry:null,startedAt:Date.now(),progressStartedAt:Date.now(),lastUserNoticeAt:Date.now(),lastWaitNoticeAt:0,executionEvidenceAt:Date.now(),executionModel:session.model,tokenUsage:null,finalReceived:false,finals:[],displayFinals:[],
-          localTask:job.context.task,requestText:job.input?.text??job.input,materials:job.context.materials??[],
-          generatedOutputs:[],imageOutputIds:new Set(),waitingAttachment:false,attachmentContinuation:null,lastProgress:null})
+          localTask:context.task,requestText:job.input?.text??job.input,materials:job.context.materials??[],
+          generatedOutputs:[],imageOutputIds:new Set(),waitingAttachment:false,waitingUser:false,taskControl:null,attachmentContinuation:continuation,lastProgress:null})
         session.items.clear()
         this.watchTurnProgress(session)
         session.workToken=this.lifecycle.capture(session.userId)
         session.workToken.activate?.()
+        if(continuation){
+          consumeQueuedWaiting(record,continuation)
+          try{await this.save()}catch(error){this.diagnostic(session,'state.save_failed',this.ports.errorFields(error))}
+        }
         if(this.nativeQueueReply)session.reply=(value,options)=>this.nativeQueueReply(job.owner,value,options)
       }
     }
@@ -797,8 +815,8 @@ export class SessionManager {
       const terminalStatus=['completed','failed','interrupted'].includes(p.turn.status)?p.turn.status:'unknown'
       session.waitingAttachment=awaitingAttachment;session.waitingUser=awaitingUser
       this.diagnostic(session,'materials.resolution',{status:awaitingAttachment?'waiting_attachment':p.turn.status,count:session.materials?.length??0})
-      if(awaitingUser)this.state.users[session.userId].waitingInput={kind:'answer',task:session.localTask,request:session.requestText,threadId:session.threadId}
-      if(awaitingAttachment)this.state.users[session.userId].waitingAttachment={task:session.localTask,request:session.requestText,threadId:session.threadId}
+      if(awaitingUser)this.state.users[session.userId].waitingInput={kind:'answer',task:session.localTask,request:session.requestText,threadId:session.threadId,sourceTaskId:identity.taskId,turnId:identity.turnId}
+      if(awaitingAttachment)this.state.users[session.userId].waitingAttachment={task:session.localTask,request:session.requestText,threadId:session.threadId,sourceTaskId:identity.taskId,turnId:identity.turnId}
       const receivedWhileWaiting=awaitingAttachment&&(this.submissions?.pendingMaterials?.(session.userId,undefined)??0)>0
       let reply = session.finals.join('\n\n')
       if(receivedWhileWaiting){reply='请求已保留，正在核对已收到的附件。';this.diagnostic(session,'materials.waiting_notice_adjusted',{reason:'received_pending'})}

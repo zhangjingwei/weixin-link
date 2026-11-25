@@ -8,13 +8,13 @@ export function enqueueDuringTurn(context,owner,input,id){
  const {manager,jobs}=context,session=manager.sessions?.get(owner)
  if(!session?.busy||!session.turnReady||!session.threadId||session.exiting||manager.desktopTransition||
     !(manager.protocolFor?.(owner)??manager.protocol)?.enqueue||input.internalHandoff||input.agentKind&&manager.agentFor&&(input.agentKind!==manager.agentFor(owner))||manager.backend?.prepareInput||hasAttachments(input)||input.nativeCommand||input.dependencies?.length||
-    input.projectDispatch||manager.state.users[owner]?.waitingAttachment)return
+    input.projectDispatch||session.waitingUser||session.waitingAttachment||manager.state.users[owner]?.waitingInput||manager.state.users[owner]?.waitingAttachment)return
  if(!jobs.get(session.taskId)?.turn_id)return
  const earlier=jobs.pending().filter(job=>job.owner===owner&&job.id!==id&&job.id!==session.taskId)
  if(earlier.some(job=>!job.context?.nativeQueue))return
  const trace=input.traceId??id,materials=currentMaterials(input,id)
  const items=[...manager.protocol.input(input,manager.agentFor?.(owner)),manager.ports.flowInput(trace),manager.ports.materialInput({materials})]
- if(!jobs.claimNativeQueue(owner,id,session.threadId,{nativeQueue:true,flowNonce:trace,task:localTaskLabel(input,id),materials}))return
+ if(!jobs.claimNativeQueue(owner,id,session.threadId,{nativeQueue:true,predecessor:{taskId:session.taskId,turnId:session.turnId},flowNonce:trace,task:localTaskLabel(input,id),materials}))return
  // All state needed to reconcile a lost reply is durable before writing the RPC.
  void manager.protocol.enqueue(session.rpc,session.threadId,id,items).catch(error=>{
   context.log('queue.native_add_unconfirmed',{trace_id:trace,code:error.definitiveRpcError?'CODEX_QUEUE_REJECTED':'CODEX_QUEUE_UNKNOWN'})

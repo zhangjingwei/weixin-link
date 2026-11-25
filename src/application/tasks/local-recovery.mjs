@@ -1,3 +1,4 @@
+import {queuedContinuation,consumeQueuedWaiting} from '../../domain/tasks/queued-continuation.mjs'
 import {stripTaskFlow} from '../../infrastructure/agents/task-flow.mjs'
 import {turnExecution,taskOutcome,outcomeEvidence} from '../../domain/tasks/task-control.mjs'
 import {recordTaskResult,archiveTaskResult,hasQueuedHandoff} from './task-result.mjs'
@@ -6,6 +7,11 @@ import {transition} from '../../domain/tasks/lifecycle.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
 export async function recover(context,job,reply,token,{completedTurn,rpc}={}){
   const session=completedTurn?{threadId:job.thread_id,rpc}:await context.manager.connect(job.owner,reply)
+  const continuation=job.context?.nativeQueue?queuedContinuation(context.manager.state.users[job.owner],job):null
+  if(continuation){
+   job={...job,context:{...job.context,task:continuation.task,continuation}}
+   context.jobs.context(job.id,job.context)
+  }
   session.taskId=job.id
   session.localTask=(job.context?.task??localTaskLabel(job.input,job.id))
   session.requestText=job.context?.request??(typeof job.input==='string'?job.input:job.input.text)
@@ -27,10 +33,11 @@ export async function recover(context,job,reply,token,{completedTurn,rpc}={}){
     const outcome=taskOutcome(turn.status,job.context?.control,{taskId:job.id,threadId:job.thread_id,turnId:turn.id},{handedOff})
     session.waitingAttachment=waiting;session.waitingUser=execution==='waiting_user'
     const record=context.manager.state.users[job.owner]
-    if(execution==='waiting_user')record.waitingInput={kind:'answer',task:session.localTask,request:session.requestText,threadId:session.threadId}
-    else if(record.waitingInput?.task?.id===session.localTask.id)delete record.waitingInput
-    if(waiting)record.waitingAttachment={task:session.localTask,request:session.requestText,threadId:session.threadId}
-    else if(record.waitingAttachment?.task?.id===session.localTask.id)delete record.waitingAttachment
+    if(execution==='waiting_user')record.waitingInput={kind:'answer',task:session.localTask,request:session.requestText,threadId:session.threadId,sourceTaskId:job.id,turnId:turn.id}
+    else if(record.waitingInput?.sourceTaskId===job.id&&record.waitingInput.turnId===turn.id)delete record.waitingInput
+    if(waiting)record.waitingAttachment={task:session.localTask,request:session.requestText,threadId:session.threadId,sourceTaskId:job.id,turnId:turn.id}
+    else if(record.waitingAttachment?.sourceTaskId===job.id&&record.waitingAttachment.turnId===turn.id)delete record.waitingAttachment
+    if(!waiting&&execution!=='waiting_user')consumeQueuedWaiting(record,session.attachmentContinuation)
     // Delivery may have been accepted before a crash: preserve the result, never blindly resend.
     archiveTaskResult(record)
     if(record.resultIdentity?.turnId!==turn.id||record.resultIdentity?.threadId!==job.thread_id)delete record.lastConversationUpdates
