@@ -59,7 +59,7 @@ test('工具、交互和查询显示可读细节，只展示允许的元数据',
   for (const [event, fields, expected] of [
     ['turn.started', {model:'gpt-test'}, '模型开始处理（gpt-test）'],
     ['turn.started', {}, '模型开始处理'],
-    ['turn.waiting_progress', {duration_ms:30000}, '距上次阶段更新已过 30 秒，正在等 Codex 返回下一步'],
+    ['turn.waiting_progress', {duration_ms:30000}, '距上次阶段更新已过 30 秒，正在等智能体返回下一步'],
     ['turn.progress', {method:'item/mcpToolCall/progress'}, 'MCP 工具报告了新进度'],
     ['tool.completed', {kind:'commandExecution', exit_code:0, duration_ms:1200}, '模型执行的命令已完成（退出码 0）（耗时 1.2 秒）'],
     ['turn.started', {model:'invalid\nname'}, '模型开始处理'],
@@ -84,4 +84,13 @@ test('会话分页只显示开始和结束，保留中途失败',()=>{
  assert.equal(page('rpc.request',{continuation_page:true}),undefined)
  assert.equal(page('rpc.response',{continuation_page:true,status:'ok',duration_ms:10}),'查询 Codex 会话列表结束')
  assert.equal(page('rpc.response',{continuation_page:true,status:'error'}),'查询 Codex 会话列表失败')
+})
+
+test('WorkBuddy typed events show engine and tools; wait state never masquerades as Codex or exposes payload',()=>{
+ for(const event of ['provider.connected','session.connected','turn.started'])assert.match(formatEvent(record(event,{agent_kind:'workbuddy',model:'hy4std'})),/WorkBuddy/)
+ assert.match(formatEvent(record('tool.started',{kind:'workbuddyTool',text:'secret',command:'private'})),/WorkBuddy 正在调用工具$/)
+ assert.match(formatEvent(record('tool.completed',{kind:'workbuddyTool',status:'failed'})),/WorkBuddy 工具调用未成功$/)
+ const wait=formatEvent(record('session.wait_changed',{agent_kind:'workbuddy',waiting_approval:true}))
+ assert.match(wait,/WorkBuddy 正在等你批准操作$/);assert.doesNotMatch(wait,/Codex|secret/)
+ assert.match(formatEvent(record('session.wait_changed',{agent_kind:'workbuddy',waiting_approval:false})),/WorkBuddy 已解除等待/)
 })

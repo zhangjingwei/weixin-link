@@ -18,6 +18,8 @@ export function deliver(context,key,value,options,send){return context.serialize
  }
  if(options?.conversationControl)return send(key,context.label(key,value),options);
  if(e.deleted)return {status:'cancelled'};
+ // Decisions and final results cannot wait for navigation back to this conversation.
+ if(['interaction','result'].includes(options?.notificationKind))return send(key,context.label(key,value),options);
  if(context.find(e.owner)?.key===key){await context.flush(key,send);const saved=context.root[e.owner].entries.find(x=>x.key===key);if(!saved.unread?.length)return send(key,context.label(key,value),options);}
  const saved=context.root[e.owner].entries.find(x=>x.key===key);saved.unread??=[];saved.unread.push({value:structuredClone(value),state:'pending',traceId:options?.traceId});await context.manager.save();
  const text=typeof value==='string'?value:value.text;

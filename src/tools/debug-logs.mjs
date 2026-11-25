@@ -40,6 +40,10 @@ const stages = new Map(Object.entries({
 }))
 const streamLabels=new Map([['reply','回复'],['reasoningSummary','分析摘要'],['commandOutput','命令输出']])
 const activities = new Map(Object.entries({
+  claudeTool: ['Claude Code 正在调用工具','Claude Code 工具调用'],
+  workbuddyTool: ['WorkBuddy 正在调用工具','WorkBuddy 工具调用'],
+  doubaoTool: ['豆包正在调用工具','豆包工具调用'],
+  grokTool: ['Grok 正在调用工具','Grok 工具调用'],
   reasoning: ['模型正在分析', '模型分析阶段结束'],
   plan: ['模型正在整理计划', '计划已生成'],
   agentMessage: ['模型正在生成回复'],
@@ -94,7 +98,9 @@ export function formatEvent(line) {
   let row
   try { row = JSON.parse(line) } catch { return }
   if (!row || typeof row !== 'object') return
+  const agent=({codex:'Codex',claude:'Claude Code',workbuddy:'WorkBuddy',doubao:'豆包',grok:'Grok'})[row.agent_kind]??'智能体'
   let label = stages.get(row.event)
+  if(['provider.connected','session.connected','turn.started','turn.completed'].includes(row.event)&&row.agent_kind)label=agent+' · '+(label??'')
   if (row.event === 'outbound.attachment_prepare_failed') {
     const reason=({UNSUPPORTED_FILE:'不支持该文件格式',FILE_NOT_FOUND:'未找到文件',EXPORT_PATH_REFUSED:'文件路径不允许导出'})[row.reason]
     label='附件准备失败，尚未发送'+(typeof reason==='string'?'（'+reason+'）':'')
@@ -105,11 +111,11 @@ export function formatEvent(line) {
   }
   if (row.event === 'turn.started' && row.model_provider==='weixin-subscription-http')label+=' · HTTP 流式连接'
   if (row.event === 'turn.waiting_progress' && Number.isFinite(row.duration_ms) && row.duration_ms >= 0) {
-    label = `距上次阶段更新已过 ${Math.floor(row.duration_ms / 1000)} 秒，正在等 Codex 返回下一步`
+    label = `距上次阶段更新已过 ${Math.floor(row.duration_ms / 1000)} 秒，正在等${agent}返回下一步`
   }
   if (row.event === 'session.wait_changed') {
     const waits=[row.waiting_approval && '批准操作',row.waiting_input && '回答问题'].filter(Boolean)
-    label=waits.length?'Codex 正在等你'+waits.join('、'):'Codex 已解除等待用户操作的状态'
+    label=waits.length?agent+' 正在等你'+waits.join('、'):agent+' 已解除等待用户操作的状态'
   }
   if (row.event === 'provider.event_error') {
     const reason=/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(row.reason??'')?row.reason:'原因未提供'

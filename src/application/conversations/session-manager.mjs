@@ -69,7 +69,7 @@ export class SessionManager {
     }).finally(()=>{this.pendingSaves--})
     return this.saving
   }
-  diagnostic(session,event,fields={}) { this.log(event,{userId:session.userId,thread_id:session.threadId,turn_id:session.turnId,trace_id:session.traceId,...fields}) }
+  diagnostic(session,event,fields={}) { this.log(event,{userId:session.userId,thread_id:session.threadId,turn_id:session.turnId,trace_id:session.traceId,agent_kind:session.rpc?.agentKind??this.agentFor(session.userId),...fields}) }
   recordProgress(session,turnId,text,at=Date.now(),shared=false) {
     const recent=session.lastProgress?.turnId===turnId?session.lastProgress.recent??[]:[]
     const summary=text.length>600?text.slice(0,599)+'…':text
@@ -150,13 +150,13 @@ export class SessionManager {
     if(['partial','unknown','cancelled','failed'].includes(delivery)&&session.lastDelivery?.error)record.delivery_error=session.lastDelivery.error
     else delete record.delivery_error
   }
-  async emit(session, text, guard = () => true, acceptedOnly = false) {
+  async emit(session, text, guard = () => true, acceptedOnly = false, notificationKind) {
     const context={userId:session.userId,thread_id:session.threadId,turn_id:session.turnId,trace_id:session.traceId}
     session.delivering = (session.delivering ?? Promise.resolve()).catch(() => {}).then(async()=>{
       if(!guard()){session.lastDelivery={status:'cancelled',updated:new Date().toISOString()};this.log('delivery.suppressed',{...context,reason:'stale_progress',delivery_state:'cancelled'});return false}
       const started=Date.now();this.log('delivery.started',{...context,chars:Array.from(typeof text==='string'?text:text.text).length})
       try{
-        const sent=await session.reply(text,{checkpoint:()=>this.save(),current:()=>session.workToken?.current()??true,traceId:session.traceId})
+        const sent=await session.reply(text,{checkpoint:()=>this.save(),current:()=>session.workToken?.current()??true,traceId:session.traceId,...notificationKind?{notificationKind}:{}})
         const state=['accepted','deferred','partial','unknown','cancelled','failed'].includes(sent?.status)?sent.status:'unknown'
         session.lastDelivery={status:state,updated:new Date().toISOString(),...(sent?.error?{error:sent.error}:{})}
         if(state==='accepted')session.contextRejected=false
@@ -172,7 +172,7 @@ export class SessionManager {
     })
     try { return await session.delivering } catch { /* Keep the delivery outcome in lastDelivery for persisted recovery state. */ return false }
   }
-  notify(session,text,guard){return this.emit(session,this.ports.systemNotice(text),guard)}
+  notify(session,text,guard,notificationKind){return this.emit(session,this.ports.systemNotice(text),guard,false,notificationKind)}
   resolveWaiters(session, result) {
     for (const resolve of session.waiters ?? []) resolve(result)
     session.waiters?.clear()
@@ -649,7 +649,7 @@ export class SessionManager {
       } else {
         text = `${p.reason ?? `${this.agentNameFor(session.userId)} 请求批准操作`}\n目录：${p.cwd ?? this.cwd}\n${p.command ?? JSON.stringify(item?.changes ?? p.permissions ?? p.networkApprovalContext)}\n\n这项操作需要你明确决定。本次请发送“批准”或“拒绝”，再选择对应操作；未确认前不会执行。`
       }
-      await this.notify(session, text)
+      await this.notify(session, text,undefined,'interaction')
       return
     }
     if(message.method==='warning' && typeof p.message==='string' &&
@@ -849,7 +849,7 @@ export class SessionManager {
       if(session.nativeQueueTurn&&!this.submissions.claimReceipt('native-final:'+session.taskId)){
         session.lastDelivery={status:'unknown',updated:new Date().toISOString()}
       }else if(receivedWhileWaiting){this.diagnostic(session,'notification.suppressed',{reason:'attachment_already_pending'})}
-      else if(typeof output==='string'){if(display)await this.emit(session,display)}else await this.emit(session,{...output,text:display+output.text.slice(reply.length)})
+      else if(typeof output==='string'){if(display)await this.emit(session,display,undefined,false,'result')}else await this.emit(session,{...output,text:display+output.text.slice(reply.length)},undefined,false,'result')
       const recovery=this.state.users[session.userId].recovery
       if(receivedWhileWaiting){session.lastDelivery={status:'not_required',updated:new Date().toISOString()}}
       const currentRecovery=this.sessions.get(session.userId)===session||!this.sessions.has(session.userId)

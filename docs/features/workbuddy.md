@@ -42,3 +42,7 @@ node src/setup/agent.mjs select codex
 模拟协议回归覆盖正文/工具事件、审批、取消、未知结果、断线、恢复不回退、模型边界、环境隔离、注册、切换回滚和 Mac 共享历史。隔离空 HOME 下，真实 2.187.0 CLI 握手返回 ACP v1、loadSession=true、multitaskSupport=false；session/new 返回标准认证错误 -32000，适配为明确登录提示。未使用真实账号推理、微信发送或桌面订阅验证；这些不能由模拟测试替代。当前运行实例须用户手动更新后验收。
 
 官方资料：[ACP](https://www.codebuddy.ai/docs/zh/cli/acp)、[腾讯云 ACP 接入](https://cloud.tencent.com/document/product/1831/137021)、[协议扩展边界](https://cloud.tencent.com/document/product/1831/137025)、[安装登录](https://cloud.tencent.com/document/product/1831/137000)。
+
+## 后台会话的可见性
+
+审批/提问及最终结果使用显式通知类型发送，即使微信当前浏览其他会话也不会仅存入未读；消息标明所属会话，普通后台进度仍暂存，不改变导航或操作权。未知投递不自动重发。终端按结构化 agent_kind 展示底座名称，并显示 WorkBuddy 工具活动；等待审批不是模型持续执行，也不代表已有设计结果。
