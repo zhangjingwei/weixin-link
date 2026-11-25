@@ -10,6 +10,7 @@
 
 ```sh
 npm run check:release
+npm run check:codex-contract
 node --test tests/tools/release-check.test.mjs
 node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs
 npm test

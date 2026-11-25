@@ -2,7 +2,7 @@ import {managementWrite} from './management-writes.mjs'
 import {verifyChoice} from './project-management.mjs'
 import {workspaceInProject} from '../conversations/workspace.mjs'
 
-const operations={
+export const nativeControlMethods={
  get_thread_goal:'thread/goal/get',request_goal_update:'thread/goal/set',request_goal_clear:'thread/goal/clear',
  get_account_usage:'account/usage/read',get_account_limits:'account/rateLimits/read',
  list_thread_sections:'threadSection/list',create_thread_section:'threadSection/create',
@@ -14,15 +14,21 @@ const operations={
  request_queue_remove:'thread/queue/delete',request_queue_reorder:'thread/queue/reorder',
  request_queue_start:'thread/queue/start',
 }
-export function hasNativeControl(name){return Object.hasOwn(operations,name)}
-export async function nativeControl(context,owner,caller,name,args){
- const method=operations[name],{requestId,workspaceToken,text,...params}=args
- const threadId=params.threadId
- // Native project and section IDs refer to the personal installation's shared catalog.
- if(context.conversations.realOwners.size!==1)throw Error('MANAGEMENT_PERSONAL_CATALOG_REQUIRED')
+export function hasNativeControl(name){return Object.hasOwn(nativeControlMethods,name)}
+export function nativeControlParams(name,args){
+ const {requestId,workspaceToken,text,...params}=args
  if(name==='request_thread_move')params.sectionId??=null
  if(name==='request_goal_update'||name==='request_goal_clear')params.origin='user'
  if(text!==undefined)params.input=[{type:'text',text}]
+ if(name==='request_queue_add')params.clientUserMessageId=requestId
+ if(name==='request_project_import')params.idempotencyKey=requestId
+ return params
+}
+export async function nativeControl(context,owner,caller,name,args){
+ const method=nativeControlMethods[name],{requestId,workspaceToken}=args,params=nativeControlParams(name,args)
+ const threadId=params.threadId
+ // Native project and section IDs refer to the personal installation's shared catalog.
+ if(context.conversations.realOwners.size!==1)throw Error('MANAGEMENT_PERSONAL_CATALOG_REQUIRED')
  const run=async()=>{
   if(name==='request_project_import'){
    const root=await verifyChoice(context,owner,workspaceToken)
@@ -32,8 +38,6 @@ export async function nativeControl(context,owner,caller,name,args){
     if(thread?.id!==id||!await workspaceInProject(thread.cwd,{roots:[root]}))throw Error('MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
    }
   }
-  if(name==='request_queue_add')params.clientUserMessageId=requestId
-  if(name==='request_project_import')params.idempotencyKey=requestId
   if(name==='request_thread_revert'&&[...context.manager.sessions.values()].some(s=>s.threadId===threadId&&(s.busy||s.finishing)))throw Error('MANAGEMENT_THREAD_BUSY')
   const session=threadId&&[...context.manager.sessions.values()].find(s=>s.threadId===threadId&&!s.rpc?.closed&&context.conversations.recipient(s.userId)===owner)
   const call=rpc=>rpc.request(method,params)
