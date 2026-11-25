@@ -23,8 +23,7 @@ import {createUpdateController} from '../interfaces/controllers/update-controlle
 import {setupModelTest} from '../setup/setup-model-test.mjs'
 import {SetupReceipts} from '../setup/setup-receipts.mjs'
 import {SetupController} from '../setup/setup-controller.mjs'
-import {readTerminalSetupStatus,terminalSetupFingerprint} from '../setup/terminal-setup-status.mjs'
-import {readProviderProfile} from '../setup/provider-profile.mjs'
+import {readTerminalSetupStatus} from '../setup/terminal-setup-status.mjs'
 import {installConfig} from '../setup/install-config.mjs'
 import {ServiceManager} from '../setup/platform-service.mjs'
 import {createToolNotifier} from './tool-status.mjs'
@@ -140,13 +139,13 @@ let schedules
 try {schedules=await createScheduleController({stateDir:runtimeStateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,
  track:work=>runtime.track('schedule',work),conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
-const desktop=createDesktopClient({account,providerKind:agent.providerKind,codexHome:agent.sessionOptions.codexHome,binary:installation.codexBinary,workspace:installation.workspace})
+const desktop=createDesktopClient({account,providerKind:agent.providerKind,codexHome:agent.sessionOptions.codexHome,binary:agent.codexBinary,workspace:installation.workspace})
 // 先打开持久收件库并接好入站处理链；登录成功后才恢复未完成工作。
 const jobs=await infrastructure.storage.accountInbox(runtimeStateDir);manager.submissions=jobs
 const companionAccess=process.platform==='darwin'&&owners.length===1?new CompanionAccess(jobs.db):null
 if(companionAccess)runtime.onCompanion=macCompanion({access:companionAccess,owner:owners[0],conversations,manager,jobs,stateDir:runtimeStateDir,submit:(...args)=>durable.submit(...args),notice:(...args)=>view.announcement(...args),ready:()=>runtime.ready()&&!runtime.draining&&!stopping})
 const handoffs=attachmentHandoffs(runtimeStateDir,jobs)
-const managementService=new ManagementService({prepareHandoff:args=>handoffs.prepare(args),desktop,manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
+const managementService=new ManagementService({agentRegistry:agent.registry,prepareHandoff:args=>handoffs.prepare(args),desktop,manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
 managementService.resumeTasks=()=>durable.resume()
 // Persist restart reconciliation and private-payload cleanup before accepting MCP calls.
 await manager.save()
@@ -158,9 +157,7 @@ try{welcomeRequest=await readWelcomeRequest(stateDir)}catch{log('lifecycle_notic
 let savedSetupLanguage;try{savedSetupLanguage=(await readTerminalSetupStatus(stateDir))?.language}catch{}
 const noticeLanguage=savedSetupLanguage??setupLanguage()
 const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.dirname,'../..'),owners,...welcomeRequest,language:noticeLanguage,
- welcomeText:async()=>{let result,profile;try{result=await readTerminalSetupStatus(stateDir);profile=await readProviderProfile(stateDir)}catch{}if(!result||result.provider!==agent.providerKind||result.fingerprint!==terminalSetupFingerprint(profile))return welcomeMessage(noticeLanguage,account.id)
- if(!result.verified)return noticeLanguage==='en'?'Weixin Link is connected. Send your first question.':'微信助手已连接，可以直接发送你的第一个问题。'
- return noticeLanguage==='en'?`Weixin Link is connected. ${result.model??'The subscription model'} passed a real inference test during setup. You can start chatting.`:'微信助手已连接，'+(result.model??'订阅模型')+' 已通过安装终端的真实推理测试。现在可以直接聊天。'},
+ welcomeText:()=>welcomeMessage(noticeLanguage,account.id),
  send:(owner,text)=>view.announcement(owner,text),log})
 const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace

@@ -3,12 +3,20 @@ import assert from 'node:assert/strict'
 import {mkdtemp,readFile,writeFile,mkdir,rm,readdir,symlink,realpath} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {initInstallation,installServices,doctor,unitText,installCodex,codexAvailability,CODEX_VERSION} from '../../src/setup/setup-core.mjs'
+import {initInstallation,installServices,doctor,unitText,installCodex} from '../../src/setup/setup-core.mjs'
 import {accountCodexHome,ensureAccountCodexHome} from '../../src/infrastructure/accounts/codex-home.mjs'
-import {findCodex} from '../../src/setup/install-config.mjs'
+import {saveAgentSelection} from '../../src/infrastructure/agents/agent-selection.mjs'
 import {parseDeviceLogin} from '../../src/setup/setup-login.mjs'
 import {SetupController,setupCommand} from '../../src/setup/setup-controller.mjs'
 import {installerCommand} from '../../src/setup/setup-locale.mjs'
+async function fakeSystemCodex(args){
+ if(args[0]==='--version')return {stdout:'codex-cli 1.0.0'}
+ if(args[1]==='generate-json-schema'){
+  const methods=['initialize','skills/extraRoots/set','thread/start','thread/resume','thread/read','thread/memoryMode/set','turn/start','turn/interrupt','thread/turns/list','thread/queue/add','thread/queue/delete','thread/queue/list']
+  await writeFile(join(args.at(-1),'ClientRequest.json'),JSON.stringify({oneOf:methods.map(method=>({properties:{method:{enum:[method]}}}))}))
+ }
+ return {stdout:''}
+}
 const fixture=async t=>{const home=await mkdtemp(join(tmpdir(),'wechat-onboard-'));t.after(()=>rm(home,{recursive:true,force:true}));return home}
 test('fresh installation works without Codex, owners, credentials or npm SDK',async t=>{const home=await fixture(t),root=join(home,'source');await mkdir(root);const r=await initInstallation({home,root});assert(r.initialized);const guidance=await readFile(join(r.workspace,'AGENTS.md'),'utf8');assert(guidance.includes('原生记忆'));assert(guidance.includes('通用任务工作区'));assert(guidance.includes('不代表当前项目的开发或生产目录'));const state=join(home,'.local/share/wechat-ping-bot');assert.deepEqual(await readdir(state),['installation.json']);assert.equal((await initInstallation({home,root})).initialized,true);await assert.rejects(initInstallation({home,root,workspace:join(home,'other')}),/ALREADY_CONFIGURED/)})
 test('installation resumes with an existing symlinked workspace',async t=>{
@@ -25,14 +33,13 @@ test('installation resumes with an existing symlinked workspace',async t=>{
 })
 test('service installation prepares the personal service and never starts or overrides foreign services',async t=>{const home=await fixture(t),root=join(home,'source with spaces'),calls=[];const run=async(...a)=>{calls.push(a)};await installServices({home,root,run,platform:'linux'});assert.deepEqual(calls[0][1],['--user','daemon-reload']);assert(!calls.some(c=>c[1].includes('start')));const dir=join(home,'.config/systemd/user');assert(!(await readdir(dir)).includes('wechat-ping-bot@.service'));const text=await readFile(join(dir,'wechat-ping-bot.service'),'utf8');assert(text.includes('/src/wechat/bot.mjs'));assert(text.includes('source with spaces'));await writeFile(join(dir,'wechat-ping-bot.service'),'foreign service');await assert.rejects(installServices({home,root,run,platform:'linux'}),/REQUIRES_REVIEW/);assert.equal(await readFile(join(dir,'wechat-ping-bot.service'),'utf8'),'foreign service')})
 test('doctor separates a working channel from missing Codex and does not expose command output',async t=>{const home=await fixture(t),root=join(home,'source');await mkdir(join(root,'node_modules/wechatbot-zerolink/dist/messaging'),{recursive:true});await writeFile(join(root,'node_modules/wechatbot-zerolink/dist/index.js'),'');await writeFile(join(root,'node_modules/wechatbot-zerolink/package.json'),JSON.stringify({name:'wechatbot-zerolink',version:'2.2.0-zerolink.2'}));await writeFile(join(root,'node_modules/wechatbot-zerolink/dist/messaging/poller.js'),'beforeCheckpoint');await initInstallation({home,root});await installServices({home,root,reload:false});const r=await doctor({home,root,run:async(bin)=>{if(bin.endsWith('codex'))throw Error('secret failure');return {stdout:'secret'}}});assert.equal(r.codexInstalled,false);assert.equal(r.codexLoggedIn,false);assert.equal(r.channelPrerequisitesReady,true);assert(!JSON.stringify(r).includes('secret'))})
-test('bundled Codex runtime is resolved from the source tree, never the user PATH',async t=>{
- const home=await fixture(t),root=join(home,'source'),binary=findCodex(home,{root}),calls=[]
- assert(binary.startsWith(join(root,'node_modules','@openai')))
- await assert.rejects(installCodex({home,root,run:async()=>{throw Error('must not run')}}),/CODEX_BUNDLED_RUNTIME_MISSING/)
- await mkdir(join(binary,'..'),{recursive:true});await writeFile(binary,'fixture')
- const r=await installCodex({home,root,run:async(bin,args)=>{calls.push([bin,args]);return {stdout:`codex-cli ${CODEX_VERSION}\n`}}})
- assert.equal(r.status,'bundled');assert.equal(calls[0][0],binary)
- assert(!calls.some(c=>c[0]==='npm'))
+test('installer checks the registered system Codex',async t=>{
+ const home=await fixture(t),root=join(home,'source'),binary=join(home,'codex')
+ await saveAgentSelection(join(home,'.local/share/wechat-ping-bot'),{version:1,kind:'codex',codexBinary:binary})
+ await assert.rejects(installCodex({home,root}),/CODEX_SYSTEM_CLI_UNAVAILABLE/)
+ await writeFile(binary,'fixture')
+ const r=await installCodex({home,root,run:async(bin,args)=>{assert.equal(bin,binary);return fakeSystemCodex(args)}})
+ assert.equal(r.status,'system')
 })
 test('personal Codex setup respects CODEX_HOME and rejects a named service',async t=>{
  const home=await fixture(t),original=process.env.CODEX_HOME
@@ -44,17 +51,17 @@ test('personal Codex setup respects CODEX_HOME and rejects a named service',asyn
   assert.throws(()=>accountCodexHome('work',home),/SINGLE_USER_INSTALLATION/)
  }finally{if(original===undefined)delete process.env.CODEX_HOME;else process.env.CODEX_HOME=original}
 })
-test('doctor reports custom provider access without requiring subscription login',async t=>{
- const home=await fixture(t),root=join(home,'source'),binary=findCodex(home,{root}),calls=[]
+test('doctor checks executor login independently of the entry model key',async t=>{
+ const home=await fixture(t),root=join(home,'source'),binary=join(home,'codex'),calls=[]
+ await saveAgentSelection(join(home,'.local/share/wechat-ping-bot'),{version:1,kind:'codex',codexBinary:binary})
  await mkdir(join(binary,'..'),{recursive:true});await writeFile(binary,'fixture')
  const providerEnv={WECHAT_CODEX_PROVIDER:'custom',WECHAT_CODEX_BASE_URL:'https://provider.example.com',WECHAT_CODEX_API_KEY_ENV:'PRIVATE_MODEL_KEY',PRIVATE_MODEL_KEY:'test-only'}
- const r=await doctor({home,root,providerEnv,run:async(bin,args)=>{calls.push(args);return {stdout:bin===binary?`codex-cli ${CODEX_VERSION}\n`:'ok'}}})
+ const r=await doctor({home,root,providerEnv,run:async(bin,args)=>{calls.push(args);if(bin===binary&&args[0]==='login')throw Error('not logged in');return bin===binary?fakeSystemCodex(args):{stdout:'ok'}}})
  assert.equal(r.codexInstalled,true)
  assert.equal(r.codexLoggedIn,false)
- assert.equal(r.codexAccessReady,true)
- assert.equal(r.authMode,'provider')
- assert(r.checks.some(c=>c.name==='codexProviderKey'&&c.ok))
- assert(!calls.some(args=>args[0]==='login'))
+ assert.equal(r.codexAccessReady,false)
+ assert(!r.checks.some(c=>c.name==='entryModelKey'))
+ assert(calls.some(args=>args[0]==='login'))
 })
 test('direct Codex acceptance requires a completed inference probe',async t=>{
  const home=await fixture(t),out=[],calls=[]

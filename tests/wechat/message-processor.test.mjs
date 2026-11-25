@@ -197,3 +197,15 @@ test('thanks and short confirmations remain model input and never get a canned a
  const f=fixture();for(const text of ['谢谢','好的','收到','对','继续'])await f.handle({userId:'owner',text,_ingressId:text})
  assert.deepEqual(f.submitted.map(args=>args[1].text),['谢谢','好的','收到','对','继续']);assert.deepEqual(f.sent,[])
 })
+
+test('a named lookup reads the uncertain task receipt without dispatching another turn',async()=>{
+ const f=fixture()
+ f.deps.jobs.matchingTasks=(owner,topic)=>{
+  assert.equal(owner,'owner');assert.equal(topic,'前端团队官网')
+  return [{text:'看看前端团队官网的结果',state:'uncertain'},{text:'重新设计前端团队官网',state:'uncertain'}]
+ }
+ f.deps.jobs.claimReceipt=()=>true
+ await f.handle({userId:'owner',text:'看看前端团队官网的结果',_ingressId:'lookup'})
+ assert.equal(f.submitted.length,0);assert.match(f.sent[0][1],/结果未确认/)
+ assert.deepEqual(f.acked,['lookup'])
+})

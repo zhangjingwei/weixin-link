@@ -6,12 +6,16 @@ const define=(name,description,properties={},required=[])=>{const mutation=/^(?:
 const thread={threadId:string()},section={sectionId:string()},queued={...thread,queuedSubmissionId:string()}
 const page={cursor:string(4096),limit:integer(1,50)}
 const ids={type:'array',items:string(),minItems:1,maxItems:100,uniqueItems:true}
+const noteList={type:'array',items:string(800),minItems:0,maxItems:8}
+const handoff={type:'object',properties:{goal:string(1600),constraints:noteList,decisions:noteList,workDone:noteList,openQuestions:noteList,nextSteps:noteList,files:noteList,evidenceTaskIds:{...ids,maxItems:6}},required:['goal'],additionalProperties:false}
 export const managementTools=[
  define('report_task_result','对明确实施任务提交结构化结果。仅接受本轮所属的精确任务和轮次；completed 是智能体报告，不代表平台独立验收或微信送达。普通问答不必调用；正文不能设置业务完成状态。',{...project,sourceTaskId:string(),turnId:string(),outcome:{...string(),enum:['completed','failed','blocked']},...write},['projectId','sourceTaskId','turnId','outcome','requestId']),
  define('request_project_workspace','用户明确确认平台项目目录时使用。凭目录选择凭据登记边界；要求关联会话均在边界内且无执行或未确认任务。不移动目录、不连接智能体。',{platformProjectId:string(),workspaceToken:string(4096),...write},['platformProjectId','workspaceToken','requestId']),
  define('request_task_input','本轮确实需要等待用户提供附件或回答时调用。仅修改调用者所属的精确持久任务，必须从 get_conversation_context 获取 sourceTaskId、turnId。确认后用自然语言说明缺少什么；正文不会改变任务状态。',{...project,sourceTaskId:string(),turnId:string(),kind:{...string(),enum:['attachment','answer']},...write},['projectId','sourceTaskId','turnId','kind','requestId']),
- define('get_conversation_agents','查看同一条对话关联的原生会话和可用智能体；不切换。',project,['projectId']),
- define('request_agent_switch','用户明确要求换智能体接着做时调用。保留同一逻辑对话，切回恢复原生会话并交接最近结果。当前任务成功结束后才执行后续请求；queued不是切换完成。不复制或重跑原任务。text须保留用户的要求和批评，不宣称原方案已获认可。',{...project,agentKind:{...string(),enum:['codex','claude','workbuddy']},text:string(8000),...write},['projectId','agentKind','text','requestId']),
+ define('list_agent_executors','检查本机支持的执行器。registered 表示服务已加载，detected 表示本次检查发现兼容的 CLI。登录状态在连接时核对。'),
+ define('request_agent_registration','用户要求接入本机已有智能体时调用。按名称注册执行器，使它可供本账号会话选择。用户要求接手当前会话时另调 request_agent_switch。',{agentKind:{...string(),enum:['codex','claude','workbuddy','doubao','grok']},...write},['agentKind','requestId']),
+ define('get_conversation_agents','查看同一条对话关联的原生会话和可用智能体；不切换。',project),
+ define('request_agent_switch','用户要求切换当前会话执行器时调用。只切换时省略 text，有后续任务时才提供原请求。保留同一逻辑对话，携带后续任务时必须提供 handoff：从本会话整理 goal、用户约束、决定依据、已做工作及验证方法、相关文件、未决事项和下一步。可用 evidenceTaskIds 指向同一会话内相关的已结束任务。只填写已知内容。当前任务成功结束后才执行后续请求；queued不是切换完成。不复制或重跑原任务。text须保留用户的要求和批评，不宣称原方案已获认可。',{...project,agentKind:{...string(),enum:['codex','claude','workbuddy','doubao','grok']},text:string(8000),handoff,...write},['agentKind','requestId']),
  define('get_thread_goal','查询会话原生长任务目标、状态和预算。',thread,['threadId']),
  define('request_goal_update','设置长任务目标或调整状态和预算。',{...thread,objective:string(4000),status:{...string(),enum:['active','paused','complete']},tokenBudget:integer(1,1000000000),...write},['threadId','status','requestId']),
  define('request_goal_clear','清除指定会话的长任务目标。',{...thread,...write},['threadId','requestId']),

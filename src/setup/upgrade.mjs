@@ -156,7 +156,7 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
   phase='dependencies'
   if(prepare)await prepare(stage)
   else{
-   const npm=npmCommand(['ci']);await exec(npm.binary,npm.args,{cwd:stage,env:nodeEnvironment(),timeout:600000,maxBuffer:4*1024*1024})
+   const npm=npmCommand(['ci','--omit=dev']);await exec(npm.binary,npm.args,{cwd:stage,env:nodeEnvironment(),timeout:600000,maxBuffer:4*1024*1024})
    await exec(process.execPath,['--check',join(stage,'src/wechat/bot.mjs')],{timeout:10000})
   }
   phase='drain'

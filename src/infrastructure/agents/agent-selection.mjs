@@ -2,10 +2,12 @@ import {readFile,lstat,mkdir,writeFile,rename,unlink} from 'node:fs/promises'
 import {join,isAbsolute} from 'node:path'
 import {randomUUID} from 'node:crypto'
 function validate(value){
- if(value?.version!==1||!['codex','claude','workbuddy'].includes(value.kind)||['claude','workbuddy'].includes(value.kind)&&(typeof value.binary!=='string'||!isAbsolute(value.binary)||/[\0\r\n]/.test(value.binary)))throw Error('INVALID_AGENT_SELECTION')
- if(value.workbuddyBinary!==undefined&&(typeof value.workbuddyBinary!=='string'||!isAbsolute(value.workbuddyBinary)||/[\0\r\n]/.test(value.workbuddyBinary)))throw Error('INVALID_AGENT_SELECTION')
- if(value.claudeBinary!==undefined&&(typeof value.claudeBinary!=='string'||!isAbsolute(value.claudeBinary)||/[\0\r\n]/.test(value.claudeBinary)))throw Error('INVALID_AGENT_SELECTION')
- return {version:1,kind:value.kind,...['claude','workbuddy'].includes(value.kind)?{binary:value.binary}:{},...value.claudeBinary?{claudeBinary:value.claudeBinary}:{},...value.workbuddyBinary?{workbuddyBinary:value.workbuddyBinary}:{}}
+ if(value?.version!==1||!['codex','claude','workbuddy','doubao','grok'].includes(value.kind)||['claude','workbuddy','doubao','grok'].includes(value.kind)&&(typeof value.binary!=='string'||!isAbsolute(value.binary)||/[\0\r\n]/.test(value.binary)))throw Error('INVALID_AGENT_SELECTION')
+ for(const kind of ['codex','claude','workbuddy','doubao','grok']){
+  const binary=value[kind+'Binary']
+  if(binary!==undefined&&(typeof binary!=='string'||!isAbsolute(binary)||/[\0\r\n]/.test(binary)))throw Error('INVALID_AGENT_SELECTION')
+ }
+ return {version:1,kind:value.kind,...['claude','workbuddy','doubao','grok'].includes(value.kind)?{binary:value.binary}:{},...Object.fromEntries(['codex','claude','workbuddy','doubao','grok'].filter(kind=>value[kind+'Binary']).map(kind=>[kind+'Binary',value[kind+'Binary']]))}
 }
 export async function readAgentSelection(stateDir){
  const path=join(stateDir,'agent.json')

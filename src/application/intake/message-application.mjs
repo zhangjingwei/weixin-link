@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto'
 import {receiptPolicy} from '../../domain/delivery/receipt-policy.mjs'
 import {errorFields} from '../../infrastructure/diagnostics/diagnostic-log.mjs'
 import {recoverFailedFinal} from '../notifications/failed-final-recovery.mjs'
-import {isResultLookup} from './catalog-question.mjs'
+import {isResultLookup,recordedFailure} from './catalog-question.mjs'
 import {nativeCommandKind} from './native-command-kind.mjs'
 
 export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,diagnosticPackage,confirmedRejection,deferMaintenance,systemNotice,diagnosticServices,diagnosticService}){
@@ -81,6 +81,13 @@ return async function handleMessage(message) {
   if(message._recovered&&nativeKind==='mutation'){
     await runtime.track('delivery',()=>deliver('上次原生命令的执行结果待核对，未重复执行。请查询对应状态后再决定是否重新发送。',{conversationControl:true}))
     jobs.acknowledge([message._ingressId].filter(Boolean));return
+  }
+  if(!initialControl&&!media&&!message.references?.length&&!message._promptReply){
+   const failure=recordedFailure(jobs,message.userId,text)
+   if(failure){
+    if(!message._ingressId||jobs.claimReceipt('local-result:'+message._ingressId))await deliver(failure,{conversationControl:true})
+    jobs.acknowledge([message._ingressId].filter(Boolean));return
+   }
   }
   let recoveryDelivery
   if(!initialControl&&!hasMedia(message)&&!message._recovered&&!isResultLookup(text)){

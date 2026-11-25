@@ -28,7 +28,7 @@ export async function nativeControl(context,owner,caller,name,args){
  const method=nativeControlMethods[name],{requestId,workspaceToken}=args,params=nativeControlParams(name,args)
  const threadId=params.threadId
  // Persisted non-Codex identities remain non-Codex after idle release/restart.
- if(threadId&&Object.entries(context.manager.state?.users??{}).some(([key,saved])=>context.conversations.recipient(key)===owner&&['claude','workbuddy'].some(kind=>saved.nativeSessions?.[kind]?.threadId===threadId||((saved.activeAgent??saved.agentKind)===kind&&saved.threadId===threadId))))throw Error('MANAGEMENT_UNSUPPORTED')
+ if(threadId&&Object.entries(context.manager.state?.users??{}).some(([key,saved])=>context.conversations.recipient(key)===owner&&['claude','workbuddy','doubao','grok'].some(kind=>saved.nativeSessions?.[kind]?.threadId===threadId||((saved.activeAgent??saved.agentKind)===kind&&saved.threadId===threadId))))throw Error('MANAGEMENT_UNSUPPORTED')
  // Native project and section IDs refer to the personal installation's shared catalog.
  if(context.conversations.realOwners.size!==1)throw Error('MANAGEMENT_PERSONAL_CATALOG_REQUIRED')
  const run=async()=>{
@@ -42,7 +42,7 @@ export async function nativeControl(context,owner,caller,name,args){
   }
   if(name==='request_thread_revert'&&[...context.manager.sessions.values()].some(s=>s.threadId===threadId&&(s.busy||s.finishing)))throw Error('MANAGEMENT_THREAD_BUSY')
   const session=threadId&&[...context.manager.sessions.values()].find(s=>s.threadId===threadId&&!s.rpc?.closed&&context.conversations.recipient(s.userId)===owner)
-  if(session&&(['claude','workbuddy'].includes(context.manager.agentFor?.(session.userId))||['claude','workbuddy'].includes(session.rpc?.agentKind)))throw Error('MANAGEMENT_UNSUPPORTED')
+  if(session&&(['claude','workbuddy','doubao','grok'].includes(context.manager.agentFor?.(session.userId))||['claude','workbuddy','doubao','grok'].includes(session.rpc?.agentKind)))throw Error('MANAGEMENT_UNSUPPORTED')
   const call=rpc=>rpc.request(method,params)
   let result
   try{result=session?.rpc?await call(session.rpc):await context.conversations.withBackend(owner,call)}

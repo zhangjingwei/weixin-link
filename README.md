@@ -57,7 +57,7 @@ Windows x64（PowerShell）：
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-按提示选择模型服务、完成授权并登录微信。Codex 订阅授权后可从实际可用列表选择工作模型，向导会标明当前与默认项，保存后读取配置确认；真实推理测试可选。选择会保存为个人 Codex 默认模型，桌面端和 CLI 也会使用；已有会话及项目的明确模型设置优先。中国大陆如果无法访问 OpenAI，使用 [Codex 订阅](https://learn.chatgpt.com/docs/auth) 需自行解决访问问题；DeepSeek、Qwen、Kimi 不受此限制。
+新会话首次收件时会列出本机可用的执行器。回复名称即可绑定并继续原任务。执行器沿用各自 CLI 的登录和模型配置。
 
 ### 升级
 
@@ -180,13 +180,13 @@ macOS 可选启用在桌面打开微信中的原会话，再返回微信继续�
 
 安装器使用设备码登录。先在 ChatGPT 的「设置 → 安全」中开启 **Device code authorization**（设备码授权／设备码登录，名称可能随界面变化），再按安装终端显示的官方链接和设备码完成授权。受管理的工作区需由管理员在工作区权限中允许设备码登录。
 
-如果刚才已被拒绝或设备码已过期，开启后重新运行安装命令，选择「配置模型 → 订阅登录」，使用本次新显示的设备码。此设置只与 Codex 订阅的设备码登录有关；第三方模型的 API Key 配置不需要它。其他登录失败仍需按实际错误检查网络或账号权限。
+如果刚才已被拒绝或设备码已过期，开启后在系统终端重新运行 `codex login --device-auth`，使用本次新显示的设备码。此设置只与 Codex 订阅的设备码登录有关；第三方模型的 API Key 配置不需要它。其他登录失败仍需按实际错误检查网络或账号权限。
 
 参见 [OpenAI 官方设备码登录说明](https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta)。
 
-### 已完成订阅授权，但模型测试超时
+### 如何切换执行器
 
-安装向导默认只检查当前账号的 Codex 原生接口，通过后即可继续微信登录。需要验证真实回复时，在微信发送「验收智能体」，或在终端运行 `node src/setup/setup.mjs wizard --verify-model`。终端测试最多等待约 3 分钟；超时可保留已有配置，仅重试测试。
+在当前微信会话发送“换成 Claude”等明确选择。
 
 ## 更多能力与文档
 

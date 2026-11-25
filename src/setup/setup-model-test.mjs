@@ -5,7 +5,9 @@ export async function setupModelTest(manager,{signal,executionKey,reply,timeout=
  if(!executionKey||previous?.busy||previous?.finishing||previous?.connecting||previous?.queue?.length)throw Error('CURRENT_TASK_BUSY')
  const probeKey='codex-probe-'+randomUUID()
  const prompt='这是连接测试。不要调用工具，只回复“连接成功”。测试编号：'+randomUUID()
+ if(manager.protocol?.availableAgents&&!manager.protocol.availableAgents.includes('codex'))throw Error('CODEX_SYSTEM_CLI_UNAVAILABLE')
  manager.owners?.add(probeKey)
+ if(manager.state?.users)manager.state.users[probeKey]={activeAgent:'codex'}
  const base=manager.lifecycle.capture(probeKey),local=new AbortController()
  const token={...base,current:()=>base.current()&&!signal?.aborted&&!local.signal.aborted,signal:signal?AbortSignal.any([signal,local.signal]):local.signal}
  let stopping

@@ -10,7 +10,7 @@ import {requestModelSwitch} from './model-management.mjs'
 import {requestProjectArchive,executeProjectArchive} from './project-archive-management.mjs'
 import {maintenanceRead,requestMaintenance,executeMaintenance} from './maintenance-management.mjs'
 import {submitProjectTask,routeConversationRequest} from './project-task-management.mjs'
-import {pruneManagementOperations,discardUnexecutedPayload} from './management-writes.mjs'
+import {managementWrite,pruneManagementOperations,discardUnexecutedPayload} from './management-writes.mjs'
 import {workspaceChoices,createProject,renameProject,confirmProjectWorkspace,openProjectSession,openConversation} from './project-management.mjs'
 import {listProjectTasks,getTaskResult,requestResultRedelivery,executeRedelivery,requestTaskReconciliation,executeReconciliation} from './result-management.mjs'
 import {hasNativeControl,nativeControl} from './native-controls.mjs'
@@ -25,8 +25,8 @@ const signatureFor=(name,args)=>createHmac('sha256','zerolink-operation-v1').upd
 
 // A management facade over the existing conversation/task state, not another queue.
 export class ManagementService{
- constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,prepareHandoff,inspectRepository,maintenance,desktop,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
-  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,prepareHandoff,inspectRepository,maintenance,desktop,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
+ constructor({manager,conversations,notice=async()=>{},now=Date.now,ready=()=>true,track=work=>work(),deliver=async()=>{throw Error('MANAGEMENT_DELIVERY_UNAVAILABLE')},schedules,updates,enqueueTask,prepareHandoff,inspectRepository,maintenance,desktop,agentRegistry,timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}){
+  Object.assign(this,{manager,conversations,notice,now,ready,track,deliver,schedules,updates,enqueueTask,prepareHandoff,inspectRepository,maintenance,desktop,agentRegistry,timeZone});this.cursorKey=randomUUID();this.timers=new Map();this.expirations=new Map();this.inflight=new Map()
   manager.state.managementOperations??=[];this.operations=manager.state.managementOperations
   for(const op of this.operations)if(['pending','executing'].includes(op.status))op.status=op.status==='pending'?'not_executed':'unknown'
   pruneManagementOperations(this.operations,this.now())
@@ -42,9 +42,18 @@ export class ManagementService{
  async call(caller,name,args){
   const spec=validateManagementCall(name,args);const owner=this.owner(caller)
   if(this.manager.state.desktopHandoff&&!spec.annotations.readOnlyHint&&!['request_desktop_handoff','request_desktop_return'].includes(name))throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')
+  if(name==='list_agent_executors'||name==='request_agent_registration'){
+   if(!this.agentRegistry)throw Error('MANAGEMENT_AGENT_REGISTRY_UNAVAILABLE')
+   if(name==='list_agent_executors')return {executors:await this.agentRegistry.list()}
+   return managementWrite(this,owner,caller,name,args,async op=>{
+    op.data=await this.agentRegistry.register(args.agentKind)
+    op.status='confirmed'
+   })
+  }
   if(name==='request_project_workspace')return confirmProjectWorkspace(this,owner,caller,args)
   if(name==='report_task_result')return reportTaskResultControl(this,owner,caller,args)
   if(name==='request_task_input')return requestTaskInputControl(this,owner,caller,args)
+  if(['request_agent_switch','get_conversation_agents'].includes(name)&&!args.projectId)args={...args,projectId:this.conversations.entry(caller).id}
   if(name==='get_conversation_agents')return conversationAgents(this,owner,args)
   if(name==='request_agent_switch')return requestAgentSwitch(this,owner,caller,args)
   if(name==='get_conversation_context')return conversationContext(this,owner,caller)
@@ -107,7 +116,7 @@ export class ManagementService{
    }
    return page
   }
-  if(name==='list_models'&&['claude','workbuddy'].includes(this.manager.agentFor?.(caller))){const session=await this.manager.connect(caller,this.manager.sessions.get(caller)?.reply??(()=>{}));return this.manager.protocol.listModels(session.rpc)}
+  if(name==='list_models'&&['claude','workbuddy','doubao','grok'].includes(this.manager.agentFor?.(caller))){const session=await this.manager.connect(caller,this.manager.sessions.get(caller)?.reply??(()=>{}));return this.manager.protocol.listModels(session.rpc)}
   if(name==='list_models')return this.conversations.withBackend(owner,rpc=>this.manager.protocol.listModels(rpc))
   const e=this.target(owner,args.projectId)
   if(name==='get_project_progress')return projectProgress(this,owner,args)
@@ -201,7 +210,7 @@ export class ManagementService{
  sign(value){const data=Buffer.from(JSON.stringify(value)).toString('base64url');return data+'.'+createHmac('sha256',this.cursorKey).update(data).digest('base64url')}
  decode(cursor){try{const [data,sig,...rest]=cursor.split('.'),expected=createHmac('sha256',this.cursorKey).update(data).digest(),actual=Buffer.from(sig,'base64url');if(rest.length||actual.length!==expected.length||!timingSafeEqual(actual,expected))throw Error();return JSON.parse(Buffer.from(data,'base64url'))}catch{throw Error('MANAGEMENT_INVALID_CURSOR')}}
  async history(owner,e,cursor){
-  if(['claude','workbuddy'].includes(this.manager.agentFor?.(e.key)))throw Error('MANAGEMENT_UNSUPPORTED')
+  if(['claude','workbuddy','doubao','grok'].includes(this.manager.agentFor?.(e.key)))throw Error('MANAGEMENT_UNSUPPORTED')
   if(!this.conversations.backendPort?.capabilities.history)throw Error('MANAGEMENT_UNSUPPORTED')
   const threadId=this.manager.state.users[e.key]?.threadId
   if(!threadId)return {messages:[],nextCursor:null}

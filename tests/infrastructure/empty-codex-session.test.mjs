@@ -1,14 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,rm,readFile,access} from 'node:fs/promises'
+import {mkdtemp,rm,readFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {findCodex} from '../../src/infrastructure/config/install-config.mjs'
+import {systemCodex} from '../../src/setup/system-codex.mjs'
 import {createSessionProtocol} from '../../src/infrastructure/agents/session-protocol.mjs'
 import {SessionManager} from '../../src/wechat/session-manager.mjs'
 const delay=ms=>new Promise(r=>setTimeout(r,ms))
 test('real isolated Codex empty connections can idle-release and reopen across a manager restart without stale persisted IDs',async t=>{
- let binary;try{binary=findCodex();await access(binary)}catch(error){if(error.code==='ENOENT'||error.message==='CODEX_BUNDLED_PLATFORM_UNSUPPORTED')return t.skip('Codex CLI is unavailable');throw error}
+ let binary;try{binary=await systemCodex()}catch(error){if(error.message==='CODEX_SYSTEM_CLI_UNAVAILABLE')return t.skip('Codex CLI is unavailable');throw error}
  const home=await mkdtemp(join(tmpdir(),'empty-codex-')),options={stateDir:join(home,'state'),cwd:home,owners:['owner'],sessionProtocol:createSessionProtocol({codexHome:home,codexBinary:()=>binary,providerEnv:{}})}
  let manager
  t.after(async()=>{manager?.close();await manager?.saving;await delay(200);await rm(home,{recursive:true,force:true,maxRetries:10,retryDelay:50})})

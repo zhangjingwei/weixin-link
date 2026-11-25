@@ -90,9 +90,9 @@ if test -e "$bootstrap_dest" || test -L "$bootstrap_dest"; then
   fi
   if test "$bootstrap_mode" = upgrade && ( : </dev/tty ) 2>/dev/null; then
     if test "$bootstrap_english" = 1; then
-      bootstrap_choice=$(bootstrap_select 'Use ↑/↓ to choose, then press Enter:' 1 'Upgrade' 'Configure model' 'Log in to WeChat again' 'Uninstall' 'Exit')
+      bootstrap_choice=$(bootstrap_select 'Use ↑/↓ to choose, then press Enter:' 1 'Upgrade' 'Executor binding help' 'Log in to WeChat again' 'Uninstall' 'Exit')
     else
-      bootstrap_choice=$(bootstrap_select '用 ↑/↓ 选择，回车确认：' 1 '升级' '配置模型' '重新登录微信' '卸载' '退出')
+      bootstrap_choice=$(bootstrap_select '用 ↑/↓ 选择，回车确认：' 1 '升级' '执行器绑定说明' '重新登录微信' '卸载' '退出')
     fi
     case "$bootstrap_choice" in
       1) ;;
@@ -168,7 +168,7 @@ fi
 if test "$bootstrap_mode" = resume && test -z "${WEIXIN_LINK_EXPECTED_COMMIT:-}"; then
   PATH="$(dirname "$bootstrap_node"):$PATH"; export PATH
   cd "$bootstrap_dest"
-  if ! test -d node_modules/proper-lockfile; then npm ci; fi
+  if ! test -d node_modules/proper-lockfile; then npm ci --omit=dev; fi
   bootstrap_run_interactive /bin/sh ./src/setup/unix-install.sh
   rm -f .weixin-link-install-pending
   exit 0

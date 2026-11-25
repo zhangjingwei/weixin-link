@@ -6,8 +6,8 @@ import {currentMaterials,hasAttachments} from '../../domain/messages/material-as
 // writer. Its SQLite row is a delivery receipt, never a second execution queue.
 export function enqueueDuringTurn(context,owner,input,id){
  const {manager,jobs}=context,session=manager.sessions?.get(owner)
- if(!session?.busy||!session.turnReady||!session.threadId||session.exiting||manager.desktopTransition||
-    !(manager.protocolFor?.(owner)??manager.protocol)?.enqueue||input.internalHandoff||input.agentKind&&manager.agentFor&&(input.agentKind!==manager.agentFor(owner))||manager.backend?.prepareInput||hasAttachments(input)||input.nativeCommand||input.dependencies?.length||
+ if(!session?.busy||!session.turnReady||!session.threadId||session.exiting||manager.state?.users[owner]?.agentHandoff||manager.desktopTransition||
+    !(manager.protocolFor?.(owner)??manager.protocol)?.enqueue||input.agentSelection||input.internalHandoff||input.agentKind&&manager.agentFor&&(input.agentKind!==manager.agentFor(owner))||manager.backend?.prepareInput||hasAttachments(input)||input.nativeCommand||input.dependencies?.length||
     input.projectDispatch||session.waitingUser||session.waitingAttachment||manager.state.users[owner]?.waitingInput||manager.state.users[owner]?.waitingAttachment)return
  if(!jobs.get(session.taskId)?.turn_id)return
  const earlier=jobs.pending().filter(job=>job.owner===owner&&job.id!==id&&job.id!==session.taskId)

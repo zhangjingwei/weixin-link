@@ -28,7 +28,7 @@ test('Unix install uses the unified WeChat login command',async t=>{
  const result=await exec('/bin/sh',[join(source,'src/setup/unix-install.sh')],{
   env:{...process.env,HOME:root,PATH:`${bin}:${process.env.PATH}`,WEIXIN_TEST_LOG:log,WEIXIN_LINK_DIR:'',WEIXIN_LINK_LANG:'en'},
  })
- assert(result.stdout.includes('not interactive'))
+ assert(!result.stdout.includes('model setup'))
  assert.deepEqual((await readFile(log,'utf8')).trim().split('\n'),[
   'deps','init','services','wechat-login',
  ])

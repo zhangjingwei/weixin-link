@@ -23,7 +23,7 @@ export function createProject(context,owner,caller,args){return managementWrite(
  const path=await verifyChoice(context,owner,args.workspaceToken)
  const name=args.name.trim()
  const project=createPlatformProject(context.conversations,owner,name,path)
- const bound=bindPlatformConversation(context.conversations,owner,project,path,{agentKind:context.manager.agentFor?.(caller)})
+ const bound=bindPlatformConversation(context.conversations,owner,project,path)
  op.projectId=bound.id;op.status='confirmed';op.data={projectId:bound.id,platformProjectId:project.id,nativeProjectId:null,name:project.name,workspace:path,switched:false,connected:false}
 })}
 export function renameProject(context,owner,caller,args){return managementWrite(context,owner,caller,'rename_project',args,async op=>{
@@ -58,7 +58,7 @@ export function openConversation(context,owner,caller,args,operation='open_conve
   if(!workspace)throw Error('MANAGEMENT_WORKSPACE_SELECTION_REQUIRED')
   if(project&&(!project.workspaceVerified||!await workspaceInProject(workspace,project)))throw Error('MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
   project??=createPlatformProject(conversations,owner,'独立项目',workspace)
-  const entry=bindPlatformConversation(conversations,owner,project,workspace,{agentKind:context.manager.agentFor?.(caller)})
+  const entry=bindPlatformConversation(conversations,owner,project,workspace)
   op.projectId=entry.id;op.status='confirmed';op.data={projectId:entry.id,platformProjectId:project.id,nativeProjectId:null,threadId:null,switched:false,connected:false}
   return
  }

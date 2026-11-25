@@ -1,3 +1,4 @@
+import {systemCodex} from '../setup/system-codex.mjs'
 // Isolated Codex compatibility check: no personal home, login, model turn or WeChat.
 import {mkdtemp,mkdir,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
@@ -8,6 +9,7 @@ import {promisify} from 'node:util'
 const root=fileURLToPath(new URL('../..',import.meta.url)),dir=await mkdtemp(join(tmpdir(),'zerolink-management-'))
 try{
  await mkdir(join(dir,'codex'))
+ const binary=await systemCodex()
  const code=`
  import {CodexRpc} from './src/infrastructure/agents/codex/rpc.mjs';
  import {join} from 'node:path';
@@ -15,7 +17,7 @@ try{
  import {createSessionProtocol} from './src/infrastructure/agents/session-protocol.mjs';
  import {managementConfiguration} from './src/infrastructure/agents/management-mcp.mjs';
  const cwd=${JSON.stringify(dir)},codexHome=cwd+'/codex';
- const protocol=createSessionProtocol({providerEnv:{},codexHome,rpcFactory:options=>new CodexRpc({...options,binary:process.execPath,providerOptions:{...options.providerOptions,args:[${JSON.stringify(join(root,'node_modules/@openai/codex/bin/codex.js'))},...options.providerOptions.args]}})});
+ const protocol=createSessionProtocol({providerEnv:{},codexHome,codexBinary:()=>${JSON.stringify(binary)}});
  const rpc=protocol.createRpc({cwd,management:managementConfiguration({socket:cwd+'/unavailable.sock',capability:'isolated-test-only'}),onEvent:()=>{},onClose:()=>{}});
  try{
   await protocol.initialize(rpc);

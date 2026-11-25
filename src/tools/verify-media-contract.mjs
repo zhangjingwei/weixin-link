@@ -4,8 +4,8 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {codexInput} from '../infrastructure/agents/codex/input.mjs'
-import {findCodex} from '../infrastructure/config/install-config.mjs'
-const exec=promisify(execFile),binary=findCodex(),dir=await mkdtemp(join(tmpdir(),'codex-input-contract-'))
+import {systemCodex} from '../setup/system-codex.mjs'
+const exec=promisify(execFile),binary=await systemCodex(),dir=await mkdtemp(join(tmpdir(),'codex-input-contract-'))
 try{
  const version=(await exec(binary,['--version'])).stdout.trim();await exec(binary,['app-server','generate-json-schema','--out',dir])
  const schema=JSON.parse(await readFile(join(dir,'v2/TurnStartParams.json'),'utf8')),variants=schema.definitions.UserInput.oneOf

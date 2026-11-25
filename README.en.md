@@ -41,8 +41,6 @@ Research, plan, and get results.
 
 ## Quick start
 
-**Run the installer → configure model access and choose a working model → open the WeChat login address and confirm.** You need your own WeChat account and a Codex subscription or supported model service. The installer prepares Node.js 24+ if needed.
-
 **Linux / macOS** — run in a terminal:
 
 ```sh
@@ -55,11 +53,11 @@ curl -fsSL https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/insta
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-The installer offers subscription sign-in, DeepSeek, Qwen or Kimi. After Codex subscription authorization, choose from the models actually available to your account; the wizard identifies the current/default options and reads back the saved setting. This changes your personal Codex default, shared with desktop and CLI. Existing conversations and explicit project overrides retain priority. A real inference test is optional; setup checks the account's Codex protocol by default.
+Send a task in WeChat and reply with the name of an available executor to bind the conversation. Each executor uses its own CLI credentials and model settings.
 
 The installer shows a WeChat login address and tries to open it in your browser. Enter third-party API keys only in the terminal. Setup supports Chinese and English; some advanced diagnostics remain in Chinese.
 
-**For users in mainland China:** [Codex subscription sign-in](https://learn.chatgpt.com/docs/auth) requires your own account and a connection to OpenAI services. If OpenAI is unavailable from your location or network, this option will not work. DeepSeek, Qwen and Kimi use keys from their own platforms instead of Codex subscription sign-in. Confirm your choice with the setup wizard's model test.
+**For users in mainland China:** [Codex subscription sign-in](https://learn.chatgpt.com/docs/auth) requires your own account and a connection to OpenAI services. If OpenAI is unavailable from your location or network, this option will not work.
 
 The setup wizard automatically uses Chinese or English.
 
@@ -165,13 +163,13 @@ Run `npm run logs` in the source directory, then send a WeChat message. The term
 
 The installer uses device-code sign-in. In ChatGPT **Settings → Security**, enable **Device code authorization** (also called device code sign-in; wording may vary), then follow the official link and code shown in the installation terminal. For a managed workspace, an admin must allow device code login in workspace permissions.
 
-If authorization was rejected or the code expired, enable the setting, rerun the installer, choose **Configure model → Subscription sign-in**, and use the newly displayed code. This setting applies to Codex subscription device-code login; third-party API key setup does not need it. For other failures, check the reported error, network, or account permissions.
+If authorization was rejected or the code expired, enable the setting, run `codex login --device-auth` in your terminal, and use the newly displayed code. This setting applies to Codex subscription device-code login; third-party API key setup does not need it. For other failures, check the reported error, network, or account permissions.
 
 See the [official OpenAI device-code login guide](https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta).
 
-### Subscription authorization succeeded, but the model test timed out
+### Select an executor
 
-By default the installer checks the Codex protocol for this account and continues to WeChat sign-in. To test a real reply, send **check-agent** in WeChat or run `node src/setup/setup.mjs wizard --verify-model` in the terminal. The optional terminal test waits up to about three minutes. You can retry it with your existing authorization.
+Reply with an available executor name to select it for this conversation.
 
 ## More capabilities and documentation
 

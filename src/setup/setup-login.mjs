@@ -1,7 +1,7 @@
 import {terminateMaintenance} from './maintenance-run.mjs'
 import {spawn,execFile} from 'node:child_process'
 import {promisify} from 'node:util'
-import {findCodex} from './install-config.mjs'
+import {systemCodex} from './system-codex.mjs'
 import {ensureAccountCodexHome} from '../infrastructure/accounts/codex-home.mjs'
 const exec=promisify(execFile)
 export function parseDeviceLogin(text){const clean=text.replace(/\x1b\[[0-9;]*[A-Za-z]/g,'');const code=clean.match(/\b[A-Z0-9]{4}-[A-Z0-9]{4,5}\b/)?.[0];const url=clean.match(/https:\/\/auth\.openai\.com\/(?:codex\/)?device\b/)?.[0];return code&&url?{code,url}:null}
@@ -12,14 +12,15 @@ export async function openDeviceLoginPage(url,{platform=process.platform,env=pro
  if(!command)return false
  try{await run(command,[url],{timeout:5000});return true}catch{return false}
 }
-export async function deviceLogin({binary=findCodex(),send,prefixArgs=[],signal,timeoutMs=600000,accountId=process.env.WECHAT_ACCOUNT??'default',home,language='zh',openPage=openDeviceLoginPage}={}){
+export async function deviceLogin({binary,send,prefixArgs=[],signal,timeoutMs=600000,accountId=process.env.WECHAT_ACCOUNT??'default',home,language='zh',openPage=openDeviceLoginPage}={}){
+ binary??=await systemCodex(home)
  const env={...process.env,CODEX_HOME:await ensureAccountCodexHome(accountId,home)}
  try{await exec(binary,[...prefixArgs,'login','status'],{timeout:10000,env});return {status:'already_logged_in'}}catch{}
  const help=await exec(binary,[...prefixArgs,'login','--help'],{timeout:10000,env});if(!help.stdout.includes('--device-auth'))throw Error('DEVICE_LOGIN_UNSUPPORTED')
  signal?.throwIfAborted()
  const guidance=language==='en'
-  ? 'Before device-code sign-in: in ChatGPT Settings → Security, enable Device code authorization (device code sign-in). For a managed workspace, ask its admin to enable device code login in workspace permissions. If authorization was blocked, enable it and retry Subscription sign-in. Official guide: https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta'
-  : '设备码登录前：请在 ChatGPT「设置 → 安全」中开启 Device code authorization（设备码授权／设备码登录，名称可能随界面变化）。受管理的工作区需由管理员在工作区权限中允许设备码登录。若授权被阻止，开启后重新选择「订阅登录」。官方说明：https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta'
+  ? 'Before device-code sign-in: in ChatGPT Settings → Security, enable Device code authorization (device code sign-in). For a managed workspace, ask its admin to enable device code login in workspace permissions. If authorization was blocked, enable it and retry Codex login. Official guide: https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta'
+  : '设备码登录前：请在 ChatGPT「设置 → 安全」中开启 Device code authorization（设备码授权／设备码登录，名称可能随界面变化）。受管理的工作区需由管理员在工作区权限中允许设备码登录。若授权被阻止，开启后重试 Codex 登录。官方说明：https://learn.chatgpt.com/docs/auth#preferred-device-code-authentication-beta'
  const notice=await send(guidance)
  if(notice?.status&&notice.status!=='accepted')throw Error('LOGIN_PROMPT_DELIVERY_UNCONFIRMED')
  signal?.throwIfAborted()

@@ -58,8 +58,8 @@ if ($bootstrapExisting) {
     if($bootstrapEnglish){throw 'A background service exists but the selected source directory is missing. Set WEIXIN_LINK_DIR to the original source; no new installation was created.'}else{throw '检测到已有后台服务，但所选源码目录不存在。请用 WEIXIN_LINK_DIR 指定原目录；未创建新安装。'}
 }
 if ($bootstrapExisting -and -not [Console]::IsInputRedirected) {
-    if($bootstrapEnglish){$choice=Select-BootstrapOption 'Use ↑/↓ to choose, then press Enter:' @('Upgrade','Configure model','Log in to WeChat again','Uninstall','Exit')}
-    else{$choice=Select-BootstrapOption '用 ↑/↓ 选择，回车确认：' @('升级','配置模型','重新登录微信','卸载','退出')}
+    if($bootstrapEnglish){$choice=Select-BootstrapOption 'Use ↑/↓ to choose, then press Enter:' @('Upgrade','Executor binding help','Log in to WeChat again','Uninstall','Exit')}
+    else{$choice=Select-BootstrapOption '用 ↑/↓ 选择，回车确认：' @('升级','执行器绑定说明','重新登录微信','卸载','退出')}
     if($choice -eq 5){return}
     if($choice -ne '1'){
         if(!(Test-Path -LiteralPath (Join-Path $bootstrapDest 'src\setup\account-manager.mjs') -PathType Leaf)){throw 'UPGRADE_REQUIRED_FOR_MENU'}

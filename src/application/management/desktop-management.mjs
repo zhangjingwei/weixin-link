@@ -4,7 +4,7 @@ export async function desktopStatus(context,owner){return {...await context.desk
 export function requestDesktop(context,owner,caller,name,args){return managementWrite(context,owner,caller,name,args,async op=>{
  if(!context.desktop)throw Error('MANAGEMENT_DESKTOP_UNAVAILABLE')
  const e=context.target(owner,args.projectId),saved=context.manager.state.users[e.key]
- if(['claude','workbuddy'].includes(context.manager.agentFor?.(e.key)))throw Error('MANAGEMENT_UNSUPPORTED')
+ if(['claude','workbuddy','doubao','grok'].includes(context.manager.agentFor?.(e.key)))throw Error('MANAGEMENT_UNSUPPORTED')
  if(e.archived||e.deleteIntent||!saved?.threadId)throw Error('MANAGEMENT_TARGET_UNAVAILABLE')
  op.threadId=saved.threadId;op.targetKey=e.key;op.workspace=context.manager.workspaceFor?.(e.key)??null
  if(name==='request_desktop_return'){

@@ -47,7 +47,7 @@ export async function resumePersonalConversation(context,message,reply){
  }else{
   const key=owner+'#conversation#'+randomUUID()
   entry={id:String(Math.max(0,...root.entries.map(e=>Number(e.id)||0))+1),key,name:label(thread.name||thread.preview)||'电脑上的会话',titleSource:thread.name?'codex':'placeholder'}
-  manager.state.users[key]={threadId:thread.id,workspace:thread.cwd,hasMessages:true,nativeProjectId:thread.projectId??null}
+  manager.state.users[key]={activeAgent:'codex',threadId:thread.id,workspace:thread.cwd,hasMessages:true,nativeProjectId:thread.projectId??null}
   root.entries.push(entry)
   manager.owners.add(key)
  }

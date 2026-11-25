@@ -6,7 +6,6 @@ import {flowInput, stripTaskFlow} from '../infrastructure/agents/task-flow.mjs'
 import {ASSISTANT_INSTRUCTIONS} from '../infrastructure/agents/assistant-policy.mjs'
 import {OutputStore, outputLinks} from '../infrastructure/media/outbound-media.mjs'
 import {CancellationScopes} from '../infrastructure/runtime/cancellation-scopes.mjs'
-import {installConfig} from '../setup/install-config.mjs'
 import {errorFields} from '../infrastructure/diagnostics/diagnostic-log.mjs'
 import {deliveryError, deliveryFailureState} from '../infrastructure/wechat/delivery-error.mjs'
 import {systemNotice} from '../interfaces/views/system-notice.mjs'
@@ -19,14 +18,13 @@ const sessionPorts = Object.freeze({
   integrationGuidance, materialInput, flowInput, stripTaskFlow,
   outputStore: options => new OutputStore(options), outputLinks,
   cancellationScopes: () => new CancellationScopes(),
-  codexBinary: () => installConfig().codexBinary,
   errorFields, deliveryError, deliveryFailureState, systemNotice,
 })
 
 class ConfiguredSessionManager extends SessionManager {
   constructor(options) {
     const {rpcFactory,providerEnv,sessionProtocol,...rest}=options
-    super({sessionPorts,...rest,sessionProtocol:sessionProtocol??createSessionProtocol({rpcFactory,providerEnv,codexBinary:sessionPorts.codexBinary})})
+    super({sessionPorts,...rest,sessionProtocol:sessionProtocol??createSessionProtocol({rpcFactory,providerEnv})})
   }
   handle(userId,text,reply,messageId,token,parsedCommand) {
     const command=parsedCommand??(typeof text==='string'?recoveryControlCommand(text):null)

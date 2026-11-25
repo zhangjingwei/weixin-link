@@ -15,6 +15,12 @@ export function archiveTaskResult(record,now=Date.now()){
  record.resultArchive=retained.slice(-20)
 }
 
-export function hasQueuedHandoff(state,jobs,owner,taskId){
- return (state.managementOperations??[]).some(op=>op.caller===owner&&op.sourceTaskId===taskId&&['route_conversation_request','request_agent_switch'].includes(op.name)&&op.status==='queued'&&['pending','starting','bound','submitted','done'].includes(jobs?.get?.(op.data?.taskId)?.state))
+export function queuedHandoffKind(state,jobs,owner,taskId){
+ return (state.managementOperations??[]).findLast(op=>{
+  if(op.caller!==owner||op.sourceTaskId!==taskId||op.status!=='queued')return false
+  const job=jobs?.get?.(op.data?.taskId)
+  if(!['pending','starting','bound','submitted','done'].includes(job?.state))return false
+  if(op.name==='request_agent_switch')return job.owner===owner&&job.input?.internalHandoff&&job.input.agentKind===op.data.agentKind
+  return op.name==='route_conversation_request'
+ })?.name
 }

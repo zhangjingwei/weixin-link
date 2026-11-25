@@ -60,13 +60,13 @@ export async function withBackend(context,owner,work){
  }
 
 export async function officialCatalog(context,connection,owner){
-  const ownedThreads=owner?context.ensure(owner).entries.filter(e=>!e.deleted&&!['claude','workbuddy'].includes(context.manager.agentFor?.(e.key))).map(e=>({key:e.key,threadId:context.manager.state.users[e.key]?.threadId})):[];
+  const ownedThreads=owner?context.ensure(owner).entries.filter(e=>!e.deleted&&!['claude','workbuddy','doubao','grok'].includes(context.manager.agentFor?.(e.key))).map(e=>({key:e.key,threadId:context.manager.state.users[e.key]?.threadId})):[];
   return context.backendPort.list(connection,ownedThreads);
  }
 
 export function applyCatalog(context,owner,catalog,onlyThread){
   const r=context.ensure(owner);
-  for(const e of r.entries){if(['claude','workbuddy'].includes(context.manager.agentFor?.(e.key)))continue;const tid=context.manager.state.users[e.key]?.threadId;if(!tid||(onlyThread&&tid!==onlyThread))continue;const item=catalog.get(tid);
+  for(const e of r.entries){if(['claude','workbuddy','doubao','grok'].includes(context.manager.agentFor?.(e.key)))continue;const tid=context.manager.state.users[e.key]?.threadId;if(!tid||(onlyThread&&tid!==onlyThread))continue;const item=catalog.get(tid);
    if(!item){if(e.deleteIntent)context.markDeleted(tid);else if(!e.deleted)e.archiveSync='missing';continue}
    if(e.deleted){e.deleteSync='conflict';continue;}
    // Persisted legacy hide flags never override the official store.
@@ -79,6 +79,6 @@ export function applyCatalog(context,owner,catalog,onlyThread){
  }
 
 export async function refreshTitles(context,owner){
-  if(context.ensure(owner).entries.every(e=>['claude','workbuddy'].includes(context.manager.agentFor?.(e.key))))return
+  if(context.ensure(owner).entries.every(e=>['claude','workbuddy','doubao','grok'].includes(context.manager.agentFor?.(e.key))))return
   await context.withBackend(owner,async connection=>{const catalog=await context.officialCatalog(connection,owner);context.applyCatalog(owner,catalog);await context.manager.save()});
  }

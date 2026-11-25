@@ -4,22 +4,16 @@ import SwiftUI
 
 struct SetupEvidence: Decodable {
   var phase: String?
-  var model: String?
   var url: String?
   var seconds: Int?
-  var device: String?
-  var code: String?
 }
 @MainActor final class FirstSetup: ObservableObject {
   @Published var phase = "checking"
   @Published var busy = ""
   @Published var notice = ""
   @Published var qr: String?
-  @Published var device: URL?
-  @Published var code = ""
-  @Published var model = ""
   @Published var pin = ""
-  private var child: Process?, checking = false, generation = 0
+  private var checking = false, generation = 0
   private var expires = Date.distantPast
   let fm = FileManager.default
   var home: String { ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory() }
@@ -30,7 +24,7 @@ struct SetupEvidence: Decodable {
     fm.fileExists(atPath: p) || (try? fm.destinationOfSymbolicLink(atPath: p)) != nil
   }
   var root: String { present(legacy) ? legacy : standard }
-  var ready: Bool { phase == "ready" && ["configured", "authorized"].contains(model) }
+  var ready: Bool { phase == "ready" }
   func launch(_ action: String) throws -> (Process, Pipe, Pipe) {
     guard let res = Bundle.main.resourceURL else { throw CocoaError(.fileNoSuchFile) }
     let p = Process()
@@ -94,7 +88,6 @@ struct SetupEvidence: Decodable {
       guard generation == version else { return }
       guard let r = result, let stage = r.phase else { throw CocoaError(.fileReadUnknown) }
       phase = stage
-      model = r.model ?? ""
       qr = r.url
       expires = Date().addingTimeInterval(Double(r.seconds ?? 0))
       if !stage.hasPrefix("verification_code_") { pin = "" }
@@ -114,43 +107,20 @@ struct SetupEvidence: Decodable {
     qr = nil
     do {
       let (p, out, input) = try launch(action)
-      child = p
       if action == "pin" {
         try input.fileHandleForWriting.write(contentsOf: Data(pin.utf8))
         pin = ""
       }
-      if action != "authorize" { try input.fileHandleForWriting.close() }
-      for try await line in out.fileHandleForReading.bytes.lines {
-        if action == "authorize", generation == version,
-          let r = try? JSONDecoder().decode(SetupEvidence.self, from: Data(line.utf8)),
-          let s = r.device,
-          ["https://auth.openai.com/codex/device", "https://auth.openai.com/device"].contains(s),
-          let u = URL(string: s)
-        {
-          device = u
-          code = r.code ?? ""
-          NSWorkspace.shared.open(u)
-        }
-      }
+      try input.fileHandleForWriting.close()
+      for try await _ in out.fileHandleForReading.bytes.lines {}
       await Task.detached { p.waitUntilExit() }.value
       withExtendedLifetime(input) {}
       if p.terminationStatus != 0 && generation == version { notice = "这一步未完成，请重新检查后再试。" }
     } catch { notice = "无法完成此步骤，请重新检查。" }
-    child = nil
-    device = nil
-    code = ""
     busy = ""
     await inspect()
   }
-  func cancel() {
-    if busy == "authorize" {
-      generation += 1
-      child?.terminate()
-      device = nil
-      code = ""
-      notice = "已取消本次授权，可重新开始。"
-    }
-  }
+
 }
 struct SetupRoot: View {
   @StateObject var setup = FirstSetup()
@@ -175,13 +145,6 @@ struct SetupRoot: View {
           if !setup.notice.isEmpty { Text(setup.notice).foregroundStyle(.secondary) }
           if !setup.busy.isEmpty {
             ProgressView()
-            if setup.busy == "authorize" {
-              if let url = setup.device {
-                Link("重新打开官方授权页", destination: url)
-                Text(verbatim: setup.code).font(.title.monospaced()).textSelection(.enabled)
-              }
-              Button("取消授权") { setup.cancel() }
-            }
           } else if setup.phase != "checking" {
             Button("重新检查") { Task { await setup.inspect() } }
           }
@@ -206,10 +169,6 @@ struct SetupRoot: View {
       button("安装本机服务", "install")
     case "conflict", "unknown": Text("发现已有实例或配置，但未能确认状态。请检查实例是否可用；这里不会覆盖现有数据。")
     default:
-      if setup.model == "missing" {
-        Text("在官方页面登录模型账号。授权完成后回到这里，应用会再次核对状态。")
-        button("开始官方账号授权", "authorize")
-      } else {
         switch setup.phase {
         case "stopped":
           Text("已找到微信账号，后台服务尚未启动。")
@@ -232,7 +191,6 @@ struct SetupRoot: View {
           }
           button(setup.qr == nil ? "获取微信二维码" : "刷新二维码", "qr")
         }
-      }
     }
   }
   func qrImage(_ text: String) -> NSImage? {

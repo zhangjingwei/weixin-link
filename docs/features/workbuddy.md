@@ -2,7 +2,11 @@
 
 接入腾讯官方 CodeBuddy Code CLI 的公开 ACP stdio 接口，使用用户自己的官方账号。当前验证版本为 `@tencent-ai/codebuddy-code` **2.187.0**，不使用 WorkBuddy 桌面内部 RPC、不复制登录凭据、不采用 API Key 回退。桌面登录与 CLI 登录能否共用不能据此保证，须以 CLI 实际登录及请求结果为准。版本不匹配会拒绝启动。
 
-## 手动启用
+## 自动发现与手动配置
+
+服务启动时会查找服务进程 PATH 中的 `codebuddy`，版本符合要求后将 WorkBuddy 加入本次运行的可切换列表，无需先运行 `configure`。每次启动重新发现，不写入 `agent.json`，已有对话保留自己的选择。手动配置的路径优先；缺失或版本不兼容的自动候选会跳过，不影响其他智能体启动。自动发现仅验证版本，登录是否有效仍以实际 ACP 会话建立为准。
+
+通过官方 CLI 登录、更新并启动服务后，可在微信发送：“切到 WorkBuddy，读取 package.json 并告诉我测试命令，不修改文件。”也可先通过 `get_conversation_agents` 查询可用列表。若服务找不到终端中已安装的 CLI，检查服务 PATH，或使用下面的绝对路径配置。Windows 批处理 shim 不参与自动发现，只尝试可直接执行的程序。
 
 先按项目的 `upgrade-local.sh` 流程手动更新本地实例。本页命令不会升级或重启服务。以下命令在更新后的源码目录运行，`/absolute/path/to/codebuddy` 必须换成自己的绝对路径；用 `command -v codebuddy` 查询。
 
@@ -10,22 +14,14 @@
 # 打开官方 CLI，按其提示登录自己的账号；完成后退出 CLI。
 node src/setup/agent.mjs login workbuddy --binary /absolute/path/to/codebuddy
 
-# 手动停止服务后注册，保留 Codex 默认值及原有数据。
+# 手动停止服务后注册。
 node src/setup/agent.mjs configure workbuddy --binary /absolute/path/to/codebuddy
 node src/setup/agent.mjs status
 ```
 
 配置写入账号私有 `agent.json`，在线服务存在时拒绝修改。注册检查版本，不把握手/认证方法列表当成已登录。手动启动服务后，可在原对话明确说“切到 WorkBuddy 接着做”，由已有管理协议 `get_conversation_agents` / `request_agent_switch` 建立顺序后续任务。只有前置任务的结构化结果确认成功才会释放后续任务，排队不等于已切换。初始化或登录失败时恢复原绑定，不提交模型任务、不自动重试。
 
-若希望新会话默认使用 WorkBuddy，可在手动停止服务后运行：
-
-```sh
-node src/setup/agent.mjs select workbuddy --binary /absolute/path/to/codebuddy
-# 恢复新会话默认 Codex（不移除 WorkBuddy 注册）
-node src/setup/agent.mjs select codex
-```
-
-这些是默认选择配置；已有逻辑会话仍保留自己的 activeAgent，需按对话显式切换。不会自动停止、启动或更新任何实例。
+在微信回复 WorkBuddy 即可绑定当前会话。
 
 ## 会话、权限与恢复
 

@@ -10,7 +10,7 @@ import {readAgentSwitch,saveAgentSwitch} from './agent-switch.mjs'
 
 export async function performAgentSwitch({account,requestId,root,home,read=readAgentSwitch,save=saveAgentSwitch,deployment=standardDeployment,wait=delay,attempts=600}={}){
  const request=await read(account)
- if(request?.id!==requestId||request.status!=='waiting_idle'||request.target!=='codex'||request.previous!=='codex')throw Error('AGENT_SWITCH_REQUEST_CHANGED')
+ if(request?.id!==requestId||request.status!=='waiting_idle'||request.previous!==request.target)throw Error('AGENT_SWITCH_REQUEST_CHANGED')
  const lease=randomUUID()
  let adapter,service,sealed=false,stopped=false,previousInstance
  try{
@@ -31,7 +31,7 @@ export async function performAgentSwitch({account,requestId,root,home,read=readA
   stopped=true;await adapter.stop(service)
   await adapter.start(service)
   for(let attempt=0;attempt<30;attempt++){
-   try{const state=await adapter.status(service);if(state.ready&&state.backend?.agentKind==='codex'&&previousInstance&&state.instance&&state.instance!==previousInstance){await save(account,{...request,status:'complete'});return {status:'complete',agentKind:'codex'}}}catch{}
+   try{const state=await adapter.status(service);if(state.ready&&state.backend?.agentKind===request.target&&previousInstance&&state.instance&&state.instance!==previousInstance){await save(account,{...request,status:'complete'});return {status:'complete',agentKind:request.target}}}catch{}
    await wait(1000)
   }
   throw Error('AGENT_SWITCH_HEALTH_CHECK_FAILED')

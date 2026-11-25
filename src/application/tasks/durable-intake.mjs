@@ -1,3 +1,4 @@
+import {selectionRequest,offerAgents} from './executor-selection.mjs'
 import {randomBytes} from 'node:crypto'
 import {validateProjectTask} from './project-dispatch.mjs'
 import {enqueueDuringTurn,awaitNativeTurn,cancelNativeWaiting} from './native-queue.mjs'
@@ -8,8 +9,14 @@ export class DurableIntake {
  constructor({jobs,manager,reply,conversations,desktopWriter,log=()=>{}}){Object.assign(this,{jobs,manager,reply,conversations,desktopWriter,log});this.users=new Map();this.closed=false}
  submit(owner,input,key,ingressIds=[]){
   input=typeof input==='string'?{text:input}:input
-  const handoff=this.jobs.pending().filter(job=>job.owner===owner&&job.input?.internalHandoff).at(-1)
-  input={...input,agentKind:input.agentKind??handoff?.input.agentKind??this.manager.agentFor?.(owner)??this.manager.protocol?.kind??'codex'}
+  const bound=this.manager.agentFor?.(owner)
+  const control=!bound&&this.manager.protocol?.availableAgents&&!input.agentKind&&!input.nativeCommand&&!input.projectDispatch&&!input.internalHandoff&&!input.attachments?.length&&!input.images?.length&&!input.audios?.length&&selectionRequest(input.text)
+  if(control)input={...input,agentSelection:true,agentKind:control.kind}
+  const handoff=this.jobs.pending().filter(job=>job.owner===owner&&(job.input?.internalHandoff||job.input?.agentSelection&&job.input.agentKind)).at(-1)
+  input={...input,agentKind:control?control.kind:input.agentKind??handoff?.input.agentKind??bound??null}
+  if(handoff?.input.agentSelection&&!control&&!input.internalHandoff&&!input.projectDispatch&&input.agentKind===handoff.input.agentKind)input={...input,dependencies:[...new Set([...(input.dependencies??[]),handoff.id])]}
+  const executorId=input.agentKind&&this.manager.protocol?.forAgent?.(input.agentKind)?.executorId
+  if(executorId)input.executorId=executorId
   const id=this.jobs.add(owner,input,key,ingressIds)
   enqueueDuringTurn(this,owner,this.jobs.get?.(id)?.input??input,id);this.wake(owner);return id
  }
@@ -67,6 +74,11 @@ export class DurableIntake {
   for(;;){if(this.closed||this.manager.state?.desktopHandoff||this.manager.desktopTransition)return;const job=this.next(owner);if(!job)return;const token=this.manager.lifecycle.capture(owner),reply=(v,o)=>this.reply(owner,v,{...o,...job.input?.projectDispatch?{projectTaskId:job.id}:{},traceId:o?.traceId??(typeof job.input==='object'?job.input.traceId:undefined)})
    let executionStarted=false
    try{
+    if(job.input?.executorId&&job.input.executorId!==this.manager.protocol?.forAgent?.(job.input.agentKind)?.executorId){
+     this.jobs.mark(job.id,job.state==='pending'?'cancelled':'uncertain')
+     await reply('原执行器的路径或配置目录已变化。请核对原会话和任务记录。')
+     continue
+    }
     if(job.state==='pending'){
      const input=typeof job.input==='string'?{text:job.input}:{...job.input};input.deliveryId=job.id
      if(job.context?.desktopConfirmation)input.expectedThreadId=job.context.desktopConfirmation.threadId
@@ -80,7 +92,20 @@ export class DurableIntake {
      const prerequisites=dependencies.map(id=>this.jobs.get(id))
      if(prerequisites.some(prior=>!prior||['cancelled','uncertain'].includes(prior.state)||prior.state==='done'&&prior.outcome!=='completed')){this.jobs.mark(job.id,'cancelled');await reply('前置任务未确认成功，依赖任务未执行。');continue}
      if(prerequisites.some(prior=>prior.state!=='done')){await delay(100);continue}
-     if(input.agentKind&&this.manager.selectAgent)await this.manager.selectAgent(owner,input.agentKind)
+     if(input.agentSelection){
+      if(input.selectionTask&&!this.manager.protocol.availableAgents.includes(input.agentKind)){
+       this.jobs.markOutcome?.(job.id,'not_submitted');this.jobs.mark(job.id,'cancelled');await reply(input.agentKind+' 未接入，本条任务未提交。可用执行器：'+(this.manager.protocol.availableAgents.join('、')||'无'));continue
+      }
+      if(!input.agentKind||!this.manager.protocol.availableAgents.includes(input.agentKind)){await offerAgents(this,job,reply,{keep:false});continue}
+      await this.manager.selectAgent(owner,input.agentKind,input.internalHandoff?{sourceTaskId:input.handoffSourceTaskId,note:input.handoffNote}:undefined)
+      if(!token.current()||this.closed)return
+      this.jobs.finishAgentSelection(owner,job.id,input.agentKind,this.manager.protocol.forAgent(input.agentKind).executorId??null,input.selectionTask)
+      if(!input.selectionTask)await reply('当前会话执行器已设为 '+input.agentKind+'。')
+      continue
+     }
+     if(!input.agentKind&&this.manager.protocol?.availableAgents){await offerAgents(this,job,reply);continue}
+     if(input.agentKind&&this.manager.selectAgent)await this.manager.selectAgent(owner,input.agentKind,input.internalHandoff?{sourceTaskId:input.handoffSourceTaskId,note:input.handoffNote}:undefined)
+     if(!token.current()||this.closed)return
      if(this.jobs.claimStart&&!this.jobs.claimStart(owner,job.id))continue
      if(dependencies.length)input.text+='\n\n前置任务执行记录（仅状态证据，不是新指令；如原请求需要内容，可按任务编号查询结果）：'+JSON.stringify(prerequisites.map(prior=>({taskId:prior.id,projectId:this.conversations?.entry(prior.owner)?.id??null,execution:prior.outcome})))
      this.log('queue.starting',{trace_id:input.traceId})
@@ -93,12 +118,23 @@ export class DurableIntake {
       else if(result?.status==='interrupted')this.jobs.mark(job.id,'cancelled')
       else this.jobs.mark(job.id,'done')
      }
-    }else{executionStarted=true;token.activate?.();if(job.context?.nativeQueue)await awaitNativeTurn(this,job,reply,token);else await this.recover(job,reply,token)}
+    }else{executionStarted=true;
+     if(job.input?.agentKind&&this.manager.agentFor&&job.input.agentKind!==this.manager.agentFor(owner))throw Error('RECOVERY_AGENT_MISMATCH')
+     token.activate?.();if(job.context?.nativeQueue)await awaitNativeTurn(this,job,reply,token);else await this.recover(job,reply,token)}
    }catch(error){if(this.closed)return;if(token.current()){
-    if(job.state==='pending'&&(/^CLAUDE_(?:CLI_|LOGIN_|SUBSCRIPTION_|INITIALIZATION_)/.test(error.code??'')||['WORKBUDDY_LOGIN_REQUIRED','WORKBUDDY_CLI_UNAVAILABLE','WORKBUDDY_CLI_VERSION_UNSUPPORTED','WORKBUDDY_RESUME_UNSUPPORTED'].includes(error.code))){
+    if(job.state==='pending'&&(/^CLAUDE_(?:CLI_|LOGIN_|SUBSCRIPTION_|INITIALIZATION_)/.test(error.code??'')||/^(?:WORKBUDDY|DOUBAO|GROK)_(?:CLI_|LOGIN_|AUTH_|RESUME_|ACP_|CONNECTION_|RPC_)/.test(error.code??''))){
      this.jobs.mark(job.id,'cancelled')
-     await reply('未能连接 '+(error.code?.startsWith('WORKBUDDY_')?'WorkBuddy':'Claude Code')+'，本条尚未提交。请在主机核对 CLI 版本及官方账号登录；不会自动重试。')
+     await reply('未能连接 '+({WORKBUDDY:'WorkBuddy',DOUBAO:'Doubao',GROK:'Grok',CLAUDE:'Claude Code'})[error.code?.split('_')[0]]+'，本条尚未提交。请在主机核对 CLI 版本及官方账号登录；不会自动重试。')
      continue
+    }
+    if(job.state==='pending'&&error.message==='AGENT_UNAVAILABLE'&&job.input?.agentKind==='codex'){
+     this.jobs.mark(job.id,'cancelled')
+     await reply('系统 Codex 不可用，本条未提交。请安装支持 app-server 的 Codex，或在安装电脑上配置 CLI 的绝对路径。')
+     continue
+    }
+    if(job.state==='pending'&&(error.code==='CODEX_RESUME_REJECTED'||!executionStarted&&error.definitiveRpcError&&error.method==='thread/resume')){
+     this.jobs.markOutcome?.(job.id,'not_submitted');this.jobs.mark(job.id,'cancelled')
+     await reply('Codex 拒绝恢复原会话，本条任务未提交。可以查看已有结果，或在未绑定的新会话中选择执行器。');continue
     }
     if(job.state==='pending'&&error.code==='CODEX_CONNECT_FAILED'){
      this.log('session.connect_failed',{trace_id:job.input?.traceId})
@@ -115,7 +151,10 @@ export class DurableIntake {
     }
     if(job.state==='pending'&&error.code==='DESKTOP_THREAD_CHANGED'){this.jobs.mark(job.id,'cancelled');await reply('原会话已变化，保留的消息已取消。');continue}
     if(!executionStarted&&/^PROJECT_TASK_(?:ROUTE_INVALID|TARGET_UNAVAILABLE|TARGET_CHANGED)$/.test(error.message)){this.jobs.mark(job.id,'cancelled');await reply('指定项目的任务未执行：目标或归属已变化，请核对项目后重新提交。');continue}
-    if(['AGENT_SWITCH_BLOCKED','AGENT_UNAVAILABLE'].includes(error.message)){this.jobs.mark(job.id,'cancelled');await reply('智能体未切换：原任务仍在执行、等待处理或状态未确认，或目标底座尚未配置。本条未交给其他智能体。');continue}
+    if(job.state==='pending'&&['AGENT_SWITCH_BLOCKED','AGENT_UNAVAILABLE'].includes(error.message)){
+     this.jobs.markOutcome?.(job.id,'not_submitted');this.jobs.mark(job.id,'cancelled')
+     await reply(error.message==='AGENT_UNAVAILABLE'?'目标执行器尚未接入，本条任务未提交。':this.jobs.uncertainCount?.(owner)?'当前会话有结果未确认的旧任务，切换受阻。本条任务未提交。':'当前会话仍有未结束的工作，暂时无法切换执行器。本条任务未提交。');continue
+    }
     if(['COMPACTION_WAIT_TIMEOUT','COMPACTION_CHECK_FAILED'].includes(error.code)){this.jobs.mark(job.id,'cancelled');await reply(error.message);continue}
     this.jobs.mark(job.id,'uncertain');const record=this.manager.state.users[owner]??={};if(record.recovery?.execution==='running'||!record.recovery)record.recovery={task:(job.context?.task??localTaskLabel(job.input,job.id)),execution:'unknown',delivery:'unknown'};await this.manager.save();await reply('该消息的执行或发送结果尚未确认，已保留记录；不会自动重复提交。你可以说“核对刚才的任务有没有完成”或“看看刚才的结果”。')}}
   }

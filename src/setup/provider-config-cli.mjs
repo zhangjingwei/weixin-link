@@ -31,7 +31,7 @@ function publicPrompt(label){
 }
 
 export async function configureProvider(kind,accountId='default',options={}){
- if(kind==='subscription'){await clearTerminalSetupStatus(accountPaths(accountId,options.home).stateDir);return clearProviderProfile({accountId,...options})}
+ if(kind==='off'){await clearTerminalSetupStatus(accountPaths(accountId,options.home).stateDir);return clearProviderProfile({accountId,...options})}
  if(!['deepseek','qwen','kimi'].includes(kind))throw Error('INVALID_PROVIDER_KIND')
  const english=options.language==='en'
  const workspaceId=kind==='qwen'?await publicPrompt(english?'Alibaba Cloud Beijing Workspace ID: ':'百炼华北 2（北京）Workspace ID：'):undefined

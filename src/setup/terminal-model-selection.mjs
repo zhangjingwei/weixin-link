@@ -2,13 +2,13 @@ import {CodexRpc} from '../infrastructure/agents/codex/rpc.mjs'
 import {initializeCodex} from '../infrastructure/agents/codex/protocol-operations.mjs'
 import {createSessionProtocol} from '../infrastructure/agents/session-protocol.mjs'
 import {ensureAccountCodexHome} from '../infrastructure/accounts/codex-home.mjs'
-import {findCodex} from './install-config.mjs'
+import {systemCodex} from './system-codex.mjs'
 
 // Use the native config API so the chosen default is also honored by Codex.
 // Project-specific model overrides continue to take precedence.
-export async function selectTerminalModel({accountId='default',home,choose,write,language='zh',rpcFactory=options=>new CodexRpc(options)}={}){
+export async function selectTerminalModel({accountId='default',home,binary,choose,write,language='zh',rpcFactory=options=>new CodexRpc(options)}={}){
  const codexHome=await ensureAccountCodexHome(accountId,home)
- const rpc=rpcFactory({binary:findCodex(home),codexHome,cwd:home})
+ const rpc=rpcFactory({binary:binary??await systemCodex(home),nativeProfile:true,providerOptions:{args:['app-server']},codexHome,cwd:home})
  const en=language==='en'
  try{
   await initializeCodex(rpc,{name:'zerolink_model_setup',version:'1.0.0'})

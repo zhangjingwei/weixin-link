@@ -9,7 +9,6 @@
 以下依据本仓库 package-lock.json 中声明的版本和 license 字段整理。它是清单，不替代各包随附的 LICENSE、NOTICE、源码提供要求或实际构建核查。
 
 - `@napi-rs/canvas` 1.0.11：MIT。
-- `@openai/codex` 0.172.0：Apache-2.0；官方 Codex CLI 及按平台安装的原生二进制，来源和完整性校验见 `package-lock.json`。随包保留上游许可证与版权声明。
 - `wechatbot-zerolink` 2.2.0-zerolink.2：MIT，基于 `@wechatbot/wechatbot` 2.2.0；来源为 npm 发布包，校验值见 `package-lock.json`，包内保留原许可证。
 - `pdfjs-dist` 6.4.299：Apache-2.0。
 - `qrcode` 1.5.4：MIT。
@@ -40,5 +39,5 @@ FFmpeg 平台包的许可声明并不一致：当前锁文件中 Linux arm64/x64
 
 ## MCP 管理工具
 
-- `@modelcontextprotocol/sdk` 1.32.2：MIT，来源 https://github.com/modelcontextprotocol/typescript-sdk 。使用维护中的 v1 协议线以匹配随项目固定的 Codex CLI；通过标准 stdio 暴露窄工具，不复制 SDK 代码。
+- `@modelcontextprotocol/sdk` 1.32.2：MIT，来源 https://github.com/modelcontextprotocol/typescript-sdk 。使用维护中的 v1 协议线以匹配系统安装的 Codex CLI；通过标准 stdio 暴露窄工具，不复制 SDK 代码。
 - 新增传递依赖及其版本、来源、完整性见 `package-lock.json`；许可证保留在依赖包中（包括 Zod MIT、Ajv MIT、Express MIT）。

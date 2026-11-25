@@ -35,6 +35,11 @@ export class DurableJobs {
   const read=(where,args)=>this.db.prepare(`SELECT ${fields} FROM ingress WHERE owner=? AND ${where} AND ${visible} ORDER BY created DESC,rowid DESC LIMIT 40`).all(owner,...args)
   return [...read('chat_thread=?',[thread]),...read('chat_thread IS NULL',[]),...(thread?read("chat_thread=''",[]):[])].sort((a,b)=>a.created-b.created||a.sequence-b.sequence)
  }
+ *matchingTasks(owner,topic){
+  const text="CASE WHEN json_type(input)='text' THEN json_extract(input,'$') ELSE json_extract(input,'$.text') END"
+  const rows=this.db.prepare(`SELECT id,state,outcome,${text} AS text FROM jobs WHERE owner=? AND NOT coalesce(json_extract(input,'$.agentSelection'),0) AND instr(coalesce(${text},''),?)>0 ORDER BY created DESC,rowid DESC`)
+  yield* rows.iterate(owner,topic)
+ }
  listForOwner(owner,{offset=0,limit=20}={}){if(!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>20)throw Error('MANAGEMENT_INVALID_ARGUMENTS');const rows=this.db.prepare('SELECT id,state,thread_id,turn_id,created FROM jobs WHERE owner=? ORDER BY created DESC,rowid DESC LIMIT ? OFFSET ?').all(owner,limit+1,offset);return {items:rows.slice(0,limit).map(r=>({taskId:r.id,title:taskDisplayTitle(this.get(r.id).input,this.get(r.id).input?.projectDispatch?.title),state:r.state,threadId:r.thread_id,turnId:r.turn_id,createdAt:new Date(r.created).toISOString()})),nextOffset:rows.length>limit?offset+limit:null}}
  recheckTask(owner,id,threadId){return this.db.prepare("UPDATE jobs SET state=CASE WHEN turn_id IS NULL THEN 'bound' ELSE 'submitted' END WHERE owner=? AND id=? AND state='uncertain' AND thread_id=?").run(owner,id,threadId).changes}
  recheck(owner){return this.db.prepare("UPDATE jobs SET state=CASE WHEN turn_id IS NULL THEN 'bound' ELSE 'submitted' END WHERE owner=? AND state='uncertain' AND thread_id IS NOT NULL").run(owner).changes}
@@ -60,6 +65,17 @@ export class DurableJobs {
  }
  claimNativeQueue(owner,id,threadId,context){
   return this.db.prepare("UPDATE jobs SET state='bound',thread_id=?,context=? WHERE owner=? AND id=? AND state='pending' AND thread_id IS NULL").run(threadId,JSON.stringify(context),owner,id).changes===1
+ }
+ waitForAgent(owner,id){
+  return this.db.prepare("UPDATE jobs SET state='waiting_agent' WHERE owner=? AND id=? AND state='pending'").run(owner,id).changes===1
+ }
+ finishAgentSelection(owner,id,kind,executorId,task){
+  this.db.exec('BEGIN IMMEDIATE')
+  try{
+   const done=task?this.db.prepare("UPDATE jobs SET input=json_remove(json_set(input,'$.text',?),'$.agentSelection','$.selectionTask') WHERE owner=? AND id=? AND state='pending'").run(task,owner,id):this.db.prepare("UPDATE jobs SET state='done',outcome='completed' WHERE owner=? AND id=? AND state='pending'").run(owner,id)
+   if(done.changes)this.db.prepare("UPDATE jobs SET state='pending',input=json_set(input,'$.agentKind',?,'$.executorId',?) WHERE owner=? AND state='waiting_agent'").run(kind,executorId,owner)
+   this.db.exec('COMMIT')
+  }catch(error){this.db.exec('ROLLBACK');throw error}
  }
  claimStart(owner,id){return this.db.prepare("UPDATE jobs SET state='starting' WHERE owner=? AND id=? AND state='pending' AND thread_id IS NULL").run(owner,id).changes===1}
  changePending(owner,id,action){
@@ -89,7 +105,7 @@ export class DurableJobs {
    if(!prior && id){
     const owner=message.userId
     this.db.prepare("UPDATE ingress SET state='cancelled' WHERE owner=? AND state='pending' AND id<>?").run(owner,id)
-    this.db.prepare("UPDATE jobs SET state='cancelled' WHERE owner=? AND state IN ('pending','starting','waiting_desktop') AND thread_id IS NULL").run(owner)
+    this.db.prepare("UPDATE jobs SET state='cancelled' WHERE owner=? AND state IN ('pending','starting','waiting_desktop','waiting_agent') AND thread_id IS NULL").run(owner)
     this.db.prepare("UPDATE jobs SET stop_request=? WHERE owner=? AND state IN ('bound','submitted')").run(id,owner)
    }
    this.db.exec('COMMIT')
@@ -104,6 +120,6 @@ export class DurableJobs {
  hasPendingInput(owner){return !!this.db.prepare("SELECT 1 FROM ingress WHERE owner=? AND state='pending' LIMIT 1").get(owner)}
  rawPending(){return this.db.prepare("SELECT id,payload FROM ingress WHERE state='pending' ORDER BY created,rowid").all().map(r=>({...JSON.parse(r.payload),_ingressId:r.id,_recovered:true}))}
  acknowledge(ids){const stmt=this.db.prepare("UPDATE ingress SET state='done' WHERE id=? AND state='pending'");for(const id of ids??[])stmt.run(id)}
- cancel(owner){this.db.prepare("UPDATE jobs SET stop_request=COALESCE(stop_request,'cancel') WHERE owner=? AND state IN ('bound','submitted') AND json_extract(context,'$.nativeQueue')=1").run(owner);this.db.prepare("UPDATE ingress SET state='cancelled' WHERE owner=? AND state='pending'").run(owner);this.db.prepare("UPDATE jobs SET state='cancelled' WHERE owner=? AND state IN ('pending','starting','waiting_desktop') AND thread_id IS NULL").run(owner)}
+ cancel(owner){this.db.prepare("UPDATE jobs SET stop_request=COALESCE(stop_request,'cancel') WHERE owner=? AND state IN ('bound','submitted') AND json_extract(context,'$.nativeQueue')=1").run(owner);this.db.prepare("UPDATE ingress SET state='cancelled' WHERE owner=? AND state='pending'").run(owner);this.db.prepare("UPDATE jobs SET state='cancelled' WHERE owner=? AND state IN ('pending','starting','waiting_desktop','waiting_agent') AND thread_id IS NULL").run(owner)}
  close(){this.db.close()}
 }

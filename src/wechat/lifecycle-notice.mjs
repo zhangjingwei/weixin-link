@@ -3,10 +3,9 @@ import {createHash,randomUUID} from 'node:crypto'
 import {readFile,writeFile,rename,unlink,lstat} from 'node:fs/promises'
 import {join} from 'node:path'
 import {deliveryError} from '../infrastructure/wechat/delivery-error.mjs'
-import {installerCommand} from '../setup/setup-locale.mjs'
 
 const RELEASE=/^(?:[0-9a-f]{7,40}|[0-9a-f]{64})$/
-export const welcomeMessage=(language,accountId='default')=>language==='en'?'Weixin Link is connected. Complete model setup in your computer terminal with '+installerCommand('setup',{accountId,language:'en'})+' if needed.':'微信助手已连接。首次模型配置请在安装电脑的终端完成；需要时运行 '+installerCommand('setup',{accountId,language:'zh'})+'。'
+export const welcomeMessage=language=>language==='en'?'Weixin Link is connected. Send a task, then reply with an executor name to bind this conversation.':'微信助手已连接。发送任务后，回复可用执行器的名称即可绑定当前会话。'
 export const upgradeMessage=(commit,language='zh',release)=>(language==='en'?`Weixin Link upgraded to ${release?.tag??commit.slice(0,7)} and is connected. You can ask how your tasks are progressing, whether the service is working, or how to use the assistant.`:`微信助手已升级到 ${release?.tag??commit.slice(0,7)}，服务已连接。可以直接说你的需求，例如“看看任务进展”“检查助手是否正常”或“介绍一下怎么用”。`)+(release?'\n\n'+release.details:'')
 
 export class LifecycleNotice{

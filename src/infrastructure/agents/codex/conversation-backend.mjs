@@ -13,7 +13,7 @@ export function createCodexConversationBackend(manager){
   listProjects:listCodexProjects,
   capabilities:{catalog:true,archive:true,delete:true,history:true},
   async withConnection(owner,recipient,work){
-   const existing=[...manager.sessions.values()].find(s=>!s.rpc?.closed&&s.rpc?.request&&recipient(s.userId)===owner);
+   const existing=[...manager.sessions.values()].find(s=>(s.rpc?.agentKind??'codex')==='codex'&&!s.rpc?.closed&&s.rpc?.request&&recipient(s.userId)===owner);
    if(existing)return work(existing.rpc);
    const rpc=manager.createCatalogRpc();
    try{await initializeCodex(rpc,{name:'wechat_catalog',version:'1.0.0'});return await work(rpc)}finally{rpc.close()}
@@ -87,7 +87,7 @@ export function createCodexConversationBackend(manager){
   connectionFor(session,fallback){return session?.rpc&&!session.rpc.closed?session.rpc:fallback},
   closeSession(session){if(manager.detachRpc)manager.detachRpc(session,session.rpcAttempt);else session.rpc?.close?.()},
   async readConversation(handle,threadId){return (await connection(handle).request('thread/read',{threadId,includeTurns:false})).thread},
-  async confirmSession(session,threadId){return ['claude','workbuddy'].includes(session.rpc?.agentKind)?manager.protocol.read(session.rpc,threadId):this.readConversation(session,threadId)},
+  async confirmSession(session,threadId){return ['claude','workbuddy','doubao','grok'].includes(session.rpc?.agentKind)?manager.protocol.read(session.rpc,threadId):this.readConversation(session,threadId)},
   async renameConversation(handle,threadId,name){await connection(handle).request('thread/name/set',{threadId,name})},
   async setArchived(handle,threadId,archived){await connection(handle).request(archived?'thread/archive':'thread/unarchive',{threadId})},
   async deleteConversation(handle,threadId){await connection(handle).request('thread/delete',{threadId})},

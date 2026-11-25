@@ -1,3 +1,4 @@
+import {systemCodex} from '../setup/system-codex.mjs'
 // Two native clients, one isolated account profile. No login, model turn, desktop
 // launch, personal config, or production conversation is accessed.
 import {mkdtemp,rm,mkdir} from 'node:fs/promises'
@@ -9,11 +10,12 @@ import {fileURLToPath} from 'node:url'
 const root=fileURLToPath(new URL('../..',import.meta.url)),dir=await mkdtemp(join(tmpdir(),'zerolink-desktop-'))
 try{
  await mkdir(join(dir,'profile'),{mode:0o700})
+ const binary=await systemCodex()
  const code=`
  import {CodexRpc} from './src/infrastructure/agents/codex/rpc.mjs';
  import {initializeCodex} from './src/infrastructure/agents/codex/protocol-operations.mjs';
  const clients=[],cwd=${JSON.stringify(dir)},codexHome=cwd+'/profile';
- const create=async()=>{const rpc=new CodexRpc({binary:process.execPath,providerOptions:{args:[${JSON.stringify(join(root,'node_modules/@openai/codex/bin/codex.js'))},'app-server']},cwd,codexHome});clients.push(rpc);await initializeCodex(rpc,{name:'desktop_profile_test',version:'1.0.0'});return rpc};
+ const create=async()=>{const rpc=new CodexRpc({binary:${JSON.stringify(binary)},providerOptions:{args:['app-server']},cwd,codexHome});clients.push(rpc);await initializeCodex(rpc,{name:'desktop_profile_test',version:'1.0.0'});return rpc};
  try{const first=await create(),started=await first.request('thread/start',{cwd,ephemeral:false});const id=started.thread.id;
  await first.request('thread/name/set',{threadId:id,name:'Desktop profile compatibility test'});
  const second=await create(),read=await second.request('thread/read',{threadId:id,includeTurns:false});

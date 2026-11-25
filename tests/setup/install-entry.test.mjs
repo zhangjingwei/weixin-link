@@ -89,7 +89,7 @@ test('an interrupted default installation resumes without downloading an upgrade
  await writeFile(join(f.bin,'npm'),'#!/bin/sh\nprintf "%s" "$*" > "$UPGRADE_CAPTURE"\n',{mode:0o755})
  await writeFile(join(f.dest,'src/setup/unix-install.sh'),'#!/bin/sh\nprintf resumed > resumed.txt\n')
  await exec('sh',[bootstrap],{env})
- assert.equal(await readFile(env.UPGRADE_CAPTURE,'utf8'),'ci')
+ assert.equal(await readFile(env.UPGRADE_CAPTURE,'utf8'),'ci --omit=dev')
  assert.equal(await readFile(join(f.dest,'resumed.txt'),'utf8'),'resumed')
  assert.equal((await readdir(f.dest)).includes('.weixin-link-install-pending'),false)
  assert.equal((await readdir(f.root)).some(name=>name.startsWith('.weixin-link-download.')),false)

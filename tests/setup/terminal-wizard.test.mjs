@@ -4,69 +4,19 @@ import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {runTerminalWizard as runWizard} from '../../src/setup/terminal-wizard.mjs'
-import {probeTerminalModel,runModelProbeCommand,MODEL_PROBE_TIMEOUT_MS} from '../../src/setup/terminal-model-probe.mjs'
-import {readTerminalSetupStatus} from '../../src/setup/terminal-setup-status.mjs'
-import {saveProviderProfile,readProviderProfile} from '../../src/setup/provider-profile.mjs'
+import {probeTerminalModel,runModelProbeCommand} from '../../src/setup/terminal-model-probe.mjs'
+import {readProviderProfile} from '../../src/setup/provider-profile.mjs'
 import {accountPaths} from '../../src/infrastructure/accounts/account-store.mjs'
 
-const runTerminalWizard=options=>runWizard({selectModel:async()=> 'test-sol',...options})
+const runTerminalWizard=runWizard
 
 async function fixture(t){const home=await mkdtemp(join(tmpdir(),'terminal-wizard-')),stateDir=accountPaths('default',home).stateDir;await mkdir(stateDir,{recursive:true});t.after(()=>rm(home,{recursive:true,force:true}));return {home,stateDir}}
 
-test('terminal wizard configures a provider, checks Codex and records only verified inference',async t=>{
- const f=await fixture(t),calls=[],messages=[]
- const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=> '2',configure:async(kind,accountId,{home})=>{calls.push('configure');await saveProviderProfile({kind,accountId,home,apiKey:'sk-private-test-key'})},check:async()=>calls.push('check'),probe:async()=>{calls.push('probe');return {verified:true,provider:'deepseek',model:'deepseek-flash'}},applyService:async()=>{calls.push('apply');return false},write:text=>messages.push(text)})
- assert.equal(result.verified,true);assert.deepEqual(calls,['configure','check','probe','apply'])
- assert.equal((await readTerminalSetupStatus(f.stateDir)).provider,'deepseek')
- assert(!messages.join('\n').includes('sk-private-test-key'))
-})
-
-test('subscription remains selectable and clears a previous provider before testing',async t=>{
- const f=await fixture(t),calls=[];await saveProviderProfile({kind:'qwen',workspaceId:'workspace123',apiKey:'sk-private-test-key',home:f.home})
- await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=> '1',login:async({send})=>{calls.push('login');await send('官方设备授权提示')},check:async()=>calls.push('check'),probe:async()=>{calls.push('probe');return {verified:true,provider:'subscription',model:'test-sol'}},applyService:async()=>{calls.push('apply');return false},write:()=>{}})
- assert.deepEqual(calls,['login','check','probe','apply']);assert.equal(await readProviderProfile(f.stateDir),null)
- assert.equal((await readTerminalSetupStatus(f.stateDir)).provider,'subscription')
-})
-
-test('failed probe followed by deferral leaves no verified marker',async t=>{
- const f=await fixture(t),choices=['4','0'],messages=[]
- const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=>choices.shift(),configure:async()=>{},check:async()=>{},probe:async()=>{throw Error('raw upstream secret should not print')},write:text=>messages.push(text)})
- assert.equal(result.verified,false);assert.equal(await readTerminalSetupStatus(f.stateDir),null)
- assert(!messages.join('\n').includes('raw upstream secret'))
-})
-
-test('English terminal wizard uses English prompts and keeps the same provider choices',async t=>{
- const f=await fixture(t),prompts=[],messages=[]
- await runTerminalWizard({verifyModel:true,home:f.home,language:'en',choose:async prompt=>{prompts.push(prompt);return '0'},write:text=>messages.push(text)})
- assert(prompts[0].includes('Subscription sign-in'))
- assert(prompts[0].includes('DeepSeek'))
- assert(prompts[0].includes('Qwen'))
- assert(messages[0].includes('not been verified'))
-})
-test('selected English language is saved for the first WeChat notice',async t=>{
- const f=await fixture(t)
- await runTerminalWizard({verifyModel:true,home:f.home,language:'en',choose:async()=> '1',login:async()=>{},check:async()=>{},probe:async()=>({verified:true,provider:'subscription',model:'test-sol'}),applyService:async()=>false,write:()=>{}})
- assert.equal((await readTerminalSetupStatus(f.stateDir)).language,'en')
-})
-
-test('service apply failure does not leave a verified marker',async t=>{
- const f=await fixture(t),choices=['2','0']
- const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=>choices.shift(),configure:async(kind,accountId,{home})=>saveProviderProfile({kind,accountId,home,apiKey:'sk-private-test-key'}),check:async()=>{},probe:async()=>({verified:true,provider:'deepseek',model:'deepseek-flash'}),applyService:async()=>{throw Error('MODEL_SERVICE_RESTART_NOT_SCHEDULED')},write:()=>{}})
- assert.equal(result.deferred,true)
- assert.equal(await readTerminalSetupStatus(f.stateDir),null)
-})
-
-test('terminal probe passes Responses configuration and checks the model output',async t=>{
- const f=await fixture(t);await saveProviderProfile({kind:'kimi',apiKey:'sk-private-test-key',home:f.home})
- let captured
- const result=await probeTerminalModel({home:f.home,execute:async(binary,args,options)=>{captured={binary,args,options};const path=args[args.indexOf('--output-last-message')+1],nonce=args.at(-1).split('：').at(-1);await writeFile(path,nonce+'\n')}})
- assert.equal(result.provider,'kimi');assert.equal(result.verified,true)
- assert.equal(captured.options.timeout,180000)
- assert.equal(captured.options.cwd,join(captured.args[captured.args.indexOf('--output-last-message')+1],'..'))
- assert(captured.args.includes('--ephemeral'));assert(captured.args.join(' ').includes('wire_api="responses"'))
- assert(captured.args.join(' ').includes('model_context_window=1048576'))
- assert(!captured.args.join(' ').includes('sk-private-test-key'))
- assert.equal(captured.options.env.WECHAT_KIMI_API_KEY,'sk-private-test-key')
+test('wizard explains WeChat executor binding without asking for a model',async t=>{
+ const f=await fixture(t),messages=[]
+ await runTerminalWizard({home:f.home,write:value=>messages.push(value)})
+ assert.match(messages.join(' '),/执行器|executor/)
+ assert.equal(await readProviderProfile(f.stateDir),null)
 })
 
 test('terminal probe closes unused stdin before waiting for Codex',async()=>{
@@ -74,22 +24,9 @@ test('terminal probe closes unused stdin before waiting for Codex',async()=>{
  assert.equal(stdout,'stdin-closed')
 })
 
-test('terminal probe reports a timed-out inference without marking setup verified',async t=>{
- const f=await fixture(t),choices=['1','0'],messages=[]
- const probe=options=>probeTerminalModel({...options,execute:async(_binary,_args,runOptions)=>{
-  assert.equal(runOptions.timeout,MODEL_PROBE_TIMEOUT_MS)
-  throw Object.assign(Error('private upstream details'),{killed:true,signal:'SIGTERM'})
- }})
- const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async()=>choices.shift(),login:async()=>{},check:async()=>{},probe,write:text=>messages.push(text)})
- assert.equal(result.deferred,true)
- assert.equal(await readTerminalSetupStatus(f.stateDir),null)
- assert(messages.some(message=>message.includes('MODEL_PROBE_TIMEOUT')&&message.includes('OpenAI')))
- assert(!messages.join('\n').includes('private upstream details'))
-})
-
 test('terminal probe distinguishes a wrong model answer from a connection timeout',async t=>{
  const f=await fixture(t)
- await assert.rejects(probeTerminalModel({home:f.home,execute:async(_binary,args)=>{
+ await assert.rejects(probeTerminalModel({binary:process.execPath,home:f.home,execute:async(_binary,args)=>{
   await writeFile(args[args.indexOf('--output-last-message')+1],'wrong answer')
  }}),/MODEL_PROBE_RESPONSE_MISMATCH/)
 })
@@ -97,7 +34,7 @@ test('terminal probe distinguishes a wrong model answer from a connection timeou
 test('a verified nonce survives CLI shutdown timeout, but missing or invalid answers remain unverified',async t=>{
  const f=await fixture(t)
  for(const answer of ['valid','wrong',null]){
-  const probe=()=>probeTerminalModel({home:f.home,execute:async(_binary,args)=>{
+  const probe=()=>probeTerminalModel({binary:process.execPath,home:f.home,execute:async(_binary,args)=>{
    if(answer!==null)await writeFile(args[args.indexOf('--output-last-message')+1],answer==='valid'?args.at(-1).split('：').at(-1):'wrong')
    throw Object.assign(Error('private details'),{killed:true,signal:'SIGTERM',code:null})
   }})
@@ -109,73 +46,22 @@ test('a verified nonce survives CLI shutdown timeout, but missing or invalid ans
 test('a non-timeout process failure cannot pass verification merely because a nonce file exists',async t=>{
  const f=await fixture(t)
  for(const error of [Object.assign(Error('upstream failed'),{code:1}),Object.assign(Error('buffer overflow'),{killed:true,signal:'SIGTERM',code:'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'})]){
-  await assert.rejects(probeTerminalModel({home:f.home,execute:async(_binary,args)=>{
+  await assert.rejects(probeTerminalModel({binary:process.execPath,home:f.home,execute:async(_binary,args)=>{
    await writeFile(args[args.indexOf('--output-last-message')+1],args.at(-1).split('：').at(-1))
    throw error
   }}),/MODEL_PROBE_FAILED/)
  }
 })
 
-test('retrying a timed-out subscription test preserves authorization and performs no second login',async t=>{
- const f=await fixture(t),choices=['1','1'],calls=[],messages=[];let probes=0
- const result=await runTerminalWizard({verifyModel:true,home:f.home,choose:async prompt=>{messages.push(prompt);return choices.shift()},login:async()=>calls.push('login'),check:async()=>calls.push('protocol'),probe:async()=>{
-  calls.push('probe');if(++probes===1){assert.equal(await readTerminalSetupStatus(f.stateDir),null);throw Error('MODEL_PROBE_TIMEOUT')}
-  return {verified:true,provider:'subscription',model:'test-sol'}
- },applyService:async()=>false,write:text=>messages.push(text)})
- assert.equal(result.verified,true);assert.deepEqual(calls,['login','protocol','probe','probe'])
- assert.equal((await readTerminalSetupStatus(f.stateDir)).verified,true)
- assert(messages.some(text=>text.includes('不代表 OpenAI 订阅登录失败')))
- assert(messages.some(text=>text.includes('仅重试模型测试')))
-})
-
-test('English timeout can be deferred without misreporting a login failure',async t=>{
- const f=await fixture(t),choices=['1','0'],messages=[]
- const result=await runTerminalWizard({verifyModel:true,home:f.home,language:'en',choose:async prompt=>{messages.push(prompt);return choices.shift()},login:async()=>{},check:async()=>{},probe:async()=>{throw Error('MODEL_PROBE_TIMEOUT')},write:text=>messages.push(text)})
- assert.equal(result.deferred,true);assert.equal(await readTerminalSetupStatus(f.stateDir),null)
- assert(messages.some(text=>text.includes('does not establish an OpenAI subscription sign-in failure')))
- assert(messages.some(text=>text.includes('Retry only the model test')))
-})
-
 test('real subprocess can finish its answer before timing out during shutdown',async t=>{
  const f=await fixture(t)
- const result=await probeTerminalModel({home:f.home,timeoutMs:1000,execute:(_binary,args,options)=>runModelProbeCommand(process.execPath,['-e',"require('node:fs').writeFileSync(process.argv[1],process.argv[2]);setInterval(()=>{},1000)",args[args.indexOf('--output-last-message')+1],args.at(-1).split('：').at(-1)],options)})
+ const result=await probeTerminalModel({binary:process.execPath,home:f.home,timeoutMs:1000,execute:(_binary,args,options)=>runModelProbeCommand(process.execPath,['-e',"require('node:fs').writeFileSync(process.argv[1],process.argv[2]);setInterval(()=>{},1000)",args[args.indexOf('--output-last-message')+1],args.at(-1).split('：').at(-1)],options)})
  assert.equal(result.verified,true)
-})
-
-test('default installation applies configuration after protocol check without invoking inference',async t=>{
- const f=await fixture(t),calls=[]
- const result=await runTerminalWizard({home:f.home,language:'en',choose:async()=>'1',
-  login:async()=>{},check:async()=>calls.push('check'),probe:async()=>assert.fail('unexpected model request'),
-  applyService:async()=>calls.push('apply'),write:()=>{}})
- assert.deepEqual(calls,['check','apply'])
- assert.equal(result.verified,false)
- const saved=await readTerminalSetupStatus(f.stateDir)
- assert.equal(saved.protocolReady,true)
- assert.equal(saved.verified,false)
- assert.equal(saved.verifiedAt,undefined)
- assert.equal(saved.language,'en')
-})
-
-test('working model selection is passed to inference and recorded in setup result',async t=>{
- const f=await fixture(t),calls=[]
- const result=await runWizard({home:f.home,verifyModel:true,choose:async()=>'1',login:async()=>calls.push('login'),check:async()=>calls.push('check'),
-  selectModel:async()=>{calls.push('select');return 'test-sol'},probe:async({model})=>{assert.equal(model,'test-sol');calls.push('probe');return {verified:true,provider:'subscription',model}},
-  applyService:async()=>false,write:()=>{}})
- assert.equal(result.model,'test-sol');assert.deepEqual(calls,['login','check','select','probe'])
- assert.equal((await readTerminalSetupStatus(f.stateDir)).model,'test-sol')
-})
-
-test('model-list retry retains login and deferral does not apply service or mark setup ready',async t=>{
- const f=await fixture(t),calls=[],choices=['1','1','0'];let attempts=0
- const result=await runWizard({home:f.home,choose:async()=>choices.shift(),login:async()=>calls.push('login'),check:async()=>calls.push('check'),
-  selectModel:async()=>{attempts++;throw Error('private upstream detail')},applyService:async()=>assert.fail('must not apply'),write:text=>assert(!text.includes('private upstream'))})
- assert.equal(attempts,2);assert.equal(result.deferred,true);assert.deepEqual(calls,['login','check'])
- assert.equal(await readTerminalSetupStatus(f.stateDir),null)
 })
 
 test('model probe uses the explicitly selected subscription model',async t=>{
  const f=await fixture(t)
- const result=await probeTerminalModel({home:f.home,model:'test-sol',execute:async(binary,args)=>{
+ const result=await probeTerminalModel({binary:process.execPath,home:f.home,model:'test-sol',execute:async(binary,args)=>{
   assert.equal(args[args.indexOf('--model')+1],'test-sol')
   await writeFile(args[args.indexOf('--output-last-message')+1],args.at(-1).split('：').at(-1))
  }})

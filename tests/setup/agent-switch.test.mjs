@@ -41,8 +41,8 @@ test('macOS restart worker is launched once without KeepAlive',async t=>{
 
 test('restart worker drains and requires a new runtime instance',async()=>{
  const account={id:'default',stateDir:'/unused'},events=[]
- let request={id:'restart-1',target:'codex',previous:'codex',status:'waiting_idle'},instance='before'
- const adapter={services:[{id:'default',active:true}],status:async()=>({ready:true,idle:true,instance,backend:{agentKind:'codex'}}),control:async(a,action)=>{events.push(action);return {idle:true}},stop:async()=>events.push('stop'),start:async()=>{events.push('start');instance='after'}}
+ let request={id:'restart-1',target:'claude',previous:'claude',status:'waiting_idle'},instance='before'
+ const adapter={services:[{id:'default',active:true}],status:async()=>({ready:true,idle:true,instance,backend:{agentKind:'claude'}}),control:async(a,action)=>{events.push(action);return {idle:true}},stop:async()=>events.push('stop'),start:async()=>{events.push('start');instance='after'}}
  const result=await performAgentSwitch({account,requestId:request.id,read:async()=>request,save:async(a,value)=>{request=value;events.push('save:'+value.status)},deployment:async()=>adapter,wait:async()=>{},attempts:1})
  assert.equal(result.status,'complete')
  assert.deepEqual(events,['drain','seal','save:committing','stop','start','save:complete'])

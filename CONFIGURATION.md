@@ -2,7 +2,7 @@
 
 ## 安装与目录
 
-Linux/macOS 使用 `install.sh`，Windows x64 使用 `install.ps1`。首次安装与后续升级共用入口；默认下载最新正式 Release。开发者可通过 `WEIXIN_LINK_REF` 指定分支、标签或提交，通过 `WEIXIN_LINK_DIR` 指定源码目录。已有安装的菜单提供升级、配置模型、重新登录微信和卸载。卸载保留助手数据与工作区。
+Linux/macOS 使用 `install.sh`，Windows x64 使用 `install.ps1`。首次安装与后续升级共用入口；默认下载最新正式 Release。开发者可通过 `WEIXIN_LINK_REF` 指定分支、标签或提交，通过 `WEIXIN_LINK_DIR` 指定源码目录。已有安装的菜单提供升级、执行器绑定说明、重新登录微信和卸载。卸载保留助手数据与工作区。
 
 | 用途 | 默认位置 |
 | --- | --- |
@@ -26,11 +26,11 @@ Windows PowerShell 安装命令：
 & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/zhangjingwei/weixin-link/main/install.ps1')))
 ```
 
-首次安装在终端完成模型配置和微信登录。登录地址只在当前配对期间有效；若微信要求 PIN，在同一终端输入。重新登录时再次运行安装命令，选择“重新登录微信”。
+首次安装在终端完成微信登录。登录地址只在当前配对期间有效；若微信要求 PIN，在同一终端输入。重新登录时再次运行安装命令，选择“重新登录微信”。
 
 ## 模型接入
 
-终端向导提供订阅登录、DeepSeek、Qwen（百炼按量付费）和 Kimi（国际平台）。默认检查 Codex 连接与协议；真实模型回复测试需运行 `node src/setup/setup.mjs wizard --verify-model`，或在微信使用“验收智能体”。非交互式安装会跳过模型配置，可随后从安装菜单选择“配置模型”。第三方密钥只在本机终端输入，不要发到微信。
+新会话首次收件时会列出本机可用的执行器。回复名称即可绑定并继续原任务。执行器沿用各自 CLI 的登录和模型配置。
 
 Codex 订阅连接方式由 `src/infrastructure/agents/codex/subscription-transport.json` 设置，当前默认为 HTTP。本地升级试用可用 `./upgrade-local.sh --auto` 选择自动连接方式；这项选择只作用于该次本地升级快照。
 

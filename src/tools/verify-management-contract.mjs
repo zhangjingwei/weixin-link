@@ -1,18 +1,18 @@
-// Compare the bundled Codex protocol with the arguments actually sent by management tools.
+// Compare the installed Codex protocol with the arguments actually sent by management tools.
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {mkdtemp,mkdir,readFile,readdir,rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join,sep} from 'node:path'
 import {fileURLToPath} from 'node:url'
-import {findCodex} from '../infrastructure/config/install-config.mjs'
+import {systemCodex} from '../setup/system-codex.mjs'
 import {CodexRpc} from '../infrastructure/agents/codex/rpc.mjs'
 import {initializeCodex} from '../infrastructure/agents/codex/protocol-operations.mjs'
 import {managementTools} from '../application/management/tools.mjs'
 import {nativeControlMethods,nativeControlParams} from '../application/management/native-controls.mjs'
 
 const root=fileURLToPath(new URL('../..',import.meta.url))
-const binary=findCodex()
+const binary=await systemCodex()
 const exec=promisify(execFile)
 const sample=schema=>{
  if(schema.enum)return schema.enum[0]
@@ -89,14 +89,12 @@ try{
  const schemaDir=join(dir,'schema'),home=join(dir,'codex-home')
  await mkdir(home)
  const {stdout:version}=await exec(binary,['--version'],{timeout:10000})
- const manifest=JSON.parse(await readFile(join(root,'package.json'),'utf8'))
- if(version.trim()!==`codex-cli ${manifest.dependencies['@openai/codex']}`)throw Error('CODEX_BUNDLED_VERSION_MISMATCH')
  await exec(binary,['app-server','generate-json-schema','--experimental','--out',schemaDir],{timeout:30000,env:{...process.env,CODEX_HOME:home}})
  const schema=JSON.parse(await readFile(join(schemaDir,'ClientRequest.json'),'utf8'))
  const literalMethods=new Set()
  for(const file of await sourceFiles(join(root,'src'))){
   // These adapters own different wire contracts; ACP methods are not Codex RPC.
-  if(file.startsWith(join(root,'src','infrastructure','agents','workbuddy')+sep)||file.startsWith(join(root,'src','infrastructure','agents','claude')+sep))continue
+  if(['workbuddy','claude','acp','doubao','grok'].some(kind=>file.startsWith(join(root,'src','infrastructure','agents',kind)+sep)))continue
   const source=await readFile(file,'utf8')
   for(const match of source.matchAll(/\.(?:request|call)\('([A-Za-z]+\/[A-Za-z/]+)'/g))literalMethods.add(match[1])
  }

@@ -8,6 +8,7 @@ import {readPrivateFile,atomicConfigWrite} from './config-files.mjs'
 import {xml,userHome} from './platform-service.mjs'
 import {standardDeployment} from './upgrade.mjs'
 import {RemoteStore} from '../infrastructure/storage/registry-lock.mjs'
+import {readAgentSelection} from '../infrastructure/agents/agent-selection.mjs'
 import {readChatUpgrade} from './chat-upgrade.mjs'
 
 const exec=promisify(execFile)
@@ -20,7 +21,7 @@ export async function readAgentSwitch(account){
  let value
  try{value=JSON.parse(text)}catch{throw Error('AGENT_SWITCH_STATE_INVALID')}
  if(!value||!['waiting_idle','committing','complete','failed'].includes(value.status)||typeof value.id!=='string')throw Error('AGENT_SWITCH_STATE_INVALID')
- if(value.target!=='codex'||value.previous!=='codex')return null
+ if(!['codex','claude','workbuddy','doubao','grok'].includes(value.target)||value.previous!==value.target)return null
  return value
 }
 
@@ -63,7 +64,8 @@ export class AgentSwitcher{
   const outcome=await this.lock(async()=>{
    const latest=await readAgentSwitch(this.account)
    if(latest&&['waiting_idle','committing'].includes(latest.status))return {pending:latest.target,id:latest.id}
-   const request={id:randomUUID(),target:'codex',previous:'codex',status:'waiting_idle'}
+   const {kind}=await readAgentSelection(this.account.stateDir)
+   const request={id:randomUUID(),target:kind,previous:kind,status:'waiting_idle'}
    await saveAgentSwitch(this.account,request)
    try{await this.schedule(this.account,request,{home:this.home})}catch(error){await saveAgentSwitch(this.account,{...request,status:'failed'});throw error}
    return {scheduled:true,id:request.id}

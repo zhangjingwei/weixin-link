@@ -1,3 +1,5 @@
+import {evaluationProtocol,nativeScenario} from './eval-native-agent.mjs'
+import {systemCodex} from '../setup/system-codex.mjs'
 import {readFile,realpath,mkdtemp,rm} from 'node:fs/promises'
 import {homedir,tmpdir} from 'node:os'
 import {join,resolve} from 'node:path'
@@ -9,8 +11,9 @@ import {grade} from '../infrastructure/agents/evals/grade.mjs'
 
 const projectRoot=fileURLToPath(new URL('../..',import.meta.url))
 const skillRoot=join(projectRoot,'src/infrastructure/agents/skills')
-const codexCli=join(projectRoot,'node_modules/@openai/codex/bin/codex.js')
+
 const usage=`Usage: npm run eval:skills -- [--case ID] [--model MODEL] [--show-replies] --codex-home DIR
+       npm run eval:skills -- --agent claude|workbuddy|doubao|grok --agent-home DIR [--native-only | --case ID]
        npm run eval:skills -- [--case ID] [--show-replies] --responses FILE
        npm run eval:skills -- --list
 
@@ -22,22 +25,23 @@ function options(argv){
  const result={}
  for(let i=0;i<argv.length;i++){
   const key=argv[i]
+  if(key==='--native-only'){result.nativeOnly=true;continue}
   if(key==='--help'){result.help=true;continue}
   if(key==='--list'){result.list=true;continue}
   if(key==='--show-replies'){result.show_replies=true;continue}
-  if(!['--case','--model','--codex-home','--responses'].includes(key)||!argv[i+1])throw Error(`Unknown or incomplete option: ${key}`)
+  if(!['--case','--model','--codex-home','--responses','--agent','--agent-home'].includes(key)||!argv[i+1])throw Error(`Unknown or incomplete option: ${key}`)
   result[key.slice(2).replaceAll('-','_')]=argv[++i]
  }
  return result
 }
 
-async function liveAnswers(scenario,{model,codex_home}){
+async function liveAnswers(scenario,{model,codex_home,binary}){
  const cwd=await mkdtemp(join(tmpdir(),'zerolink-skill-eval-'))
  let rpc,pending
  try{
   const replies=[]
-  rpc=new CodexRpc({binary:process.execPath,cwd,codexHome:codex_home,
-   providerOptions:{args:[codexCli,'app-server']},
+  rpc=new CodexRpc({binary,cwd,codexHome:codex_home,
+   providerOptions:{args:['app-server']},
    onEvent:message=>{
     if(!pending)return
     if(message.method==='item/completed'&&message.params?.item?.type==='agentMessage'&&(!message.params.item.phase||message.params.item.phase==='final_answer'))pending.parts.push(message.params.item.text??'')
@@ -80,18 +84,27 @@ async function main(){
  const selected=args.case?cases.filter(item=>item.id===args.case):cases
  if(!selected.length)throw Error(`Unknown case: ${args.case}`)
  if(args.responses&&args.codex_home)throw Error('Choose --responses or --codex-home')
- let saved
- if(args.responses){saved=JSON.parse(await readFile(resolve(args.responses),'utf8'))}
+ let saved,protocol
+ if(args.agent&&args.agent!=='codex'){
+  if(!args.agent_home||args.responses||args.codex_home)throw Error('Native evaluation requires --agent-home DIR')
+  const profile=await realpath(resolve(args.agent_home))
+  const personal=await realpath(homedir())
+  if([personal,...['.claude','.codex','.codebuddy','.grok','.doubao'].map(dir=>join(personal,dir))].includes(profile))throw Error('Use a separate test home')
+  protocol=await evaluationProtocol(args.agent,profile)
+  if(args.nativeOnly){await nativeScenario(protocol,{steps:[]});console.log('PASS native session: '+args.agent);return}
+ }else if(args.nativeOnly||args.agent_home){throw Error('For Codex native checks use check:codex-contract and verify-management-native.mjs')}
+ else if(args.responses){saved=JSON.parse(await readFile(resolve(args.responses),'utf8'))}
  else{
   if(!args.codex_home)throw Error(`Live mode requires --codex-home.\n${usage}`)
   const profile=await realpath(resolve(args.codex_home))
   const personal=await realpath(join(homedir(),'.codex')).catch(()=>null)
   if(profile===personal)throw Error('Use a separate Codex profile, not ~/.codex')
+  args.binary=await systemCodex()
   args.codex_home=profile
  }
  let failed=0
  for(const scenario of selected){
-  const answers=saved?saved[scenario.id]:await liveAnswers(scenario,args)
+  const answers=protocol?await nativeScenario(protocol,scenario,{skillRoot,model:args.model}):saved?saved[scenario.id]:await liveAnswers(scenario,args)
   if(!Array.isArray(answers)||answers.length!==scenario.steps.length)throw Error(`Missing replies for ${scenario.id}: expected ${scenario.steps.length}`)
   for(let i=0;i<scenario.steps.length;i++){
    const step=scenario.steps[i]

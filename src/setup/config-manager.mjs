@@ -6,7 +6,7 @@ import {access,stat} from 'node:fs/promises'
 import {constants as fsConstants} from 'node:fs'
 import {ConfigError,validateConfig,parseConfig} from './config-schema.mjs'
 import {atomicConfigWrite,readPrivateFile,digest} from './config-files.mjs'
-import {installConfig,projectRoot,findCodex} from './install-config.mjs'
+import {installConfig,projectRoot} from './install-config.mjs'
 import {updateWorkspaceGuidance} from './workspace-guidance.mjs'
 const currentHome=()=>process.env.HOME||homedir()
 export function configPath(kind,{home=currentHome(),workspace,env=process.env}={}){
@@ -61,7 +61,7 @@ export async function configure(kind,input,{home=currentHome(),workspace,env=pro
  result=await write()
  let guidance
  if(kind==='installation'){
-  try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot,codexBinary:findCodex(home)})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
+  try{guidance=await updateWorkspaceGuidance({workspace:config.workspace,root:projectRoot})}catch(error){guidance={updated:false,error:error.code??'GUIDANCE_UPDATE_FAILED'}}
  }
  return {kind,version:config.version,verified:kind!=='remote-hosts',written:true,...result,effective:kind==='installation'?'next_service_start':'next_operation',...(guidance?{guidance}:{}),restartRequired:kind==='installation'}
 }

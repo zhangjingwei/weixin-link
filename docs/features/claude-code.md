@@ -1,10 +1,12 @@
 # Claude Code CLI 接入与同对话切换
 
-Codex 仍是默认底座。Claude Code 是显式选择的可选适配，使用用户自己的官方订阅登录及未修改的本机 CLI。当前验证组合为 Claude Code 2.1.319 与 `@anthropic-ai/claude-agent-sdk` 0.3.319；其他版本会拒绝启动，需要重新验证后更新适配，避免静默使用不同协议。
+新会话在微信中选择执行器。Claude Code 是显式选择的可选适配，使用用户自己的官方订阅登录及未修改的本机 CLI。当前验证组合为 Claude Code 2.1.319 与 `@anthropic-ai/claude-agent-sdk` 0.3.319；其他版本会拒绝启动，需要重新验证后更新适配，避免静默使用不同协议。
 
 ## 配置与试用
 
-以下操作由用户在源码目录执行，不会自动安装或升级当前服务。先安装本版本依赖 `npm ci`，再通过官方渠道安装对应版本 CLI。将示例路径替换成实际的 Claude Code 绝对路径。
+服务启动时自动发现服务进程 PATH 中的 `claude`，通过固定版本和官方订阅登录检查后加入可切换列表，无需先运行 `configure`。发现结果只用于当前进程，不写入账号配置、不切换对话；每次启动重新检查。手动配置的路径优先。未登录或不兼容的自动候选会跳过，完成官方 CLI 登录后重启服务再查询。Windows 批处理 shim 不参与自动发现。
+
+以下操作由用户在源码目录执行，不会自动安装或升级当前服务。先安装运行依赖 `npm ci --omit=dev`，再通过官方渠道安装对应版本 CLI。将示例路径替换成实际的 Claude Code 绝对路径。
 
 ```sh
 # 登录由原版 CLI 完成，不在微信或自制表单收集密码。
@@ -13,10 +15,10 @@ node src/setup/agent.mjs login claude --binary /absolute/path/to/claude
 # 查询当前选择。
 node src/setup/agent.mjs status
 
-# 先停止本机 Weixin Link 服务，再注册可切换底座（保持 Codex 默认）。
+# 先停止本机 Weixin Link 服务，再注册可切换底座。
 node src/setup/agent.mjs configure claude --binary /absolute/path/to/claude
 
-# 以下选择改变实例默认底座及其历史数据根，通常无需使用。服务在线时命令会拒绝。
+# 以下选择改变实例配置及其历史数据根，通常无需使用。服务在线时命令会拒绝。
 node src/setup/agent.mjs select claude --binary /absolute/path/to/claude
 
 # 启动服务后，新消息使用 Claude；切回前同样先停止服务。

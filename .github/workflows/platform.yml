@@ -16,6 +16,14 @@ jobs:
       - run: npm run check:release
       - run: node --test tests/tools/release-check.test.mjs
       - run: npm ci
+      # Native contract checks require a system CLI on the disposable runner.
+      - run: npm install --global @openai/codex@0.172.0
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $cli = Get-ChildItem (Join-Path (npm root -g) '@openai/codex') -Filter codex.exe -Recurse | Select-Object -First 1
+          if (!$cli) { throw 'Native Codex executable missing' }
+          $cli.DirectoryName >> $env:GITHUB_PATH
       - run: npm run check:codex-contract
-      - run: node --test tests/base/codex/protocol-client.test.mjs tests/remote/remote-protocol.test.mjs tests/remote/reconnecting-connection.test.mjs tests/remote/remote-rpc.test.mjs tests/core/original-request.test.mjs
+      - run: node --test "tests/agents/*.test.mjs" "tests/infrastructure/agents/codex/*.test.mjs" tests/infrastructure/empty-codex-session.test.mjs tests/core/original-request.test.mjs
       - run: node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs tests/setup/install-entry.test.mjs tests/setup/upgrade.test.mjs tests/setup/cli-output.test.mjs tests/setup/qr-script.test.mjs

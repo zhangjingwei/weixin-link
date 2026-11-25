@@ -17,7 +17,7 @@ export class TextConversations{
  // Called synchronously at message arrival, before any asynchronous work or download.
  bind(message){const owner=message.userId,r=this.ensure(owner);const media=message.images?.length||message.files?.length||message.videos?.length||message.voices?.length,waiting=media?null:r.prompt,parsed=this.parseInput(message.text,{pending:waiting});
  // Only a live, owned managed-agent interaction enables this narrow approval reply path.
- if(['claude','workbuddy'].includes((this.manager.protocolFor?.(this.find(owner)?.key)??this.manager.protocol)?.kind)&&!media&&!parsed.command&&!parsed.sessionCommand&&
+ if(['claude','workbuddy','doubao','grok'].includes((this.manager.protocolFor?.(this.find(owner)?.key)??this.manager.protocol)?.kind)&&!media&&!parsed.command&&!parsed.sessionCommand&&
     [...this.manager.questions.values()].some(q=>this.recipient(q.session.userId)===owner)){
   const decision={批准:'approve',拒绝:'reject',回答:'answer',approve:'approve',reject:'reject',answer:'answer'}[message.text?.trim().toLowerCase()]
   if(decision)parsed.command={action:'prompt',target:'approvalChoice',decision}
@@ -30,7 +30,7 @@ export class TextConversations{
  if(command?.action==='projectFolderPrompt')r.prompt={target:'projectFolder',name:command.name,key:this.find(owner)?.key,id:this.find(owner)?.id};
  if(command?.action==='answerPrompt'){const q=this.manager.questions.get(command.code);if(q&&this.recipient(q.session.userId)===owner)r.prompt={target:'answerText',code:command.code,key:q.session.userId,id:this.entry(q.session.userId)?.id};}
  if(['new','switch','personalResume'].includes(command?.action))r.selectionVersion=(r.selectionVersion??0)+1;
- if(command?.action==='new'){const source=this.manager.state.users[this.find(owner)?.key];const e={id:String(r.entries.length+1),key:owner+'#conversation#'+randomUUID(),name:'未命名项目 '+(r.entries.length+1),titleSource:'placeholder'};if(!command.workspace&&source?.workspace)this.manager.state.users[e.key]={workspace:source.workspace,activeAgent:this.manager.agentFor?.(this.find(owner)?.key)}
+ if(command?.action==='new'){const source=this.manager.state.users[this.find(owner)?.key];const e={id:String(r.entries.length+1),key:owner+'#conversation#'+randomUUID(),name:'未命名项目 '+(r.entries.length+1),titleSource:'placeholder'};if(!command.workspace&&source?.workspace)this.manager.state.users[e.key]={workspace:source.workspace}
  r.entries.push(e);r.active=e.id;this.manager.owners.add(e.key);}
  if(command?.action==='switch'){const e=this.find(owner,command.id);if(e&&!e.archived)r.active=e.id;else error='没有找到可进入的项目，可能已归档。你可以说“我有哪些项目”，再确认要进入哪一个。';}
  let e=this.find(owner);if(waiting&&command?.action!=='new'&&!(waiting.target==='switch'&&command?.action==='switch')){const target=r.entries.find(entry=>entry.key===waiting.key&&!entry.deleted);if(target)e=target;else{error='原会话已不可用，请重新说明要处理哪个项目。';}}

@@ -35,7 +35,7 @@ export async function saveProviderProfile({kind,apiKey,workspaceId,accountId='de
 export async function clearProviderProfile({accountId='default',home}={}){
  const account=await assertAccount(accountId,home)
  try{await unlink(join(account.stateDir,FILE))}catch(error){if(error.code!=='ENOENT')throw error}
- return {kind:'subscription',account:account.id,restartRequired:true}
+ return {kind:'off',account:account.id,restartRequired:true}
 }
 
 export function providerEnvironment(profile,env=process.env){

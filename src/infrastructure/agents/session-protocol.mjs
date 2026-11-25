@@ -9,9 +9,9 @@ const skillRoot=fileURLToPath(new URL('./skills',import.meta.url))
 const clientInfo={name:'wechat_codex',title:'WeChat',version:'3.0.0'}
 
 // SessionManager depends on this narrow agent protocol, not on either wire format.
-export function createSessionProtocol({rpcFactory,providerEnv=process.env,providerSecrets={},codexBinary,codexHome}={}){
+export function createSessionProtocol({rpcFactory,providerEnv=process.env,providerSecrets={},nativeProfile=false,codexBinary,codexHome}={}){
  const factory=rpcFactory??(options=>new CodexRpc(options))
- const providerOptions=()=>codexProviderOptions({...providerEnv,...providerSecrets})
+ const providerOptions=()=>nativeProfile?{args:['app-server','--listen','stdio://'],thread:{},provider:null,credentialReady:true}:codexProviderOptions({...providerEnv,...providerSecrets})
  const managementConfigs=new WeakMap()
  const params=(rpc,{cwd,instructions,provider})=>({config:{...nativeMemoryConfig,...managementConfigs.get(rpc)},sandbox:'danger-full-access',approvalPolicy:'never',cwd,developerInstructions:instructions,...provider.thread})
  const verify=result=>{
@@ -26,13 +26,13 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   return result
  }
  return {
-  name:'Codex',kind:'codex',supportsNativeCatalog:true,supportsModels:true,supportsNativeCommands:true,providerOptions,
+  name:'Codex',nativeProfile,executorId:nativeProfile?JSON.stringify(['codex',codexBinary(),codexHome]):undefined,kind:'codex',supportsNativeCatalog:true,supportsModels:true,supportsNativeCommands:true,providerOptions,
   createRpc(options){
    const management=options.management,selected=options.providerOptions??providerOptions(),args=[...selected.args]
    // Codex discovers MCP servers at app-server startup. Thread-only overrides
    // do not populate its management channel. Secrets go via env, never argv.
    for(const [table,fields]of Object.entries(management?.config??{}))for(const [key,value]of Object.entries(fields))args.push('-c',`${table}.${key}=${JSON.stringify(value)}`)
-   const rpc=factory({...options,providerOptions:{...selected,args},binary:options.binary??codexBinary?.(),codexHome,providerSecrets:{...providerSecrets,...management?.environment}})
+   const rpc=factory({...options,providerOptions:{...selected,args},binary:options.binary??codexBinary?.(),nativeProfile,codexHome,providerSecrets:{...providerSecrets,...management?.environment}})
    if(management)managementConfigs.set(rpc,management.config)
    return rpc
   },

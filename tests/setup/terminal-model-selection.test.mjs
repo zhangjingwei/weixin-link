@@ -8,7 +8,7 @@ import {selectTerminalModel} from '../../src/setup/terminal-model-selection.mjs'
 async function fixture(t,{empty=false,unconfirmed=false}={}){
  const home=await mkdtemp(join(tmpdir(),'model-selection-'));t.after(()=>rm(home,{recursive:true,force:true}))
  const calls=[];let saved='model-terra',closed=false
- return {home,calls,get closed(){return closed},rpcFactory:()=>({
+ return {home,binary:process.execPath,calls,get closed(){return closed},rpcFactory:()=>({
   write:()=>{},close:()=>{closed=true},request:async(method,params)=>{
    calls.push({method,params})
    if(method==='initialize')return {}
