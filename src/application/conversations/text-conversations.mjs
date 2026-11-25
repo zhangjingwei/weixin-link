@@ -1,3 +1,4 @@
+import {ensurePlatformProjects} from '../../domain/conversations/platform-projects.mjs'
 import {workspaceText,projectFolderChoices} from './workspace.mjs'
 import {installOfficialHooks,titleUpdated,withBackend,officialCatalog,applyCatalog,refreshTitles} from './catalog.mjs'
 import {label,serialize,flush,deliver,replay} from './delivery.mjs'
@@ -9,7 +10,7 @@ import {defineConversationBackendPort} from '../ports/conversation-backend-port.
 export class TextConversations{
  constructor(manager,owners,parseInput,backendPort){if(typeof parseInput!=='function')throw Error('CONVERSATION_INPUT_PARSER_REQUIRED');this.parseInput=parseInput;this.backendPort=backendPort?defineConversationBackendPort(backendPort):null;this.manager=manager;this.realOwners=new Set(owners);manager.state.textConversations??={};this.root=manager.state.textConversations;this.pages=new Map();for(const owner of owners)this.ensure(owner);manager.onConversationTitle=(threadId,name)=>this.titleUpdated(threadId,name);if(this.backendPort?.capabilities.catalog!==false)this.installOfficialHooks()}
  installOfficialHooks(...args){return installOfficialHooks(this,...args)}
- ensure(owner){if(!this.realOwners.has(owner))throw Error('未授权用户');if(!this.root[owner]){const saved=this.manager.state.users[owner]??{};const entries=[{id:'1',key:owner,name:'原有对话'}];for(const tid of [...new Set(saved.previous??[])].filter(t=>t!==saved.threadId)){const key=owner+'#conversation#'+randomUUID();entries.push({id:String(entries.length+1),key,name:'历史对话 '+(entries.length+1)});this.manager.state.users[key]={threadId:tid,hasMessages:true};}this.root[owner]={active:'1',entries};}const r=this.root[owner];for(const e of r.entries)this.manager.owners.add(e.key);return r}
+ ensure(owner){if(!this.realOwners.has(owner))throw Error('未授权用户');if(!this.root[owner]){const saved=this.manager.state.users[owner]??{};const entries=[{id:'1',key:owner,name:'原有对话'}];for(const tid of [...new Set(saved.previous??[])].filter(t=>t!==saved.threadId)){const key=owner+'#conversation#'+randomUUID();entries.push({id:String(entries.length+1),key,name:'历史对话 '+(entries.length+1)});this.manager.state.users[key]={threadId:tid,hasMessages:true};}this.root[owner]={active:'1',entries};}const r=this.root[owner];for(const e of r.entries)this.manager.owners.add(e.key);ensurePlatformProjects(this.manager.state,owner,r.entries,this.manager.state.users,this.manager.cwd);return r}
  entry(key){for(const [owner,r]of Object.entries(this.root)){const entry=r.entries.find(e=>e.key===key);if(entry)return {...entry,owner};}return null}
  recipient(key){return this.entry(key)?.owner??key}
  find(owner,id){const r=this.ensure(owner);return id?r.entries.find(e=>e.id.toLowerCase()===id.toLowerCase()||this.manager.state.users[e.key]?.threadId===id):r.entries.find(e=>e.id===r.active)}
@@ -29,8 +30,7 @@ export class TextConversations{
  if(command?.action==='projectFolderPrompt')r.prompt={target:'projectFolder',name:command.name,key:this.find(owner)?.key,id:this.find(owner)?.id};
  if(command?.action==='answerPrompt'){const q=this.manager.questions.get(command.code);if(q&&this.recipient(q.session.userId)===owner)r.prompt={target:'answerText',code:command.code,key:q.session.userId,id:this.entry(q.session.userId)?.id};}
  if(['new','switch','personalResume'].includes(command?.action))r.selectionVersion=(r.selectionVersion??0)+1;
- if(command?.action==='new'){const source=this.manager.state.users[this.find(owner)?.key];const e={id:String(r.entries.length+1),key:owner+'#conversation#'+randomUUID(),name:'未命名项目 '+(r.entries.length+1),titleSource:'placeholder'};if(command.workspace)e.pendingNativeProject={name:command.name,path:command.workspace}
- else if(source?.nativeProjectId)this.manager.state.users[e.key]={nativeProjectId:source.nativeProjectId,workspace:source.workspace}
+ if(command?.action==='new'){const source=this.manager.state.users[this.find(owner)?.key];const e={id:String(r.entries.length+1),key:owner+'#conversation#'+randomUUID(),name:'未命名项目 '+(r.entries.length+1),titleSource:'placeholder'};if(!command.workspace&&source?.workspace)this.manager.state.users[e.key]={workspace:source.workspace,activeAgent:this.manager.agentFor?.(this.find(owner)?.key)}
  r.entries.push(e);r.active=e.id;this.manager.owners.add(e.key);}
  if(command?.action==='switch'){const e=this.find(owner,command.id);if(e&&!e.archived)r.active=e.id;else error='没有找到可进入的项目，可能已归档。你可以说“我有哪些项目”，再确认要进入哪一个。';}
  let e=this.find(owner);if(waiting&&command?.action!=='new'&&!(waiting.target==='switch'&&command?.action==='switch')){const target=r.entries.find(entry=>entry.key===waiting.key&&!entry.deleted);if(target)e=target;else{error='原会话已不可用，请重新说明要处理哪个项目。';}}
@@ -56,13 +56,12 @@ export class TextConversations{
   catch{return null}
  }
  async listBoundConversations(owner,reply,{selecting=false}={}){
-  if(this.backendPort?.capabilities.catalog!==false)await this.refreshTitles(owner)
   const r=this.ensure(owner)
   const selectable=r.entries.filter(e=>!e.archived&&!e.deleted)
   const lines=selectable.map((e,index)=>{
    const session=this.manager.sessions.get(e.key),current=e.id===r.active?' [当前]':''
    const recovery=this.manager.state.users[e.key]?.recovery?.execution
-   const status=session?.busy||e.officialStatus==='active'?'执行中':session?.finishing?'发送中':e.deleteIntent?'删除状态待核对':e.archiveSync==='missing'?'Codex记录缺失':e.archiveIntent!==undefined?'归档状态待核对':recovery==='unknown'?'结果待核对':!this.manager.state.users[e.key]?.threadId?'尚未连接Codex':'空闲'
+   const status=session?.busy?'执行中':session?.finishing?'发送中':e.deleteIntent?'删除状态待核对':e.archiveSync==='missing'?'原生记录待核对':e.archiveIntent!==undefined?'归档状态待核对':recovery==='unknown'?'结果待核对':!this.manager.state.users[e.key]?.threadId?'尚未连接智能体':'空闲'
    return `${selecting?index+1:e.id}. ${e.name}${current} · ${status}`
   })
   if(selecting){
@@ -75,7 +74,6 @@ export class TextConversations{
   await reply('项目列表\n'+(lines.length?lines.join('\n'):'暂无项目')+'\n'+help)
  }
  async listHistoryChoices(owner,reply){
-  if(this.backendPort?.capabilities.catalog!==false)await this.refreshTitles(owner)
   const root=this.ensure(owner),entries=root.entries.filter(e=>!e.deleted),choices=entries.map(e=>e.id)
   if(root.prompt?.target==='history'){root.prompt.choices=choices;await this.manager.save()}
   await reply('选择要查看历史的会话：\n'+(entries.length?entries.map((e,index)=>`${index+1}. ${e.name}${e.archived?'（已归档）':''}`).join('\n'):'暂无会话')+'\n回复前面的序号；发送“取消”放弃。')

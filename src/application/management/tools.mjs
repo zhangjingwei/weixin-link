@@ -2,11 +2,14 @@ const string=(maxLength=160)=>({type:'string',minLength:1,maxLength})
 const integer=(minimum,maximum)=>({type:'integer',minimum,maximum})
 const project={projectId:string()},task={...project,taskId:string(),turnId:string()},write={requestId:string()}
 const repeat={type:'object',properties:{frequency:{...string(),enum:['daily','weekly']},time:string(5),timeZone:string(100),weekdays:{type:'array',items:integer(1,7),minItems:1,maxItems:7,uniqueItems:true}},required:['frequency','time','timeZone'],additionalProperties:false}
-const define=(name,description,properties={},required=[])=>{const mutation=/^(?:request_|create_|rename_|skip_|cancel_|submit_|supplement_|open_|route_|associate_)/.test(name);return {name,description,inputSchema:{type:'object',properties,required,additionalProperties:false},annotations:{readOnlyHint:!mutation,destructiveHint:['request_task_stop','request_service_restart','request_upgrade','request_desktop_handoff','request_desktop_return','request_project_delete','request_thread_revert','request_section_delete','request_queue_remove'].includes(name),idempotentHint:!mutation||required.includes('requestId'),openWorldHint:false}}}
+const define=(name,description,properties={},required=[])=>{const mutation=/^(?:request_|report_|create_|rename_|skip_|cancel_|submit_|supplement_|open_|route_|associate_)/.test(name);return {name,description,inputSchema:{type:'object',properties,required,additionalProperties:false},annotations:{readOnlyHint:!mutation,destructiveHint:['request_task_stop','request_service_restart','request_upgrade','request_desktop_handoff','request_desktop_return','request_project_delete','request_thread_revert','request_section_delete','request_queue_remove'].includes(name),idempotentHint:!mutation||required.includes('requestId'),openWorldHint:false}}}
 const thread={threadId:string()},section={sectionId:string()},queued={...thread,queuedSubmissionId:string()}
 const page={cursor:string(4096),limit:integer(1,50)}
 const ids={type:'array',items:string(),minItems:1,maxItems:100,uniqueItems:true}
 export const managementTools=[
+ define('report_task_result','对明确实施任务提交结构化结果。仅接受本轮所属的精确任务和轮次；completed 是智能体报告，不代表平台独立验收或微信送达。普通问答不必调用；正文不能设置业务完成状态。',{...project,sourceTaskId:string(),turnId:string(),outcome:{...string(),enum:['completed','failed','blocked']},...write},['projectId','sourceTaskId','turnId','outcome','requestId']),
+ define('request_project_workspace','用户明确确认平台项目目录时使用。凭目录选择凭据登记边界；要求关联会话均在边界内且无执行或未确认任务。不移动目录、不连接智能体。',{platformProjectId:string(),workspaceToken:string(4096),...write},['platformProjectId','workspaceToken','requestId']),
+ define('request_task_input','本轮确实需要等待用户提供附件或回答时调用。仅修改调用者所属的精确持久任务，必须从 get_conversation_context 获取 sourceTaskId、turnId。确认后用自然语言说明缺少什么；正文不会改变任务状态。',{...project,sourceTaskId:string(),turnId:string(),kind:{...string(),enum:['attachment','answer']},...write},['projectId','sourceTaskId','turnId','kind','requestId']),
  define('get_conversation_agents','查看同一条对话关联的原生会话和可用智能体；不切换。',project,['projectId']),
  define('request_agent_switch','用户明确要求换智能体接着做时调用。保留同一逻辑对话，切回恢复原生会话并交接最近结果。当前任务成功结束后才执行后续请求；queued不是切换完成。不复制或重跑原任务。text须保留用户的要求和批评，不宣称原方案已获认可。',{...project,agentKind:{...string(),enum:['codex','claude']},text:string(8000),...write},['projectId','agentKind','text','requestId']),
  define('get_thread_goal','查询会话原生长任务目标、状态和预算。',thread,['threadId']),
@@ -33,10 +36,11 @@ export const managementTools=[
  define('request_desktop_handoff','用户明确要求在桌面继续时调用；收到回执并空闲后打开个人 Codex 桌面端，暂停本账号微信执行。桌面可见性需人工确认。',{...project,...write},['projectId','requestId']),
  define('request_desktop_return','用户要求返回微信时调用；核对原会话空闲且可重新取得写入权。',{...project,...write},['projectId','requestId']),
  define('resolve_target','查找当前用户已登记的项目/会话。候选不是授权，歧义时询问。',{query:string(300)},['query']),
- define('list_projects','查询 Codex 项目（nativeProjects 包含 id、name、roots，null 表示不可用）。projects 是微信会话绑定，供派发和切换使用。'),
- define('get_project_progress','只读最近完成结果证据、当前任务、阻碍和排队后续工作，不猜测项目整体完成度。',project,['projectId']),
+ define('list_projects','查询平台项目与逻辑对话，不连接任何智能体。platformProjects 是平台项目；projects 是兼容的会话绑定，projectId 用于现有任务路由。'),
+ define('list_native_projects','显式查询可选的 Codex 原生项目；不可用不影响平台项目。'),
+ define('get_project_progress','只读平台最近轮次结果、业务结果来源、当前任务和队列；不猜项目完成度。includeNative=true 才额外查询原生待办。',{...project,includeNative:{type:'boolean'}},['projectId']),
  define('get_project_status','读取本地任务、队列、待审批和管理操作状态；不是项目完成度。',project,['projectId']),
- define('get_session_history','只读历史文本分块分页；下一页为剩余文本或更早轮次，不重发附件。',{...project,cursor:string(4096)},['projectId']),
+ define('get_session_history','读取平台已持久化的近期消息和结果，跨智能体汇总，不连接底座。native=true 显式查询 Codex 原生历史。文本分页，不重发附件。',{...project,native:{type:'boolean'},cursor:string(4096)},['projectId']),
  define('get_management_operation','按操作编号查询当前用户的管理请求回执，不重放操作。',{operationId:string()},['operationId']),
  define('request_model_switch','明确要求切换时，为指定项目保存后续新任务的模型；不中断当前轮次，不更换供应商。先 list_models 核对模型标识。',{...project,model:string(),...write},['projectId','model','requestId']),
  define('request_queue_cancel_all','明确要求取消某项目全部排队任务时传查询得到的快照任务ID；只取消这些尚未开始的任务，不取消未来任务或停止运行任务。',{...project,taskIds:{type:'array',items:string(),minItems:1,maxItems:20,uniqueItems:true},...write},['projectId','taskIds','requestId']),
@@ -47,16 +51,16 @@ export const managementTools=[
  define('supplement_task','补充指定原任务；任务过期则拒绝，绝不排队到下一轮。',{...task,text:string(8000),...write},['projectId','taskId','turnId','text','requestId']),
  define('request_task_stop','停止指定原任务并清空其队列；requested 不代表已确认停止。',{...task,...write},['projectId','taskId','turnId','requestId']),
  define('list_workspace_choices','列出来源项目当前目录及允许的子目录，返回五分钟有效的绑定选择凭据。',project,['projectId']),
- define('create_project','使用目录选择凭据创建 Codex 原生项目；不切换、不连接、不创建文件夹。',{name:string(60),workspaceToken:string(4096),...write},['name','workspaceToken','requestId']),
- define('list_project_sessions','通过 Codex app-server 分页查询未归档会话；省略 nativeProjectId 查询所有项目和独立会话。',{nativeProjectId:string(),cursor:string(4096)}),
- define('open_conversation','模型根据原始请求和 MCP 查询结果判断新建或复用会话。threadId 接续真实会话（可无项目）；省略 threadId 新建，独立会话须提供目录凭据，项目会话用 nativeProjectId。只连接和返回微信操作编号，不执行任务、不切换。',{nativeProjectId:string(),threadId:string(),workspaceToken:string(4096),...write},['requestId']),
- define('route_conversation_request','模型确认需要交给另一会话执行时，原样转交本轮持久请求及引用和本轮附件；依赖此前讨论时用 agreedPlan 补充已定方案；先 open_conversation 或 list_projects 核对目标 threadId、projectId。sourceTaskId 来自 get_conversation_context，禁止转发已分流任务。queued 不代表完成，也不切换导航。',{...project,threadId:string(),sourceTaskId:string(),agreedPlan:string(8000),...write},['projectId','threadId','sourceTaskId','requestId']),
+ define('create_project','使用目录选择凭据创建平台项目和初始逻辑对话，不依赖智能体安装，不切换或连接。',{name:string(60),workspaceToken:string(4096),...write},['name','workspaceToken','requestId']),
+ define('list_project_sessions','查询平台逻辑对话；platformProjectId 限定平台项目。显式 nativeProjectId 才查询 Codex 原生会话。',{platformProjectId:string(),nativeProjectId:string(),cursor:string(4096),limit:integer(1,50)}),
+ define('open_conversation','创建平台逻辑对话时传 platformProjectId 或目录凭据，不连接智能体。显式 threadId/nativeProjectId 才导入 Codex 原生会话。不执行任务、不切换导航。',{platformProjectId:string(),nativeProjectId:string(),threadId:string(),workspaceToken:string(4096),...write},['requestId']),
+ define('route_conversation_request','模型确认需要交给另一会话执行时，原样转交本轮持久请求及引用和本轮附件；依赖此前讨论时用 agreedPlan 补充已定方案；先 open_conversation 或 list_projects 核对目标 projectId；已连接目标须传返回的 threadId，未连接目标省略 threadId。sourceTaskId 来自 get_conversation_context，禁止转发已分流任务。queued 不代表完成，也不切换导航。',{...project,threadId:string(),sourceTaskId:string(),agreedPlan:string(8000),...write},['projectId','sourceTaskId','requestId']),
  define('get_conversation_repository','只读核实指定真实会话目录所属 Git 仓库与 worktree 共同身份，返回五分钟有效的仓库凭据。不是 Git 仓库返回 null；不按目录名推断。',thread,['threadId']),
  define('associate_repository_conversations','模型判断多个会话应归同一仓库项目时调用。先获取仓库凭据，再指定真实会话 ID；nativeProjectId 复用已有项目，否则按 name 创建。核实仓库相同，保留 worktree 目录，拒绝覆盖已有其他项目归属；不合并历史、不执行代码、不切换。',{workspaceToken:string(4096),nativeProjectId:string(),name:string(60),threadIds:{type:'array',items:string(),minItems:1,maxItems:20,uniqueItems:true},...write},['workspaceToken','threadIds','requestId']),
  define('get_conversation_context','读取本次模型所在会话、持久任务 ID、是否已分流及本轮材料摘要；用于自主决定是否需要查询、新建或接续其他会话。'),
- define('create_project_session','为指定原生项目创建新会话，或按 threadId 接续已有会话。多根项目新建时选择一个返回过的 workspace。返回微信操作编号，可用于切换。',{nativeProjectId:string(),threadId:string(),workspace:string(4096),...write},['nativeProjectId','requestId']),
+ define('create_project_session','为 platformProjectId 创建平台逻辑对话。显式 nativeProjectId/threadId 保留 Codex 原生导入能力。返回逻辑会话编号；创建不等于执行。',{platformProjectId:string(),nativeProjectId:string(),threadId:string(),workspace:string(4096),...write},['requestId']),
  define('request_project_archive','明确要求归档或还原微信绑定的会话才调用；pending 不是完成，当前任务结束后复用原归档核对流程。',{...project,archived:{type:'boolean'},...write},['projectId','archived','requestId']),
- define('rename_project','修改 Codex 项目名称。projectId 可用 list_projects 返回的原生 ID 或已绑定会话编号。',{...project,name:string(60),...write},['projectId','name','requestId']),
+ define('rename_project','修改平台项目或逻辑对话名称。显式传 Codex 原生项目 ID 时保留原生项目改名兼容。',{...project,name:string(60),...write},['projectId','name','requestId']),
  define('search_sessions','按话题在个人 Codex 会话中搜索；默认未归档，archived=true 仅查已归档。返回会话 ID、匹配片段和续页。',{query:string(300),archived:{type:'boolean'},cursor:string(4096)},['query']),
  define('search_session_history','在一条 Codex 会话中搜索原文。指定微信绑定 projectId 或原生 threadId，沿 nextCursor 续查。',{...project,threadId:string(),query:string(300),cursor:string(4096)},['query']),
  define('list_project_tasks','列出指定项目持久任务的完整 taskId、可读标题与状态，不返回请求正文。',{...project,offset:integer(0,1000000),limit:integer(1,20)},['projectId']),

@@ -88,7 +88,7 @@ test('Claude selection mounts an isolated engine directory and never imports Cod
  const dir=await mkdtemp(join(tmpdir(),'claude-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}))
  const old=JSON.stringify({version:1,users:{owner:{threadId:'codex-thread',hasMessages:true}}});await writeFile(join(dir,'assistant-sessions.json'),old)
  await saveAgentSelection(dir,{version:1,kind:'claude',binary:'/fake/claude'})
- const agent=await loadAgentAdapter({stateDir:dir},dir,{});assert.equal(agent.backend.stateDir,join(dir,'agents','claude'));assert.equal(agent.sessionOptions.sessionProtocol.forAgent('claude').enqueue,undefined);assert.equal(agent.sessionOptions.sessionProtocol.supportsNativeCommands,false)
+ const agent=await loadAgentAdapter({stateDir:dir},dir,{});assert.equal(agent.backend.stateDir,join(dir,'agents','claude'));assert.equal(agent.sessionOptions.sessionProtocol.forAgent('claude').enqueue,undefined);assert.equal(agent.sessionOptions.sessionProtocol.supportsNativeCommands,false);assert.equal(agent.sessionOptions.codexHome,undefined);assert.deepEqual(agent.sessionOptions.sessionProtocol.availableAgents,['claude'])
  assert.equal(await readFile(join(dir,'assistant-sessions.json'),'utf8'),old)
 })
 
@@ -129,4 +129,8 @@ test('Claude receives the scoped management MCP bridge without inheriting arbitr
  await h.rpc.open({},'rules')
  assert.deepEqual(h.options.options.mcpServers['zerolink-management'],{type:'stdio',command:'/fake/node',args:['/fake/bridge'],env:h.rpc.management.environment})
  h.rpc.close()
+})
+test('an unsubmitted Claude identity is reused as sessionId rather than silently replaced',async()=>{
+ const h=harness();await h.rpc.open({threadId:'allocated',agentKind:'claude',hasMessages:false},'rules')
+ assert.equal(h.rpc.id,'allocated');assert.equal(h.options.options.sessionId,'allocated');assert.equal(h.options.options.resume,undefined);h.rpc.close()
 })

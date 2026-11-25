@@ -1,6 +1,6 @@
-import {recordTaskResult,archiveTaskResult} from './task-result.mjs'
 import {stripTaskFlow} from '../../infrastructure/agents/task-flow.mjs'
-import {executionState} from '../../domain/tasks/execution-state.mjs'
+import {turnExecution,taskOutcome,outcomeEvidence} from '../../domain/tasks/task-control.mjs'
+import {recordTaskResult,archiveTaskResult,hasQueuedHandoff} from './task-result.mjs'
 import {localTaskLabel,localCompletion} from '../../domain/tasks/task-label.mjs'
 import {transition} from '../../domain/tasks/lifecycle.mjs'
 import {setTimeout as delay} from 'node:timers/promises'
@@ -18,20 +18,27 @@ export async function recover(context,job,reply,token,{completedTurn,rpc}={}){
    if(job.state==='bound'){context.jobs.submitted(job.id,turn.id);job=context.jobs.get(job.id)}
    session.turnId=turn.id;session.turnReady=true;session.workToken=token;session.traceId=job.context?.flowNonce??job.id;session.startedAt=Date.now();session.finals??=[];session.items??=new Map();session.queue??=[]
    if(!['inProgress','in_progress'].includes(turn.status)){
-    // Rebuild waiting state using the exact nonce persisted before submission.
-    const finalText=(turn.items??[]).filter(i=>i.type==='agentMessage'&&i.phase!=='commentary').map(i=>context.manager.protocol.cleanOutputText(i.text)).join('\n\n')
-    const waiting=turn.status==='completed'&&stripTaskFlow(finalText,job.context?.flowNonce).waiting
+    // Rebuild control exclusively from the durable typed operation, never from reply text.
+    const rawFinalText=(turn.items??[]).filter(i=>i.type==='agentMessage'&&i.phase!=='commentary').map(i=>context.manager.protocol.cleanOutputText(i.text)).join('\n\n')
+    const finalText=stripTaskFlow(rawFinalText,job.context?.flowNonce).text
+    const execution=turnExecution(turn.status,job.context?.control,{taskId:job.id,threadId:job.thread_id,turnId:turn.id})
+    const waiting=execution==='waiting_attachment'
+    const handedOff=hasQueuedHandoff(context.manager.state,context.jobs,job.owner,job.id)
+    const outcome=taskOutcome(turn.status,job.context?.control,{taskId:job.id,threadId:job.thread_id,turnId:turn.id},{handedOff})
+    session.waitingAttachment=waiting;session.waitingUser=execution==='waiting_user'
     const record=context.manager.state.users[job.owner]
+    if(execution==='waiting_user')record.waitingInput={kind:'answer',task:session.localTask,request:session.requestText,threadId:session.threadId}
+    else if(record.waitingInput?.task?.id===session.localTask.id)delete record.waitingInput
     if(waiting)record.waitingAttachment={task:session.localTask,request:session.requestText,threadId:session.threadId}
     else if(record.waitingAttachment?.task?.id===session.localTask.id)delete record.waitingAttachment
     // Delivery may have been accepted before a crash: preserve the result, never blindly resend.
     archiveTaskResult(record)
     if(record.resultIdentity?.turnId!==turn.id||record.resultIdentity?.threadId!==job.thread_id)delete record.lastConversationUpdates
-    if(context.manager.state.users[job.owner].lastTask?.id!==session.localTask.id)context.manager.state.users[job.owner].lastOutput=undefined;context.manager.state.users[job.owner].lastTask=session.localTask;context.manager.state.users[job.owner].recovery={task:session.localTask,execution:executionState(turn.status,waiting),delivery:'recovered'};context.manager.state.users[job.owner].lastReply=finalText;recordTaskResult(record,{taskId:job.id,threadId:job.thread_id,turnId:turn.id,execution:executionState(turn.status,waiting),delivery:'recovered'})
+    if(context.manager.state.users[job.owner].lastTask?.id!==session.localTask.id)context.manager.state.users[job.owner].lastOutput=undefined;context.manager.state.users[job.owner].lastTask=session.localTask;context.manager.state.users[job.owner].recovery={task:session.localTask,execution,delivery:'recovered'};context.manager.state.users[job.owner].lastReply=finalText;recordTaskResult(record,{taskId:job.id,threadId:job.thread_id,turnId:turn.id,execution,delivery:'recovered'});record.resultIdentity.taskOutcome=outcome;record.resultIdentity.outcomeEvidence=outcomeEvidence(turn.status,job.context?.control,{taskId:job.id,threadId:job.thread_id,turnId:turn.id},{handedOff});record.recovery.outcome=outcome
     const native=job.context?.nativeQueue
     if(native)record.resultIdentity.delivery=record.recovery.delivery='unknown'
     if(native&&context.jobs.claimReceipt('native-final:'+job.id)){
-     const message=finalText||(waiting?'正在等待附件。':turn.status==='failed'?'本轮任务失败。':turn.status==='interrupted'?'本轮任务已停止。':'本轮已结束，没有文字回复。')
+     const message=finalText||(execution==='unknown'?'原任务状态待核对；未确认执行结束。':waiting?'正在等待附件。':turn.status==='failed'?'本轮任务失败。':turn.status==='interrupted'?'本轮任务已停止。':'本轮已结束，没有文字回复。')
      const output=await context.manager.outputStoreFor(job.owner).package(job.owner,message,[],token.signal)
      if(typeof output==='object')record.lastOutput=output
      await context.manager.save()
@@ -40,10 +47,10 @@ export async function recover(context,job,reply,token,{completedTurn,rpc}={}){
      record.resultIdentity.delivery=record.recovery.delivery=result?.status??'unknown'
     }
     await context.manager.save()
-    context.jobs.markOutcome?.(job.id,turn.status==='completed'&&!waiting?'completed':'not_confirmed')
-    context.jobs.mark(job.id,'done')
+    context.jobs.markOutcome?.(job.id,execution==='completed'&&['completed','handed_off'].includes(outcome)?'completed':'not_confirmed')
+    context.jobs.mark(job.id,execution==='unknown'?'uncertain':'done')
     if(session.busy&&session.turnId===turn.id)transition(session,'idle')
-    if(!native&&!session.busy&&!waiting)await reply(localCompletion('已找回上一次任务的结果，你可以说“看看上次的结果”。',session.localTask));return
+    if(!native&&!session.busy&&!waiting&&execution!=='waiting_user')await reply(localCompletion(execution==='unknown'?'上次任务的执行状态仍待核对；已保存可读取内容，不会重复执行。':'已找回上一次任务的结果，你可以说“看看上次的结果”。',session.localTask));return
    }
    if(turn.id===job.turn_id && context.jobs.claimRecoveredStop?.(job)){
     await context.manager.protocol.interrupt(session.rpc,job.thread_id,turn.id)

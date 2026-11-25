@@ -14,3 +14,7 @@ export function archiveTaskResult(record,now=Date.now()){
  retained.push({identity:structuredClone(identity),lastReply:record.lastReply,...record.lastConversationUpdates?.length?{updates:[...record.lastConversationUpdates]}:{},...record.lastOutput?{lastOutput:structuredClone(record.lastOutput)}:{}})
  record.resultArchive=retained.slice(-20)
 }
+
+export function hasQueuedHandoff(state,jobs,owner,taskId){
+ return (state.managementOperations??[]).some(op=>op.caller===owner&&op.sourceTaskId===taskId&&['route_conversation_request','request_agent_switch'].includes(op.name)&&op.status==='queued'&&['pending','starting','bound','submitted','done'].includes(jobs?.get?.(op.data?.taskId)?.state))
+}

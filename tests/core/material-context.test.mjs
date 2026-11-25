@@ -47,6 +47,7 @@ test('attachment received during inference changes stale waiting copy without en
  const m=await new SessionManager({stateDir:dir,cwd:dir,owners:['u'],completionMarkers:true,remoteControl:async()=>({}),rpcFactory:()=>({closed:false,write(){},close(){},async request(method){return method.startsWith('thread/')?{thread:{id:'t'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'}:{turn:{id:'turn'}}}})}).init()
  try{
  await m.handle('u','总结文件',async t=>out.push(t));const session=m.sessions.get('u')
+ session.taskControl={taskId:session.taskId,threadId:session.threadId,turnId:session.turnId,waitingFor:'attachment'}
  m.submissions={pendingMaterials:()=>1}
  await m.event(session,{method:'turn/started',params:{threadId:'t',turn:{id:'turn'}}})
  await m.event(session,{method:'item/completed',params:{threadId:'t',item:{type:'agentMessage',phase:'final_answer',text:`已收到总结要求，正在等待聊天记录附件到达。<wechat-task:${session.traceId}>waiting_attachment</wechat-task:${session.traceId}>`}}})

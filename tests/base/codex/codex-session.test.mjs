@@ -502,6 +502,7 @@ test('waiting attachment preserves logical task and produces only one completion
  const m=await new SessionManager({stateDir:dir,cwd:dir,owners:['u'],completionMarkers:true,remoteControl:async()=>({}),rpcFactory:()=>({closed:false,write(){},close(){},async request(method,params){if(method.startsWith('thread/'))return {thread:{id:'t'},sandbox:{type:'dangerFullAccess'},approvalPolicy:'never'};return {turn:{id:'turn'+(++turns)}}}})}).init()
  try{
  await m.handle('u','总结聊天记录文件',async t=>out.push(t));const s=m.sessions.get('u'),task=s.localTask.id
+ s.taskControl={taskId:s.taskId,threadId:s.threadId,turnId:s.turnId,waitingFor:'attachment'}
  await m.event(s,{method:'turn/started',params:{threadId:'t',turn:{id:s.turnId}}})
  await m.event(s,{method:'item/completed',params:{threadId:'t',item:{type:'agentMessage',phase:'final_answer',text:`请发送聊天记录文件。<wechat-task:${s.traceId}>waiting_attachment</wechat-task:${s.traceId}>`}}})
  await m.event(s,{method:'turn/completed',params:{threadId:'t',turn:{id:s.turnId,status:'completed'}}})

@@ -45,8 +45,6 @@ export async function nativeControl(context,owner,caller,name,args){
   let result
   try{result=session?.rpc?await call(session.rpc):await context.conversations.withBackend(owner,call)}
   catch(error){
-   if(error.definitiveRpcError&&/account authentication required/i.test(error.message))throw Error('MANAGEMENT_ACCOUNT_LOGIN_REQUIRED')
-   if(error.definitiveRpcError&&/active writer/i.test(error.message))throw Error('MANAGEMENT_THREAD_IN_USE')
    if(error.definitiveRpcError)throw Error('MANAGEMENT_NATIVE_REQUEST_REJECTED')
    throw error
   }

@@ -87,7 +87,7 @@ export class DurableIntake {
      executionStarted=true
      const result=await this.manager.ask(owner,input,reply,24*60*60*1000,token)
      if(token.current()){
-      const completed=result?.status==='completed'&&!this.manager.state.users[owner]?.waitingAttachment
+      const completed=result?.status==='completed'&&['completed','handed_off'].includes(result.taskOutcome)
       this.jobs.markOutcome?.(job.id,completed?'completed':'not_confirmed')
       if(result?.status==='unknown')this.jobs.mark(job.id,'uncertain')
       else if(result?.status==='interrupted')this.jobs.mark(job.id,'cancelled')

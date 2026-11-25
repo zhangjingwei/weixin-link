@@ -1,3 +1,4 @@
+import {platformProjects} from './platform-projects.mjs'
 import {randomUUID} from 'node:crypto'
 
 export function bindProjectSession(context,owner,{project,workspace,thread}){
@@ -7,6 +8,8 @@ export function bindProjectSession(context,owner,{project,workspace,thread}){
   const session=context.manager.sessions.get(existing.key)
   if(existing.deleted||existing.archived||existing.deleteIntent||existing.archiveIntent!==undefined||context.archiveLocks?.has(existing.key)||session?.busy||session?.finishing||context.manager.workspaceFor(existing.key)!==workspace)throw Error('MANAGEMENT_TARGET_UNAVAILABLE')
   context.manager.state.users[existing.key].nativeProjectId=project?.id??null
+  const local=platformProjects(context,owner).find(p=>p.id===existing.platformProjectId)
+  if(local&&project?.roots){local.roots=[...project.roots];local.workspaceVerified=true}
   return existing
  }
  const key=owner+'#conversation#'+randomUUID()
@@ -14,5 +17,7 @@ export function bindProjectSession(context,owner,{project,workspace,thread}){
  context.manager.state.users[key]={workspace,nativeProjectId:project?.id??null,...(thread?{threadId:thread.id,hasMessages:true}:{})}
  root.entries.push(entry)
  context.manager.owners.add(key)
+ const local=platformProjects(context,owner).find(p=>p.id===entry.platformProjectId)
+ if(local&&project?.roots){local.roots=[...project.roots];local.workspaceVerified=true}
  return entry
 }

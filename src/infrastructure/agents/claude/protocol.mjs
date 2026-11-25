@@ -2,7 +2,7 @@ import {ClaudeSession} from './session.mjs'
 import {claudeInput} from './input.mjs'
 import {inspectClaude} from './installation.mjs'
 export function createClaudeProtocol({binary,query,inspect=inspectClaude,env=process.env}={}){
- return {kind:'claude',name:'Claude Code',supportsMemory:false,supportsModels:true,supportsNativeCommands:false,supportsRemoteTaskRecovery:false,
+ return {kind:'claude',name:'Claude Code',supportsNativeCatalog:false,supportsMemory:false,supportsModels:true,supportsNativeCommands:false,supportsRemoteTaskRecovery:false,
   providerOptions:()=>({thread:{},args:[]}),input:claudeInput,cleanOutputText:text=>String(text??'').trim(),eventCode:()=>null,workspaceRules:async()=>'',
   createRpc:options=>new ClaudeSession({...options,query,binary,env}),
   initialize:async()=>{await inspect(binary,{env})},

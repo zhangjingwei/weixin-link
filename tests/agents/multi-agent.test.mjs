@@ -23,7 +23,7 @@ async function fixture(t){
  manager.submissions=jobs
  const intake=new DurableIntake({manager,jobs,reply:async()=>({status:'accepted'})})
  t.after(async()=>{intake.close();manager.close();await manager.saving;jobs.close();await rm(dir,{recursive:true,force:true})})
- const finish=async n=>{const s=starts[n];await s.rpc.onEvent({method:'item/completed',params:{threadId:s.options.threadId,turnId:s.turnId,item:{id:'answer-'+n,type:'agentMessage',phase:'final_answer',text:'answer '+n}}});await s.rpc.onEvent({method:'turn/completed',params:{threadId:s.options.threadId,turn:{id:s.turnId,status:'completed'}}})}
+ const finish=async n=>{const s=starts[n],session=manager.sessions.get('owner'),job=jobs.get(session.taskId);jobs.context(job.id,{...job.context,control:{taskId:job.id,threadId:session.threadId,turnId:session.turnId,outcome:'completed'}});await s.rpc.onEvent({method:'item/completed',params:{threadId:s.options.threadId,turnId:s.turnId,item:{id:'answer-'+n,type:'agentMessage',phase:'final_answer',text:'answer '+n}}});await s.rpc.onEvent({method:'turn/completed',params:{threadId:s.options.threadId,turn:{id:s.turnId,status:'completed'}}})}
  return {dir,starts,mux,manager,jobs,intake,finish}
 }
 test('legacy identity migrates; switching back preserves models, project and thread without crossing logical owners',()=>{

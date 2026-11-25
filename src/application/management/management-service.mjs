@@ -1,3 +1,6 @@
+import {platformHistory} from '../conversations/platform-history.mjs'
+import {platformProjects,platformProject} from '../conversations/platform-projects.mjs'
+import {requestTaskInputControl,reportTaskResultControl} from './task-control-management.mjs'
 import {conversationAgents,requestAgentSwitch} from './agent-management.mjs'
 import {conversationContext,repositoryContext,associateRepositoryConversations} from './conversation-management.mjs'
 import {desktopStatus,requestDesktop,executeDesktop} from './desktop-management.mjs'
@@ -8,13 +11,13 @@ import {requestProjectArchive,executeProjectArchive} from './project-archive-man
 import {maintenanceRead,requestMaintenance,executeMaintenance} from './maintenance-management.mjs'
 import {submitProjectTask,routeConversationRequest} from './project-task-management.mjs'
 import {pruneManagementOperations,discardUnexecutedPayload} from './management-writes.mjs'
-import {workspaceChoices,createProject,renameProject,openProjectSession,openConversation} from './project-management.mjs'
+import {workspaceChoices,createProject,renameProject,confirmProjectWorkspace,openProjectSession,openConversation} from './project-management.mjs'
 import {listProjectTasks,getTaskResult,requestResultRedelivery,executeRedelivery,requestTaskReconciliation,executeReconciliation} from './result-management.mjs'
 import {hasNativeControl,nativeControl} from './native-controls.mjs'
 import {searchNativeHistory} from './history-search.mjs'
 import {createSchedule,listSchedules,cancelSchedule} from './schedule-management.mjs'
 import {checkUpdates,skipUpdate} from './update-management.mjs'
-import {randomUUID,createHmac,timingSafeEqual} from 'node:crypto'
+import {randomUUID,createHmac,timingSafeEqual,createHash} from 'node:crypto'
 import {historyInputText,historyText} from '../conversations/history.mjs'
 import {validateManagementCall} from './tools.mjs'
 
@@ -33,12 +36,15 @@ export class ManagementService{
  target(owner,id){const e=this.entries(owner).find(e=>e.id===id);if(!e)throw Error('MANAGEMENT_TARGET_NOT_FOUND');return e}
  snapshot(owner,e){
   const saved=this.manager.state.users[e.key]??{},s=this.manager.sessions.get(e.key)
-  return {projectId:e.id,nativeProjectId:saved.nativeProjectId??null,name:e.name,active:this.conversations.root[owner].active===e.id,archived:!!e.archived,workspace:saved.workspace??null,workspaceSource:'local_configuration',threadId:saved.threadId??null,configuredModel:saved.modelOverride??null,connectedModel:s?.model??null,turnModel:s?.executionModel??null,turnTokenUsage:s?.tokenUsage??null,nativeStatus:s?.nativeStatus??null,nativeActiveFlags:s?.nativeActiveFlags??[],goal:s?.nativeGoal??null,state:s?.state??'disconnected',task:s?.busy&&s.traceId&&s.turnId?{id:s.traceId,turnId:s.turnId,jobId:s.taskId??null}:null,queued:(s?.queue?.length??0)+(this.manager.submissions?.pending?.()??[]).filter(j=>j.owner===e.key).length,uncertain:this.manager.submissions?.uncertainCount?.(e.key)??0,recovery:saved.recovery??null,lastProgress:s?.lastProgress?.turnId===s?.turnId?s?.lastProgress?.text?.slice(0,2000)??null:null,progressTruncated:(s?.lastProgress?.text?.length??0)>2000,pendingApprovals:[...this.manager.questions.values()].filter(q=>q.session.userId===e.key).length,latestResult:saved.resultIdentity??null,executionOwner:this.manager.state.desktopHandoff?'desktop':'wechat',evidence:'local_runtime',observedAt:new Date(this.now()).toISOString()}
+  return {projectId:e.id,platformProjectId:e.platformProjectId??null,nativeProjectId:saved.nativeProjectId??null,name:e.name,active:this.conversations.root[owner].active===e.id,archived:!!e.archived,workspace:saved.workspace??null,workspaceSource:'local_configuration',threadId:saved.threadId??null,configuredModel:saved.modelOverride??null,connectedModel:s?.model??null,turnModel:s?.executionModel??null,turnTokenUsage:s?.tokenUsage??null,nativeStatus:s?.nativeStatus??null,nativeActiveFlags:s?.nativeActiveFlags??[],goal:s?.nativeGoal??null,state:s?.state??'disconnected',task:s?.busy&&s.traceId&&s.turnId?{id:s.traceId,turnId:s.turnId,jobId:s.taskId??null}:null,queued:(s?.queue?.length??0)+(this.manager.submissions?.pending?.()??[]).filter(j=>j.owner===e.key).length,uncertain:this.manager.submissions?.uncertainCount?.(e.key)??0,recovery:saved.recovery??null,lastProgress:s?.lastProgress?.turnId===s?.turnId?s?.lastProgress?.text?.slice(0,2000)??null:null,progressTruncated:(s?.lastProgress?.text?.length??0)>2000,pendingApprovals:[...this.manager.questions.values()].filter(q=>q.session.userId===e.key).length,latestResult:saved.resultIdentity??null,executionOwner:this.manager.state.desktopHandoff?'desktop':'wechat',evidence:'local_runtime',observedAt:new Date(this.now()).toISOString()}
  }
  exact(e,args){const s=this.manager.sessions.get(e.key);if(!s||!s.busy||s.traceId!==args.taskId||s.turnId!==args.turnId||s.rpc?.closed)throw Error('MANAGEMENT_STALE_TASK');return s}
  async call(caller,name,args){
   const spec=validateManagementCall(name,args);const owner=this.owner(caller)
   if(this.manager.state.desktopHandoff&&!spec.annotations.readOnlyHint&&!['request_desktop_handoff','request_desktop_return'].includes(name))throw Error('MANAGEMENT_DESKTOP_EXECUTION_PAUSED')
+  if(name==='request_project_workspace')return confirmProjectWorkspace(this,owner,caller,args)
+  if(name==='report_task_result')return reportTaskResultControl(this,owner,caller,args)
+  if(name==='request_task_input')return requestTaskInputControl(this,owner,caller,args)
   if(name==='get_conversation_agents')return conversationAgents(this,owner,args)
   if(name==='request_agent_switch')return requestAgentSwitch(this,owner,caller,args)
   if(name==='get_conversation_context')return conversationContext(this,owner,caller)
@@ -66,15 +72,26 @@ export class ManagementService{
   const extended={open_conversation:()=>openConversation(this,owner,caller,args),route_conversation_request:()=>routeConversationRequest(this,owner,caller,args),create_project_session:()=>openProjectSession(this,owner,caller,args),submit_project_task:()=>submitProjectTask(this,owner,caller,args),list_workspace_choices:()=>workspaceChoices(this,owner,args),create_project:()=>createProject(this,owner,caller,args),rename_project:()=>renameProject(this,owner,caller,args),search_sessions:()=>searchNativeHistory(this,owner,args,true),search_session_history:()=>searchNativeHistory(this,owner,args),list_project_tasks:()=>listProjectTasks(this,owner,args),get_task_result:()=>getTaskResult(this,owner,args),request_result_redelivery:()=>requestResultRedelivery(this,owner,caller,args),request_task_reconciliation:()=>requestTaskReconciliation(this,owner,caller,args),check_updates:()=>checkUpdates(this,owner),skip_update:()=>skipUpdate(this,owner,caller,args),create_schedule:()=>createSchedule(this,owner,caller,args),list_schedules:()=>listSchedules(this,owner,args),cancel_schedule:()=>cancelSchedule(this,owner,caller,args)}
   if(extended[name])return extended[name]()
   if(name==='get_management_operation'){const op=this.operations.find(op=>op.id===args.operationId&&op.owner===owner);if(!op)throw Error('MANAGEMENT_OPERATION_NOT_FOUND');return this.result(op)}
+  if(name==='list_native_projects')return {nativeProjects:await this.conversations.codexProjects?.(owner)??null}
   if(name==='list_projects'){
-   const nativeProjects=await this.conversations.codexProjects?.(owner)??null
-   return {nativeProjects,codexProjects:nativeProjects?.map(project=>project.name)??null,callerProjectId:this.conversations.entry(caller).id,projects:this.entries(owner).map(e=>this.snapshot(owner,e))}
+   const nativeProjects=null
+   return {platformProjects:structuredClone(platformProjects(this.conversations,owner)),nativeProjects,codexProjects:nativeProjects?.map(project=>project.name)??null,callerProjectId:this.conversations.entry(caller).id,projects:this.entries(owner).map(e=>this.snapshot(owner,e))}
   }
   if(name==='resolve_target'){
    const q=args.query.normalize('NFKC').trim().toLowerCase(),entries=this.entries(owner)
    const exact=entries.filter(e=>[e.id,e.name].some(v=>String(v).normalize('NFKC').toLowerCase()===q))
    const found=exact.length?exact:entries.filter(e=>[e.name,this.manager.state.users[e.key]?.workspace].some(v=>v&&String(v).normalize('NFKC').toLowerCase().includes(q)))
    return {resolution:found.length===1?'unique':found.length?'ambiguous':'not_found',candidates:found.map(e=>this.snapshot(owner,e)),changed:false}
+  }
+  if(name==='list_project_sessions'&&args.nativeProjectId&&args.platformProjectId)throw Error('MANAGEMENT_NATIVE_AND_LOCAL_PROJECT_CONFLICT')
+  if(name==='list_project_sessions'&&!args.nativeProjectId){
+   const ids=args.platformProjectId?[platformProject(this.conversations,owner,args.platformProjectId).id]:null
+   const entries=this.entries(owner).filter(e=>!e.archived&&(!ids||ids.includes(e.platformProjectId)))
+   const digest=createHash('sha256').update(JSON.stringify(entries.map(e=>[e.id,e.platformProjectId]))).digest('hex')
+   const position=args.cursor?this.credential(args.cursor,'platform-sessions',owner):{projectId:args.platformProjectId??null,index:0,digest}
+   if(position.projectId!==(args.platformProjectId??null)||position.digest!==digest)throw Error('MANAGEMENT_INVALID_CURSOR')
+   const end=position.index+(args.limit??50),nextCursor=end<entries.length?this.sign({...position,index:end,kind:'platform-sessions',owner,expires:this.now()+600000}):null
+   return {sessions:entries.slice(position.index,end).map(e=>({...this.snapshot(owner,e),conversationId:e.id})),nextCursor,source:'platform'}
   }
   if(name==='list_project_sessions'){
    const api=this.conversations.backendPort?.nativeProjects
@@ -95,7 +112,7 @@ export class ManagementService{
   const e=this.target(owner,args.projectId)
   if(name==='get_project_progress')return projectProgress(this,owner,args)
   if(name==='get_project_status')return {...this.snapshot(owner,e),operationsTotal:this.operations.filter(o=>o.owner===owner&&o.projectId===e.id).length,operations:this.operations.filter(o=>o.owner===owner&&o.projectId===e.id).slice(-20).map(op=>({...this.result(op),name:op.name,requestId:op.requestId,createdAt:op.createdAt}))}
-  if(name==='get_session_history')return this.history(owner,e,args.cursor)
+  if(name==='get_session_history')return args.native?this.history(owner,e,args.cursor):platformHistory(this,owner,e,args.cursor)
   // Serialize duplicate writes until their uncertain intent has reached durable storage.
   const key=JSON.stringify([owner,args.requestId]),running=this.inflight.get(key)
   const signature=signatureFor(name,args)

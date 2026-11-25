@@ -5,11 +5,11 @@
    - 改变后续微信消息去向 → 执行“切换会话”工作流。
    - 给另一项目提交新文字任务 → 执行“提交任务”工作流。
    - 把本轮请求及材料交给另一会话执行 → 执行“转交请求”工作流。
-2. 用 `list_projects`、`list_project_sessions` 或 `search_sessions` 定位目标；`list_project_sessions({})` 包含独立会话，翻页沿用原范围和 `nextCursor`。目标有歧义时请用户选定。
+2. 用 `list_projects`、`list_project_sessions` 或 `search_sessions` 定位目标；`list_project_sessions({})` 查询平台逻辑会话；显式 nativeProjectId 才查询 Codex 原生会话，翻页沿用原范围和 `nextCursor`。目标有歧义时请用户选定。
 
 ## 打开会话
 
-1. 目标会话已存在时用其 threadId 调用 `open_conversation`；新建时省略 threadId，独立目录使用 `list_workspace_choices` 的凭据。
+1. 平台逻辑会话已存在时直接使用其 projectId，不重新打开原生会话。新建用 platformProjectId 或 `list_workspace_choices` 的凭据调用 `open_conversation`；返回 threadId=null 表示尚未连接，不是失败。只有显式导入 Codex 原生会话时才传 threadId/nativeProjectId。
 2. 核对工具回执，返回会话信息；不改变后续微信消息去向。
 
 ## 切换会话
@@ -26,5 +26,5 @@
 
 1. 用 `get_conversation_context` 查询 `sourceTaskId`、`alreadyRouted` 和本轮材料；若 `alreadyRouted` 为真，直接在目标会话处理，不再转交。
 2. 核对目标会话及本轮原文、引用、附件是否可交接；必要时先按“打开会话”工作流接入目标。
-3. 用 `sourceTaskId` 调用 `route_conversation_request`；依赖已定方案时附 `agreedPlan`。
+3. 已连接的目标须传查询得到的 threadId；未连接的新逻辑会话省略 threadId。用 `sourceTaskId` 调用 `route_conversation_request`；依赖已定方案时附 `agreedPlan`。
 4. `queued` 后结束发起会话的本轮，等待目标任务的后续通知；回执不确定时查询原管理操作，不另起相同任务。

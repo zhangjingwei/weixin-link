@@ -29,7 +29,7 @@ test('restart recovers original logical task and waiting state without completio
  const dir=await mkdtemp(join(tmpdir(),'task-recovery-'));let jobs=new DurableJobs(join(dir,'queue.sqlite'))
  try{
  const id=jobs.add('u',{text:'附件'},'delivery'),task={id:'original',title:'总结'}
- jobs.context(id,{task,request:'总结文件',flowNonce:'nonce'});jobs.bind(id,'thread');jobs.submitted(id,'turn');jobs.close();jobs=new DurableJobs(join(dir,'queue.sqlite'))
+ jobs.context(id,{task,request:'总结文件',flowNonce:'nonce',control:{taskId:id,threadId:'thread',turnId:'turn',waitingFor:'attachment'}});jobs.bind(id,'thread');jobs.submitted(id,'turn');jobs.close();jobs=new DurableJobs(join(dir,'queue.sqlite'))
  const state={users:{u:{}}},out=[],session={threadId:'thread',rpc:{async request(){return {data:[{id:'turn',status:'completed',items:[{type:'agentMessage',text:'等待附件。<wechat-task:nonce>waiting_attachment</wechat-task:nonce>'}]}]}}}}
  const intake=new DurableIntake({jobs,manager:{state,protocol:createSessionProtocol({kind:'codex'}),connect:async()=>session,save:async()=>{}},reply:async()=>{}})
  await intake.recover(jobs.get(id),async t=>out.push(t),{current:()=>true})

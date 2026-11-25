@@ -11,21 +11,18 @@ function hasUnfinishedWork(context, key) {
 }
 
 export async function rename(context,entry,name,reply){
- if(context.manager.agentFor?.(entry.key)==='claude'){const local=context.find(context.recipient(entry.key),entry.id);if(!local)throw Error('未找到所属会话。');local.name=name;local.titleSource='local';await context.manager.save();return}
- const session=await context.manager.connect(entry.key,context.manager.sessions.get(entry.key)?.reply??reply),threadId=context.manager.state.users[entry.key]?.threadId??session.threadId;
- if(!threadId)throw Error('Codex尚未确认会话，未修改标题。');
- let failure;try{await context.backendPort.renameConversation(session,threadId,name);}catch(e){failure=e;}
- const thread=await context.backendPort.readConversation(session,threadId);
- if(thread?.name!==name)throw Error(failure?'Codex标题修改结果未确认，请查看列表核对，未自动重试。':'Codex返回的标题与请求不一致，未确认修改。');
- await context.titleUpdated(threadId,thread.name);
- }
+ const local=context.find(context.recipient(entry.key),entry.id)
+ if(!local)throw Error('未找到所属会话。')
+ local.name=name;local.titleSource='local'
+ await context.manager.save()
+}
 
 export async function selectConversation(context,message,reply){
   const owner=message._conversationOwner,cmd=message._conversationCommand,r=context.ensure(owner);
   const current=cmd.action==='switch'?context.find(owner,cmd.id):r.entries.find(e=>e.key===message.userId);
   let confirmed=false;
   try{
-   if(context.backendPort.capabilities.catalog)await context.refreshTitles(owner);
+
    if(!current||current.deleted||current.deleteIntent||current.archived||current.archiveSync==='missing')throw Error('目标会话不可连接；请先查看列表或还原。');
    await bindNewWorkspace(context,current.key,cmd.workspace);
    const session=await context.manager.connect(current.key,context.manager.sessions.get(current.key)?.reply??reply);

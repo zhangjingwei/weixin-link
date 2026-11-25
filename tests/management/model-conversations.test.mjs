@@ -33,10 +33,10 @@ test('MCP opens standalone new and existing conversations without changing navig
  const f=await fixture(t),choices=await f.service.call('alice','list_workspace_choices',{projectId:'1'})
  const args={workspaceToken:choices.items[0].workspaceToken,requestId:'new-one'}
  const created=await f.service.call('alice','open_conversation',args)
- assert.equal(created.status,'confirmed');assert.equal(created.data.nativeProjectId,null);assert.equal(created.data.threadId,'created-1')
+ assert.equal(created.status,'confirmed');assert.equal(created.data.nativeProjectId,null);assert.equal(created.data.threadId,null);assert.equal(created.data.connected,false)
  assert.deepEqual(await f.service.call('alice','open_conversation',args),created)
  const second=await f.service.call('alice','open_conversation',{...args,requestId:'new-two'})
- assert.notEqual(second.data.threadId,created.data.threadId)
+ assert.notEqual(second.data.projectId,created.data.projectId)
  const resumed=await f.service.call('alice','open_conversation',{threadId:'old',requestId:'resume'})
  assert.equal(resumed.data.threadId,'old');assert.equal(resumed.data.nativeProjectId,null)
  assert.equal(f.conversations.root.alice.active,'1')
@@ -50,8 +50,9 @@ test('project conversation rejects a thread still running in the shared assistan
  f.threads.get('source').projectId='textbook'
  const context=await f.service.call('alice','get_conversation_context',{})
  assert.equal(context.workspace,f.dir)
- assert.equal(context.projectWorkspace,'unverified')
+ assert.equal(context.projectWorkspace,'matches')
  f.manager.state.users.alice.nativeProjectId='textbook'
+ f.manager.state.platformProjects.alice.find(p=>p.id===f.conversations.find('alice','1').platformProjectId).roots=[root]
  const mismatch=await f.service.call('alice','get_conversation_context',{})
  assert.equal(mismatch.projectWorkspace,'mismatch')
  const rejected=await f.service.call('alice','open_conversation',{nativeProjectId:'textbook',threadId:'source',requestId:'wrong-dir'})
@@ -101,6 +102,7 @@ test('routing refuses an old project binding whose thread still uses the shared 
  f.projects.set('toolbox',{id:'toolbox',name:'工具箱',roots:[join(f.dir,'repo')]})
  const target=f.conversations.find('alice',opened.data.projectId)
  f.manager.state.users[target.key].nativeProjectId='toolbox'
+ Object.assign(f.manager.state.platformProjects.alice.find(p=>p.id===target.platformProjectId),{roots:[join(f.dir,'repo')],workspaceVerified:true})
  const id=f.jobs.add('alice',{text:'修复教材游戏'},'request')
  f.manager.sessions.set('alice',{busy:true,taskId:id})
  const result=await f.service.call('alice','route_conversation_request',{projectId:opened.data.projectId,threadId:'other',sourceTaskId:id,requestId:'wrong-target'})

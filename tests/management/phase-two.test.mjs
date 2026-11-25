@@ -205,7 +205,7 @@ test('retained old result metadata can redeliver its own snapshot after another 
  await service.execute(service.operations.find(op=>op.id===pending.operationId));assert.equal(deliveries[0].value.text,'原结果')
 })
 test('historical attachment-waiting turns remain waiting rather than claiming the request completed',async t=>{
- const {service,manager,jobs}=await fixture(t),id=jobs.add('alice','needs file');jobs.bind(id,'a');jobs.submitted(id,'waiting-turn');jobs.mark(id,'done');jobs.context(id,{flowNonce:'known-nonce'})
+ const {service,manager,jobs}=await fixture(t),id=jobs.add('alice','needs file');jobs.bind(id,'a');jobs.submitted(id,'waiting-turn');jobs.mark(id,'done');jobs.context(id,{flowNonce:'known-nonce',control:{taskId:id,threadId:'a',turnId:'waiting-turn',waitingFor:'attachment'}})
  manager.protocol.recoverTurn=async()=>({id:'waiting-turn',status:'completed',items:[{type:'agentMessage',text:'等待材料。<wechat-task:known-nonce>waiting_attachment</wechat-task:known-nonce>'}]})
  const result=await service.call('alice','get_task_result',{projectId:'1',taskId:id});assert.equal(result.execution,'waiting_attachment');assert(!result.text.includes('wechat-task:'))
 })

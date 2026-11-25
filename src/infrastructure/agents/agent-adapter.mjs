@@ -11,11 +11,15 @@ export async function loadAgentAdapter(account,workspace,installation){
  const selected=await readAgentSelection(account.stateDir)
  const kind=selected.kind
  const backend={id:kind==='claude'?'claude':'host',kind:'host',cwd:workspace,stateDir:kind==='claude'?join(account.stateDir,'agents','claude'):account.stateDir,memoryMode:'native',instructions:'使用当前智能体的原生会话与记忆；切换时保留各底座独立的原生会话。'}
- const codexHome=await ensureAccountCodexHome(account.id)
- const profile=await readProviderProfile(account.stateDir)
- const provider=providerEnvironment(profile)
- const protocols={codex:createSessionProtocol({rpcFactory:backend.rpcFactory,providerEnv:provider.options,providerSecrets:provider.secrets,codexBinary:()=>installation.codexBinary,codexHome})}
+ let codexHome,profile
+ const protocols={}
+ if(kind==='codex'||installation.codexBinary){
+  codexHome=await ensureAccountCodexHome(account.id)
+  profile=await readProviderProfile(account.stateDir)
+  const provider=providerEnvironment(profile)
+  protocols.codex=createSessionProtocol({rpcFactory:backend.rpcFactory,providerEnv:provider.options,providerSecrets:provider.secrets,codexBinary:()=>installation.codexBinary,codexHome})
+ }
  const claudeBinary=selected.claudeBinary??(kind==='claude'?selected.binary:null)
  if(claudeBinary){const {query}=await import('@anthropic-ai/claude-agent-sdk');protocols.claude=createClaudeProtocol({binary:claudeBinary,query})}
- return {kind,name:kind==='claude'?'Claude Code':'Codex',backend,sessionOptions:{codexHome,sessionProtocol:createMultiAgentProtocol(protocols,kind)},catalog:'official',providerKind:profile?.kind??'subscription'}
+ return {kind,name:kind==='claude'?'Claude Code':'Codex',backend,sessionOptions:{codexHome,sessionProtocol:createMultiAgentProtocol(protocols,kind)},catalog:'official',providerKind:kind==='claude'?'claude-subscription':profile?.kind??'subscription'}
 }

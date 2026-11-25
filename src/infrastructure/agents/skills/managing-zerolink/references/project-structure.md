@@ -1,19 +1,19 @@
 # 项目与会话结构
 
 1. 判断用户要做什么：
-   - 创建或导入 Codex 项目 → 执行“创建或导入项目”工作流。
+   - 创建平台项目或显式导入 Codex 项目 → 执行“创建或导入项目”工作流。
    - 将会话归入同一仓库项目 → 执行“仓库归组”工作流。
    - 重命名、排序或整理会话分组 → 执行“整理结构”工作流。
    - 归档或还原微信绑定的会话 → 执行“归档会话”工作流。
    - 删除原生项目或会话分组 → 执行“删除结构”工作流。
    - 回退会话历史 → 执行“回退历史”工作流。
-2. 用 `list_projects`、`list_project_sessions` 或 `list_thread_sections` 核对相应目标；目标有歧义时请用户选定。若 `get_conversation_context.projectWorkspace=mismatch`，另查原生项目根目录。
+2. 用 `list_projects`、`list_project_sessions` 或 `list_thread_sections` 核对相应目标；目标有歧义时请用户选定。若 `get_conversation_context.projectWorkspace` 为 mismatch 或 unverified，停止派发；使用目录凭据和 `request_project_workspace` 核对平台边界，不按目录名或原生标题推断。
 
 ## 创建或导入项目
 
 1. 用 `list_workspace_choices` 取得所选目录的 `workspaceToken`，核对项目名称与目录。
-2. 新建项目调用 `create_project`；导入已有项目调用 `request_project_import`，需要关联会话时传已核对的 threadId。
-3. 核对工具回执中的原生项目 ID，再查询项目列表；创建或导入本身不切换后续消息去向。
+2. 新建平台项目调用 `create_project`，不连接智能体；导入已有项目调用 `request_project_import`，需要关联会话时传已核对的 threadId。
+3. 新建核对平台 platformProjectId 与逻辑会话 projectId；显式原生导入才核对原生项目 ID。再查询项目列表；创建或导入本身不切换后续消息去向。
 
 ## 仓库归组
 

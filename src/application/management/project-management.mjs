@@ -1,3 +1,4 @@
+import {platformProject,platformProjects,createPlatformProject,bindPlatformConversation} from '../conversations/platform-projects.mjs'
 import {realpath,stat} from 'node:fs/promises'
 import {bindProjectSession} from '../conversations/native-projects.mjs'
 import {projectFolderChoices,workspaceText,workspaceInProject} from '../conversations/workspace.mjs'
@@ -21,13 +22,13 @@ export async function verifyChoice(context,owner,token){
 export function createProject(context,owner,caller,args){return managementWrite(context,owner,caller,'create_project',args,async op=>{
  const path=await verifyChoice(context,owner,args.workspaceToken)
  const name=args.name.trim()
- const api=context.conversations.backendPort?.nativeProjects
- if(!api)throw Error('MANAGEMENT_NATIVE_PROJECTS_UNAVAILABLE')
- const project=await context.conversations.withBackend(owner,rpc=>api.create(rpc,name,path,op.id))
- const bound=bindProjectSession(context.conversations,owner,{project,workspace:path})
- op.projectId=bound.id;op.status='confirmed';op.data={projectId:bound.id,nativeProjectId:project.id,name:project.name,workspace:path,switched:false,connected:false}
+ const project=createPlatformProject(context.conversations,owner,name,path)
+ const bound=bindPlatformConversation(context.conversations,owner,project,path,{agentKind:context.manager.agentFor?.(caller)})
+ op.projectId=bound.id;op.status='confirmed';op.data={projectId:bound.id,platformProjectId:project.id,nativeProjectId:null,name:project.name,workspace:path,switched:false,connected:false}
 })}
 export function renameProject(context,owner,caller,args){return managementWrite(context,owner,caller,'rename_project',args,async op=>{
+ const local=platformProjects(context.conversations,owner).find(p=>p.id===args.projectId)
+ if(local){local.name=args.name.trim();op.status='confirmed';op.data={platformProjectId:local.id,name:local.name,switched:false};return}
  const api=context.conversations.backendPort?.nativeProjects
  // Native IDs from project/list can be used before any WeChat session exists.
  if(api&&!context.entries(owner).some(e=>e.id===args.projectId)){
@@ -39,18 +40,9 @@ export function renameProject(context,owner,caller,args){return managementWrite(
  }
  const entry=context.target(owner,args.projectId)
  if(entry.archived||entry.archiveSync==='missing'||context.conversations.archiveLocks?.has(entry.key))throw Error('MANAGEMENT_TARGET_UNAVAILABLE')
- const nativeId=context.manager.state.users[entry.key]?.nativeProjectId
- if(nativeId){
-  const project=await context.conversations.withBackend(owner,rpc=>context.conversations.backendPort.nativeProjects.rename(rpc,nativeId,args.name.trim()))
-  if(!context.manager.state.users[entry.key].threadId)entry.name=project.name
-  op.status='confirmed';op.data={projectId:entry.id,nativeProjectId:nativeId,name:project.name,switched:false};return
- }
- if(!context.manager.state.users[entry.key]?.threadId){entry.name=args.name.trim();entry.titleSource='local'}
- else{
-  // Existing rename verifies the official thread title. Preserve the delivery
-  // callback of a disconnected target instead of routing future output to MCP.
-  await context.conversations.rename(entry,args.name.trim(),(value,options)=>context.deliver(entry.key,value,options))
- }
+ const project=platformProjects(context.conversations,owner).find(p=>p.id===entry.platformProjectId)
+ if(project)project.name=args.name.trim()
+ entry.name=args.name.trim();entry.titleSource='local'
  op.status='confirmed';op.data={projectId:entry.id,name:entry.name,switched:false}
 })}
 
@@ -60,6 +52,17 @@ export function openConversation(context,owner,caller,args,operation='open_conve
  const conversations=context.conversations,api=conversations.backendPort?.nativeProjects
  const session=context.manager.sessions.get(caller),source=session?.taskId&&context.manager.submissions?.get(session.taskId)
  if(source?.input?.projectDispatch&&!source.input.projectDispatch.entryOrigin)throw Error('MANAGEMENT_NESTED_DISPATCH_DENIED')
+ if(!args.nativeProjectId&&!args.threadId){
+  let project=args.platformProjectId?platformProject(conversations,owner,args.platformProjectId):null
+  const workspace=args.workspaceToken?await verifyChoice(context,owner,args.workspaceToken):project?.roots.length===1?project.roots[0]:null
+  if(!workspace)throw Error('MANAGEMENT_WORKSPACE_SELECTION_REQUIRED')
+  if(project&&(!project.workspaceVerified||!await workspaceInProject(workspace,project)))throw Error('MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
+  project??=createPlatformProject(conversations,owner,'独立项目',workspace)
+  const entry=bindPlatformConversation(conversations,owner,project,workspace,{agentKind:context.manager.agentFor?.(caller)})
+  op.projectId=entry.id;op.status='confirmed';op.data={projectId:entry.id,platformProjectId:project.id,nativeProjectId:null,threadId:null,switched:false,connected:false}
+  return
+ }
+ if(args.platformProjectId)throw Error('MANAGEMENT_NATIVE_AND_LOCAL_PROJECT_CONFLICT')
  if(!api)throw Error('MANAGEMENT_NATIVE_PROJECTS_UNAVAILABLE')
  const {project,thread,workspace}=await conversations.withBackend(owner,async rpc=>{
   const project=args.nativeProjectId?await api.read(rpc,args.nativeProjectId):null
@@ -87,4 +90,16 @@ export function openConversation(context,owner,caller,args,operation='open_conve
   if(!session.threadId||thread&&session.threadId!==thread.id)throw Error('CODEX_THREAD_UNCONFIRMED')
  }
  op.status='confirmed';op.data={projectId:entry.id,nativeProjectId:project?.id??null,threadId:context.manager.state.users[entry.key].threadId,switched:false}
+})}
+
+export function confirmProjectWorkspace(context,owner,caller,args){return managementWrite(context,owner,caller,'request_project_workspace',args,async op=>{
+ const project=platformProject(context.conversations,owner,args.platformProjectId),path=await verifyChoice(context,owner,args.workspaceToken)
+ const entries=context.entries(owner).filter(e=>e.platformProjectId===project.id)
+ for(const entry of entries){
+  const session=context.manager.sessions.get(entry.key)
+  if(session?.busy&&entry.key!==caller||session?.connecting||session?.finishing||context.manager.submissions?.uncertainCount?.(entry.key))throw Error('MANAGEMENT_TARGET_BUSY')
+  if(!await workspaceInProject(context.manager.workspaceFor(entry.key),{roots:[path]}))throw Error('MANAGEMENT_PROJECT_WORKSPACE_MISMATCH')
+ }
+ project.roots=[path];project.workspaceVerified=true
+ op.status='confirmed';op.data={platformProjectId:project.id,workspace:path,changedConversationDirectories:false}
 })}

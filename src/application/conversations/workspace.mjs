@@ -39,6 +39,8 @@ export async function bindNewWorkspace(context,key,path,{prepareOnly=false}={}){
  const current=context.manager.state.users[key]??={}
  if(current.threadId||context.manager.sessions.has(key)||current.hasMessages)throw Error('已有会话不能迁移目录，请新建项目。')
  current.workspace=actual
+ const entry=context.entry?.(key),project=context.manager.state.platformProjects?.[entry?.owner]?.find(p=>p.id===entry?.platformProjectId)
+ if(project){project.roots=[actual];project.workspaceVerified=true}
  await context.manager.save()
 }
 export function workspaceText(context,key){return context.manager.workspaceFor?.(key)??context.manager.cwd??'未配置'}

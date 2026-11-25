@@ -20,21 +20,13 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   return result
  }
  const resume=async(rpc,{threadId,cwd,instructions,provider})=>{
-  let result
-  try{
-   result=verify(await rpc.request('thread/resume',{...params(rpc,{cwd,instructions,provider}),threadId,excludeTurns:true}))
-  }catch(error){
-   if(error.definitiveRpcError&&error.rpcCode===-32600&&/already has an active writer/i.test(error.message)){
-    throw Object.assign(Error('已在另一个应用中打开。请先在那边关闭会话，才能在这里继续。'),{code:'CODEX_THREAD_WRITER_BUSY',threadId})
-   }
-   throw error
-  }
+  const result=verify(await rpc.request('thread/resume',{...params(rpc,{cwd,instructions,provider}),threadId,excludeTurns:true}))
   if(result.thread.id!==threadId)throw Error('底座未确认目标对话，未切换。')
   await enableThreadMemory(rpc,threadId)
   return result
  }
  return {
-  name:'Codex',kind:'codex',supportsMemory:true,supportsModels:true,supportsNativeCommands:true,providerOptions,
+  name:'Codex',kind:'codex',supportsNativeCatalog:true,supportsMemory:true,supportsModels:true,supportsNativeCommands:true,providerOptions,
   createRpc(options){
    const management=options.management,selected=options.providerOptions??providerOptions(),args=[...selected.args]
    // Codex discovers MCP servers at app-server startup. Thread-only overrides
@@ -57,8 +49,7 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
    if(saved.modelOverride&&!provider.provider)provider={...provider,thread:{...provider.thread,model:saved.modelOverride}}
    let result
    if(saved.threadId){
-    try{result=await resume(rpc,{threadId:saved.threadId,cwd,instructions,provider})}
-    catch(error){if(saved.nativeProjectId||saved.hasMessages||!error.message.includes('no rollout found for thread id'))throw error}
+    result=await resume(rpc,{threadId:saved.threadId,cwd,instructions,provider})
    }
    if(!result){result=verify(await rpc.request('thread/start',{...params(rpc,{cwd,instructions,provider}),...(saved.nativeProjectId?{projectId:saved.nativeProjectId}:{})}));if(saved.nativeProjectId&&result.thread.projectId!==saved.nativeProjectId)throw Error('CODEX_PROJECT_THREAD_UNCONFIRMED');await enableThreadMemory(rpc,result.thread.id)}
    return result

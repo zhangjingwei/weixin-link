@@ -18,5 +18,9 @@ description: 用户通过微信助手管理项目、会话、任务、计划、�
 
 ## 共同约束
 
-- `get_conversation_context.projectId` 和 `list_projects.callerProjectId` 指执行项目；`list_projects.projects[].active` 指微信选中项目。`list_projects.projects` 提供微信项目 ID，`list_projects.nativeProjects` 提供 Codex 项目；后者为空表示无项目，null 表示查询不可用。
+- `get_conversation_context.projectId` 和 `list_projects.callerProjectId` 指执行项目；`list_projects.projects[].active` 指微信选中项目。`list_projects.projects` 提供微信项目 ID，`list_projects.platformProjects` 提供平台项目和 platformProjectId；项目身份不依赖底座。显式 `list_native_projects` 才查询 Codex 项目。
 - 新写操作用新 UUID 作 `requestId`，同一写操作重试沿用原 `requestId` 和参数。`queued`、`pending`、`scheduled`、`requested` 都不代表最终完成；工具回执不确定时查询原管理操作，不直接重做。
+
+- 缺少附件/用户回答时，用 `get_conversation_context` 的 sourceTaskId、turnId 调用 `request_task_input`；不要通过正文状态标签控制程序。
+- 实施任务结果用 `report_task_result` 结构化报告。轮次结束不等于业务完成，智能体报告不等于独立验收或消息送达；未知状态如实保留。
+- 普通项目创建、名称、逻辑对话、近期历史优先使用平台接口；仅在明确要求原生功能时查询对应底座。不把原生服务不可用当作平台项目不存在。

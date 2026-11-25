@@ -46,14 +46,14 @@ test('untrusted owner fields, tools and forged cursors are rejected',async t=>{
  const {service}=fixture(t)
  await assert.rejects(service.call('alice','list_projects',{ownerId:'bob'}),/INVALID_ARGUMENTS/)
  await assert.rejects(service.call('alice','rpc',{method:'thread/resume'}),/INVALID_ARGUMENTS/)
- await assert.rejects(service.call('alice','get_session_history',{projectId:'2',cursor:'forged'}),/INVALID_CURSOR/)
+ await assert.rejects(service.call('alice','get_session_history',{native:true,projectId:'2',cursor:'forged'}),/INVALID_CURSOR/)
  await assert.rejects(service.call('outsider','list_projects',{}),/FORBIDDEN/)
 })
 test('large history is returned fully across bound cursors; attachments and metadata do not execute',async t=>{
  const {service,backend}=fixture(t),body='完整上下文'.repeat(5000)
  backend.listTurns=async()=>({data:[{id:'t',items:[{type:'userMessage',content:[{type:'text',text:'原请求接入层任务状态元数据 nonce=test'}]},{type:'agentMessage',text:body+'[附件](/private/a.md)'}]}]})
  let cursor,text='',pages=0
- do{const page=await service.call('alice','get_session_history',{projectId:'2',...(cursor?{cursor}:{})});cursor=page.nextCursor;text+=page.messages.filter(m=>m.role==='assistant').map(m=>m.text).join('');assert.equal(page.attachmentsResent,false);pages++;if(cursor)await assert.rejects(service.call('bob','get_session_history',{projectId:'1',cursor}),/INVALID_CURSOR/)}while(cursor&&pages<10)
+ do{const page=await service.call('alice','get_session_history',{native:true,projectId:'2',...(cursor?{cursor}:{})});cursor=page.nextCursor;text+=page.messages.filter(m=>m.role==='assistant').map(m=>m.text).join('');assert.equal(page.attachmentsResent,false);pages++;if(cursor)await assert.rejects(service.call('bob','get_session_history',{native:true,projectId:'1',cursor}),/INVALID_CURSOR/)}while(cursor&&pages<10)
  assert.equal(text,body+'附件〔历史附件，未重发〕');assert(pages>1)
 })
 test('supplement uses exact existing turn and deduplicates request IDs',async t=>{
@@ -131,15 +131,16 @@ test('a new selection during durable switch bookkeeping cannot be overwritten',a
 test('history continuation rejects a changed active turn rather than skipping new text',async t=>{
  const {service,backend}=fixture(t);let text='原文'.repeat(10000)
  backend.listTurns=async()=>({data:[{id:'turn',items:[{type:'agentMessage',text}]}]})
- const first=await service.call('alice','get_session_history',{projectId:'2'});text='修改'+text
- await assert.rejects(service.call('alice','get_session_history',{projectId:'2',cursor:first.nextCursor}),/HISTORY_CHANGED/)
+ const first=await service.call('alice','get_session_history',{native:true,projectId:'2'});text='修改'+text
+ await assert.rejects(service.call('alice','get_session_history',{native:true,projectId:'2',cursor:first.nextCursor}),/HISTORY_CHANGED/)
 })
 
-test('list_projects exposes the native catalog independently of registered project IDs',async t=>{
+test('platform catalog stays local and native catalog is explicitly requested',async t=>{
  const {service,backend}=fixture(t)
  backend.listProjects=async()=>[{id:'p',name:'原生项目',roots:[]}]
  const result=await service.call('alice','list_projects',{})
- assert.deepEqual(result.codexProjects,['原生项目'])
+ assert.equal(result.codexProjects,null)
+ assert.deepEqual((await service.call('alice','list_native_projects',{})).nativeProjects.map(p=>p.name),['原生项目'])
  assert.ok(result.projects.some(p=>p.name==='知识库'))
  assert.ok(result.projects.every(p=>p.name!=='原生项目'))
  backend.listProjects=async()=>{throw Error('unavailable')}

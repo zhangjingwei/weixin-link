@@ -29,9 +29,15 @@ test('private provider credentials reach the local Codex process without enterin
  assert.equal(spawned.binary,'/bundled/codex')
 })
 
-test('a confirmed active writer blocks resume without starting a replacement thread',async()=>{
+test('a generic RPC error remains unclassified and cannot start a replacement thread',async()=>{
  const calls=[],protocol=createSessionProtocol()
  const rpc={request:async(method)=>{calls.push(method);throw Object.assign(Error('thread example already has an active writer'),{rpcCode:-32600,definitiveRpcError:true})}}
- await assert.rejects(protocol.open(rpc,{saved:{threadId:'example'},cwd:'/tmp',provider:{}}),{code:'CODEX_THREAD_WRITER_BUSY'})
+ await assert.rejects(protocol.open(rpc,{saved:{threadId:'example'},cwd:'/tmp',provider:{}}),error=>error.definitiveRpcError&&error.rpcCode===-32600&&error.code===undefined)
+ assert.deepEqual(calls,['thread/resume'])
+})
+
+test('a missing-rollout phrase cannot automatically replace an empty saved identity',async()=>{
+ const calls=[],protocol=createSessionProtocol(),rpc={request:async method=>{calls.push(method);throw Object.assign(Error('no rollout found for thread id'),{definitiveRpcError:true,rpcCode:-32600})}}
+ await assert.rejects(protocol.open(rpc,{saved:{threadId:'saved',hasMessages:false},cwd:'/tmp',provider:{}}))
  assert.deepEqual(calls,['thread/resume'])
 })

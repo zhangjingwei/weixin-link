@@ -1,5 +1,5 @@
+import {turnExecution,taskOutcome,outcomeEvidence} from '../../domain/tasks/task-control.mjs'
 import {stripTaskFlow} from '../../infrastructure/agents/task-flow.mjs'
-import {executionState} from '../../domain/tasks/execution-state.mjs'
 import {createHash} from 'node:crypto'
 import {historyText} from '../conversations/history.mjs'
 import {managementWrite} from './management-writes.mjs'
@@ -30,7 +30,7 @@ export async function getTaskResult(context,owner,args){
   if(!turn||turn.id!==job.turn_id||['inProgress','in_progress'].includes(turn.status))throw Error('MANAGEMENT_RESULT_NOT_READY')
   const raw=(turn.items??[]).filter(i=>i.type==='agentMessage'&&i.phase!=='commentary').map(i=>context.manager.protocol.cleanOutputText(i.text)).join('\n\n')
   const flow=stripTaskFlow(raw,job.context?.flowNonce),text=flow.text
-  value={record:{lastReply:text},identity:{id:digest([job.id,job.thread_id,turn.id]),taskId:job.id,threadId:job.thread_id,turnId:turn.id,execution:executionState(turn.status,turn.status==='completed'&&flow.waiting),delivery:'historical_not_tracked'},fingerprint:digest(text),historical:true}
+  value={record:{lastReply:text},identity:{id:digest([job.id,job.thread_id,turn.id]),taskId:job.id,threadId:job.thread_id,turnId:turn.id,execution:turnExecution(turn.status,job.context?.control,{taskId:job.id,threadId:job.thread_id,turnId:turn.id}),taskOutcome:taskOutcome(turn.status,job.context?.control,{taskId:job.id,threadId:job.thread_id,turnId:turn.id}),outcomeEvidence:outcomeEvidence(turn.status,job.context?.control,{taskId:job.id,threadId:job.thread_id,turnId:turn.id}),delivery:'historical_not_tracked'},fingerprint:digest(text),historical:true}
  }
  const {record,identity,fingerprint}=value
  if(cursor&&cursor.fingerprint!==fingerprint)throw Error('MANAGEMENT_RESULT_CHANGED')
@@ -38,7 +38,7 @@ export async function getTaskResult(context,owner,args){
  const nextCursor=nextOffset<characters.length?context.sign({kind:'result-page',owner,projectId:entry.id,taskId:args.taskId,resultId:identity.id,fingerprint,offset:nextOffset,expires:context.now()+600000}):null
  const attachments=(record.lastOutput?.attachments??[]).map(a=>({name:a.fileName,kind:a.kind,bytes:a.bytes,availability:'not_checked'}))
  const resultToken=value.historical?null:context.sign({kind:'result',owner,projectId:entry.id,resultId:identity.id,fingerprint,expires:context.now()+600000})
- return {...identity,projectId:entry.id,text:chunk,nextCursor,attachments,resultToken,attachmentsResent:false,redeliveryAvailable:!value.historical}
+ return {...identity,taskOutcome:identity.taskOutcome??'unknown',projectId:entry.id,text:chunk,nextCursor,attachments,resultToken,attachmentsResent:false,redeliveryAvailable:!value.historical}
 }
 export function requestResultRedelivery(context,owner,caller,args){return managementWrite(context,owner,caller,'request_result_redelivery',args,async op=>{
  const entry=context.target(owner,args.projectId),token=context.credential(args.resultToken,'result',owner),value=retained(context,entry,{resultId:token.resultId})

@@ -36,3 +36,9 @@
 
 1. 用 `list_project_tasks` 找到状态不确定的持久任务及完整 `taskId`。
 2. 调用 `request_task_reconciliation`，再查询原管理操作和任务状态；`requested` 只表示已安排核对，不代表重新执行或任务完成。
+
+## 等待与业务结果
+
+1. 本轮需要用户附件/回答时，读取 `get_conversation_context` 的 sourceTaskId、turnId，通过 `request_task_input` 提交 attachment/answer。只有确认回执后说明等待，不输出正文控制标记。
+2. 明确实施任务结束时用 `report_task_result` 报告 completed/failed/blocked。这是智能体报告，不是平台独立验收；普通问答无需机械追加报告。
+3. `execution=completed` 表示轮次执行结束；`taskOutcome=unknown` 不得解释成业务完成。转交后的 queued/handed_off 不代表目标已完成；delivery=accepted 不代表手机可见。

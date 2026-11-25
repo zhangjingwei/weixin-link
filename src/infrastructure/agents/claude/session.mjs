@@ -17,7 +17,7 @@ export class ClaudeSession {
  async open(saved,instructions){
   if(saved.threadId&&saved.agentKind!=='claude')throw Error('CLAUDE_SESSION_PROVIDER_MISMATCH')
   const resuming=!!saved.threadId&&saved.hasMessages!==false
-  this.id=resuming?saved.threadId:randomUUID();this.saved=saved
+  this.id=saved.threadId??randomUUID();this.saved=saved
   saved.hasMessages??=false
   let timer
   try{this.handle=this.query({prompt:this.input,options:{pathToClaudeCodeExecutable:this.binary,cwd:this.cwd,env:{...claudeEnvironment(this.env),DISABLE_AUTOUPDATER:'1',CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:'1'},

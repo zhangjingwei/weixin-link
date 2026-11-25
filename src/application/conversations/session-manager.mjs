@@ -1,8 +1,8 @@
+import {turnExecution,taskOutcome,outcomeEvidence} from '../../domain/tasks/task-control.mjs'
 import {activeAgent,syncNativeSession,selectNativeSession,handoffContext,nativeThreadIds} from '../../domain/conversations/native-sessions.mjs'
 import {taskProgress,heartbeatDue} from '../../domain/tasks/progress-state.mjs'
-import {recordTaskResult,archiveTaskResult} from '../tasks/task-result.mjs'
+import {recordTaskResult,archiveTaskResult,hasQueuedHandoff} from '../tasks/task-result.mjs'
 import {currentMaterials,hasAttachments} from '../../domain/messages/material-association.mjs'
-import {executionState} from '../../domain/tasks/execution-state.mjs'
 import {localTaskLabel,localCompletion} from '../../domain/tasks/task-label.mjs'
 import {handoffReply} from './handoff-reply.mjs'
 import {transition} from '../../domain/tasks/lifecycle.mjs'
@@ -452,11 +452,13 @@ export class SessionManager {
     session.workToken=token
     session.traceId = typeof text==='object'&&/^[a-zA-Z0-9_-]{8,64}$/.test(text.traceId??'')?text.traceId:randomBytes(8).toString('hex')
     session.taskId=typeof text==='object'&&text.deliveryId?text.deliveryId:session.traceId
-    const waiting=this.state.users[session.userId]?.waitingAttachment
-    session.attachmentContinuation=hasAttachments(text)&&waiting?waiting:null
+    const waiting=this.state.users[session.userId]?.waitingAttachment??this.state.users[session.userId]?.waitingInput
+    session.attachmentContinuation=waiting&&(waiting.kind==='answer'||hasAttachments(text))?waiting:null
     session.localTask=session.attachmentContinuation?.task??localTaskLabel(text,typeof text==='object'&&text.deliveryId?text.deliveryId:session.traceId)
 
     session.waitingAttachment=false
+    session.waitingUser=false
+    session.taskControl=null
     session.requestText=typeof text==='string'?text:text.text
 
     this.state.users[session.userId]??={}
@@ -485,13 +487,14 @@ export class SessionManager {
       this.diagnostic(session,'materials.context',{count:materials.length,queue_depth:pendingMaterials,reason:session.attachmentContinuation?'continuation':materials.length?'current':'unbound'})
       const runtimeInput=this.backend?.prepareInput?await this.backend.prepareInput(text,{signal:token.signal}):text
       session.agentHandoff=this.state.users[session.userId]?.agentHandoff
-      const turnParams={threadId:session.threadId,input:[...this.protocol.input(runtimeInput,this.agentFor(session.userId)),...(this.state.users[session.userId]?.agentHandoff?[{type:'text',text:this.state.users[session.userId].agentHandoff}]:[]),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
+      const turnParams={threadId:session.threadId,input:[...this.protocol.input(runtimeInput,this.agentFor(session.userId)),...(this.state.users[session.userId]?.agentHandoff?[{type:'text',text:this.state.users[session.userId].agentHandoff}]:[]),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:(session.attachmentContinuation.kind==='answer'?'当前回复':'当前附件')+'用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
       result=native?.action==='review'
         ?await this.protocol.startReview(session.rpc,session.threadId,native.target)
         :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,model:executionModel,fastMode:this.state.users[session.userId]?.fastMode})
       if(!result?.turn?.id)throw Error('底座未确认任务标识，结果待核对。')
       if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment
+      if(waiting&&this.state.users[session.userId]?.waitingInput===waiting)delete this.state.users[session.userId].waitingInput
     } catch(error) {
       if(session.exited || session.traceId!==traceId)return
       transition(session,'closed');session.queue=[];this.detachRpc(session,session.rpcAttempt)
@@ -769,7 +772,7 @@ export class SessionManager {
         this.reportModelRecovery(session)
         const flow=this.ports.stripTaskFlow(this.protocol.cleanOutputText(p.item.text),session.traceId)
         const rest=flow.text
-        if(p.item.phase==='final_answer'||!p.item.phase)session.waitingAttachment=flow.waiting
+        // Reply content is presentation only; control comes from authenticated tools/events.
         if (p.item.phase === 'commentary') {
           const turnId = session.turnId
           if(session.contextRejected){this.diagnostic(session,'notification.suppressed',{reason:'context_rejected'});return}
@@ -786,23 +789,32 @@ export class SessionManager {
       clearTimeout(session.progressTimer)
       transition(session,'delivering')
       this.clearQuestions(session)
-      const awaitingAttachment=p.turn.status==='completed'&&session.waitingAttachment&&(session.workToken?.current()??true)
+      const identity={taskId:session.taskId??session.traceId,threadId:session.threadId,turnId:session.turnId}
+      const control=this.submissions?.get?.(identity.taskId)?.context?.control??session.taskControl
+      const execution=turnExecution(p.turn.status,control,identity)
+      const awaitingAttachment=execution==='waiting_attachment'&&(session.workToken?.current()??true)
+      const awaitingUser=execution==='waiting_user'&&(session.workToken?.current()??true)
+      const terminalStatus=['completed','failed','interrupted'].includes(p.turn.status)?p.turn.status:'unknown'
+      session.waitingAttachment=awaitingAttachment;session.waitingUser=awaitingUser
       this.diagnostic(session,'materials.resolution',{status:awaitingAttachment?'waiting_attachment':p.turn.status,count:session.materials?.length??0})
+      if(awaitingUser)this.state.users[session.userId].waitingInput={kind:'answer',task:session.localTask,request:session.requestText,threadId:session.threadId}
       if(awaitingAttachment)this.state.users[session.userId].waitingAttachment={task:session.localTask,request:session.requestText,threadId:session.threadId}
       const receivedWhileWaiting=awaitingAttachment&&(this.submissions?.pendingMaterials?.(session.userId,undefined)??0)>0
       let reply = session.finals.join('\n\n')
       if(receivedWhileWaiting){reply='请求已保留，正在核对已收到的附件。';this.diagnostic(session,'materials.waiting_notice_adjusted',{reason:'received_pending'})}
       if (p.turn.status === 'failed') reply += `\n${this.agentNameFor(session.userId)} 任务失败：${p.turn.error?.message ?? '未返回错误详情。'}`
       else if (p.turn.status === 'interrupted') reply += '\n当前任务已停止。'
-      else if (!reply) reply = '本轮任务已结束，但未返回文字回复。'
+      else if (!reply) reply = terminalStatus==='unknown'?'本轮执行状态未确认，结果待核对。':'本轮任务已结束，但未返回文字回复。'
       const handoff=!awaitingAttachment&&!receivedWhileWaiting
         ?handoffReply(this.state,this.submissions,session):null
+      const handedOff=hasQueuedHandoff(this.state,this.submissions,session.userId,identity.taskId)
+      const outcome=taskOutcome(p.turn.status,control,identity,{handedOff})
       if(handoff)reply=handoff+(p.turn.status==='failed'?'\n源会话本轮处理失败；目标任务状态以以上记录为准。':'')
       // The footer describes execution completion, not delivery acceptance.
-      const mergedCompletion=this.completionMarkers&&!awaitingAttachment&&!handoff&&(session.workToken?.current()??true)
+      const mergedCompletion=this.completionMarkers&&!awaitingUser&&!awaitingAttachment&&!handoff&&(session.workToken?.current()??true)
       const footerOffset=mergedCompletion&&p.turn.status!=='completed'?reply.length:null
       if(footerOffset!==null){
-        const marker=p.turn.status==='failed'?'⚠️ 本轮执行失败，回答已结束。':p.turn.status==='interrupted'?'⏹ 本轮已停止。':'✅ 本轮回答结束。'
+        const marker=p.turn.status==='failed'?'⚠️ 本轮执行失败，回答已结束。':p.turn.status==='interrupted'?'⏹ 本轮已停止。':'⚠️ 本轮执行结果待核对。'
         reply+='\n\n'+localCompletion(marker,session.localTask)
       }
       let output=reply
@@ -819,8 +831,10 @@ export class SessionManager {
       archiveTaskResult(this.state.users[session.userId])
       this.state.users[session.userId].lastConversationUpdates=session.lastProgress?.turnId===session.turnId?session.lastProgress?.updates:undefined
       this.state.users[session.userId].lastOutput=typeof output==='string'?undefined:output
-      this.state.users[session.userId].recovery={task:session.localTask,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending',updated:new Date().toISOString()}
-      recordTaskResult(this.state.users[session.userId],{taskId:session.taskId??session.traceId,threadId:session.threadId,turnId:session.turnId,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending'})
+      this.state.users[session.userId].recovery={task:session.localTask,execution,outcome,delivery:'pending',updated:new Date().toISOString()}
+      recordTaskResult(this.state.users[session.userId],{taskId:session.taskId??session.traceId,threadId:session.threadId,turnId:session.turnId,execution,delivery:'pending'})
+      this.state.users[session.userId].resultIdentity.taskOutcome=outcome
+      this.state.users[session.userId].resultIdentity.outcomeEvidence=outcomeEvidence(p.turn.status,control,identity,{handedOff})
       this.state.users[session.userId].resultIdentity.footerOffset=footerOffset
       this.state.users[session.userId].lastTask=session.localTask
       this.state.users[session.userId].lastReply = reply
@@ -853,11 +867,11 @@ export class SessionManager {
         await this.notify(session,localCompletion(warning,session.localTask),()=>!session.exited&&(session.workToken?.current()??true))
       }else if(prepareRejected)this.diagnostic(session,'notification.suppressed',{reason:'upstream_prepare_rejected'})
       if(session.nativeQueueTurn){
-        this.submissions.markOutcome(session.taskId,p.turn.status==='completed'&&!awaitingAttachment?'completed':'not_confirmed')
-        this.submissions.mark(session.taskId,p.turn.status==='interrupted'?'cancelled':'done')
+        this.submissions.markOutcome(session.taskId,terminalStatus==='completed'&&['completed','handed_off'].includes(outcome)?'completed':'not_confirmed')
+        this.submissions.mark(session.taskId,terminalStatus==='unknown'?'uncertain':terminalStatus==='interrupted'?'cancelled':'done')
         session.nativeQueueTurn=false
       }
-      this.resolveWaiters(session, { status: p.turn.status, reply })
+      this.resolveWaiters(session, { status: terminalStatus, taskOutcome:outcome, reply })
       if(session.exited)return
       transition(session,'idle')
       this.scheduleIdleRelease(session)
@@ -876,7 +890,7 @@ export class SessionManager {
     const from=this.agentFor(userId)
     if(from===kind)return
     const session=this.sessions.get(userId)
-    if(this.submissions?.uncertainCount?.(userId)||session?.busy||session?.finishing||session?.connecting||session?.selecting||session?.exiting||session?.compacting||session?.queue?.length||record.waitingAttachment||['running','unknown'].includes(record.recovery?.execution)||[...this.questions.values()].some(q=>q.session===session))throw Error('AGENT_SWITCH_BLOCKED')
+    if(this.submissions?.uncertainCount?.(userId)||session?.busy||session?.finishing||session?.connecting||session?.selecting||session?.exiting||session?.compacting||session?.queue?.length||record.waitingAttachment||['waiting_user','running','unknown'].includes(record.recovery?.execution)||[...this.questions.values()].some(q=>q.session===session))throw Error('AGENT_SWITCH_BLOCKED')
     const previous=structuredClone(record),context=handoffContext(record,from,kind,this.submissions?.companionMessages?.(userId,nativeThreadIds(record))??[])
     this.agentSelections.add(userId)
     if(session)session.selecting=true
@@ -1093,7 +1107,13 @@ export class SessionManager {
             }
           }
         }else this.lifecycle.cancel(userId,{preserveActive:!!(runtime?.busy||runtime?.finishing)})
-        if(this.state.users[userId]?.waitingAttachment){delete this.state.users[userId].waitingAttachment;if(this.state.users[userId].recovery)this.state.users[userId].recovery.execution='interrupted';await this.save()}
+        if((this.state.users[userId]?.waitingAttachment||this.state.users[userId]?.waitingInput)&&!runtime?.busy&&!runtime?.finishing){
+          const record=this.state.users[userId],identity=record.resultIdentity,job=identity&&this.submissions?.get?.(identity.taskId)
+          if(job?.owner===userId&&job.thread_id===identity.threadId&&job.turn_id===identity.turnId)this.submissions.context(job.id,{...job.context,control:{taskId:job.id,threadId:job.thread_id,turnId:job.turn_id,cancelled:true}})
+          if(identity)identity.taskOutcome='cancelled'
+          if(record.recovery)record.recovery.outcome='cancelled'
+        }
+        if(this.state.users[userId]?.waitingAttachment||this.state.users[userId]?.waitingInput){delete this.state.users[userId].waitingAttachment;delete this.state.users[userId].waitingInput;if(this.state.users[userId].recovery)this.state.users[userId].recovery.execution='interrupted';await this.save()}
         const scopeId=runtime?.threadId??this.state.users[userId]?.threadId
         if(runtime?.compacting||this.state.users[userId]?.compaction?.threadId===scopeId)await reply('上下文压缩可能仍在进行；本次停止未确认取消压缩。新任务会先核对状态。')
         if (!runtime || runtime.rpc?.closed) { await reply(command.action==='exit'?'微信这边的会话连接已关闭。':`当前没有运行中的本地 ${this.agentNameFor(userId)} 任务。`); return }

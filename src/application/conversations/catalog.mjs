@@ -4,18 +4,17 @@ export function installOfficialHooks(context){
   context.manager.beforeConversationConnect=async key=>{
    if(context.archiveLocks?.has(key))throw Error('该会话正在更改归档状态，请稍后继续。');
    const e=context.entry(key),tid=context.manager.state.users[key]?.threadId;if(e?.deleted)throw Error('该会话已被Codex永久删除，不能继续或还原。');if(!e)return
-   if(context.manager.agentFor?.(key)==='claude')return
    if(e.pendingNativeProject){
+    // Compatibility for an unfinished legacy "new project" intent. Resolve its
+    // explicit directory locally; never create a native project as a side effect.
     const entry=context.find(e.owner,e.id),intent=e.pendingNativeProject
-    const workspace=await bindNewWorkspace(context,key,intent.path,{prepareOnly:true})
-    await context.manager.save()
-    const api=context.backendPort.nativeProjects
-    if(!api)throw Error('当前底座不支持创建 Codex 项目。')
-    const project=await context.withBackend(e.owner,rpc=>api.create(rpc,intent.name,workspace,key))
-    Object.assign(context.manager.state.users[key]??={},{nativeProjectId:project.id,workspace})
+    await bindNewWorkspace(context,key,intent.path)
+    const project=context.manager.state.platformProjects?.[e.owner]?.find(p=>p.id===entry.platformProjectId)
+    if(project&&intent.name)project.name=intent.name
     delete entry.pendingNativeProject
     await context.manager.save()
    }
+   if(context.manager.protocolFor?.(key)?.supportsNativeCatalog===false)return
    if(!tid)return;
    await context.withBackend(e.owner,async connection=>{
     let item=await context.backendPort.lookupThread?.(connection,tid)
@@ -38,6 +37,7 @@ export function installOfficialHooks(context){
  }
 
 function setConversationTitle(entry, owner, name, preview){
+ if(entry.titleSource==='local')return
  const title=typeof name==='string'?name.trim().replace(/[\r\n]+/g,' ').slice(0,60):''
  const usablePreview=typeof preview==='string'&&!/^\s*(?:#\s*AGENTS\.md|<environment_context|接入层任务状态元数据)/i.test(preview)
  const topic=usablePreview?preview.trim().replace(/[\x00-\x1f\x7f]/g,' ').replace(/\s+/g,' ').slice(0,24):''

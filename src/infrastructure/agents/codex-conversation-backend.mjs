@@ -60,12 +60,7 @@ export function createCodexConversationBackend(manager){
    return threads
   },
   async lookupThread(rpc,threadId){
-   let thread
-   try{thread=await this.readConversation(rpc,threadId)}
-   catch(error){
-    if(error.definitiveRpcError&&/no rollout|not found|does not exist|thread not loaded/i.test(error.message))return
-    throw error
-   }
+   const thread=await this.readConversation(rpc,threadId)
    if(thread?.id!==threadId)throw Error('Codex未确认会话标识，未更新列表。')
    const archived=archiveStatus(thread)
    if(archived!==undefined)return {thread,archived}
@@ -81,7 +76,7 @@ export function createCodexConversationBackend(manager){
    // Empty Codex threads may be absent from thread/list; verify owned IDs only.
    for(const {key,threadId} of ownedThreads){if(!threadId||catalog.has(threadId))continue;
     const own=manager.sessions.get(key);const reader=own?.rpc&&!own.rpc.closed?own.rpc:rpc;
-    let thread;try{thread=await this.readConversation(reader,threadId)}catch(error){if(error.definitiveRpcError&&/no rollout|not found|does not exist|thread not loaded/i.test(error.message))continue;throw error}
+    const thread=await this.readConversation(reader,threadId)
     if(thread?.id!==threadId)throw Error('Codex未确认会话标识，未更新列表。');
     const archived=archiveStatus(thread);
     if(archived===undefined)throw Error('当前Codex版本未提供可核实的空白会话归档状态。');
