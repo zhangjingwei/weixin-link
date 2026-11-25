@@ -1,0 +1,10 @@
+id: resend-csv
+name: 重发指定原文件
+inputs:
+  prompt: 用户在微信说：“把知识库上次的 CSV 原文件再发一次，截图不用。”本轮已定位可用交付副本 /work/kb/outputs/check.csv 和 /work/kb/outputs/preview.png。请生成交给微信发送层的回复正文。
+graders:
+  - type: text
+    name: csv
+    config:
+      regex_match:
+        - "\\[[^\\]]+\\]\\(<?(?:sandbox:)?/work/kb/outputs/check\\.csv>?\\)"
