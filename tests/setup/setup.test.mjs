@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtemp,readFile,writeFile,mkdir,rm,readdir,symlink,realpath} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
-import {initInstallation,installServices,doctor,unitText,installCodex,codexAvailability} from '../../src/setup/setup-core.mjs'
+import {initInstallation,installServices,doctor,unitText,installCodex,codexAvailability,CODEX_VERSION} from '../../src/setup/setup-core.mjs'
 import {accountCodexHome,ensureAccountCodexHome} from '../../src/infrastructure/accounts/codex-home.mjs'
 import {findCodex} from '../../src/setup/install-config.mjs'
 import {parseDeviceLogin} from '../../src/setup/setup-login.mjs'
@@ -30,7 +30,7 @@ test('bundled Codex runtime is resolved from the source tree, never the user PAT
  assert(binary.startsWith(join(root,'node_modules','@openai')))
  await assert.rejects(installCodex({home,root,run:async()=>{throw Error('must not run')}}),/CODEX_BUNDLED_RUNTIME_MISSING/)
  await mkdir(join(binary,'..'),{recursive:true});await writeFile(binary,'fixture')
- const r=await installCodex({home,root,run:async(bin,args)=>{calls.push([bin,args]);return {stdout:'codex-cli 0.163.0\n'}}})
+ const r=await installCodex({home,root,run:async(bin,args)=>{calls.push([bin,args]);return {stdout:`codex-cli ${CODEX_VERSION}\n`}}})
  assert.equal(r.status,'bundled');assert.equal(calls[0][0],binary)
  assert(!calls.some(c=>c[0]==='npm'))
 })
@@ -48,7 +48,7 @@ test('doctor reports custom provider access without requiring subscription login
  const home=await fixture(t),root=join(home,'source'),binary=findCodex(home,{root}),calls=[]
  await mkdir(join(binary,'..'),{recursive:true});await writeFile(binary,'fixture')
  const providerEnv={WECHAT_CODEX_PROVIDER:'custom',WECHAT_CODEX_BASE_URL:'https://provider.example.com',WECHAT_CODEX_API_KEY_ENV:'PRIVATE_MODEL_KEY',PRIVATE_MODEL_KEY:'test-only'}
- const r=await doctor({home,root,providerEnv,run:async(bin,args)=>{calls.push(args);return {stdout:bin===binary?'codex-cli 0.163.0\n':'ok'}}})
+ const r=await doctor({home,root,providerEnv,run:async(bin,args)=>{calls.push(args);return {stdout:bin===binary?`codex-cli ${CODEX_VERSION}\n`:'ok'}}})
  assert.equal(r.codexInstalled,true)
  assert.equal(r.codexLoggedIn,false)
  assert.equal(r.codexAccessReady,true)

@@ -15,7 +15,7 @@ import {installConfig,findCodex,projectRoot} from './install-config.mjs'
 import {ensureAccountCodexHome} from '../infrastructure/accounts/codex-home.mjs'
 import {codexProviderOptions} from '../base/codex/provider-options.mjs'
 import {accountProviderProfile,providerEnvironment} from './provider-profile.mjs'
-export const CODEX_VERSION='0.163.0'
+export const CODEX_VERSION='0.172.0'
 const exec=promisify(execFile)
 const exists=async p=>{try{await access(p);return true}catch{return false}}
 export function setupPaths({home=(process.env.HOME||platformHome()),root=projectRoot}={}){return {home,root,state:join(home,'.local/share/wechat-ping-bot'),units:join(home,'.config/systemd/user'),...installConfig(home,{root})}}

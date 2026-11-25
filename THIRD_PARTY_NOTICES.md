@@ -7,7 +7,7 @@
 以下依据本仓库 package-lock.json 中声明的版本和 license 字段整理。它是清单，不替代各包随附的 LICENSE、NOTICE、源码提供要求或实际构建核查。
 
 - `@napi-rs/canvas` 1.0.11：MIT。
-- `@openai/codex` 0.163.0：Apache-2.0；官方 Codex CLI 及按平台安装的原生二进制，来源和完整性校验见 `package-lock.json`。随包保留上游许可证与版权声明。
+- `@openai/codex` 0.172.0：Apache-2.0；官方 Codex CLI 及按平台安装的原生二进制，来源和完整性校验见 `package-lock.json`。随包保留上游许可证与版权声明。
 - `wechatbot-zerolink` 2.2.0-zerolink.2：MIT，基于 `@wechatbot/wechatbot` 2.2.0；来源为 npm 发布包，校验值见 `package-lock.json`，包内保留原许可证。
 - `pdfjs-dist` 6.4.299：Apache-2.0。
 - `qrcode` 1.5.4：MIT。
