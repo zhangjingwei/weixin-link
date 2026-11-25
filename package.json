@@ -5,6 +5,7 @@
   "main": "src/wechat/bot.mjs",
   "scripts": {
     "test": "node --test \"tests/**/*.test.mjs\"",
+    "eval:skills": "node src/tools/eval-agent-skills.mjs",
     "check:codex-input": "node src/tools/verify-media-contract.mjs",
     "setup": "node src/setup/setup.mjs",
     "logs": "node src/tools/debug-logs.mjs",
