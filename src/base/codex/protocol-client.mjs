@@ -1,13 +1,8 @@
 // Shared Codex JSON-RPC protocol. Transports only send/receive messages.
-export const localRpcErrors={
+const localRpcErrors={
  disconnected:method=>Object.assign(Error('Codex 连接已断开。'),{connectionClosed:true,method}),
  timeout:method=>Object.assign(Error(`Codex ${method} 响应超时。`),{requestTimeout:true,method}),
  response:(error,method)=>Object.assign(Error(error.message??'Codex 请求失败。'),{definitiveRpcError:true,rpcCode:error.code,method}),
-}
-export const remoteRpcErrors={
- disconnected:method=>Object.assign(Error('REMOTE_DISCONNECTED'),{method}),
- timeout:method=>Object.assign(Error('REMOTE_REQUEST_UNCERTAIN'),{method}),
- response:(error,method)=>Object.assign(Error('REMOTE_RPC_ERROR'),{rpcCode:error.code,method}),
 }
 export class CodexProtocolClient {
  constructor({transport,onEvent=()=>{},onClose=()=>{},log=()=>{},errors=localRpcErrors,timeout=45000,errorFields=()=>({error_type:'Error'})}){

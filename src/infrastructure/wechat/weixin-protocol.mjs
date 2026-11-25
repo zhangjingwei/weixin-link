@@ -12,7 +12,7 @@ import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 const exec=promisify(execFile),ffmpeg=ffmpegBinary
-export function partialSelection(value){
+function partialSelection(value){
  if(!value||typeof value!=='object')return null
  const out={};for(const k of ['start','end','quotemd5'])if(typeof value[k]==='string')out[k]=value[k].slice(0,1024)
  for(const k of ['startindex','endindex'])if(value[k]!==undefined){if(!Number.isSafeInteger(value[k])||value[k]<0)return null;out[k]=value[k]}

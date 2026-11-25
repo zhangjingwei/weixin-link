@@ -52,7 +52,6 @@ export async function resumePersonalConversation(context,message,reply){
   manager.owners.add(key)
  }
  root.active=entry.id
- delete root.entryClarification
  await manager.save()
  if(current())await reply('接下来在“'+entry.name+'”里聊。你可以继续刚才的话题。')
 }

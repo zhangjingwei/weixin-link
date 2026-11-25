@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process'
 import {homedir} from 'node:os'
 import {join} from 'node:path'
 
-export const sshConfig=process.env.WECHAT_SSH_CONFIG??join(homedir(),'.ssh/wechat_hosts_config')
+const sshConfig=process.env.WECHAT_SSH_CONFIG??join(homedir(),'.ssh/wechat_hosts_config')
 export const shellQuote=value=>"'"+value.replaceAll("'", "'\"'\"'")+"'"
 
 // A lost SSH connection does not tell us whether the remote shell ran the command.

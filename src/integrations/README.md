@@ -1,6 +1,6 @@
 # 可选集成
 
-核心通过静态注册表提供发现、配置、启停、检查、调用和会话指引。当前注册 Home Assistant、SSH 远端操作和 RSSHub。运行时入口位于 `src/integrations/runtime.mjs`；配置格式与文件读写位于 `src/infrastructure/config/`。备份仍沿用现有配置实现。
+核心通过静态注册表提供发现、配置、启停、检查、调用和会话指引。当前注册 Home Assistant、SSH 远端操作和 RSSHub。运行时入口位于 `src/integrations/runtime.mjs`；配置格式与文件读写位于 `src/infrastructure/config/`。
 
 ## 使用和迁移
 
@@ -30,10 +30,9 @@ SSH 插件 ID 为 `ssh-remote`。先用 `config-set remote-hosts` 配置主机�
 
 `list` / `status` 接受一个可选账号；`enable` / `disable` / `check` / `call` 接受集成 ID 和可选账号。未指定账号时取 `WECHAT_ACCOUNT`，再回退 `default`。安装入口同时支持 `integration-list/status/enable/disable/check/call`，参数与上述入口一致。
 
-- 保留 `config-schema/check/set/restore/status ha` 和 `~/.config/wechat-assistant/ha.json`，兼容不带 version 的旧配置；无须复制已有令牌。配置不会自动启用。
+- 保留 `config-schema/check/set/restore/status ha` 和 `~/.config/wechat-assistant/ha.json`。已保存的配置须包含 `version: 1`；配置不会自动启用。
 - 每个账号私有状态目录中的 `integrations.json` 记录启用状态。缺失时全部禁用；损坏时拒绝调用并省略集成指引。启用前校验配置和连接，失败不会写入启用状态；禁用不要求连接正常。
 - 首版所有已授权账号使用同一份宿主 HA、RSSHub 或 SSH 主机配置。每个账号必须单独启用；尚不支持各账号独立服务配置。
-- 旧 `node src/integrations/home-assistant/ha-read.mjs states ...` / `history ...` 入口保留，但现在也检查当前账号的启用状态。迁移部署后先显式启用，再使用旧入口。
 - 启用/禁用状态每次调用重读，禁用阻止后续调用；已经发出的请求可能完成。启用后的指引在下一次新建或重新连接会话时生效。已有会话可能保留旧指引，但调用仍会检查最新状态。
 - 指引按本地账号加载到会话，不向共享 `AGENTS.md` 写入集成说明或任何凭据；远程底座暂不加载宿主集成。
 - `status` 只检查本地配置，不探测网络；禁用的集成不读取凭据。`check` 主动检查连接。单个集成配置错误或连接失败不会阻止普通会话。

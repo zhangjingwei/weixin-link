@@ -183,7 +183,7 @@ Stay in one WeChat entry and ask a named project to do work. Explicit cross-proj
 - [Configuration examples](config-templates/): deployment references.
 - [Contributing](CONTRIBUTING.md): report issues and contribute changes.
 
-Optional integrations: [Home Assistant read-only queries, SSH remote operations, and RSSHub feeds](src/integrations/README.md) require explicit per-account enablement. Backup migration to this interface remains pending.
+Optional integrations: [Home Assistant read-only queries, SSH remote operations, and RSSHub feeds](src/integrations/README.md) require explicit per-account enablement.
 
 See [artifact delivery and retention](docs/artifact-delivery.md) (Chinese) for private staging, delivery failures, source cleanup, and the 7-day replay window.
 

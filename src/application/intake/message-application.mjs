@@ -7,7 +7,7 @@ import {recoverFailedFinal} from '../notifications/failed-final-recovery.mjs'
 import {isResultLookup} from './catalog-question.mjs'
 import {nativeCommandKind} from './native-command-kind.mjs'
 
-export function createMessageApplication({entryRouting,view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,diagnosticPackage,confirmedRejection,deferMaintenance,systemNotice,diagnosticServices,diagnosticService}){
+export function createMessageApplication({view,manager,jobs,conversations,runtime,log,stateDir,lifecycleNotice,management,mediaDependencies,durable,classifyMessage,hasMedia,normalizeVoice,singleMedia,quoteInput,diagnosticPackage,confirmedRejection,deferMaintenance,systemNotice,diagnosticServices,diagnosticService}){
 return async function handleMessage(message) {
   if(message._ingressId&&!jobs.rawCurrent(message._ingressId))return
   if(message._intakeToken&&!message._intakeToken.current())return
@@ -63,11 +63,6 @@ return async function handleMessage(message) {
   if(diagnosticAction){const token=manager.lifecycle.capture(message.userId);await runtime.track('delivery',()=>handleDiagnostic(diagnosticAction,async(value)=>deliver(diagnosticAction==='export'?await diagnosticPackage(message.userId,value):value,{current:()=>token.current(),conversationControl:true}),{stateDir,service:diagnosticService,services:diagnosticServices}));jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const media = hasMedia(message)
   const text = message.text?.trim() ?? ''
-  const owner = message._conversationOwner ?? message.userId
-  const conversation = manager.state.textConversations?.[owner]
-  const greeting = !intent && !media && !message.references?.length && !message._promptReply &&
-    !manager.state.users[message.userId]?.waitingAttachment && !conversation?.entryClarification &&
-    !conversation?.entryRoutes?.[message._ingressId] && /^(?:你好|您好|嗨|哈喽|hi|hello|ping)[！!。.]*$/iu.test(text)
   if (!media && !message.text?.trim()){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const reply = (value,options) => deliver(options?.checkpoint?value:systemNotice(value),options)
   if (text.length > 12_000) { await reply('消息过长，请拆成几条发送。');jobs.acknowledge([message._ingressId].filter(Boolean)); return }
@@ -99,8 +94,6 @@ return async function handleMessage(message) {
     catch(error){await reply(error.message);jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
   if(!control&&!token.current())return
-  // Standalone greetings are ordinary conversation, never an entry-routing action or canned notice.
-  if(!control&&!greeting&&!media&&entryRouting&&await entryRouting.process(message,token))return
   const notice=receiptPolicy({media,busy:manager.sessions.get(message.userId)?.busy,waiting:!!manager.state.users[message.userId]?.waitingAttachment})
   message._receiptDeferred=notice==='defer'
   if(!control&&media){await singleMedia(message,token,mediaDependencies);return}

@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto'
 const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value
-export const operationSignature=(name,args)=>createHash('sha256').update(JSON.stringify([name,canonical(args)])).digest('hex')
+const operationSignature=(name,args)=>createHash('sha256').update(JSON.stringify([name,canonical(args)])).digest('hex')
 
 // Keep audit/deduplication metadata, but no payload for a confirmed unexecuted request.
 export function discardUnexecutedPayload(op){

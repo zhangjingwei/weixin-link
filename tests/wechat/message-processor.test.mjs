@@ -114,17 +114,6 @@ test('transcribed voice upgrade request enters durable model intake',async()=>{
  assert.equal(f.submitted[0][1].text,'升级。')
 })
 
-test('standalone greetings reach the current model unchanged in first and existing sessions',async()=>{
- for(const existing of [false,true]){
-  const f=fixture();if(!existing)f.deps.manager.sessions.clear()
-  f.deps.entryRouting={process:async()=>assert.fail('greeting must stay in current conversation')}
-  const handle=createMessageProcessor(f.deps)
-  for(const [i,text] of ['hi','hello','你好','您好！','嗨','哈喽','HI!','ping'].entries())await handle({userId:'owner',text,_ingressId:'greeting-'+i})
-  assert.deepEqual(f.submitted.map(args=>[args[0],args[1].text]),['hi','hello','你好','您好！','嗨','哈喽','HI!','ping'].map(text=>['owner',text]))
-  assert.deepEqual(f.sent,[]);assert.deepEqual(f.acked,[])
- }
-})
-
 test('greetings retain permission and cancellation gates, while explicit stop stays a command',async()=>{
  const f=fixture(),handled=[]
  f.deps.manager.acceptMessage=async()=>true
@@ -134,19 +123,6 @@ test('greetings retain permission and cancellation gates, while explicit stop st
  await f.handle({userId:'owner',text:'hello',_intakeToken:{current:()=>false}})
  await f.handle({userId:'owner',text:'停止'})
  assert.deepEqual(f.submitted,[]);assert.deepEqual(handled,[['owner','停止']])
-})
-
-test('greetings with requests, quotes or pending clarification retain normal routing',async()=>{
- const f=fixture(),routed=[]
- f.deps.entryRouting={process:async message=>{routed.push(message._ingressId);return true}}
- const handle=createMessageProcessor(f.deps)
- const base={userId:'owner',text:'你好'}
- await handle({...base,text:'你好，帮我整理文件',_ingressId:'task'})
- await handle({...base,references:[{text:'之前的问题'}],_ingressId:'quote'})
- f.deps.manager.state.textConversations={owner:{entryClarification:{question:'哪个项目？'}}}
- await handle({...base,_ingressId:'clarification'})
- assert.deepEqual(routed,['task','quote','clarification'])
- assert.deepEqual(f.sent,[])
 })
 
 test('bare continue confirms only one captured desktop request; ambiguous or ordinary text never quits',async()=>{
@@ -198,8 +174,6 @@ test('text and voice result lookups reach the model without replaying a rejected
 
 test('short follow-ups enter the same project turn without a local topic switch',async()=>{
  const f=fixture(),routed=[]
- const {EntryRouting}=await import('../../src/application/intake/entry-routing.mjs')
- f.deps.entryRouting=new EntryRouting({modelManagedConversations:true,classify:()=>assert.fail('short follow-up must not invoke the legacy router')})
  f.deps.manager.state.textConversations={owner:{active:'1',entries:[{id:'1',key:'owner',name:'当前项目'},{id:'2',key:'other',name:'知识库'}]}}
  f.deps.durable.submit=(...args)=>routed.push(args)
  const handle=createMessageProcessor(f.deps)

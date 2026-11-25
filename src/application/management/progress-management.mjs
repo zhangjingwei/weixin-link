@@ -19,7 +19,3 @@ export async function projectProgress(context,owner,args){
  if(saved.waitingAttachment)blockers.push('任务等待关联附件')
  return {projectId:entry.id,name:status.name,observedAt:status.observedAt,completed:evidence.length?evidence[0]:null,inProgress:status.task?{taskId:status.task.jobId,title:taskDisplayTitle(jobs?.get?.(status.task.jobId)?.input??saved.recovery?.task?.title??'当前任务',jobs?.get?.(status.task.jobId)?.input?.projectDispatch?.title)}:null,blockers,next:[...(nativeQueue?.items??[]),...queued],moreNativeTasks:nativeQueue?.more,nativeProgress:status.task?status.lastProgress??null:null,turnModel:status.turnModel??null,goal:status.goal??null,evidence,scope:'最近保留的完成结果及当前本地执行状态；不代表项目整体完成度'}
 }
-export function progressText(value){
- const result=value.completed
- return `${value.name} · 进展\n已完成：${result?'最近一次已完成任务的结果节选（'+(result.at??'时间未记录')+'）：\n'+result.excerpt+(result.truncated?'\n（节选）':''):'没有可核实的近期完成结果。'}\n进行中：${value.nativeProgress||value.inProgress?.title||'当前无执行任务'}\n阻碍：${value.blockers.join('；')||'本地未记录明确阻碍，不能据此认定项目没有问题'}\n下一步：${value.next.map(task=>task.title).join('；')||'没有已排队任务，后续计划未确认'}\n查询时间：${value.observedAt}\n${value.scope}`
-}

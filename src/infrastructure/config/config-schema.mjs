@@ -7,12 +7,11 @@ const text={type:'string',minLength:1,maxLength:8192,pattern:'^[^\\r\\n\\u0000]+
 const absolute={...text,format:'absolute-path'}
 const object=(properties,required)=>({type:'object',properties,required,additionalProperties:false})
 const host=object({platform:{enum:['posix','win32']},root:{...text,format:'remote-path'}},['platform','root'])
-export const CONFIG_SCHEMAS={
+const CONFIG_SCHEMAS={
  installation:object({version:{const:1},workspace:absolute,createdAt:{...text,format:'date-time'}},['version','workspace']),
  desktop:object({version:{const:1},enabled:{type:'boolean'},app:{enum:['ChatGPT','Codex']}},['version','enabled','app']),
  ha: haSchema,
  rsshub: rsshubSchema,
- backup:object({version:{const:1},host:{...text,pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},remoteDirectory:{...text,format:'backup-directory'}},['version','host','remoteDirectory']),
  'remote-hosts':object({version:{const:1},hosts:{type:'object',propertyNames:{pattern:'^[A-Za-z0-9][A-Za-z0-9._-]*$'},additionalProperties:host}},['version','hosts']),
 }
 function fail(code,field){throw new ConfigError(code,field)}
@@ -34,14 +33,13 @@ function validate(schema,value,path='',parent){
   if(value.length<(schema.minLength??0)||value.length>(schema.maxLength??Infinity)||schema.pattern&&!new RegExp(schema.pattern).test(value))fail('CONFIG_INVALID_STRING',path)
   if(schema.format==='absolute-path'&&!isAbsolute(value))fail('CONFIG_ABSOLUTE_PATH_REQUIRED',path)
   if(schema.format==='remote-path'&&!(parent.platform==='win32'?win32:posix).isAbsolute(value))fail('CONFIG_ABSOLUTE_PATH_REQUIRED',path)
-  if(schema.format==='backup-directory'&&(!/^\/[A-Za-z0-9_./-]+$/.test(value)||value==='/'||value.split('/').includes('..')))fail('CONFIG_INVALID_DIRECTORY',path)
   if(schema.format==='http-url'){let url;try{url=new URL(value)}catch{fail('CONFIG_INVALID_URL',path)}if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)fail('CONFIG_INVALID_URL',path)}
   if(schema.format==='date-time'&&!Number.isFinite(Date.parse(value)))fail('CONFIG_INVALID_DATE',path)
  }
  if(schema.type==='boolean'&&typeof value!=='boolean')fail('CONFIG_INVALID_BOOLEAN',path)
  if(schema.type==='integer'&&(!Number.isInteger(value)||value<schema.minimum||value>schema.maximum))fail('CONFIG_INVALID_INTEGER',path)
 }
-export function validateHostConfig(name,value){
+function validateHostConfig(name,value){
  if(!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name))fail('CONFIG_INVALID_HOST_NAME','hosts')
  validate(host,value,'hosts.'+name)
  return value
@@ -49,12 +47,10 @@ export function validateHostConfig(name,value){
 export function validateConfig(kind,input){
  const schema=Object.hasOwn(CONFIG_SCHEMAS,kind)?CONFIG_SCHEMAS[kind]:null;if(!schema)fail('CONFIG_UNKNOWN_KIND')
  if(!input||typeof input!=='object'||Array.isArray(input))fail('CONFIG_EXPECTED_OBJECT','config')
- let value
- if(kind==='remote-hosts'&&!Object.hasOwn(input,'hosts')&&!Object.hasOwn(input,'version'))value={version:1,hosts:input}
- else value={version:1,...input}
+ const value={version:1,...input}
  validate(schema,value)
  if(kind==='remote-hosts')for(const [name,entry]of Object.entries(value.hosts))validateHostConfig(name,entry)
  return structuredClone(value)
 }
-export function parseConfig(kind,text){if(Buffer.byteLength(text)>MAX_CONFIG_BYTES)fail('CONFIG_TOO_LARGE');let value;try{value=JSON.parse(text)}catch{fail('CONFIG_INVALID_JSON')};return validateConfig(kind,value)}
+export function parseConfig(kind,text){if(Buffer.byteLength(text)>MAX_CONFIG_BYTES)fail('CONFIG_TOO_LARGE');let value;try{value=JSON.parse(text)}catch{fail('CONFIG_INVALID_JSON')};if(value?.version!==1)fail('CONFIG_UNSUPPORTED_VERSION');return validateConfig(kind,value)}
 export const configSchema=kind=>{if(!Object.hasOwn(CONFIG_SCHEMAS,kind))fail('CONFIG_UNKNOWN_KIND');return {$schema:'https://json-schema.org/draft/2020-12/schema',...structuredClone(CONFIG_SCHEMAS[kind])}}

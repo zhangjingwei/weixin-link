@@ -5,6 +5,4 @@ export function memoryCommand(text){
  if(/^(?:忘掉|删除)第?\s*\d+\s*条记忆[。！!]?$/u.test(text.trim())||/^把第?\s*\d+\s*条记忆改(?:为|成)/u.test(text.trim()))return {action:'memory',op:'unsupported'}
  return null
 }
-// Display-only compatibility for old persisted replies; never parses or saves candidates.
-export const publicMemoryText=text=>String(text??'').replace(/<wechat-memory:([^>]+)>[\s\S]*?<\/wechat-memory:\1>/g,'').trim()
 export async function enableThreadMemory(rpc,threadId){await rpc.request('thread/memoryMode/set',{threadId,mode:'enabled'})}

@@ -1,5 +1,5 @@
 import {historyParts} from './history-presentation.mjs'
-export function historyText(value){return String(value).replace(/<wechat-memory:[^>]+>[\s\S]*?<\/wechat-memory:[^>]+>/g,'').replace(/<wechat-task:[^>]+>[\s\S]*?<\/wechat-task:[^>]+>/g,'').replace(/!?\[([^\]\n]*)\]\((?:<\/[^>\n]+>|\/[^\s)]+)\)/g,'$1〔历史附件，未重发〕').trim()}
+export function historyText(value){return String(value).replace(/<wechat-task:[^>]+>[\s\S]*?<\/wechat-task:[^>]+>/g,'').replace(/!?\[([^\]\n]*)\]\((?:<\/[^>\n]+>|\/[^\s)]+)\)/g,'$1〔历史附件，未重发〕').trim()}
 
 export async function history(context,owner,entry,cmd,reply){if(entry?.deleted){await reply('该会话已永久删除，历史不可读取或还原。');return;}const old=context.pages.get(owner);if(cmd.action==='older'){if(!old){await reply('请说明想看哪个项目的聊天记录。');return;}entry=context.find(owner,old.id);if(!old.cursor){await reply('已到当前可读取历史的最早一页。');return;}}
  const tid=context.manager.state.users[entry.key]?.threadId;if(!tid){await reply('该会话还没有消息。');return;}

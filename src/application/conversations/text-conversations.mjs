@@ -6,18 +6,17 @@ import {resumePersonalConversation} from './personal-conversation.mjs'
 import {history} from './history.mjs'
 import {randomUUID} from 'node:crypto'
 import {defineConversationBackendPort} from '../ports/conversation-backend-port.mjs'
-export {historyText} from './history.mjs'
 export class TextConversations{
  constructor(manager,owners,parseInput,backendPort){if(typeof parseInput!=='function')throw Error('CONVERSATION_INPUT_PARSER_REQUIRED');this.parseInput=parseInput;this.backendPort=backendPort?defineConversationBackendPort(backendPort):null;this.manager=manager;this.realOwners=new Set(owners);manager.state.textConversations??={};this.root=manager.state.textConversations;this.pages=new Map();for(const owner of owners)this.ensure(owner);manager.onConversationTitle=(threadId,name)=>this.titleUpdated(threadId,name);if(this.backendPort?.capabilities.catalog!==false)this.installOfficialHooks()}
  installOfficialHooks(...args){return installOfficialHooks(this,...args)}
- ensure(owner){if(!this.realOwners.has(owner))throw Error('未授权用户');if(!this.root[owner]){const saved=this.manager.state.users[owner]??{};const entries=[{id:'1',key:owner,name:'原有对话'}];for(const tid of [...new Set(saved.previous??[])].filter(t=>t!==saved.threadId)){const key=owner+'#conversation#'+randomUUID();entries.push({id:String(entries.length+1),key,name:'历史对话 '+(entries.length+1)});this.manager.state.users[key]={threadId:tid,hasMessages:true};}this.root[owner]={active:'1',entries};}const r=this.root[owner];delete r.dailyId;for(const e of r.entries)this.manager.owners.add(e.key);return r}
+ ensure(owner){if(!this.realOwners.has(owner))throw Error('未授权用户');if(!this.root[owner]){const saved=this.manager.state.users[owner]??{};const entries=[{id:'1',key:owner,name:'原有对话'}];for(const tid of [...new Set(saved.previous??[])].filter(t=>t!==saved.threadId)){const key=owner+'#conversation#'+randomUUID();entries.push({id:String(entries.length+1),key,name:'历史对话 '+(entries.length+1)});this.manager.state.users[key]={threadId:tid,hasMessages:true};}this.root[owner]={active:'1',entries};}const r=this.root[owner];for(const e of r.entries)this.manager.owners.add(e.key);return r}
  entry(key){for(const [owner,r]of Object.entries(this.root)){const entry=r.entries.find(e=>e.key===key);if(entry)return {...entry,owner};}return null}
  recipient(key){return this.entry(key)?.owner??key}
  find(owner,id){const r=this.ensure(owner);return id?r.entries.find(e=>e.id.toLowerCase()===id.toLowerCase()||this.manager.state.users[e.key]?.threadId===id):r.entries.find(e=>e.id===r.active)}
  // Called synchronously at message arrival, before any asynchronous work or download.
- bind(message){const owner=message.userId,r=this.ensure(owner);if(r.prompt?.target==='plan')delete r.prompt;const media=message.images?.length||message.files?.length||message.videos?.length||message.voices?.length,waiting=media?null:r.prompt,parsed=this.parseInput(message.text,{pending:waiting}),command=media?null:parsed.command;let error;const priorActive=r.active;
+ bind(message){const owner=message.userId,r=this.ensure(owner);const media=message.images?.length||message.files?.length||message.videos?.length||message.voices?.length,waiting=media?null:r.prompt,parsed=this.parseInput(message.text,{pending:waiting}),command=media?null:parsed.command;let error;const priorActive=r.active;
  const promptReply=!!waiting&&parsed.promptResult!=='keep';
- const messageId=message.raw?.message_id??message.raw?.client_id;r.bindings??={};const prior=messageId===undefined?null:r.bindings[String(messageId)];if(prior){const saved=typeof prior==='string'?{key:prior}:prior,retiredPlan=saved.command?.action==='prompt'&&saved.command.target==='plan'||saved.sessionCommand?.action==='plan';return {...message,userId:saved.key,_conversationOwner:owner,_conversationCommand:retiredPlan?null:Object.hasOwn(saved,'command')?saved.command:command,_sessionCommand:retiredPlan?null:Object.hasOwn(saved,'sessionCommand')?saved.sessionCommand:parsed.sessionCommand,_promptReply:retiredPlan?false:saved.promptReply??promptReply};}
+ const messageId=message.raw?.message_id??message.raw?.client_id;r.bindings??={};const saved=messageId===undefined?null:r.bindings[String(messageId)];if(saved)return {...message,userId:saved.key,_conversationOwner:owner,_conversationCommand:Object.hasOwn(saved,'command')?saved.command:command,_sessionCommand:Object.hasOwn(saved,'sessionCommand')?saved.sessionCommand:parsed.sessionCommand,_promptReply:saved.promptReply??promptReply};
  if(parsed.promptResult==='done')delete r.prompt;
  if(command?.action==='prompt')r.prompt={target:command.target,decision:command.decision,key:this.find(owner)?.key,id:this.find(owner)?.id};
  if(command?.action==='projectFolderPrompt')r.prompt={target:'projectFolder',name:command.name,key:this.find(owner)?.key,id:this.find(owner)?.id};
@@ -87,8 +86,6 @@ export class TextConversations{
  async control(message,reply){
   const cmd=message._conversationCommand
   if(!cmd||cmd.action==='sessionList'||cmd.projectOverview||cmd.registeredOnly)return false
-  // A replay may carry the retired navigation command in its frozen binding.
-  if(cmd.action==='daily')return true
   if(this.manager.state.desktopHandoff&&!['list','history','older','search','folder','promptCancel'].includes(cmd.action)){await reply('桌面正在接续这个账号的工作，暂不修改项目或会话。请先关闭桌面，再说“回到微信继续”。',{conversationControl:true});return true}
   const originalReply=reply
   reply=(value,options)=>originalReply(value,{...options,conversationControl:true})

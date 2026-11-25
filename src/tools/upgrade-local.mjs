@@ -15,10 +15,7 @@ function installTarget() {
   if (configured) return resolve(configured)
   const base = join(homedir(), '.local', 'share')
   const target = join(base, 'weixin-link', 'source')
-  const legacy = join(base, 'zero-link', 'source')
-  if (!existsSync(legacy)) return target
-  if (existsSync(target)) throw Error('存在两个安装目录，请用 WEIXIN_LINK_DIR 指定要试用的实例。')
-  return legacy
+  return target
 }
 
 export async function previewLocal({root, target, checkOnly=false, details=false, upgrade=upgradeInstallation, inspect=standardDeployment, confirm, resume=resumePending}) {
@@ -77,7 +74,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (args.some(arg=>!['--check','--confirm','--details'].includes(arg))) throw Error('用法：npm run upgrade:local [-- --check | --confirm] [--details]')
     await previewLocal({root:fileURLToPath(new URL('../../',import.meta.url)),target:installTarget(),checkOnly:args.includes('--check'),details:args.includes('--details'),confirm:args.includes('--confirm')?confirmAction:undefined})
   } catch (error) {
-    console.error('本地试用未完成：'+(error.message==='UPGRADE_ACTIVE_LEGACY_ACCOUNT'?'旧版的额外微信服务仍在运行。请先停止该服务，再升级单人版本。':error.message))
+    console.error('本地试用未完成：'+error.message)
     if (error.recovery) console.error('恢复记录：'+error.recovery)
     process.exitCode=1
   }

@@ -39,7 +39,7 @@ export async function downloadMedia(item, fetcher = fetch, signal) {
   return result
 }
 
-export function imageExtension(data) {
+function imageExtension(data) {
   if (data.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return '.png'
   if (data[0] === 255 && data[1] === 216 && data[2] === 255) return '.jpg'
   if (data.subarray(0, 3).toString() === 'GIF') return '.gif'

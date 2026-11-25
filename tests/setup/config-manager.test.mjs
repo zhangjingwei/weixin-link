@@ -12,15 +12,14 @@ import {updateWorkspaceGuidance} from '../../src/setup/workspace-guidance.mjs'
 const repo=fileURLToPath(new URL('../../',import.meta.url)),verify=async()=>{}
 async function fixture(t){const home=await mkdtemp(join(tmpdir(),'zerolink-config-'));t.after(()=>rm(home,{recursive:true,force:true}));return {home,workspace:join(home,'workspace'),env:{},verify}}
 const ha=token=>({version:1,baseUrl:'http://homeassistant.local:8123',token})
-test('published samples are accepted by the actual schemas, and legacy configuration normalizes to v1',async()=>{
- for(const kind of ['ha','backup'])assert.equal(validateConfig(kind,JSON.parse(await readFile(join(repo,'config-templates/'+kind+'.example.json'),'utf8'))).version,1)
+test('published samples are accepted by the actual schemas',async()=>{
+ for(const kind of ['ha'])assert.equal(validateConfig(kind,JSON.parse(await readFile(join(repo,'config-templates/'+kind+'.example.json'),'utf8'))).version,1)
  assert.equal(validateConfig('ha',{baseUrl:'http://localhost',token:'fixture'}).version,1)
- assert.equal(validateConfig('remote-hosts',{}).version,1);assert.equal(configSchema('ha').additionalProperties,false)
+ assert.equal(validateConfig('remote-hosts',{hosts:{}}).version,1);assert.equal(configSchema('ha').additionalProperties,false)
  for(const value of [{...ha('x'),version:2},{...ha('x'),arbitrary:'ignored'},{...ha('x'),token:'x\ny'},{...ha('x'),baseUrl:'http://user:password@host'}])assert.throws(()=>validateConfig('ha',value),/CONFIG_/)
- assert.throws(()=>validateConfig('backup',{host:'-oProxyCommand=bad',remoteDirectory:'/tmp'}),/CONFIG_/)
- assert.throws(()=>validateConfig('backup',{host:'backup',remoteDirectory:'/srv/../etc'}),/CONFIG_/)
- assert.equal(validateConfig('remote-hosts',{server:{platform:'win32',root:'C:\\work'}}).hosts.server.platform,'win32')
- assert.throws(()=>validateConfig('remote-hosts',{server:{platform:'posix',root:'/work',transport:'daemon-proxy'}}),/CONFIG_UNKNOWN_FIELD/)
+ assert.throws(()=>validateConfig('backup',{}),/CONFIG_UNKNOWN_KIND/)
+ assert.equal(validateConfig('remote-hosts',{hosts:{server:{platform:'win32',root:'C:\\work'}}}).hosts.server.platform,'win32')
+ assert.throws(()=>validateConfig('remote-hosts',{hosts:{server:{platform:'posix',root:'/work',transport:'daemon-proxy'}}}),/CONFIG_UNKNOWN_FIELD/)
 })
 test('successful updates verify first, keep a private previous version and restore without replaying writes',async t=>{
  const options=await fixture(t),path=configPath('ha',options);let probes=0;options.verify=async()=>{probes++}
@@ -46,20 +45,11 @@ test('concurrent direct edits and an existing write lock are refused without ove
 })
 test('optional invalid config status is isolated and redacted',async t=>{
  const options=await fixture(t),path=configPath('ha',options);await mkdir(join(options.home,'.config/wechat-assistant'),{recursive:true});await writeFile(path,'{"token":"private-fixture","baseUrl":false}')
- const status=await configStatus(options);assert.equal(status.ha.valid,false);assert.equal(status.backup.configured,false);assert.ok(!JSON.stringify(status).includes('private-fixture'))
+ const status=await configStatus(options);assert.equal(status.ha.valid,false);assert.equal(Object.hasOwn(status,'backup'),false);assert.ok(!JSON.stringify(status).includes('private-fixture'))
 })
 test('installation config cannot silently migrate an existing workspace',async t=>{
  const options=await fixture(t);await mkdir(options.workspace);await configure('installation',{workspace:options.workspace},options)
  await assert.rejects(configure('installation',{workspace:join(options.home,'different')},options),/CONFIG_WORKSPACE_MIGRATION_REQUIRED/)
-})
-test('config-set replaces unsupported installation fields while preserving the workspace',async t=>{
- const options=await fixture(t);await mkdir(options.workspace)
- const path=configPath('installation',options)
- await configure('installation',{workspace:options.workspace},options)
- await writeFile(path,JSON.stringify({version:1,workspace:options.workspace,obsoleteField:'unused'}))
- await assert.rejects(configure('installation',{workspace:join(options.home,'other')},options),/CONFIG_WORKSPACE_MIGRATION_REQUIRED/)
- await configure('installation',{workspace:options.workspace},options)
- assert.deepEqual(JSON.parse(await readFile(path,'utf8')),{version:1,workspace:options.workspace})
 })
 test('config-set saves offline remote hosts without trying to connect',async t=>{
  const options=await fixture(t);await mkdir(options.workspace)

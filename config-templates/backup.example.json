@@ -1,5 +1,0 @@
-{
-  "version": 1,
-  "host": "backup-host",
-  "remoteDirectory": "/srv/backups/wechat-assistant"
-}

@@ -189,9 +189,9 @@ macOS 可选启用在桌面打开微信中的原会话，再返回微信继续�
 当前功能和更新内容见[版本发布页](https://github.com/zhangjingwei/weixin-link/releases/latest)。使用仍需要安装电脑保持运行并能联网。
 
 - [使用指南](USER-GUIDE.md)：会话、模型、记忆、附件与结果。
-- [配置与维护](CONFIGURATION.md)：安装、升级、备份和故障处理。
+- [配置与维护](CONFIGURATION.md)：安装、升级和故障处理。
 - [远程连接](src/infrastructure/remote/README.md)：连接已授权的远程工作区。
-- [可选集成](src/integrations/README.md)：HA 只读查询、SSH 远端操作和 RSSHub 新闻源，按账号显式启用；备份统一接入仍待迁移。
+- [可选集成](src/integrations/README.md)：HA 只读查询、SSH 远端操作和 RSSHub 新闻源，按账号显式启用。
 - [配置示例](config-templates/)：部署配置参考。
 - [参与贡献](CONTRIBUTING.md)：问题反馈与代码贡献。
 

@@ -6,8 +6,7 @@ import {managementWrite} from './management-writes.mjs'
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex')
 function retained(context,entry,{taskId,resultId}={}){
  const current=context.manager.state.users[entry.key]??{}
- const legacy={id:digest([current.lastTask,current.lastReply,current.lastOutput?.id]),taskId:current.lastTask?.id??'legacy',threadId:current.threadId,execution:current.recovery?.execution??'unknown',delivery:current.recovery?.delivery??'unknown'}
- const candidates=[{...current,identity:current.resultIdentity??legacy},...(current.resultArchive??[]).filter(item=>Date.parse(item.identity.createdAt)>context.now()-7*86400000)]
+ const candidates=[...(current.resultIdentity?[{...current,identity:current.resultIdentity}]:[]),...(current.resultArchive??[]).filter(item=>Date.parse(item.identity.createdAt)>context.now()-7*86400000)]
  const record=candidates.find(item=>typeof item.lastReply==='string'&&(!taskId||item.identity.taskId===taskId)&&(!resultId||item.identity.id===resultId))
  if(!record)throw Error('MANAGEMENT_RESULT_NOT_FOUND')
  const identity=record.identity

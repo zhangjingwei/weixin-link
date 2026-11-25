@@ -32,8 +32,6 @@ import {createInfrastructurePorts} from './infrastructure-ports.mjs'
 import {AgentSwitcher} from '../setup/agent-switch.mjs'
 import {ChatUpgrader} from '../setup/chat-upgrade.mjs'
 import {TextConversations} from '../application/conversations/text-conversations.mjs'
-import {importLegacySessions} from '../infrastructure/storage/import-legacy-sessions.mjs'
-import {migrateNativeBindings} from '../application/conversations/native-projects.mjs'
 import {createCodexConversationBackend} from '../infrastructure/agents/codex-conversation-backend.mjs'
 import {TypingStatus,typingOwners} from './typing-status.mjs'
 import {traceIngress} from '../infrastructure/wechat/ingress-trace.mjs'
@@ -59,35 +57,22 @@ const agent=await infrastructure.agent.load(account,cwd,installation)
 const backend=agent.backend
 const runtimeStateDir=backend.stateDir
 await mkdir(stateDir, { recursive: true, mode: 0o700 })
-const testing = process.argv.includes('--test-codex')
-const owners = testing ? ['integration'] : JSON.parse(await readFile(join(stateDir, 'codex-owners.json'), 'utf8'))
+const owners = JSON.parse(await readFile(join(stateDir, 'codex-owners.json'), 'utf8'))
 if (!Array.isArray(owners) || owners.length!==1 || !owners.every(id => typeof id === 'string')) throw new Error('Single-user mode requires one authorized WeChat sender')
-if(!testing)await importLegacySessions(stateDir,agent.sessionOptions.codexHome)
-const testName = process.env.CODEX_TEST_SESSION ?? `${Date.now()}-${process.pid}`
-if (testing && !/^[a-zA-Z0-9_-]+$/.test(testName)) throw new Error('Invalid test session name')
-const diagnostic=createDiagnosticLog({dir:join(stateDir,testing?'integration-logs':'logs')})
+const diagnostic=createDiagnosticLog({dir:join(stateDir,'logs')})
 const log=(event,fields)=>{void diagnostic.log(event,fields)}
-log('service.started',{status:testing?'test':'live'})
+log('service.started',{status:'live'})
 
 // 会话编排由应用层负责；底座协议由所选 agent.sessionOptions 注入。
-const manager = await new SessionManager({log, completionMarkers:true, stateDir: testing ? join(runtimeStateDir, 'integration', testName) : runtimeStateDir, cwd:backend.cwd, owners, backend, ...agent.sessionOptions }).init()
+const manager = await new SessionManager({log, completionMarkers:true, stateDir: runtimeStateDir, cwd:backend.cwd, owners, backend, ...agent.sessionOptions }).init()
 const agentSwitcher=new AgentSwitcher({account})
 const upgrader=new ChatUpgrader()
 
-if (testing) {
-  try {
-    const result = await manager.ask('integration', process.env.CODEX_TEST_QUESTION ?? '现在北京时间几点？', async text => console.log('CODEX_MESSAGE', text))
-    if (result.status !== 'completed') throw new Error(`Codex test failed: ${result.status}`)
-    console.log('CODEX_TEST_OK', result.reply)
-  } finally { manager.close(); await manager.saving;await diagnostic.flush() }
-  process.exit(0)
-}
 
 const setupController=await new SetupController({stateDir,accountId:account.id,checkUpdates:language=>updates.check(language),skipUpdate:(owner,language)=>updates.skip(owner,language),runModelTest:options=>setupModelTest(manager,options)}).init()
 const classifyMessage=createCommandClassifier()
 const conversationBackend=createCodexConversationBackend(manager)
 const conversations=new TextConversations(manager,owners,conversationInput,conversationBackend)
-for(const owner of owners)await migrateNativeBindings(conversations,owner)
 await manager.save()
 const bot = infrastructure.wechat.createClient({ storage: 'file', storageDir: stateDir, logger: createSdkLogger(log) })
 const notifyStart=bot.api.notifyStart.bind(bot.api)
@@ -161,7 +146,7 @@ const jobs=await infrastructure.storage.accountInbox(stateDir);manager.submissio
 const companionAccess=process.platform==='darwin'&&owners.length===1?new CompanionAccess(jobs.db):null
 if(companionAccess)runtime.onCompanion=macCompanion({access:companionAccess,owner:owners[0],conversations,manager,jobs,stateDir,submit:(...args)=>durable.submit(...args),notice:(...args)=>view.announcement(...args),ready:()=>runtime.ready()&&!runtime.draining&&!stopping})
 const handoffs=attachmentHandoffs(stateDir,jobs)
-const managementService=new ManagementService({prepareHandoff:args=>handoffs.prepare(args),desktop,routingStatus:()=>agent.classifyEntry?.statistics?.(),manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
+const managementService=new ManagementService({prepareHandoff:args=>handoffs.prepare(args),desktop,manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
 managementService.resumeTasks=()=>durable.resume()
 // Persist restart reconciliation and private-payload cleanup before accepting MCP calls.
 await manager.save()

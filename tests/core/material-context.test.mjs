@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {ASSISTANT_INSTRUCTIONS} from '../../src/infrastructure/agents/assistant-policy.mjs'
-import {currentMaterials,materialInput} from '../../src/infrastructure/agents/material-context.mjs'
+import {materialInput} from '../../src/infrastructure/agents/material-context.mjs'
+import {currentMaterials} from '../../src/domain/messages/material-association.mjs'
 
 test('material labels never expose Windows or POSIX parent paths', () => {
   const rows = currentMaterials({attachments: [{path: 'C:\\Users\\alice\\private\\photo.png', kind: 'images'}, {path: '/tmp/private/secret.pdf', name: 'C:\\Users\\alice\\secret.pdf', kind: 'files'}]}, 'delivery-1')

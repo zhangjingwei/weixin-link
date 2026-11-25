@@ -1,5 +1,5 @@
 # Copy into your private SSH config and replace every placeholder.
-Host remote-linux backup-host
+Host remote-linux
     HostName host.example.com
     User example
     IdentityFile ~/.ssh/wechat_ed25519

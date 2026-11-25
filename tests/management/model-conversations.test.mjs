@@ -11,7 +11,6 @@ import {ManagementService} from '../../src/application/management/management-ser
 import {SessionManager} from '../../src/wechat/session-manager.mjs'
 import {TextConversations} from '../../src/application/conversations/text-conversations.mjs'
 import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
-import {EntryRouting} from '../../src/application/intake/entry-routing.mjs'
 
 async function fixture(t){
  const dir=await mkdtemp(join(tmpdir(),'model-conversations-'));t.after(()=>rm(dir,{recursive:true,force:true}));await mkdir(join(dir,'state'));await mkdir(join(dir,'repo'));await mkdir(join(dir,'tree'))
@@ -152,12 +151,6 @@ test('existing repo project gains a verified worktree root instead of creating a
  const result=await f.service.call('alice','associate_repository_conversations',{nativeProjectId:'existing',workspaceToken:proof.workspaceToken,threadIds:['old','worktree'],requestId:'reuse'})
  assert.equal(result.status,'confirmed');assert.equal(result.data.nativeProjectId,'existing');assert(!f.writes.some(([method])=>method==='create'))
  assert.deepEqual(f.projects.get('existing').roots,[join(f.dir,'repo'),join(f.dir,'tree')])
-})
-
-test('model managed mode sends ordinary requests to the execution model without heuristic classification',async()=>{
- const router=new EntryRouting({modelManagedConversations:true,classify:async()=>assert.fail('must not classify')})
- assert.equal(await router.process({text:'接着聊或者另开一条',_ingressId:'input'},{current:()=>true}),false)
- await router.close()
 })
 
 test('real private attachment copy keeps parser metadata and rewrites paths in the forwarded input',async t=>{

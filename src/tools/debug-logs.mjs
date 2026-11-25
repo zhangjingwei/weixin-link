@@ -22,10 +22,6 @@ const stages = new Map(Object.entries({
   'attachments.preprocess_started': '开始读取附件',
   'attachments.preprocess_completed': '附件已准备好',
   'agent.readiness_check': '正在检查模型服务是否可用',
-  'routing.queued': '正在等上一条消息完成项目选择',
-  'routing.local': '已在本地选定处理方式，跳过独立意图识别',
-  'routing.classifying': '正在请模型判断该用哪个项目、做什么操作',
-  'routing.classified': '模型已返回处理建议',
   'queue.waiting_session': '当前项目还有任务在处理，正在排队',
   'queue.starting': '已取出任务，正在准备项目会话',
   'provider.http_fallback': 'Codex 已切换到 HTTP',
@@ -140,7 +136,6 @@ export function formatEvent(line) {
   const operation = catalogRequests.get(row.method)
   if (operation && row.event === 'rpc.request') label = '正在' + operation
   if (operation && row.event === 'rpc.response') label = operation + (row.status === 'error' ? '失败' : '结束')
-  if (row.event === 'routing.failed') label = row.reason === 'timeout' ? '项目和操作判断超时' : '项目和操作判断失败'
   if (row.event === 'agent.readiness_checked') label = row.status === 'ready' ? '模型服务可用' : '模型服务暂不可用'
   if (row.event === 'rpc.request' && row.method === 'turn/start') label = '正在向模型提交请求'
   if (row.event === 'delivery.completed' || row.event === 'delivery.failed') {

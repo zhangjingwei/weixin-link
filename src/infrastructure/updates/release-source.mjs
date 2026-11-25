@@ -31,7 +31,7 @@ export async function githubLatestRelease({request=fetch}={}){
 
 export {githubLatestRelease as fetchLatestRelease}
 
-export async function readInstalledNotes(sourceDir,tag){
+async function readInstalledNotes(sourceDir,tag){
  try{
   const path=join(sourceDir,'CHANGELOG.md')
   if((await stat(path)).size>1024*1024)return ''

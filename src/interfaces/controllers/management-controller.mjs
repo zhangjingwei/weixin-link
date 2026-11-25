@@ -34,5 +34,3 @@ export function createManagementController({manager, jobs, runtime, setupReceipt
     },
   }
 }
-
-export {runConfigurationAction} from '../../setup/config-action.mjs'

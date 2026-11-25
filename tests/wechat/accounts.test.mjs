@@ -2,19 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,writeFile,mkdir,rm} from 'node:fs/promises'
 import {join} from 'node:path'
-import {accountPaths,legacyAccountPaths,listAccounts} from '../../src/infrastructure/accounts/account-store.mjs'
-import {DurableJobs} from '../../src/infrastructure/storage/durable-jobs.mjs'
-import {SessionManager} from '../../src/wechat/session-manager.mjs'
-async function createLegacyAccount(id,home){const p=legacyAccountPaths(id,home);if(id==='default')throw Error('DEFAULT_ACCOUNT_EXISTS');await mkdir(join(p.base,'accounts'),{recursive:true,mode:0o700});await mkdir(p.stateDir,{mode:0o700});await writeFile(join(p.stateDir,'account.json'),JSON.stringify({id,created_at:new Date().toISOString()})+'\n',{mode:0o600});return p}
-test('default retains legacy paths and invalid account ids cannot traverse directories',()=>{assert.equal(accountPaths('default','/tmp/home').stateDir,'/tmp/home/.local/share/wechat-ping-bot');for(const id of ['../default','a/b','a;id','DEFAULT','', '-bad'])assert.throws(()=>accountPaths(id,'/tmp/home'));assert.throws(()=>accountPaths('one','/tmp/home'),/SINGLE_USER_INSTALLATION/)})
-test('upgrade discovery recognizes old named services without enabling new profiles',async t=>{
- const home=await mkdtemp('/tmp/legacy-discovery-');t.after(()=>rm(home,{recursive:true,force:true}))
- await createLegacyAccount('one',home)
- assert.deepEqual((await listAccounts(home)).map(p=>p.id),['default','one'])
- assert.throws(()=>accountPaths('one',home),/SINGLE_USER_INSTALLATION/)
-})
-test('same sender and message IDs remain isolated across bot queues and cancellation',async()=>{const home=await mkdtemp('/tmp/account-queue-');let a,b;try{const pa=await createLegacyAccount('one',home),pb=await createLegacyAccount('two',home);a=new DurableJobs(join(pa.stateDir,'inbox.sqlite'));b=new DurableJobs(join(pb.stateDir,'inbox.sqlite'));const id=a.add('same-person','first account','same-sdk-message');b.add('same-person','second account','same-sdk-message');a.cancel('same-person');assert.equal(a.get(id).state,'cancelled');assert.equal(b.get(id).state,'pending');assert.equal(b.get(id).input,'second account')}finally{a?.close();b?.close();await rm(home,{recursive:true,force:true})}})
-test('session histories for the same sender live in separate profiles',async()=>{const home=await mkdtemp('/tmp/account-history-');let a,b;try{const pa=await createLegacyAccount('one',home),pb=await createLegacyAccount('two',home);a=await new SessionManager({stateDir:pa.stateDir,cwd:home,owners:['same']}).init();b=await new SessionManager({stateDir:pb.stateDir,cwd:home,owners:['same']}).init();a.state.users.same={threadId:'one-thread',lastReply:'one-result'};b.state.users.same={threadId:'two-thread',lastReply:'two-result'};await Promise.all([a.save(),b.save()]);const again=await new SessionManager({stateDir:pb.stateDir,cwd:home,owners:['same']}).init();assert.equal(again.state.users.same.threadId,'two-thread');assert.equal(again.state.users.same.lastReply,'two-result');again.close()}finally{a?.close();b?.close();await rm(home,{recursive:true,force:true})}})
+import {accountPaths} from '../../src/infrastructure/accounts/account-store.mjs'
+test('default account path and invalid account ids cannot traverse directories',()=>{assert.equal(accountPaths('default','/tmp/home').stateDir,'/tmp/home/.local/share/wechat-ping-bot');for(const id of ['../default','a/b','a;id','DEFAULT','', '-bad'])assert.throws(()=>accountPaths(id,'/tmp/home'));assert.throws(()=>accountPaths('one','/tmp/home'),/SINGLE_USER_INSTALLATION/)})
 test('single user registration rejects named profiles and binds the scanner',async t=>{
  const {registerLogin}=await import('../../src/infrastructure/accounts/account-store.mjs')
  const home=await mkdtemp('/tmp/single-registration-');t.after(()=>rm(home,{recursive:true,force:true}))

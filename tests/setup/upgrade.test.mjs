@@ -255,13 +255,3 @@ test('failed local update restores the previous notification marker',async t=>{
  await assert.rejects(upgradeInstallation({...f.options,localUpdate:true}),/UPGRADE_HEALTH_CHECK_FAILED/)
  assert.equal(await readFile(join(f.target,marker),'utf8'),'old marker')
 })
-
-test('personal upgrade detects a running legacy service before changing either installation',async t=>{
- const f=await fixture(t),unit=join(f.home,'managed.service'),legacy=join(f.state,'accounts','older')
- await mkdir(legacy,{recursive:true});await writeFile(join(legacy,'account.json'),'{"id":"older"}')
- await writeFile(unit,'# Managed by wechat-assistant setup v1\n')
- const run=async(_exe,args)=>({stdout:args.includes('--property=FragmentPath')?
-  'FragmentPath='+unit+'\nExecStart=/usr/bin/node '+join(f.target,'src/wechat/bot.mjs')+'\n':'ActiveState=active\nMainPID=1\n'})
- await assert.rejects(standardDeployment({target:f.target,home:f.home,platform:'linux',run}),/UPGRADE_ACTIVE_LEGACY_ACCOUNT/)
- assert.equal(await readFile(join(f.target,'version'),'utf8'),'old')
-})

@@ -40,8 +40,7 @@ export class SetupController{
     await reply(english?'Installation checks:\n'+checks.map(c=>(c.ok?'✓ ':'Needs attention: ')+c.name).join('\n')+'\nModel inference verification: '+(passed?'passed':'unconfirmed')+'.':'安装检查：\n'+checks.map(c=>(c.ok?'✓ ':'待完成：')+c.name+(c.action?'；'+c.action:'')).join('\n')+'\n模型推理验收：'+(passed?'已通过':'未确认')+'。')
     return
    }
-   const root=this.stateDir.includes('/accounts/')?this.stateDir.slice(0,this.stateDir.indexOf('/accounts/')):this.stateDir
-   await new RemoteStore(root).locked('codex-bootstrap',async()=>{
+   await new RemoteStore(this.stateDir).locked('codex-bootstrap',async()=>{
     if(command==='install'){await this.runInstall({home:this.home,accountId:this.accountId,signal});await reply(english?'The bundled Codex CLI is ready. Run '+setupAtHome+' on your computer and choose 2 to configure a model.':'项目自带的 Codex CLI 已就绪。首次模型配置请在安装电脑运行 '+setupAtHome+'。')}
     else if(command==='login'){await reply(english?'Run '+setupAtHome+' on your computer and choose Subscription sign-in to authorize through the official device login page.':'订阅登录请在安装电脑运行 '+setupAtHome+'，在安装菜单中选择 2，再选择“订阅登录”完成官方设备授权。')}
     else if(command==='check'){

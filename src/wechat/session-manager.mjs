@@ -15,7 +15,7 @@ import {recentCommits} from '../infrastructure/agents/recent-commits.mjs'
 
 // The account composition boundary supplies the shared session engine with
 // use-case formatting and external adapters. The engine imports none of them.
-export const sessionPorts = Object.freeze({
+const sessionPorts = Object.freeze({
   assistantInstructions: ASSISTANT_INSTRUCTIONS,
   integrationGuidance, materialInput, flowInput, stripTaskFlow,
   outputStore: options => new OutputStore(options), outputLinks,
@@ -24,12 +24,10 @@ export const sessionPorts = Object.freeze({
   errorFields, deliveryError, deliveryFailureState, systemNotice, controlCommand, recentCommits,
 })
 
-export class ConfiguredSessionManager extends SessionManager {
+class ConfiguredSessionManager extends SessionManager {
   constructor(options) {
     const {rpcFactory,providerEnv,sessionProtocol,...rest}=options
     super({sessionPorts,...rest,sessionProtocol:sessionProtocol??createSessionProtocol({rpcFactory,providerEnv,codexBinary:sessionPorts.codexBinary})})
   }
 }
 export {ConfiguredSessionManager as SessionManager}
-export {controlCommand} from '../interfaces/wechat/control-command.mjs'
-export {codexProviderOptions} from '../base/codex/provider-options.mjs'

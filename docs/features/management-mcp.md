@@ -82,11 +82,11 @@ node src/tools/verify-management-native.mjs
 
 新建项目先取来源目录候选，凭据绑定用户、来源项目、真实根目录、目标目录和设备/inode，五分钟有效；创建前重新校验，不能把模型提供的任意路径当授权。目录选择不是操作系统沙箱。新建会通过 app-server 创建原生项目；微信保存会话操作编号。list_project_sessions 按原生项目 ID 查询会话，create_project_session 可新建会话或绑定指定 threadId。后续切换需单独请求。普通聊天继续使用当前会话。
 
-微信文字和语音中的“结果”进入普通对话，通过 get_task_result 只读查询。新结果保存完整任务/线程/轮次身份；旧记录采用明确的兼容身份。查询文本按最多10,000个字符分块，历史附件链接不作为新交付链接。指定持久任务可从其原线程只读核对历史文本，最近20份旧结果的文本和附件清单保存在同一会话状态中，重发查询窗口为7天；过期元数据在后续结果归档时清理，不另存文件字节。超出该范围、没有保留清单时 redeliveryAvailable=false，不猜测文件位置。最近结果的 resultToken 十分钟有效；提交重发时把确切快照冻结到同一管理操作中，之后即使新结果到达也不改发新结果。投递前验证全部附件的归属、保留期、大小和哈希；不可用则不先发文字、不重新生成。accepted 只表示现有投递接口的确认，不表示用户已阅读。
+微信文字和语音中的“结果”进入普通对话，通过 get_task_result 只读查询。结果保存完整任务/线程/轮次身份。查询文本按最多10,000个字符分块，历史附件链接不作为新交付链接。指定持久任务可从其原线程只读核对历史文本，最近20份结果的文本和附件清单保存在同一会话状态中，重发查询窗口为7天；过期元数据在后续结果归档时清理，不另存文件字节。超出该范围、没有保留清单时 redeliveryAvailable=false，不猜测文件位置。最近结果的 resultToken 十分钟有效；提交重发时把确切快照冻结到同一管理操作中，之后即使新结果到达也不改发新结果。投递前验证全部附件的归属、保留期、大小和哈希；不可用则不先发文字、不重新生成。accepted 只表示现有投递接口的确认，不表示用户已阅读。
 
 任务核对先按完整持久 taskId 验证归属和 uncertain 状态。空闲后仅将那一条记录送回既有恢复流程；不把 pending 新任务当作恢复对象，不调用 turn/start 重执行旧任务。恢复结果仍由原 DurableIntake/SessionManager 保存。项目状态附最近20条管理操作摘要；具体操作用 get_management_operation 查询。
 
-搜索最多覆盖最近50轮，每次处理一个轮次或其中最多10,000字符；长文本跨片匹配保留接缝。每片最多返回20个命中摘要，并标记省略命中数量；complete/limited/nextCursor 说明实际覆盖边界，内容变化时拒绝旧续页而非静默漏读。
+搜索使用 Codex 原生会话搜索接口，按原生游标分页。结果中的 complete 和 nextCursor 标明当前页是否还有后续；游标绑定用户、范围、会话、查询词和归档选项，参数变化时拒绝续页。
 
 定时操作直接复用原 ScheduleService，服务端绑定目标项目而非接受任意 threadId。创建请求的去重身份与计划在同一计划状态中原子保存，重启后保持；返回时间为实际下一次触发，另给时区和本地显示。提醒与任务都保留来源项目，任务到期仍进入原持久队列。取消不撤回已经提交的任务，回执明确 futureTriggersCancelled、taskMayStillBeRunning 和 runningTaskStopped。
 
@@ -114,4 +114,4 @@ node src/tools/verify-management-native.mjs
 
 模型选择按项目保存于既有会话状态，普通消息及规划轮次从下一次提交生效，并在重新连接时应用。configured 仅表示偏好持久化，不代表实际推理验收成功。原生 review/start 不提供逐次模型参数，不保证独立审查同步切换。项目状态区分 configuredModel（保存的选择）与 connectedModel（最近建连时底座回执），后者不是每轮实际模型。
 
-新增 get_project_progress 返回完成证据、当前任务、阻碍及排队后续；get_entry_routing_status 返回记录阶段、耗时、回退与实际识别模型；request_queue_change 仅取消或提前精确 pending 任务；request_queue_cancel_all 原子取消查询快照中的任务，任何已起跑任务会使整批拒绝，不影响之后新入队的任务。
+新增 get_project_progress 返回完成证据、当前任务、阻碍及排队后续；request_queue_change 仅取消或提前精确 pending 任务；request_queue_cancel_all 原子取消查询快照中的任务，任何已起跑任务会使整批拒绝，不影响之后新入队的任务。

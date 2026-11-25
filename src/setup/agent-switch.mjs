@@ -12,7 +12,7 @@ import {readChatUpgrade} from './chat-upgrade.mjs'
 
 const exec=promisify(execFile)
 const root=fileURLToPath(new URL('../../',import.meta.url))
-export const agentSwitchPath=account=>join(account.stateDir,'agent-switch.json')
+const agentSwitchPath=account=>join(account.stateDir,'agent-switch.json')
 
 export async function readAgentSwitch(account){
  const text=await readPrivateFile(agentSwitchPath(account))

@@ -1,7 +1,7 @@
 import {win32} from 'node:path'
 
 const quote=value=>"'"+value.replaceAll("'","''")+"'"
-export const powershell=script=>'powershell.exe -NoProfile -NonInteractive -EncodedCommand '+Buffer.from(script,'utf16le').toString('base64')
+const powershell=script=>'powershell.exe -NoProfile -NonInteractive -EncodedCommand '+Buffer.from(script,'utf16le').toString('base64')
 
 export function windowsDirectory(path){
  const root=win32.parse(path).root,parts=win32.relative(root,path).split(win32.sep).filter(Boolean),paths=[root]

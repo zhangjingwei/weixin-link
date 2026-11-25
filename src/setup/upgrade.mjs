@@ -7,7 +7,7 @@ import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
 import {realpathSync} from 'node:fs'
 import {ServiceManager,userHome,serviceName,xml} from './platform-service.mjs'
-import {accountPaths,listAccounts} from '../infrastructure/accounts/account-store.mjs'
+import {accountPaths} from '../infrastructure/accounts/account-store.mjs'
 import {controlRequest} from '../infrastructure/runtime/runtime-control.mjs'
 import {npmCommand,nodeEnvironment} from './platform-command.mjs'
 import {installConfig} from './install-config.mjs'
@@ -36,30 +36,29 @@ async function sameSourceTree(source,target){
 // Reject another release layout instead of silently upgrading an unused directory.
 export async function standardDeployment({target,home=userHome(),platform=process.platform,run=exec}){
  const manager=new ServiceManager({home,root:target,platform,run})
- const accounts=await listAccounts(home),services=[]
+ const accounts=[accountPaths('default',home)],services=[]
  for(const account of accounts){
   let definition,command
   if(platform==='linux'){
    const {stdout}=await run('systemctl',['--user','show',account.service,'--property=FragmentPath','--property=ExecStart'],{timeout:10000})
    const path=stdout.match(/^FragmentPath=(.+)$/m)?.[1]
-   if(!path){if(account.id==='default')throw Error('UPGRADE_SERVICE_NOT_INSTALLED');continue}
+   if(!path)throw Error('UPGRADE_SERVICE_NOT_INSTALLED')
    definition=await readFile(path,'utf8');command=stdout
   }else if(platform==='darwin'){
-   if(!await exists(manager.plist(account.service))){if(account.id==='default')throw Error('UPGRADE_SERVICE_NOT_INSTALLED');continue}
+   if(!await exists(manager.plist(account.service)))throw Error('UPGRADE_SERVICE_NOT_INSTALLED')
    definition=await readFile(manager.plist(account.service),'utf8');command=definition
    // A loaded service can still point at an earlier release than its plist.
    try{command=(await run('launchctl',['print',manager.domain+'/'+serviceName(account.service)],{timeout:10000})).stdout}catch{}
   }else if(platform==='win32'){
    const inspector=new ServiceManager({home,root:fileURLToPath(new URL('../../',import.meta.url)),platform,run})
    const details=JSON.parse((await inspector.windows('inspect',account.service)).stdout)
-   if(!details.exists){if(account.id==='default')throw Error('UPGRADE_SERVICE_NOT_INSTALLED');continue}
+   if(!details.exists)throw Error('UPGRADE_SERVICE_NOT_INSTALLED')
    definition=details.description;command=details.arguments
   }else throw Error('UNSUPPORTED_PLATFORM')
   const entry=join(target,platform==='win32'?'src/setup/service-entry.mjs':'src/wechat/bot.mjs')
   if(!definition.includes(marker)||!(command.includes(entry)||platform==='darwin'&&command.includes(xml(entry))))throw Error('UPGRADE_CUSTOM_DEPLOYMENT')
   const status=await manager.status(account.service)
-  if(account.id!=='default'&&status.active)throw Error('UPGRADE_ACTIVE_LEGACY_ACCOUNT')
-  if(account.id==='default')services.push({...account,...status})
+  services.push({...account,...status})
  }
  return {
   services,
@@ -234,7 +233,6 @@ export async function upgradeInstallation({source,target,home=userHome(),adapter
 }
 
 const errors={
- UPGRADE_ACTIVE_LEGACY_ACCOUNT:'旧命名账号服务仍在运行，请先停止该服务再升级单人版本。',
  UPGRADE_CUSTOM_DEPLOYMENT:'检测到自定义服务或其他版本目录。未修改现有部署；请由部署者使用自己的发布流程升级，或先完成标准安装迁移。',
  UPGRADE_CUSTOM_SOURCE:'源码目录包含 Git 工作区或自定义 .env。请使用原部署流程升级；未覆盖本地修改。',
  UPGRADE_BUSY:'当前有任务执行中，未切换版本。请等任务结束后重试。',
@@ -251,7 +249,7 @@ function upgradeTextEnglish(message){
  if(message==='升级未通过，正在恢复旧版本和运行数据…')return 'Upgrade failed. Restoring the previous source and runtime data…'
  return message
 }
-const errorsEn={UPGRADE_ACTIVE_LEGACY_ACCOUNT:'Stop the running legacy named service before upgrading to the single-user version.',UPGRADE_CUSTOM_DEPLOYMENT:'An unmanaged service or custom source was found. The existing deployment was left unchanged.',UPGRADE_CUSTOM_SOURCE:'The source contains a Git workspace or custom .env. Use its original upgrade process.',UPGRADE_BUSY:'A task is still running. Retry after it finishes.',UPGRADE_ALREADY_RUNNING:'Another upgrade is in progress. Check its recovery record before retrying.',UPGRADE_ROLLBACK_FAILED:'Automatic rollback could not be confirmed. Preserve the temporary rollback data and recovery record.'}
+const errorsEn={UPGRADE_CUSTOM_DEPLOYMENT:'An unmanaged service or custom source was found. The existing deployment was left unchanged.',UPGRADE_CUSTOM_SOURCE:'The source contains a Git workspace or custom .env. Use its original upgrade process.',UPGRADE_BUSY:'A task is still running. Retry after it finishes.',UPGRADE_ALREADY_RUNNING:'Another upgrade is in progress. Check its recovery record before retrying.',UPGRADE_ROLLBACK_FAILED:'Automatic rollback could not be confirmed. Preserve the temporary rollback data and recovery record.'}
 if(process.argv[1]&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))){
  const target=process.argv[2]
  const english=setupLanguage()==='en'

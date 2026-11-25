@@ -3,7 +3,7 @@ import {CodexRpc} from '../../base/codex/codex-rpc.mjs'
 import {codexInput} from '../../base/codex/codex-input.mjs'
 import {initializeCodex} from '../../base/codex/protocol-operations.mjs'
 import {codexProviderOptions,providerEventCode} from '../../base/codex/provider-options.mjs'
-import {nativeMemoryConfig,enableThreadMemory,publicMemoryText} from '../../base/codex/native-memory.mjs'
+import {nativeMemoryConfig,enableThreadMemory} from '../../base/codex/native-memory.mjs'
 
 const skillRoot=fileURLToPath(new URL('./skills',import.meta.url))
 const clientInfo={name:'wechat_codex',title:'WeChat',version:'3.0.0'}
@@ -46,7 +46,7 @@ export function createSessionProtocol({rpcFactory,providerEnv=process.env,provid
   },
   input:codexInput,
   eventCode:providerEventCode,
-  cleanOutputText:publicMemoryText,
+  cleanOutputText:text=>String(text??'').trim(),
   async workspaceRules(){return ''},
   async initialize(rpc){
    await initializeCodex(rpc,clientInfo)

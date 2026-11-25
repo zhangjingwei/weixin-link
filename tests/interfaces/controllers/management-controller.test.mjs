@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createManagementController, runConfigurationAction} from '../../../src/interfaces/controllers/management-controller.mjs'
+import {createManagementController} from '../../../src/interfaces/controllers/management-controller.mjs'
+import {runConfigurationAction} from '../../../src/setup/config-action.mjs'
 
 test('management setup claims one receipt and does not repeat a recovered operation', async () => {
   const events = [], sent = []

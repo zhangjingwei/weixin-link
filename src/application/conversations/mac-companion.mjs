@@ -1,7 +1,7 @@
 import {taskProgress} from '../../domain/tasks/progress-state.mjs'
 import {createHash} from 'node:crypto'
 import {basename,join,resolve,sep} from 'node:path'
-import {entryRequestId,taskId} from '../../domain/messages/message-identity.mjs'
+import {taskId} from '../../domain/messages/message-identity.mjs'
 import {historyInputText} from './history.mjs'
 
 const states=new Set(['accepted','partial','failed','unknown','cancelled','deferred','pending','sending','not_required'])
@@ -37,20 +37,16 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
    const addFiles=(parts,folder)=>{const start=files.length;for(const item of parts??[]){const root=join(stateDir,folder,hash)+sep;if(typeof item.path==='string'&&resolve(item.path).startsWith(root))files.push({name:basename(item.fileName??item.name??item.path),path:resolve(item.path),root:root.slice(0,-1),...(folder==='outgoing'&&delivery(item.status)?{delivery:item.status}:{}),...(folder==='outgoing'&&typeof item.sourcePath==='string'?{sourcePath:item.sourcePath}:{})})}return files.slice(start)}
    const queued=jobs.companionMessages(key,thread),byJob=new Map(queued.map(j=>[j.id,j])),seenJobs=new Set(),supplementReceipts=new Map()
    for(const receipt of jobs.companionIngress?.(key,thread)??[]){
-    const route=catalog.entryRoutes?.[receipt.id],job=byJob.get(receipt.chat_job??taskId(key,receipt.id))
-    const steps=route?.currentProjectId===entry.id?(route.steps??[]):[]
-    const sameThread=step=>step.projectId===entry.id&&step.threadId===thread
+    const job=byJob.get(receipt.chat_job??taskId(key,receipt.id))
     if(receipt.chat_thread!==thread){
-     if(receipt.chat_thread||!(job&&job.thread_id===thread)&&!queued.some(j=>j.ingress_id===receipt.id&&j.thread_id===thread)&&!steps.some(sameThread))continue
+     if(receipt.chat_thread||!(job&&job.thread_id===thread)&&!queued.some(j=>j.ingress_id===receipt.id&&j.thread_id===thread))continue
     }
-    const matching=[...new Set([job,...queued.filter(j=>j.ingress_id===receipt.id),...steps.flatMap((step,i)=>sameThread(step)?[byJob.get(route.receipts?.[i]?.taskId)]:[])].filter(Boolean))]
+    const matching=[...new Set([job,...queued.filter(j=>j.ingress_id===receipt.id)].filter(Boolean))]
     for(const item of matching)seenJobs.add(item.id)
     // New supplements retain their exact request identity, even after routing records expire.
     const bubble={role:'你',text:receipt.text||'附件',time:receipt.created,messageId:receipt.id,files:addFiles(matching.flatMap(j=>JSON.parse(j.files)),'attachments')}
     messages.push(bubble)
     supplementReceipts.set(receipt.id,bubble)
-    supplementReceipts.set(entryRequestId(receipt.id),bubble)
-    for(const [i,step] of steps.entries())if(i&&sameThread(step)&&step.action==='supplement')supplementReceipts.set(entryRequestId(receipt.id+':'+i),bubble)
    }
    for(const job of queued){
     if(seenJobs.has(job.id))continue
@@ -69,9 +65,7 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
     const suffix='\n\n'+marker
     const exact=marker&&Number.isSafeInteger(footerOffset)&&footerOffset>=0&&result.lastReply.startsWith(suffix,footerOffset)
     const body=exact?result.lastReply.slice(0,footerOffset)+result.lastReply.slice(footerOffset+suffix.length):result.lastReply
-    // Old records lack provenance. Let the client fold, but retain, a matching standalone status.
-    const legacyFooter=footerOffset===undefined&&marker&&body.endsWith(suffix)?marker:undefined
-    messages.push({role:'助手',resultId:result.identity.id,updates:result.updates,route:routes.get(result.identity.taskId),delivery:delivery(result.identity.delivery),text:body.slice(0,16000),legacyFooter:body.length<=16000?legacyFooter:undefined,truncated:body.length>16000,time:Date.parse(result.identity.createdAt),files:addFiles(result.lastOutput?.attachments,'outgoing')})
+    messages.push({role:'助手',resultId:result.identity.id,updates:result.updates,route:routes.get(result.identity.taskId),delivery:delivery(result.identity.delivery),text:body.slice(0,16000),truncated:body.length>16000,time:Date.parse(result.identity.createdAt),files:addFiles(result.lastOutput?.attachments,'outgoing')})
    }
    const progress=turn&&session.threadId===thread&&session.lastProgress?.turnId===turn?session.lastProgress.recent:undefined
    messages.sort((a,b)=>a.time-b.time)

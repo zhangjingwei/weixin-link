@@ -16,13 +16,7 @@ await mkdir(dir,{recursive:true,mode:0o700})
 let result,old,drained=false,restarted=false
 try{
  const pid=await mainPid()
- try{old=await request('GET','/status')}catch(error){
-  // Explicit one-time migration only: the old binary has no control endpoint.
-  if(!process.argv.includes('--bootstrap')||!['ENOENT','ECONNREFUSED'].includes(error.code))throw error
-  await delay(30000)
-  if(await mainPid()!==pid)throw Object.assign(Error('Process changed'),{code:'PID_CHANGED'})
- }
- if(old){
+ old=await request('GET','/status')
   if(old.pid!==pid||(!old.ready&&!process.argv.includes('--stop')))throw Object.assign(Error('Runtime mismatch'),{code:'RUNTIME_NOT_READY'})
   let sealed=false
   for(let i=0;i<600;i++){
@@ -32,7 +26,6 @@ try{
    await delay(1000)
   }
   if(!sealed)throw Object.assign(Error('Busy'),{code:'RESTART_DEFERRED_BUSY'})
- }
  if(await mainPid()!==pid)throw Object.assign(Error('Process changed'),{code:'PID_CHANGED'})
  await services[process.argv.includes('--stop')?'stop':'restart'](accountPaths().service);restarted=true
  if(process.argv.includes('--stop')){const stopped=await confirmServiceStopped(()=>services.status(accountPaths().service),pid);result={checked_at:new Date().toISOString(),status:stopped?'verified':'not_verified',...(stopped?{service_active:false}:{}),mode:'stopped'}}else{
@@ -41,12 +34,12 @@ try{
   try{
    newPid=await mainPid();const state=await request('GET','/status')
    features=state.features;const required=(process.argv.find(v=>v.startsWith('--require-features='))??'').split('=')[1]?.split(',')??[]
-   verified=required.every(name=>features?.[name]===true)&&newPid!==pid&&state.pid===newPid&&state.instance!==old?.instance&&state.ready&&!state.draining
+   verified=required.every(name=>features?.[name]===true)&&newPid!==pid&&state.pid===newPid&&state.instance!==old.instance&&state.ready&&!state.draining
    if(verified)break
   }catch{}
   await delay(1000)
  }
- result={checked_at:new Date().toISOString(),status:verified?'verified':'not_verified',service_active:verified,login_confirmed:verified,features,pid:newPid,mode:old?'live_handshake':'bootstrap'}
+ result={checked_at:new Date().toISOString(),status:verified?'verified':'not_verified',service_active:verified,login_confirmed:verified,features,pid:newPid,mode:'live_handshake'}
  }
 }catch(error){
  result={checked_at:new Date().toISOString(),status:'failed',code:['RESTART_DEFERRED_BUSY','PID_CHANGED','RUNTIME_NOT_READY','ENOENT','ECONNREFUSED','ETIMEDOUT','CONTROL_REJECTED'].includes(error.code)?error.code:'ACTIVATION_FAILED'}

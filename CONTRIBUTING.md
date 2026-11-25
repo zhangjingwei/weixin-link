@@ -1,60 +1,59 @@
 # 贡献指南
 
-欢迎通过 Issue 描述问题或通过 Pull Request / Merge Request 提交改进。项目处于预览阶段，尚无稳定版本兼容承诺。
+欢迎通过 Issue 报告问题，或通过 Pull Request / Merge Request 提交改进。项目处于预览阶段，尚无稳定版本兼容承诺。涉及模块边界时先看[架构说明](docs/architecture/README.md)；具体实现沿用附近代码的风格和状态来源。
 
-## 开发与验证
+## 开发环境
 
-使用 Node.js 24 或受支持的更新版本。在隔离的开发目录运行 npm ci；微信 SDK 使用 npm 发布的固定版本，不要直接使用生产账号目录进行开发。SDK 变更先在独立仓库测试并发布，再更新本仓库的依赖、锁文件和协议测试。
+使用 Node.js 24 或受支持的更新版本，在隔离的开发目录运行 `npm ci`。微信 SDK 使用锁定的 npm 版本；SDK 行为变更应先在独立仓库测试、发布，再更新本仓库的依赖、锁文件和协议测试。不要修改 `node_modules` 作为源码变更。
 
-提交前检查：
+测试使用模拟数据与专用目录。真实登录、远程任务、HA 查询、微信发送和服务操作仅在明确授权的专用测试环境执行；停止任务前核对账号、会话和任务归属。
 
-```sh
-npm run check:release
-npm run check:codex-contract
-node --test tests/tools/release-check.test.mjs
-node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs
-npm test
-```
+## 按改动范围验证
 
-涉及远程适配器时增加 `node --test tests/remote/*.test.mjs`。报告实际执行的检查、失败项及环境；不得将静态测试通过描述为跨平台或真实微信验收通过。
+先运行受影响领域的测试，例如 `node --test tests/management/*.test.mjs`。新增失败路径时验证实际行为，尤其是重复消息、未知投递、取消、重启和账号隔离。修复本次改动引起的失败后重跑相关测试。
 
-真实登录、远程任务、HA 查询、消息发送和服务操作只在有明确授权的专用测试环境执行。停止任务必须核对归属，不得终止其他会话或共享服务。
+| 改动范围 | 增加的检查 |
+| --- | --- |
+| Codex 管理协议 | `npm run check:codex-contract` |
+| Codex 媒体输入协议 | `npm run check:codex-input` |
+| 远程适配器 | `node --test tests/remote/*.test.mjs` |
+| 安装、升级或服务入口 | `node --test tests/setup/platform-service.test.mjs tests/setup/platform-smoke.test.mjs`，并运行相关 `tests/setup/` 测试 |
+| 发布文件检查器 | `node --test tests/tools/release-check.test.mjs` |
+| 准备提交或发布 | 暂存拟提交内容后运行 `npm run check:release`；准备发布时再运行 `npm test` 和上述适用检查 |
+
+`check:release` 检查 Git 暂存区，而非仅检查工作副本；它不能替代人工审查。跨平台 CI 命令见 [platform.yml](.github/workflows/platform.yml)。报告实际运行的检查、失败项和环境；静态测试通过不等于真实微信收发或跨平台人工验收。
 
 ## 提交要求
 
-- 说明具体问题、修改后的行为和验证结果；尽量保持每次改动范围清晰。
-- 不提交真实密钥、账号标识、聊天记录、附件、日志、数据库或本地部署配置；示例使用虚构数据。
-- 提交前暂存拟发布内容，再执行 npm run check:release；该检查读取暂存区，而不是只检查工作副本。
-- 不在修复中覆盖现有用户配置，不改变账号隔离、执行授权、停止与恢复边界而不说明影响。
-- 引入依赖或复制第三方代码时说明来源、许可和修改，并更新 THIRD_PARTY_NOTICES.md；不能将第三方代码直接改标为 MIT。
+- 说明问题、行为变化和验证结果，保持改动范围清晰；协议或状态格式变化应说明兼容与恢复语义。
+- 不提交密钥、账号标识、聊天记录、附件、日志、数据库或本机部署配置。示例使用虚构数据，并人工检查暂存区。
+- 不覆盖用户配置；涉及账号隔离、授权、停止和恢复边界时说明影响。
+- 引入依赖或复制第三方代码时记录来源、许可和修改，并更新 `THIRD_PARTY_NOTICES.md`；不得将第三方代码直接改标为 MIT。
 
-提交自有贡献即表示同意按本项目 MIT 许可证提供该贡献。第三方内容必须保留其适用许可；本项目未设置额外 CLA 流程。
+自有贡献按本项目 MIT 许可证提供。第三方内容保留其适用许可；项目未设置额外 CLA 流程。安全问题不要在公开 Issue 中披露可利用细节或真实凭据，参见 [SECURITY.md](SECURITY.md)。
 
-安全问题不要在公开 Issue 中披露可利用细节或真实凭据，参见 SECURITY.md。
+## 在专用安装中试用
 
-## 在本机试用开发改动
+以下命令会操作本机安装并可能重启该安装下正在运行的账号服务，仅用于已授权的专用测试安装。macOS 和 Linux 的 `./upgrade-local.sh` 默认将当前工作目录（包括未被 Git 忽略的新文件）制作成临时快照；`--staged` 仅使用暂存内容，`--check` 仅预览，`--details` 显示改动明细和快照编号。脚本使用临时 Git 索引，不改变原暂存选择。
 
-macOS 和 Linux 可直接运行 `./upgrade-local.sh`。默认打包当前工作目录（包括 Git 未忽略的新文件），显示安装位置和重启提示后直接升级。用 `--details` 查看改动明细和快照编号；用 `--check` 只预览，用 `--staged` 只试用已暂存的内容。脚本在临时 Git 索引中准备快照，会保留你原有的暂存选择。更新成功后，已连接的微信账号会主动通知授权用户。同一快照重复运行或重启时不会重复提醒。目标目录若有未完成安装标记且缺少默认后台服务，脚本会说明将接续安装，先临时保留未完成的旧源码，将预览的快照放到安装目录，再运行该快照中的安装向导和微信登录。
+```sh
+./upgrade-local.sh --check
+./upgrade-local.sh --staged --check
+```
 
-### 直接使用 npm 入口
+确认快照和目标安装后，按所选来源运行 `./upgrade-local.sh` 或 `./upgrade-local.sh --staged`。可用 `WEIXIN_LINK_DIR` 指定标准安装路径。升级器会检查任务是否空闲、切换后服务是否就绪；失败时按现有恢复流程处理。若目标存在未完成安装标记，脚本可能接续安装向导和微信登录，因此执行前须确认测试环境与授权。
 
-在开发仓库用 `git add -p` 选择要试用的修改，新增文件用 `git add <路径>` 加入，再用 `git diff --cached` 核对。无需提交、合并到 main、打标签或创建 GitHub Release。
+直接使用 npm 入口时，先用 `git add -p` 或 `git add <路径>` 选择内容，再用 `git diff --cached` 核对。该入口始终打包暂存区：
 
 ```sh
 npm run upgrade:local -- --check
 npm run upgrade:local
 ```
 
-第一条只检查并打包 Git 暂存区，显示快照编号和目标目录。第二条把该快照交给标准升级程序，会临时保留回滚数据并重启该安装下原先运行的账号服务；任务繁忙时退出，切换后健康检查失败时走原有回滚流程。再次试用前，重新暂存最新修改。自定义标准安装路径用 `WEIXIN_LINK_DIR` 指定。建议选择专用测试安装。
-
-试用满意后再走正式发布流程。要从试用版切回公开稳定版，可在安装电脑运行标准安装脚本，选择升级至最新正式版。本地快照不带正式发布标记。
+无需为本地试用提交、合并、打标签或创建 Release。再次试用前重新暂存最新修改。本地快照不带正式发布标记；试用结束后可通过标准安装入口切回公开稳定版。
 
 ## 正式版本发布
 
-发布前同步 `package.json` 与 `package-lock.json` 版本、记录变更并完成上述检查。
-发布标签采用 `vX.Y.Z`，标签必须指向已审查的提交，且与包版本一致；在 GitHub
-创建非草稿、非预发布 Release，并将预期的稳定版设为 latest。不要移动已发布标签。
-发布说明应在 GitHub Release 正文和 CHANGELOG 对应版本条目中维护 3～5 条顶层列表，优先写用户能感知的核心变化。新版本提醒摘录 Release 正文的前 5 条要点；升级完成通知摘录本机已安装标签对应的 CHANGELOG 条目，不使用其他版本内容。每条显示最多 140 字符，完整内容通过该版本 Release 链接查阅；无要点时明确提示缺少摘要。
+发布前同步 `package.json` 与 `package-lock.json` 版本，更新 `CHANGELOG.md`，完成适用检查，并核对暂存区与拟发布提交。标签采用 `vX.Y.Z`，须指向已审查提交且与包版本一致；不要移动已发布标签。GitHub Release 应为非草稿、非预发布，并将预期稳定版设为 latest。推送主干不等于发布；创建标签和 Release 需要本次发布授权。
 
-推送主干不等于发布版本；创建标签和 Release 需要本次发布授权。
-安装器默认下载 latest 正式版本；没有 Release 时明确失败，不回退主干。
+Release 正文和 `CHANGELOG.md` 对应版本均维护 3～5 条用户可感知的顶层要点。新版本提醒摘录 Release 正文前 5 条；升级完成通知摘录本机已安装标签对应的 `CHANGELOG.md` 条目，不借用其他版本内容。每条最多显示 140 字符，完整内容由该版本 Release 链接提供；无要点时明确提示缺少摘要。安装器默认下载 latest 正式版，没有 Release 时失败，不回退主干。

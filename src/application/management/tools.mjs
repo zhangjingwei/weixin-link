@@ -61,7 +61,6 @@ export const managementTools=[
  define('get_task_result','只读最近结果或指定持久任务的历史结果，文本分页；不发送附件。',{...project,taskId:string(),cursor:string(4096)},['projectId']),
  define('request_result_redelivery','明确重发时使用查询返回的 resultToken；校验原快照，不重新生成文件。',{...project,resultToken:string(4096),...write},['projectId','resultToken','requestId']),
  define('request_task_reconciliation','核对指定未确认持久任务；仅查询原任务，不重执行。',{...project,taskId:string(),...write},['projectId','taskId','requestId']),
- define('get_entry_routing_status','只读当前用户入口识别耗时、回退次数及最近处理阶段，不含请求正文。'),
  define('get_service_status','只读当前账号服务的就绪、忙闲和维护排空状态。'),
  define('get_installation_status','只读当前账号安装和推理验收记录，不发起推理或登录。'),
  define('get_diagnostics','只读当前账号脱敏诊断汇总和最近错误，不返回原始日志或聊天内容。'),
