@@ -80,7 +80,8 @@ private let surface = Color(nsColor: .controlBackgroundColor)
             Image(systemName:assistant ? "sparkle" : "person.fill").font(.system(size:14,weight:.medium)).foregroundStyle(assistant ? leaf : .secondary).frame(width:30,height:30).background(assistant ? leaf.opacity(0.12) : Color.secondary.opacity(0.09),in:RoundedRectangle(cornerRadius:9))
             VStack(alignment:.leading,spacing:7) {
                 HStack(spacing:9) { Text(message.role).font(.headline); if let time = message.time { Text(Date(timeIntervalSince1970:time/1000),style:.time).font(.caption.monospacedDigit()).foregroundStyle(.secondary) } }
-                Text(message.text).font(.system(size:15)).lineSpacing(4).textSelection(.enabled).fixedSize(horizontal:false,vertical:true)
+                if assistant { ReplyBody(text:message.text) } else { Text(verbatim:message.text).font(.system(size:15)).lineSpacing(4).textSelection(.enabled).padding(12).background(leaf.opacity(0.075),in:RoundedRectangle(cornerRadius:10)) }
+                if message.truncated == true { Text("长回复仅显示开头，可在微信查询完整结果。").font(.caption).foregroundStyle(.secondary) }
             }.frame(maxWidth:.infinity,alignment:.leading)
         }
     }
@@ -96,10 +97,13 @@ private let surface = Color(nsColor: .controlBackgroundColor)
             ScrollViewReader { reader in ScrollView { LazyVStack(alignment:.leading,spacing:25) {
                 if view.messages.isEmpty { Label("这个会话还没有近期消息",systemImage:"bubble.left").foregroundStyle(.secondary) }
                 ForEach(Array(view.messages.enumerated()),id:\.offset) { _, item in messageRow(item) }
+                if let steps=view.progress,!steps.isEmpty { ProgressSummary(steps:steps).id(view.target) }
                 Color.clear.frame(height:1).id("end")
             }.padding(28) }.onAppear { reader.scrollTo("end",anchor:.bottom) }.onChange(of:view.messages.last?.time) { _ in reader.scrollTo("end",anchor:.bottom) } }.id(view.project)
             if !view.files.isEmpty {
-                Divider(); HStack(spacing:10) { Image(systemName:"paperclip").foregroundStyle(.secondary); ScrollView(.horizontal,showsIndicators:false) { HStack { ForEach(Array(view.files.enumerated()),id:\.offset) { _, file in Button { if FileManager.default.fileExists(atPath:file.path) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:file.path)]) } else { notices[view.project] = "文件已过期或不在本机。" } } label: { Label(file.name,systemImage:"doc.text").lineLimit(1) }.controlSize(.small) } } } }.padding(.horizontal,28).padding(.vertical,12)
+                Divider(); ScrollView(.horizontal) { HStack { ForEach(Array(view.files.enumerated()),id:\.offset) { _, file in Button { if FileManager.default.fileExists(atPath:file.path) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:file.path)]) } else { notices[view.project] = "文件已过期或不在本机。" } } label: {
+                    HStack { Image(systemName:"doc.fill").foregroundStyle(leaf); VStack(alignment:.leading,spacing:2) {Text(verbatim:file.name).font(.callout.weight(.medium)).lineLimit(1).truncationMode(.middle);Text("在 Finder 中显示").font(.caption2).foregroundStyle(.secondary)} }.padding(.horizontal,12).padding(.vertical,7).background(Color.secondary.opacity(0.08),in:RoundedRectangle(cornerRadius:8))
+                }.buttonStyle(.plain).help(file.name) } } }.padding(.horizontal,28).padding(.vertical,9)
             }
             Divider()
             VStack(alignment:.leading,spacing:10) {
@@ -114,4 +118,10 @@ private let surface = Color(nsColor: .controlBackgroundColor)
         HSplitView { sidebar; Group { if let current = snapshot { content(current) } else { VStack(spacing:12) { Image(systemName:"bubble.left.and.bubble.right").font(.largeTitle).foregroundStyle(leaf); Text(online ? "正在打开会话…" : "正在连接本机服务").font(.headline); if !online { Text("请确认本机服务已更新并启动。").foregroundStyle(.secondary) } }.frame(maxWidth:.infinity,maxHeight:.infinity) } }.frame(minWidth:430) }
             .frame(minWidth:680,minHeight:440).tint(leaf).task(id:selected) { let project = selected; while !Task.isCancelled { await refresh(project); try? await Task.sleep(nanoseconds:2_000_000_000) } }
     }
+}
+
+private struct ProgressSummary: View {
+    let steps: [String]
+    @State private var expanded=false
+    var body: some View { DisclosureGroup(isExpanded:$expanded) { VStack(alignment:.leading,spacing:6) { ForEach(Array(steps.enumerated()),id:\.offset) { _,step in Text(verbatim:step).frame(maxWidth:.infinity,alignment:.leading) } }.font(.callout).padding(.top,6) } label:{Label("当前任务进展 · \(steps.count) 项",systemImage:"list.bullet").font(.callout.weight(.medium))}.padding(10).background(Color.secondary.opacity(0.06),in:RoundedRectangle(cornerRadius:8)) }
 }

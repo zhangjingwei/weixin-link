@@ -67,6 +67,11 @@ export class SessionManager {
     return this.saving
   }
   diagnostic(session,event,fields={}) { this.log(event,{userId:session.userId,thread_id:session.threadId,turn_id:session.turnId,trace_id:session.traceId,...fields}) }
+  recordProgress(session,turnId,text,at=Date.now()) {
+    const recent=session.lastProgress?.turnId===turnId?session.lastProgress.recent??[]:[]
+    const summary=text.length>600?text.slice(0,599)+'…':text
+    session.lastProgress={turnId,text,at,recent:[...recent.filter(item=>item!==summary),summary].slice(-6)}
+  }
   reportModelRecovery(session) {
     const retry=session.modelRetry
     if(!retry || retry.turnId!==session.turnId)return
@@ -88,7 +93,7 @@ export class SessionManager {
     const text=parts.join('，')+'。'
     progress.reported=progress.version
     // Detailed tool counts belong to the on-demand progress view, not the push channel.
-    session.lastProgress={turnId:progress.turnId,text,at:now}
+    this.recordProgress(session,progress.turnId,text,now)
   }
   watchTurnProgress(session) {
     clearTimeout(session.progressTimer)
@@ -582,7 +587,7 @@ export class SessionManager {
         const percent=typeof p.message==='string'&&p.message.match(/(?:^|[^0-9.])(100|[0-9]{1,2})%(?![0-9])/)
         text=percent?'工具报告进度 '+percent[1]+'%。':'工具仍在处理本轮请求。'
       }
-      session.lastProgress={text,at:Date.now(),turnId:p.turnId}
+      this.recordProgress(session,p.turnId,text)
       this.diagnostic(session,'turn.progress',{method:message.method})
       this.watchTurnProgress(session)
       return
@@ -743,7 +748,7 @@ export class SessionManager {
           if(session.contextRejected){this.diagnostic(session,'notification.suppressed',{reason:'context_rejected'});return}
           if(rest){
             const delivered=await this.emit(session, rest, () => (session.workToken?.current()??true) && session.busy && !session.finalReceived && session.turnId === turnId)
-            if(delivered&&session.turnId===turnId){session.lastProgress={text:rest,at:Date.now(),turnId};session.lastUserNoticeAt=Date.now()}
+            if(delivered&&session.turnId===turnId){this.recordProgress(session,turnId,rest);session.lastUserNoticeAt=Date.now()}
           }
         } else { if(p.item.phase!=='partial_answer')session.finalReceived = true; session.finals.push(rest);session.displayFinals??=[];session.displayFinals.push(rest) }
       }

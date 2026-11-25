@@ -2,11 +2,12 @@ import SwiftUI
 import AppKit
 
 struct Snapshot: Decodable {
-    struct Message: Decodable { let role, text: String; let time: Double? }
+    struct Message: Decodable { let role, text: String; let time: Double?; let truncated: Bool? }
     struct Conversation: Decodable, Identifiable { let id, name: String }
     struct File: Decodable { let name, path: String }
     let name, project, thread, turn, writer: String
     let revision: Int
+    let progress: [String]?
     let messages: [Message], files: [File]
     let conversations: [Conversation], activeProject: String
     var target: String { "\(project)/\(thread)/\(turn)/\(revision)" }
