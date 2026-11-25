@@ -1,5 +1,4 @@
 import {readInstalledNotice} from '../infrastructure/updates/release-source.mjs'
-import {quickStartGuide} from '../setup/user-guide.mjs'
 import {createHash,randomUUID} from 'node:crypto'
 import {readFile,writeFile,rename,unlink,lstat} from 'node:fs/promises'
 import {join} from 'node:path'
@@ -23,7 +22,7 @@ export class LifecycleNotice{
   try{const info=await lstat(path);if(!info.isFile()||info.isSymbolicLink()||info.nlink!==1||info.size>1024)throw Error('LIFECYCLE_NOTICE_STATE_INVALID')}
   catch(error){if(error.code==='ENOENT')return null;throw error}
   const value=JSON.parse(await readFile(path,'utf8'))
-  if(value.version!==1||!['welcome','upgrade'].includes(value.kind)||!['pending','sending','accepted','deferred','unknown'].includes(value.status)||value.commit!==null&&!RELEASE.test(value.commit))throw Error('LIFECYCLE_NOTICE_STATE_INVALID')
+  if(value.version!==1||!['welcome','upgrade'].includes(value.kind)||!['pending','sending','accepted','deferred','unknown','suppressed'].includes(value.status)||value.commit!==null&&!RELEASE.test(value.commit))throw Error('LIFECYCLE_NOTICE_STATE_INVALID')
   return value
  }
  async write(owner,value){const path=this.path(owner),temp=path+'.'+randomUUID()+'.tmp';try{await writeFile(temp,JSON.stringify(value)+'\n',{flag:'wx',mode:0o600});await rename(temp,path)}finally{await unlink(temp).catch(()=>{})}}
@@ -39,10 +38,15 @@ export class LifecycleNotice{
    value={version:1,kind:welcome?'welcome':'upgrade',commit:this.commit,status:'pending',loginId:this.loginId??value?.loginId}
    await this.write(owner,value)
   }
+  // Pairing is visible in setup. Do not inject welcome/help into a conversation.
+  if(value.kind==='welcome'){
+   if(value.status!=='suppressed')await this.write(owner,{...value,status:'suppressed'})
+   return null
+  }
   if(!['pending',...(inbound?['deferred']:[])].includes(value.status))return null
   const localUpdate=this.language==='en'?'Your WeChat assistant has been updated to the new local version.':'微信助手已更新到本地新版，可以继续使用了。'
   const release=value.kind==='upgrade'&&this.installed?.tag?this.installed:null
-  const message=value.kind==='welcome'?[await this.welcomeText(owner),quickStartGuide(this.language)].join('\n\n'):this.installed?.local?localUpdate:upgradeMessage(value.commit,this.language,release)
+  const message=this.installed?.local?localUpdate:upgradeMessage(value.commit,this.language,release)
   await this.write(owner,{...value,status:'sending'})
   let status='unknown'
   try{const result=await this.send(owner,message);status=result?.status==='accepted'?'accepted':'unknown'}

@@ -116,7 +116,7 @@ export class ManagementService{
   if(op.status==='pending')this.expire(op)
   if(name==='supplement_task'){
    const notices=[]
-   try{this.exact(e,args);const result=await this.manager.steer(e.key,args.text,t=>notices.push(t),this.manager.lifecycle.capture(e.key),{traceId:args.taskId,turnId:args.turnId});op.status=result?.status??'unknown';op.detail=notices.join('\n')}catch(error){op.status=error.message==='MANAGEMENT_STALE_TASK'?'not_sent':'unknown'}
+   try{this.exact(e,args);const result=await this.manager.steer(e.key,args.text,t=>notices.push(t),this.manager.lifecycle.capture(e.key),{traceId:args.taskId,turnId:args.turnId,requestId:args.requestId});op.status=result?.status??'unknown';op.detail=notices.join('\n')}catch(error){op.status=error.message==='MANAGEMENT_STALE_TASK'?'not_sent':'unknown'}
    await this.manager.save()
   }
   return this.result(op)

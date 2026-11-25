@@ -3,10 +3,14 @@ import {nativeCommandKind} from './native-command-kind.mjs'
 
 /** Own receipt and fast-control decisions after the transport parses a wire. */
 export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, conversations, runtime, setupController, setupReceipts, normalizeVoice, classifyMessage, deferMaintenance, log = () => {}}) {
+  const threadOf=message=>manager.state?.users?.[message.userId]?.threadId??''
+  const chatThread=(message,intent)=>!message._setupAction&&!message._promptReply&&!message._conversationCommand&&(!intent||intent.kind==='session'&&intent.value.action==='steer')
+    ?message._chatThread??threadOf(message):null
   return {
     prepare(parsed, {traceId, quote}) {
       const previous = jobs.findCaptured(parsed)
       const message = previous ?? conversations.bind(normalizeVoice(parsed))
+      message._chatThread ??= threadOf(message)
       message._traceId ??= traceId
       const frozenSetup = setupReceipts.get(parsed)
       if (frozenSetup) {
@@ -31,7 +35,7 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
         const intent = classifyMessage(message)
         const stop = intent?.kind === 'session' && intent.value.action === 'stop' && !manager.state?.desktopHandoff
         if (message._desktopQuit || !intent || nativeCommandKind(intent) || stop || message._setupAction) {
-          if (!stop) message._ingressId = jobs.capture(message)
+          if (!stop) message._ingressId = jobs.capture(message,chatThread(message,intent))
           if (stop) {
             const {id, fresh} = jobs.captureStop(message)
             message._ingressId = id
@@ -41,6 +45,7 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
             else message._recovered = true
           }
         }
+        if(intent?.kind==='session'&&intent.value.action==='steer'&&!message._captureState)message._chatReceipt=jobs.observeSupplement(message,chatThread(message,intent))
         if (!message._setupAction) continue
         const receipt = setupReceipts.capture(message)
         if (receipt) {
@@ -64,13 +69,16 @@ export function createReceiveMessage({manager, jobs, view, dispatch, hasMedia, c
       }
       if (runtime.sealed) return
       const intent=classifyMessage(message)
-      if (intent&&!nativeCommandKind(intent)) { dispatch(message); return }
+      if (intent&&!nativeCommandKind(intent)) {
+        if(intent.kind==='session'&&intent.value.action==='steer'&&!message._chatReceipt)message._chatReceipt=jobs.observeSupplement(message,chatThread(message,intent))
+        dispatch(message); return
+      }
       const token = manager.lifecycle.capture(message.userId)
       void (async () => {
         try {
           await manager.save()
           if (!token.current()) return
-          const id = jobs.capture(message)
+          const id = jobs.capture(message,chatThread(message,intent))
           if (id) {
             log('ingress.persisted', {trace_id: message._traceId, messageId: message.raw?.message_id ?? message.raw?.client_id, kind: hasMedia(message) ? 'media' : 'text'})
             dispatch({...message, _ingressId: id, _intakeToken: token})

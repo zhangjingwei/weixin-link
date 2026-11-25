@@ -1,6 +1,6 @@
 import {voiceTextMessage} from '../interfaces/wechat/voice-text.mjs'
 import {conversationCommand} from '../interfaces/wechat/conversation-command.mjs'
-import {controlCommand} from '../interfaces/wechat/control-command.mjs'
+import {recoveryControlCommand} from '../interfaces/wechat/control-command.mjs'
 import {diagnosticCommand} from '../application/diagnostics/diagnostic-commands.mjs'
 import {setupCommand} from '../setup/setup-controller.mjs'
 
@@ -9,7 +9,7 @@ export function voiceCommandInput(message){
  const converted=voiceTextMessage(message)
  if(!converted)return message
  const candidate=converted.text.trim().replace(/[。！？!?，,]+$/u,'').trim()
- const conversation=conversationCommand(candidate),control=controlCommand(candidate)
+ const conversation=conversationCommand(candidate),control=recoveryControlCommand(candidate)
  // Free-form arguments (names, search queries, answers and supplements) keep punctuation.
  const command=(conversation&&!conversation.name&&!conversation.q&&!conversation.workspace)||(control&&!['steer','answer'].includes(control.action))||diagnosticCommand(candidate)||setupCommand(candidate)
  return {...converted,text:command?candidate:converted.text,_voiceTranscribed:true}

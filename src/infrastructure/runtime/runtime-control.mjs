@@ -70,11 +70,11 @@ export class RuntimeControl {
     if(this.token&&req.headers['x-control-token']!==this.token)throw Object.assign(Error('Unauthorized'),{statusCode:403})
     let result
     if(req.method==='GET'&&req.url==='/status')result=this.status()
-    else if(req.method==='POST'&&req.url==='/management'){
+    else if(req.method==='POST'&&(req.url==='/management'||(req.url==='/mac-companion'&&this.onCompanion))){
      if(this.sealed||this.draining)throw Error('MANAGEMENT_UNAVAILABLE')
      req.setEncoding('utf8')
      let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>65536)throw Object.assign(Error('MANAGEMENT_INVALID_ARGUMENTS'),{statusCode:413})}
-     result=await this.track('management',()=>this.onManagement(JSON.parse(body)))
+     result=await this.track('management',()=>req.url==='/mac-companion'?this.onCompanion(JSON.parse(body)):this.onManagement(JSON.parse(body)))
     }
     else if(req.method==='POST'&&['/drain','/seal','/resume'].includes(req.url)){
      let body='';for await(const chunk of req){body+=chunk;if(body.length>512)throw Object.assign(Error('Too large'),{statusCode:413})}

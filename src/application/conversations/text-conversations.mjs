@@ -15,9 +15,9 @@ export class TextConversations{
  recipient(key){return this.entry(key)?.owner??key}
  find(owner,id){const r=this.ensure(owner);return id?r.entries.find(e=>e.id.toLowerCase()===id.toLowerCase()||this.manager.state.users[e.key]?.threadId===id):r.entries.find(e=>e.id===r.active)}
  // Called synchronously at message arrival, before any asynchronous work or download.
- bind(message){const owner=message.userId,r=this.ensure(owner),media=message.images?.length||message.files?.length||message.videos?.length||message.voices?.length,waiting=media?null:r.prompt,parsed=this.parseInput(message.text,{pending:waiting}),command=media?null:parsed.command;let error;const priorActive=r.active;
+ bind(message){const owner=message.userId,r=this.ensure(owner);if(r.prompt?.target==='plan')delete r.prompt;const media=message.images?.length||message.files?.length||message.videos?.length||message.voices?.length,waiting=media?null:r.prompt,parsed=this.parseInput(message.text,{pending:waiting}),command=media?null:parsed.command;let error;const priorActive=r.active;
  const promptReply=!!waiting&&parsed.promptResult!=='keep';
- const messageId=message.raw?.message_id??message.raw?.client_id;r.bindings??={};const prior=messageId===undefined?null:r.bindings[String(messageId)];if(prior){const saved=typeof prior==='string'?{key:prior}:prior;return {...message,userId:saved.key,_conversationOwner:owner,_conversationCommand:Object.hasOwn(saved,'command')?saved.command:command,_sessionCommand:Object.hasOwn(saved,'sessionCommand')?saved.sessionCommand:parsed.sessionCommand,_promptReply:saved.promptReply??promptReply};}
+ const messageId=message.raw?.message_id??message.raw?.client_id;r.bindings??={};const prior=messageId===undefined?null:r.bindings[String(messageId)];if(prior){const saved=typeof prior==='string'?{key:prior}:prior,retiredPlan=saved.command?.action==='prompt'&&saved.command.target==='plan'||saved.sessionCommand?.action==='plan';return {...message,userId:saved.key,_conversationOwner:owner,_conversationCommand:retiredPlan?null:Object.hasOwn(saved,'command')?saved.command:command,_sessionCommand:retiredPlan?null:Object.hasOwn(saved,'sessionCommand')?saved.sessionCommand:parsed.sessionCommand,_promptReply:retiredPlan?false:saved.promptReply??promptReply};}
  if(parsed.promptResult==='done')delete r.prompt;
  if(command?.action==='prompt')r.prompt={target:command.target,decision:command.decision,key:this.find(owner)?.key,id:this.find(owner)?.id};
  if(command?.action==='projectFolderPrompt')r.prompt={target:'projectFolder',name:command.name,key:this.find(owner)?.key,id:this.find(owner)?.id};
@@ -137,7 +137,7 @@ export class TextConversations{
     if(!await this.manager.listRecentCommits(message.userId,reply)){delete this.ensure(owner).prompt;await this.manager.save()}
     return true
    }
-   const prompts={steer:'请输入要补充的信息。',plan:'请输入计划需求。',goal:'请输入长任务目标；可在末尾加“| 预算 10000”。',reviewBranch:'请输入要对比的分支名称，例如 main。',new:'请输入项目名称。',newProject:'请给新项目起个名字。',rename:'请输入新的会话名称。',search:'请输入搜索词。'}
+   const prompts={steer:'请输入要补充的信息。',goal:'请输入长任务目标；可在末尾加“| 预算 10000”。',reviewBranch:'请输入要对比的分支名称，例如 main。',new:'请输入项目名称。',newProject:'请给新项目起个名字。',rename:'请输入新的会话名称。',search:'请输入搜索词。'}
    await reply(`${prompts[cmd.target]}下一条纯文字将作为输入；发送“取消”放弃。`);return true
   }
   if(cmd.action==='projectFolderPrompt'){

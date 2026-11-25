@@ -1,0 +1,4 @@
+interface:
+  display_name: "生成项目约定"
+  short_description: "在明确要求时依据仓库证据创建或更新根目录 AGENTS.md"
+  default_prompt: "使用 $generating-agents-md 为当前仓库生成 AGENTS.md。"

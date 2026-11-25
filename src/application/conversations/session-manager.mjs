@@ -1,3 +1,4 @@
+import {taskProgress,heartbeatDue} from '../../domain/tasks/progress-state.mjs'
 import {recordTaskResult,archiveTaskResult} from '../tasks/task-result.mjs'
 import {currentMaterials,hasAttachments} from '../../domain/messages/material-association.mjs'
 import {executionState} from '../../domain/tasks/execution-state.mjs'
@@ -67,6 +68,12 @@ export class SessionManager {
     return this.saving
   }
   diagnostic(session,event,fields={}) { this.log(event,{userId:session.userId,thread_id:session.threadId,turn_id:session.turnId,trace_id:session.traceId,...fields}) }
+  recordProgress(session,turnId,text,at=Date.now(),shared=false) {
+    const recent=session.lastProgress?.turnId===turnId?session.lastProgress.recent??[]:[]
+    const summary=text.length>600?text.slice(0,599)+'…':text
+    const updates=session.lastProgress?.turnId===turnId?session.lastProgress.updates:undefined
+    session.lastProgress={turnId,text,at,updates:shared?[...(updates??[]),summary].slice(-6):updates,recent:[...recent.filter(item=>item!==summary),summary].slice(-6)}
+  }
   reportModelRecovery(session) {
     const retry=session.modelRetry
     if(!retry || retry.turnId!==session.turnId)return
@@ -88,7 +95,7 @@ export class SessionManager {
     const text=parts.join('，')+'。'
     progress.reported=progress.version
     // Detailed tool counts belong to the on-demand progress view, not the push channel.
-    session.lastProgress={turnId:progress.turnId,text,at:now}
+    this.recordProgress(session,progress.turnId,text,now)
   }
   watchTurnProgress(session) {
     clearTimeout(session.progressTimer)
@@ -103,20 +110,30 @@ export class SessionManager {
         this.diagnostic(session,'turn.waiting_progress',{duration_ms:quietMs})
       }
       const now=Date.now()
-      const sinceNotice=now-Math.max(session.progressStartedAt??now,session.lastUserNoticeAt??0)
-      const interval=session.lastWaitNoticeAt?120_000:90_000
       const waiting=!session.nativeActiveFlags?.length && ![...this.questions.values()].some(q=>q.session===session)
-      if(waiting && !session.contextRejected && sinceNotice>=interval){
-        const current=()=>this.sessions.get(session.userId)===session && session.turnId===turnId &&
+      if(waiting && !session.contextRejected && heartbeatDue(session,now)){
+        const current=()=>this.sessions.get(session.userId)===session && session.turnId===turnId && session.traceId===traceId &&
           session.busy && !session.finalReceived && !session.contextRejected && !session.exiting &&
-          session.state!=='stopping' && !session.rpcAttempt?.closing && session.workToken?.current()!==false
-        session.lastUserNoticeAt=now
+          !session.nativeActiveFlags?.length && !session.waitingAttachment && session.state!=='stopping' && !session.rpcAttempt?.closing && session.workToken?.current()!==false
         session.lastWaitNoticeAt=now
-        void this.emit(session,'仍在处理，结果完成后会继续回复。',current)
+        // Query the same execution connection; never infer work from service health.
+        void (async()=>{
+          try{
+            const thread=await this.protocol.read(session.rpc,session.threadId)
+            if(current()&&thread?.id===session.threadId){
+              session.nativeStatus=thread.status?.type
+              session.nativeActiveFlags=waitingFlags.filter(flag=>thread.status?.activeFlags?.includes(flag))
+              if(thread.status?.type==='active')session.executionEvidenceAt=Date.now()
+              else session.executionEvidenceAt=null
+            }
+          }catch{if(current())session.executionEvidenceAt=null}
+          if(current())await this.emit(session,taskProgress(session).phase==='running'
+            ?'任务仍在执行，暂无新的关键进展。':'暂未确认任务仍在执行，已核对执行连接；结果状态待确认。',current)
+        })()
       }
-      const untilNotice=(session.lastWaitNoticeAt?120_000:90_000)-(Date.now()-Math.max(session.progressStartedAt??Date.now(),session.lastUserNoticeAt??0))
-      const untilDiagnostic=quietMs<30_000?30_000-quietMs:30_000
-      session.progressTimer=setTimeout(report,Math.min(untilDiagnostic,Math.max(1,untilNotice)))
+      const due=Math.max((session.lastUserNoticeAt??session.progressStartedAt??now)+180_000,
+        session.lastWaitNoticeAt?session.lastWaitNoticeAt+300_000:0)
+      session.progressTimer=setTimeout(report,Math.min(quietMs<30_000?30_000-quietMs:30_000,due>now?due-now:30_000))
       session.progressTimer.unref?.()
     }
     session.progressTimer=setTimeout(report,30_000)
@@ -414,7 +431,6 @@ export class SessionManager {
       if (session.queue.length >= 5) throw new Error('已排队 5 条消息，请等待当前任务完成。')
       session.queue.push({input:text,token})
       this.diagnostic(session,'turn.queued',{queue_depth:session.queue.length})
-      await this.notify(session, `消息已排队（第 ${session.queue.length} 条）。`)
       return
     }
     transition(session,'running')
@@ -432,7 +448,6 @@ export class SessionManager {
 
     session.waitingAttachment=false
     session.requestText=typeof text==='string'?text:text.text
-    session.workflowMode=native?.action
 
     this.state.users[session.userId]??={}
     this.state.users[session.userId].recovery={task:session.localTask,execution:'running',delivery:null,updated:new Date().toISOString()}
@@ -460,10 +475,9 @@ export class SessionManager {
       this.diagnostic(session,'materials.context',{count:materials.length,queue_depth:pendingMaterials,reason:session.attachmentContinuation?'continuation':materials.length?'current':'unbound'})
       const runtimeInput=this.backend?.prepareInput?await this.backend.prepareInput(text,{signal:token.signal}):text
       const turnParams={threadId:session.threadId,input:[...this.protocol.input(runtimeInput),this.ports.flowInput(session.traceId),this.ports.materialInput({materials,pending:pendingMaterials,continuation:!!session.attachmentContinuation}),...(session.attachmentContinuation?[{type:'text',text:'当前附件用于继续此前等待中的用户请求（保持原授权范围）：'+JSON.stringify(session.attachmentContinuation.request)}]:[])],...(deliveryId?{clientUserMessageId:deliveryId}:{})}
-      if(native?.action==='plan')turnParams.input.push({type:'text',text:'用户选择了微信的“计划”：本轮仅调研和制定方案，等用户明确要求实施后再改动项目。'})
       result=native?.action==='review'
         ?await this.protocol.startReview(session.rpc,session.threadId,native.target)
-        :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,model:executionModel,fastMode:this.state.users[session.userId]?.fastMode,workflowMode:native?.action})
+        :await this.protocol.startTurn(session.rpc,{threadId:turnParams.threadId,input:turnParams.input,deliveryId,model:executionModel,fastMode:this.state.users[session.userId]?.fastMode})
       if(!result?.turn?.id)throw Error('底座未确认任务标识，结果待核对。')
       if(deliveryId)this.submissions?.submitted(deliveryId,result.turn.id)
       if(waiting&&this.state.users[session.userId]?.waitingAttachment===waiting)delete this.state.users[session.userId].waitingAttachment
@@ -545,6 +559,7 @@ export class SessionManager {
       const flags=p.status?.type==='active' && Array.isArray(p.status.activeFlags)
         ? waitingFlags.filter(flag=>p.status.activeFlags.includes(flag)) : []
       const previous=session.nativeActiveFlags??[]
+      if(session.busy)session.executionEvidenceAt=p.status?.type==='active'?Date.now():null
       session.nativeStatus=p.status?.type
       session.nativeActiveFlags=flags
       if(previous.join()!==flags.join()){
@@ -554,7 +569,7 @@ export class SessionManager {
       return
     }
     if(message.method==='thread/closed'&&p.threadId===session.threadId){
-      session.nativeStatus='notLoaded';session.nativeActiveFlags=[]
+      session.nativeStatus='notLoaded';session.nativeActiveFlags=[];session.executionEvidenceAt=null
       if(!session.busy&&!session.finishing&&this.sessions.get(session.userId)===session){
         this.sessions.delete(session.userId);clearTimeout(session.idleReleaseTimer)
         transition(session,'closed');this.detachRpc(session,session.rpcAttempt)
@@ -576,13 +591,14 @@ export class SessionManager {
         text=`计划已完成 ${plan.filter(step=>step.status==='completed').length}/${plan.length} 步`+(current?'，正在'+String(current.step).slice(0,200):'')
       }else if(message.method==='turn/diff/updated'){
         const count=typeof p.diff==='string'?(p.diff.match(/^diff --git /gm)??[]).length:0
+        session.companionDiff=count && p.diff.length<=32000 ? {turn:p.turnId,text:p.diff}:null
         if(!count)return
         text=`本轮已有 ${count} 个文件发生修改。`
       }else{
         const percent=typeof p.message==='string'&&p.message.match(/(?:^|[^0-9.])(100|[0-9]{1,2})%(?![0-9])/)
         text=percent?'工具报告进度 '+percent[1]+'%。':'工具仍在处理本轮请求。'
       }
-      session.lastProgress={text,at:Date.now(),turnId:p.turnId}
+      this.recordProgress(session,p.turnId,text)
       this.diagnostic(session,'turn.progress',{method:message.method})
       this.watchTurnProgress(session)
       return
@@ -655,7 +671,7 @@ export class SessionManager {
     if (message.method === 'turn/started' && session.busy) {
       if(session.turnReady&&session.turnId&&p.turn?.id!==session.turnId){this.diagnostic(session,'event.ignored',{reason:'other_turn',method:message.method});return}
       session.turnReady = true; session.turnStarted = true; session.turnId = p.turn.id
-      session.progressStartedAt=Date.now();session.lastUserNoticeAt=Date.now();session.lastWaitNoticeAt=0
+      session.progressStartedAt=Date.now();session.lastUserNoticeAt=Date.now();session.lastWaitNoticeAt=0;session.executionEvidenceAt=Date.now()
       session.executionModel=p.turn.model??session.executionModel
       this.watchTurnProgress(session)
       this.diagnostic(session,'turn.started',{provider:session.provider,model:session.executionModel,model_provider:session.modelProvider})
@@ -667,7 +683,7 @@ export class SessionManager {
         this.submissions.submitted(job.id,p.turnId)
         transition(session,'running')
         Object.assign(session,{taskId:job.id,traceId:job.context.flowNonce,turnId:p.turnId,turnReady:true,turnStarted:true,
-          nativeQueueTurn:true,modelRetry:null,startedAt:Date.now(),executionModel:session.model,tokenUsage:null,finalReceived:false,finals:[],displayFinals:[],
+          nativeQueueTurn:true,modelRetry:null,startedAt:Date.now(),progressStartedAt:Date.now(),lastUserNoticeAt:Date.now(),lastWaitNoticeAt:0,executionEvidenceAt:Date.now(),executionModel:session.model,tokenUsage:null,finalReceived:false,finals:[],displayFinals:[],
           localTask:job.context.task,requestText:job.input?.text??job.input,materials:job.context.materials??[],
           generatedOutputs:[],imageOutputIds:new Set(),waitingAttachment:false,attachmentContinuation:null,lastProgress:null})
         session.items.clear()
@@ -683,6 +699,7 @@ export class SessionManager {
           session.workToken?.current()===false || typeof p.delta!=='string' || !p.delta.length)return
       if(streamKind!=='commandOutput')this.reportModelRecovery(session)
       const now=Date.now()
+      session.executionEvidenceAt=now
       session.lastStageAt=now
       if(session.streamProgress?.turnId!==p.turnId)session.streamProgress={turnId:p.turnId,kinds:new Map()}
       const kinds=session.streamProgress.kinds
@@ -700,7 +717,7 @@ export class SessionManager {
       if (!session.busy || !session.turnReady || (session.finalReceived&&p.item?.type!=='imageGeneration')) { this.diagnostic(session,'event.ignored',{reason:'inactive_or_final',method:message.method}); return }
       if (p.turnId && p.turnId !== session.turnId) { this.diagnostic(session,'event.ignored',{reason:'old_turn',method:message.method}); return }
     }
-    if ((message.method==='item/started'||message.method==='item/completed') && p.item?.type && p.item.type!=='userMessage') this.watchTurnProgress(session)
+    if ((message.method==='item/started'||message.method==='item/completed') && p.item?.type && p.item.type!=='userMessage') {session.executionEvidenceAt=Date.now();this.watchTurnProgress(session)}
     if (['item/started','item/completed'].includes(message.method) && p.item?.type==='commandExecution' && p.item.id){
       const item=p.item
       if(session.commandProgress?.turnId!==session.turnId)
@@ -741,9 +758,9 @@ export class SessionManager {
         if (p.item.phase === 'commentary') {
           const turnId = session.turnId
           if(session.contextRejected){this.diagnostic(session,'notification.suppressed',{reason:'context_rejected'});return}
-          if(rest){
+          if(rest && !(session.lastProgress?.turnId===session.turnId&&session.lastProgress.updates?.includes(rest))){
             const delivered=await this.emit(session, rest, () => (session.workToken?.current()??true) && session.busy && !session.finalReceived && session.turnId === turnId)
-            if(delivered&&session.turnId===turnId){session.lastProgress={text:rest,at:Date.now(),turnId};session.lastUserNoticeAt=Date.now()}
+            if(delivered&&session.turnId===turnId){this.recordProgress(session,turnId,rest,Date.now(),true);session.lastUserNoticeAt=Date.now()}
           }
         } else { if(p.item.phase!=='partial_answer')session.finalReceived = true; session.finals.push(rest);session.displayFinals??=[];session.displayFinals.push(rest) }
       }
@@ -766,12 +783,10 @@ export class SessionManager {
       const handoff=!awaitingAttachment&&!receivedWhileWaiting
         ?handoffReply(this.state,this.submissions,session):null
       if(handoff)reply=handoff+(p.turn.status==='failed'?'\n源会话本轮处理失败；目标任务状态以以上记录为准。':'')
-      const discussionPrefix=!handoff&&p.turn.status==='completed'&&!awaitingAttachment&&!receivedWhileWaiting&&session.finals.length
-        ?this.ports.discussionReplyPrefix?.(session.requestText,reply,session.workflowMode)??'':''
-      reply=discussionPrefix+reply
       // The footer describes execution completion, not delivery acceptance.
       const mergedCompletion=this.completionMarkers&&!awaitingAttachment&&!handoff&&(session.workToken?.current()??true)
-      if(mergedCompletion){
+      const footerOffset=mergedCompletion&&p.turn.status!=='completed'?reply.length:null
+      if(footerOffset!==null){
         const marker=p.turn.status==='failed'?'⚠️ 本轮执行失败，回答已结束。':p.turn.status==='interrupted'?'⏹ 本轮已停止。':'✅ 本轮回答结束。'
         reply+='\n\n'+localCompletion(marker,session.localTask)
       }
@@ -786,16 +801,18 @@ export class SessionManager {
       session.generatedOutputs=[]
       if(this.sessions.has(session.userId)&&this.sessions.get(session.userId)!==session)return
       archiveTaskResult(this.state.users[session.userId])
+      this.state.users[session.userId].lastConversationUpdates=session.lastProgress?.turnId===session.turnId?session.lastProgress?.updates:undefined
       this.state.users[session.userId].lastOutput=typeof output==='string'?undefined:output
       this.state.users[session.userId].recovery={task:session.localTask,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending',updated:new Date().toISOString()}
       recordTaskResult(this.state.users[session.userId],{taskId:session.taskId??session.traceId,threadId:session.threadId,turnId:session.turnId,execution:executionState(p.turn.status,awaitingAttachment),delivery:'pending'})
+      this.state.users[session.userId].resultIdentity.footerOffset=footerOffset
       this.state.users[session.userId].lastTask=session.localTask
       this.state.users[session.userId].lastReply = reply
       try { await this.save() } catch(error) { this.diagnostic(session,'state.save_failed',this.ports.errorFields(error));reply+='\n（微信会话状态保存失败，本轮回复可能无法在重启后恢复。）';this.state.users[session.userId].lastReply=reply }
       this.diagnostic(session,'turn.completed',{status:p.turn.status,provider:session.provider,model:session.executionModel,model_provider:session.modelProvider,duration_ms:Date.now()-(session.startedAt??Date.now()),chars:Array.from(reply).length})
       if (session.exited) return
       if (session.exiting) { await this.finishExit(session, p.turn.status === 'interrupted' ? '当前任务已停止。' : '本轮任务已结束。', p.turn.status); return }
-      const display=receivedWhileWaiting||handoff?reply:discussionPrefix+(session.displayFinals??session.finals).join('\n\n')+reply.slice(discussionPrefix.length+session.finals.join('\n\n').length)
+      const display=receivedWhileWaiting||handoff?reply:(session.displayFinals??session.finals).join('\n\n')+reply.slice(session.finals.join('\n\n').length)
       if(session.nativeQueueTurn&&!this.submissions.claimReceipt('native-final:'+session.taskId)){
         session.lastDelivery={status:'unknown',updated:new Date().toISOString()}
       }else if(receivedWhileWaiting){this.diagnostic(session,'notification.suppressed',{reason:'attachment_already_pending'})}
@@ -844,7 +861,7 @@ export class SessionManager {
     try{await this.save()}catch(error){if(record.seen===accepted)record.seen=previous;throw error}
     return true
   }
-  async steer(userId, text, reply, token, expected) {
+  async steer(userId, text, reply, token, expected, chatReceipt) {
     if(!text){await reply('请说明要补充的内容，以及要补充到哪个任务。');return}
     const session=this.sessions.get(userId)
     if(expected&&(!session||session.traceId!==expected.traceId||session.turnId!==expected.turnId))throw Error('MANAGEMENT_STALE_TASK')
@@ -854,7 +871,7 @@ export class SessionManager {
     if(!session.turnReady||!session.turnStarted||!session.turnId){await reply('当前任务仍在启动，补充尚未提交；请等任务开始后再补充。');return {status:'not_sent'}}
     const {threadId,turnId,traceId,rpc}=session
     const record=this.state.users[userId]
-    const entry={id:randomBytes(12).toString('hex'),threadId,turnId,text,status:'unknown',created:new Date().toISOString()}
+    const entry={id:randomBytes(12).toString('hex'),threadId,turnId,text,...chatReceipt?{chatReceipt}:{},...expected?.requestId?{requestId:expected.requestId}:{},status:'unknown',created:new Date().toISOString()}
     record.supplements=[...(record.supplements??[]).slice(-49),entry]
     // Persist the uncertain write before sending. Never replay turn/steer after a crash.
     await this.save()
@@ -888,7 +905,7 @@ export class SessionManager {
       if(command?.action==='reviewCommit'){
         command=this.resolveReviewCommit(userId,command.selection)
       }
-      if(command?.action==='steer'){await this.steer(userId,command.text,reply,token);return}
+      if(command?.action==='steer'){await this.steer(userId,command.text,reply,token,undefined,command.chatReceipt);return}
       if(command?.action==='memory'){
         if(!this.protocol.supportsMemory){await reply(await this.protocol.memory(null,null,command));return}
         const session=await this.connect(userId,reply)
@@ -918,7 +935,7 @@ export class SessionManager {
         const session=await this.connect(userId,reply)
         await reply(await this.protocol.models(session.rpc,session.model));return
       }
-      if(['goal','plan','review','compact','fork','agentStatus','fast'].includes(command?.action)){
+      if(['goal','review','compact','fork','agentStatus','fast'].includes(command?.action)){
         if(!this.protocol.supportsNativeCommands){await reply(`当前 ${this.agentName} 底座未接入这项原生命令；没有执行。`);return}
         const session=await this.connect(userId,reply)
         if(!token.current())return
@@ -977,7 +994,7 @@ export class SessionManager {
           }finally{session.selecting=false}
         }
         const reviewText=command.target?.type==='commit'?'请审查选定的提交。':command.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
-        await this.send(session,command.action==='plan'?{text:command.text,nativeCommand:command}:reviewText,token,command)
+        await this.send(session,reviewText,token,command)
         return
       }
       if (command?.action === 'help') {
@@ -985,8 +1002,8 @@ export class SessionManager {
           '微信命令列表：',
           '【当前任务】',
           '进度（progress）', '补充（supplement）', '停止（stop）', '恢复（recover）', '退出（exit）',
-          '【长任务与计划】',
-          '长任务（goal）', '长任务状态（goal-status）', '暂停长任务（goal-pause）', '继续长任务（goal-resume）', '完成长任务（goal-complete）', '清除长任务（goal-clear）', '计划（plan）',
+          '【长任务】',
+          '长任务（goal）', '长任务状态（goal-status）', '暂停长任务（goal-pause）', '继续长任务（goal-resume）', '完成长任务（goal-complete）', '清除长任务（goal-clear）',
           '【代码审查】',
           '代码审查（review）', '对比审查（compare）', '审查提交（commit-review）',
           '【会话】',

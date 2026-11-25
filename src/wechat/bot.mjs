@@ -1,11 +1,11 @@
 import {createDesktopClient} from '../infrastructure/agents/desktop-client.mjs'
+import {CompanionAccess} from '../infrastructure/storage/companion-access.mjs'
+import {macCompanion} from '../application/conversations/mac-companion.mjs'
 import {attachmentHandoffs} from '../infrastructure/media/attachment-handoff.mjs'
-import {EntryRouting} from '../application/intake/entry-routing.mjs'
 import {createManagementMaintenanceController} from '../interfaces/controllers/management-maintenance-controller.mjs'
-import {managementPlugin} from '../setup/management-plugin.mjs'
 import {ManagementService} from '../application/management/management-service.mjs'
 import {createManagementMcpController} from '../interfaces/controllers/management-mcp-controller.mjs'
-import {managementConfiguration,managementGuidance} from '../infrastructure/agents/management-plugin.mjs'
+import {managementConfiguration,managementGuidance} from '../infrastructure/agents/management-mcp.mjs'
 import {voiceCommandInput} from './voice-command-input.mjs'
 import {trackLoginValidity} from './login-validity.mjs'
 import {readWelcomeRequest,recordWelcomeRequest} from '../infrastructure/wechat/welcome-request.mjs'
@@ -145,7 +145,7 @@ const mediaDependencies={
  log,
  prepare:async(message,token)=>{const start=Date.now(),messageId=message.raw?.message_id??message.raw?.client_id,trace_id=message._traceId;log('attachments.download_started',{trace_id,messageId});try{const r=await runtime.track('media',()=>infrastructure.media.prepare(message,stateDir,undefined,token?.signal));log('attachments.download_completed',{trace_id,messageId,duration_ms:Date.now()-start,count:r.attachments.length,bytes:r.attachments.reduce((n,a)=>n+(a.bytes??0),0),status:r.errors.length?'partial':'ok'});return r}catch(e){log('attachments.download_failed',{trace_id,messageId,duration_ms:Date.now()-start,...errorFields(e)});throw e}},
  compose:input=>runtime.track('media',()=>infrastructure.media.compose(input)),
- submit:async(owner,input,token,ingressId,message)=>{if(!token.current())return;if(message&&await entryRouting.process(message,token,input))return;durable.submit(owner,input,ingressId,[ingressId].filter(Boolean))},
+ submit:async(owner,input,token,ingressId)=>{if(!token.current())return;durable.submit(owner,input,ingressId,[ingressId].filter(Boolean))},
 }
 const outgoing=infrastructure.wechat.createOutbound({bot,conversations,runtime,store:manager.outputStore,log})
 const view=createWeChatPresenter({bot,conversations,outgoing,runtime})
@@ -155,20 +155,19 @@ let schedules
 try {schedules=await createScheduleController({stateDir,owners,ready:()=>runtime.ready()&&!runtime.sealed&&!runtime.draining,
  track:work=>runtime.track('schedule',work),conversations,enqueueTask:(...args)=>durable.submit(...args),view,log})}
 catch(error) {log('schedule.state_unavailable',{code:/^SCHEDULE_[A-Z_]+$/.test(error.message)?error.message:'SCHEDULE_STATE_UNAVAILABLE'})}
-const managementInstallation=await managementPlugin({accountId:account.id,codexHome:agent.sessionOptions.codexHome,stateDir})
 const desktop=createDesktopClient({account,providerKind:agent.providerKind,codexHome:agent.sessionOptions.codexHome,binary:installation.codexBinary,workspace:installation.workspace})
 // 先打开持久收件库并接好入站处理链；登录成功后才恢复未完成工作。
 const jobs=await infrastructure.storage.accountInbox(stateDir);manager.submissions=jobs
+const companionAccess=process.platform==='darwin'&&owners.length===1?new CompanionAccess(jobs.db):null
+if(companionAccess)runtime.onCompanion=macCompanion({access:companionAccess,owner:owners[0],conversations,manager,jobs,stateDir,submit:(...args)=>durable.submit(...args),notice:(...args)=>view.announcement(...args),ready:()=>runtime.ready()&&!runtime.draining&&!stopping})
 const handoffs=attachmentHandoffs(stateDir,jobs)
 const managementService=new ManagementService({prepareHandoff:args=>handoffs.prepare(args),desktop,routingStatus:()=>agent.classifyEntry?.statistics?.(),manager,conversations,maintenance:createManagementMaintenanceController({account,home:process.env.HOME,runtime,setupController,agentSwitcher,upgrader}),enqueueTask:(...args)=>durable.submit(...args),deliver:(key,value,options)=>view.deliver(key,value,options),schedules:schedules?{create:(...args)=>schedules.createForOwner(...args),list:(...args)=>schedules.listForOwner(...args),cancel:(...args)=>schedules.cancelForOwner(...args)}:undefined,updates:{query:()=>updates.query(),skipVersion:(...args)=>updates.skipVersion(...args)},notice:(owner,text)=>view.announcement(owner,text),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
 managementService.resumeTasks=()=>durable.resume()
 // Persist restart reconciliation and private-payload cleanup before accepting MCP calls.
 await manager.save()
 const management=createManagementMcpController({manager,service:managementService,configuration:capability=>managementConfiguration({socket:account.socket,capability,controlToken:runtime.token})})
-if(managementInstallation.enabled){
- manager.managementBinding=(...args)=>management.bind(...args)
- manager.managementGuidance=managementGuidance
-}
+manager.managementBinding=(...args)=>management.bind(...args)
+manager.managementGuidance=managementGuidance
 await runtime.listen(account.socket)
 let welcomeRequest={}
 try{welcomeRequest=await readWelcomeRequest(stateDir)}catch{log('lifecycle_notice.failed',{code:'WELCOME_REQUEST_UNREADABLE'})}
@@ -182,6 +181,7 @@ const lifecycleNotice=new LifecycleNotice({stateDir,sourceDir:join(import.meta.d
 const setupReceipts=new SetupReceipts(stateDir)
 let weixin,ingressTrace
 const inbound=createWeChatController({bot,view,manager,jobs,conversations,runtime,setupController,setupReceipts,classifyMessage,
+ phoneAccess:companionAccess?.phone.bind(companionAccess),
  normalizeVoice:voiceCommandInput,deferMaintenance:message=>maintenancePending.set(message._ingressId,message),
  traceWire:wire=>ingressTrace.traceId(wire),traceMessage:message=>ingressTrace.callback(message),quote:message=>weixin.quote(message),dispatch:message=>intakeHandler(message),log})
 weixin=infrastructure.wechat.installProtocol(bot,{db:jobs.db,log,prepareBatch:inbound.prepareBatch})
@@ -195,8 +195,7 @@ manager.lifecycle.onCancel((userId,{queueAlreadyCancelled}={})=>{pending.cancel(
 bot.on('error', error => log('wechat.error',errorFields(error)))
 const handoffCleanup=setInterval(()=>{void runtime.track('management',()=>handoffs.cleanup()).catch(()=>log('attachment_handoff.cleanup_failed',{code:'HANDOFF_CLEANUP_FAILED'}))},3600000);handoffCleanup.unref()
 await handoffs.cleanup().catch(()=>log('attachment_handoff.cleanup_failed',{code:'HANDOFF_CLEANUP_FAILED'}))
-const entryRouting=new EntryRouting({modelManagedConversations:managementInstallation.enabled,log,canAnswerDirectly:managementInstallation.enabled,prepareHandoff:args=>handoffs.prepare(args),manager,conversations,jobs,service:managementService,classify:agent.classifyEntry,deliver:(...args)=>view.deliver(...args),ready:()=>!runtime.draining&&!runtime.sealed&&!stopping,track:work=>runtime.track('management',work)})
-const handleMessage=createMessageProcessor({entryRouting,view,manager,jobs,conversations,runtime,log,stateDir,accountId:account.id,lifecycleNotice,setupReceipts,setupController,agentSwitcher,upgrader,backend,owners,mediaDependencies,durable,classifyMessage,infrastructure,diagnosticServices:new ServiceManager(),diagnosticService:account.service,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
+const handleMessage=createMessageProcessor({view,manager,jobs,conversations,runtime,log,stateDir,accountId:account.id,lifecycleNotice,setupReceipts,setupController,backend,owners,mediaDependencies,durable,classifyMessage,infrastructure,diagnosticServices:new ServiceManager(),diagnosticService:account.service,deferMaintenance:message=>maintenancePending.set(message._ingressId,message)})
 intakeHandler=nonBlockingHandler(async message => {
   try {
     message=voiceCommandInput(message)
@@ -219,7 +218,7 @@ const stopWatchingUpgrade=watchLocalUpgrade(join(import.meta.dirname,'../..'),()
 })
 
 // 退出时停止新工作，等待微信上下文与会话状态落盘，再关闭控制端点。
-async function shutdown(signal){if(stopping)return;stopping=true;stopWatchingUpgrade();clearInterval(handoffCleanup);await entryRouting.close();management.close();updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
+async function shutdown(signal){if(stopping)return;stopping=true;stopWatchingUpgrade();clearInterval(handoffCleanup);management.close();updates.close();schedules?.close();clearInterval(typingTimer);typingStatus.close();ingressTrace.close();durable.close();log('service.stopping',{signal,count:manager.sessions.size});bot.stop();await bot.contextStore.flush().catch(error=>log('wechat.context_save_failed',errorFields(error)));manager.lifecycle.listeners.clear();manager.close();await manager.saving.catch(error=>log('state.save_failed',errorFields(error)));log('service.stopped',{signal});await diagnostic.flush();await runtime.close();process.exit(0)}
 process.once('SIGTERM',()=>{void shutdown('SIGTERM')});process.once('SIGINT',()=>{void shutdown('SIGINT')})
 
 // 登录并核查账号身份，待 SDK 加载微信上下文后恢复积压消息。

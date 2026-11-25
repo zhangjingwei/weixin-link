@@ -1,0 +1,4 @@
+interface:
+  display_name: "方案讨论"
+  short_description: "在需求存在多种可行路径或边界不明确时讨论并形成方案共识"
+  default_prompt: "使用 $discussing-designs 讨论这个需求的实现方案和验收边界。"

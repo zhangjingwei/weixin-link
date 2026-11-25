@@ -19,12 +19,9 @@ return async function handleMessage(message) {
   if(!message._recovered)manager.recordUserInput?.(message.userId)
   message=normalizeVoice(message)
   if(message._voiceTranscribed)log('voice.transcript_forwarded',{trace_id,userId:message.userId,status:'wechat_asr_text'})
-  let lifecycleDelivery
-  try{lifecycleDelivery=await lifecycleNotice?.onInbound(conversations.recipient(message.userId))}catch(error){log('lifecycle_notice.failed',{trace_id,...errorFields(error)})}
+  try{await lifecycleNotice?.onInbound(conversations.recipient(message.userId))}catch(error){log('lifecycle_notice.failed',{trace_id,...errorFields(error)})}
   const intent=classifyMessage(message)
   const diagnosticAction=intent?.kind==='diagnostic'?intent.value:null
-  const agentAction=intent?.kind==='agent'?intent.value:null
-  const upgradeAction=intent?.kind==='upgrade'?intent.value:null
   const initialControl=intent?.value
   const nativeKind=nativeCommandKind(intent)
   if(runtime.sealed)return
@@ -70,10 +67,9 @@ return async function handleMessage(message) {
   const conversation = manager.state.textConversations?.[owner]
   const greeting = !intent && !media && !message.references?.length && !message._promptReply &&
     !manager.state.users[message.userId]?.waitingAttachment && !conversation?.entryClarification &&
-    !conversation?.entryRoutes?.[message._ingressId] && /^(?:你好|您好|嗨|哈喽|hi|hello)[！!。.]*$/iu.test(text)
+    !conversation?.entryRoutes?.[message._ingressId] && /^(?:你好|您好|嗨|哈喽|hi|hello|ping)[！!。.]*$/iu.test(text)
   if (!media && !message.text?.trim()){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   const reply = (value,options) => deliver(options?.checkpoint?value:systemNotice(value),options)
-  if (!media && text.toLowerCase() === 'ping') { await reply('pong');jobs.acknowledge([message._ingressId].filter(Boolean)); return }
   if (text.length > 12_000) { await reply('消息过长，请拆成几条发送。');jobs.acknowledge([message._ingressId].filter(Boolean)); return }
   const token=message._intakeToken??manager.lifecycle.capture(message.userId)
   const messageId = message.raw?.message_id ?? message.raw?.client_id
@@ -91,17 +87,11 @@ return async function handleMessage(message) {
     await runtime.track('delivery',()=>deliver('上次原生命令的执行结果待核对，未重复执行。请查询对应状态后再决定是否重新发送。',{conversationControl:true}))
     jobs.acknowledge([message._ingressId].filter(Boolean));return
   }
-  if(message._recovered&&(agentAction?.action==='restart'||upgradeAction)){
-   await runtime.track('delivery',()=>deliver('上次维护操作是否完成还不确定，没有重复执行。你可以说“检查助手服务是否正常”。',{conversationControl:true}))
-   jobs.acknowledge([message._ingressId].filter(Boolean));return
-  }
   let recoveryDelivery
   if(!initialControl&&!hasMedia(message)&&!message._recovered&&!isResultLookup(text)){
    try{recoveryDelivery=await recoverFailedFinal(manager,message.userId,(key,value)=>view.deliver(key,value,{conversationControl:true,traceId:trace_id}),confirmedRejection);if(recoveryDelivery)log('delivery.recovery_attempt',{trace_id,status:recoveryDelivery})}
    catch(error){log('delivery.recovery_failed',{trace_id,...errorFields(error)})}
   }
-  if(agentAction){await management.agent(agentAction,message,deliver,trace_id);return}
-  if(upgradeAction){await management.upgrade(message,deliver,trace_id);return}
   if(!hasMedia(message)&&await conversations.control(message,reply)){jobs.acknowledge([message._ingressId].filter(Boolean));return}
   let control = intent?.kind==='session'?intent.value:null
   if(control?.action==='reviewCommit'){
@@ -109,33 +99,22 @@ return async function handleMessage(message) {
     catch(error){await reply(error.message);jobs.acknowledge([message._ingressId].filter(Boolean));return}
   }
   if(!control&&!token.current())return
-  if(greeting){
-    // Claim before sending so an interrupted or uncertain delivery is never repeated on replay.
-    if(!message._ingressId||jobs.claimReceipt(message._ingressId)){
-      await deliver(/^(?:hi|hello)/i.test(text)?'Hi! How can I help?':'你好！有什么可以帮你？',{conversationControl:true,current:()=>token.current()})
-    }
-    jobs.acknowledge([message._ingressId].filter(Boolean))
-    return
-  }
-  if(!control&&!media&&entryRouting&&await entryRouting.process(message,token))return
+  // Standalone greetings are ordinary conversation, never an entry-routing action or canned notice.
+  if(!control&&!greeting&&!media&&entryRouting&&await entryRouting.process(message,token))return
   const notice=receiptPolicy({media,busy:manager.sessions.get(message.userId)?.busy,waiting:!!manager.state.users[message.userId]?.waitingAttachment})
   message._receiptDeferred=notice==='defer'
-  if(!control&&notice!=='defer'&&jobs.claimReceipt(message._ingressId)&&notice==='send'){
-    if(lifecycleDelivery==='accepted'||recoveryDelivery==='accepted')log('receipt.suppressed',{trace_id,reason:'other_notice_sent'})
-    else try{void Promise.resolve(reply(media?'已收到附件，正在接收。':manager.sessions.get(message.userId)?.busy?'已收到，已排队。':'已收到，正在处理。')).catch(error=>log('receipt.delivery_unconfirmed',{trace_id,...errorFields(error)}))}catch(error){log('receipt.delivery_unconfirmed',{trace_id,...errorFields(error)})}
-  }
   if(!control&&media){await singleMedia(message,token,mediaDependencies);return}
   // Controls must not wait behind a slow turn/start or an earlier message send.
-  if(control&&['plan','review'].includes(control.action)){
+  if(control?.action==='review'){
     if(!manager.supportsNativeCommands){await reply(`当前 ${manager.agentName} 底座未接入这项原生命令；没有执行。`);jobs.acknowledge([message._ingressId].filter(Boolean));return}
     if(!token.current())return
-    const input=control.action==='plan'?quoteInput(control.text,message.references):control.target?.type==='commit'?'请审查选定的提交。':control.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
-    durable.submit(message.userId,{...(typeof input==='string'?{text:input}:input),nativeCommand:control,traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
+    const input=control.target?.type==='commit'?'请审查选定的提交。':control.target?.type==='baseBranch'?'请审查与指定分支相比的改动。':'请审查当前工作区变更。'
+    durable.submit(message.userId,{text:input,nativeCommand:control,traceId:trace_id},message._ingressId??(messageId===undefined?undefined:String(messageId)),[message._ingressId].filter(Boolean))
     return
   }
   if(control){
     const command=capturedStop?{...control,stopIngressId:message._ingressId,stopTrace:message._stopTrace}:control
-    await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token,command)
+    await manager.handle(message.userId,text,reply,control.action==='steer'?messageId:undefined,token,control.action==='steer'&&message._chatReceipt?{...command,chatReceipt:message._chatReceipt}:command)
     if(nativeKind==='mutation'||capturedStop)jobs.acknowledge([message._ingressId].filter(Boolean))
     return
   }

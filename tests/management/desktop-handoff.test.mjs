@@ -142,13 +142,13 @@ test('desktop launch rechecks the caller guard immediately before opening',async
  assert(!f.calls.some(c=>c.binary==='/usr/bin/open'))
 })
 
-test('legacy installation, upgrade and restart controllers cannot bypass desktop ownership',async()=>{
+test('installation recovery cannot bypass desktop ownership',async()=>{
  const {createManagementController}=await import('../../src/interfaces/controllers/management-controller.mjs'),sent=[],acks=[]
  const denied=()=>{throw Error('must not mutate service')}
- const controller=createManagementController({manager:{state:{desktopHandoff:{phase:'desktop'}}},jobs:{acknowledge:ids=>acks.push(ids)},setupReceipts:{capture:denied},runtime:{track:denied},agentSwitcher:{handle:denied},upgrader:{handle:denied}})
+ const controller=createManagementController({manager:{state:{desktopHandoff:{phase:'desktop'}}},jobs:{acknowledge:ids=>acks.push(ids)},setupReceipts:{capture:denied},runtime:{track:denied}})
  const message={_ingressId:'desktop-request'},deliver=async text=>sent.push(text)
- await controller.setup('login',message,deliver);await controller.agent('restart',message,deliver);await controller.upgrade(message,deliver)
- assert.equal(acks.length,3);assert.equal(sent.length,3);assert(sent.every(text=>text.includes('先完成并关闭桌面')))
+ await controller.setup('login',message,deliver)
+ assert.equal(acks.length,1);assert.equal(sent.length,1);assert(sent[0].includes('先完成并关闭桌面'))
 })
 
 test('a return racing the last launch preflight cannot reopen a cancelled handoff',async t=>{

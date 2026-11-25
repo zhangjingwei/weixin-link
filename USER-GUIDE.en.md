@@ -4,7 +4,7 @@ Describe what you want to do. You do not need to memorize commands or switch con
 
 ## Getting started
 
-Follow the [README](README.en.md#quick-start) on the installation computer. Complete model authorization and WeChat sign-in yourself; enter API keys only there. A short guide appears after login. Keep that computer running and connected.
+Follow the [README](README.en.md#quick-start) on the installation computer. Complete model authorization and WeChat sign-in yourself; enter API keys only there. Send “guide” in WeChat whenever you need the usage guide. Keep that computer running and connected.
 
 ## Assign work and check progress
 

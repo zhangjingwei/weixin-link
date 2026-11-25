@@ -1,7 +1,7 @@
 import {memoryCommand} from '../../base/codex/native-memory.mjs'
 
 const english={
-  plan:'计划',review:'代码审查',
+  review:'代码审查',
  compare:'对比审查','commit-review':'审查提交',compact:'压缩上下文',fork:'分叉会话',branch:'旁支会话',
   'fast-on':'开启快速模式','fast-off':'关闭快速模式',
   stop:'停止',exit:'退出',
@@ -11,7 +11,6 @@ const english={
 
 export function controlCommand(text) {
   const raw=text.trim(),command=english[raw.toLowerCase()]??raw
-  if(command==='计划')return {action:'prompt',target:'plan'}
   if(command==='代码审查')return {action:'review',target:{type:'uncommittedChanges'}}
   if(command==='对比审查')return {action:'prompt',target:'reviewBranch'}
   if(command==='审查提交')return {action:'prompt',target:'reviewCommit'}
@@ -32,11 +31,18 @@ export function controlCommand(text) {
   return null
 }
 
+// Only recovery controls are interpreted before the model sees a new message.
+export function recoveryControlCommand(text) {
+  const value=text.trim().toLowerCase().replace(/[。？！!?]$/u,'')
+  if(value==='stop'||value==='停止')return {action:'stop'}
+  if(value==='exit'||value==='退出')return {action:'exit'}
+  return null
+}
+
 export function completeControlPrompt(target,text){
  const value=text.trim()
  if(!value)return {error:'请输入内容。'}
  if(target==='steer')return value.length<=12000?{command:{action:'steer',text:value}}:{error:'补充内容不能超过12000字。'}
- if(target==='plan')return value.length<=12000?{command:{action:'plan',text:value}}:{error:'计划需求不能超过12000字。'}
  if(target==='reviewBranch')return /^[A-Za-z0-9._/-]{1,120}$/.test(value)?{command:{action:'review',target:{type:'baseBranch',branch:value}}}:{error:'请输入分支名称，例如 main。'}
  if(target==='reviewCommit')return /^\d{1,2}$/.test(value)&&Number(value)>0?{command:{action:'reviewCommit',selection:value}}:{error:'请回复列表中的编号。'}
  if(target==='resume')return /^\d{1,3}$/.test(value)&&Number(value)>0?{command:{action:'resume',selection:value}}:{error:'请回复列表中的编号。'}

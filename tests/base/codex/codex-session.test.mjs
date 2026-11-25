@@ -131,7 +131,7 @@ test('owner isolation, deduplication, queue, stop, questions, persistence, and f
   } finally { manager.close(); await manager.saving; await rm(dir, { recursive: true, force: true }) }
 })
 
-test('design advice gets one visible marker in the saved and delivered final',async()=>{
+test('design advice is saved and delivered without adding a marker',async()=>{
  const output=[]
  const manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner']})
  manager.save=async()=>{}
@@ -141,9 +141,8 @@ test('design advice gets one visible marker in the saved and delivered final',as
  try{
   await manager.event(session,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'answer',type:'agentMessage',phase:'final_answer',text:'建议先验证移动端网页需求。'}}})
   await manager.event(session,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
-  assert.match(output[0],/^💡 Zero · 方案讨论\n建议先验证移动端网页需求。/)
-  assert.match(manager.state.users.owner.lastReply,/^💡 Zero · 方案讨论\n建议先验证移动端网页需求。/)
-  assert.equal((output[0].match(/💡 Zero · 方案讨论/g)??[]).length,1)
+  assert.equal(output[0],'建议先验证移动端网页需求。')
+  assert.equal(manager.state.users.owner.lastReply,'建议先验证移动端网页需求。')
  }finally{manager.close()}
 })
 
@@ -352,7 +351,7 @@ test('multi-sentence commentary is sent once when its item completes',async()=>{
 test('completion marker follows final delivery once and never marks an active partial answer complete',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'end-marker-')),output=[],manager=await new SessionManager({stateDir:dir,cwd:join(dir,'work'),owners:['owner'],completionMarkers:true}).init();manager.state.users.owner={}
  const s={userId:'owner',threadId:'thread',turnId:'turn',turnReady:true,busy:true,finals:[],items:new Map(),queue:[],reply:async text=>{output.push(text);return {status:'accepted'}}}
- try{await manager.event(s,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'partial',type:'agentMessage',phase:'partial_answer',text:'仍在处理。'}}});assert.equal(output.length,0);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.deepEqual(output,['仍在处理。\n\n✅ 本轮回答结束。']);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.equal(output.length,1);assert.equal(manager.state.users.owner.lastReply,'仍在处理。\n\n✅ 本轮回答结束。')}finally{manager.close();await rm(dir,{recursive:true,force:true})}
+ try{await manager.event(s,{method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'partial',type:'agentMessage',phase:'partial_answer',text:'仍在处理。'}}});assert.equal(output.length,0);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.deepEqual(output,['仍在处理。']);await manager.event(s,{method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});assert.equal(output.length,1);assert.equal(manager.state.users.owner.lastReply,'仍在处理。')}finally{manager.close();await rm(dir,{recursive:true,force:true})}
 })
 test('confirmed routed source turn replaces model completion with one queued status',async()=>{
  const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['owner'],completionMarkers:true})
@@ -427,7 +426,7 @@ test('connection close drains a queued completion before declaring the result un
  callbacks.event({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}})
  callbacks.close()
  await session.events
- assert.deepEqual(output,['最终结果。\n\n✅ 本轮回答结束。'])
+ assert.deepEqual(output,['最终结果。'])
  assert.equal(manager.state.users.owner.recovery.execution,'completed')
  assert.equal(manager.state.users.owner.recovery.delivery,'accepted')
  assert.ok(!events.includes('delivery.suppressed'))
@@ -510,7 +509,7 @@ test('waiting attachment preserves logical task and produces only one completion
  await m.event(s,{method:'turn/started',params:{threadId:'t',turn:{id:s.turnId}}})
  await m.event(s,{method:'item/completed',params:{threadId:'t',item:{type:'agentMessage',phase:'final_answer',text:'文件总结完成。'}}})
  await m.event(s,{method:'turn/completed',params:{threadId:'t',turn:{id:s.turnId,status:'completed'}}})
- assert.equal(out.filter(t=>t.includes('本轮回答结束')).length,1);assert.equal(m.state.users.u.waitingAttachment,undefined)
+ assert.equal(out.filter(t=>t.includes('本轮回答结束')).length,0);assert.equal(m.state.users.u.waitingAttachment,undefined)
  }finally{await rm(dir,{recursive:true,force:true})}
 })
 
@@ -709,17 +708,38 @@ test('tool statistics stay on demand and a long turn gets sparse waiting notices
  await send('item/started',{item:{id:'search-2',type:'webSearch'}})
  assert.deepEqual(output,[])
  assert.equal(session.lastProgress.text,'工具报告进度 70%。')
- t.mock.timers.tick(89_999)
+ t.mock.timers.tick(179_999)
  assert.deepEqual(output,[])
  t.mock.timers.tick(1)
+ await new Promise(resolve=>setImmediate(resolve))
  await session.delivering
- assert.deepEqual(output,['仍在处理，结果完成后会继续回复。'])
- t.mock.timers.tick(119_999)
+ assert.deepEqual(output,['暂未确认任务仍在执行，已核对执行连接；结果状态待确认。'])
+ t.mock.timers.tick(299_999)
  assert.equal(output.length,1)
  t.mock.timers.tick(1)
+ await new Promise(resolve=>setImmediate(resolve))
  await session.delivering
  assert.equal(output.length,2)
  session.busy=false
  t.mock.timers.tick(240_000)
  assert.equal(output.length,2)
+})
+
+test('heartbeat checks execution and drops a late check after completion; key updates are immediate and deduplicated',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout']})
+ const output=[],manager=new SessionManager({stateDir:'/unused',cwd:'/unused',owners:['u']})
+ const session={userId:'u',threadId:'t',busy:true,items:new Map(),reply:async text=>{output.push(text);return {status:'accepted'}}}
+ manager.sessions.set('u',session)
+ let checks=0,release
+ session.rpc={request:async()=>{checks++;return checks===1?{thread:{id:'t',status:{type:'active'}}}:new Promise(resolve=>{release=resolve})}}
+ const send=(method,params)=>manager.event(session,{method,params:{threadId:'t',turnId:'a',...params}})
+ await send('turn/started',{turn:{id:'a'}})
+ const update={item:{id:'p',type:'agentMessage',phase:'commentary',text:'发现配置不匹配，正在修正。'}}
+ await send('item/completed',update);await send('item/completed',update)
+ assert.deepEqual(output,['发现配置不匹配，正在修正。'])
+ t.mock.timers.tick(180000);await new Promise(resolve=>setImmediate(resolve));await session.delivering
+ assert.equal(checks,1);assert.equal(output.at(-1),'任务仍在执行，暂无新的关键进展。')
+ t.mock.timers.tick(300000);await new Promise(resolve=>setImmediate(resolve));assert.equal(checks,2)
+ session.finalReceived=true;session.busy=false;release({thread:{id:'t',status:{type:'active'}}})
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(output.length,2)
 })

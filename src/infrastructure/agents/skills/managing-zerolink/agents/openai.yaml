@@ -1,0 +1,11 @@
+interface:
+  display_name: "微信助手控制台"
+  short_description: "管理微信助手的项目、会话、任务、计划和服务"
+  default_prompt: "使用 $managing-zerolink 查看我的项目和正在进行的任务。"
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "zerolink-management"
+      description: "微信助手账号服务提供的本地管理接口"
+policy:
+  allow_implicit_invocation: true

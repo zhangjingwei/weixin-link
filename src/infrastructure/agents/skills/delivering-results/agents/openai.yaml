@@ -1,0 +1,4 @@
+interface:
+  display_name: "成果交付"
+  short_description: "实施已明确的需求，验证改动并交付代码、报告或文件成果"
+  default_prompt: "使用 $delivering-results 完成并验证这项已确定的改动。"

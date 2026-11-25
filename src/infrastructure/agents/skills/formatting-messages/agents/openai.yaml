@@ -1,0 +1,4 @@
+interface:
+  display_name: "微信消息排版"
+  short_description: "整理包含代码、多项对比或附件的微信回复，便于阅读和复制"
+  default_prompt: "使用 $formatting-messages 整理这条包含代码和附件的微信回复。"

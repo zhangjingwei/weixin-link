@@ -1,7 +1,5 @@
-import {createHash} from 'node:crypto'
 import {submitProjectTask} from '../management/project-task-management.mjs'
-
-export const entryRequestId=id=>{const h=createHash('sha256').update('entry-route:'+id).digest('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`}
+import {entryRequestId} from '../../domain/messages/message-identity.mjs'
 export async function entryAction(context,message,record,step,index){
  const {service,manager,conversations}=context,owner=message._conversationOwner??message.userId,caller=message.userId,args={projectId:step.projectId},requestId=entryRequestId(index?message._ingressId+':'+index:message._ingressId)
  if(step.action==='clarify')return step.question||'这条请求要交给哪个项目？'
@@ -24,7 +22,7 @@ export async function entryAction(context,message,record,step,index){
   const text=record.steps.length>1?'用户原始请求（只有下方指定片段属于本项目任务，其他项目仅作上下文）：\n'+record.text+'\n本任务只执行以下原文片段，并遵守原请求中的共同约束：\n'+step.text:record.text
   let preparedInput=step.useAttachments===true||step.useAttachments===undefined&&record.steps.length===1?record.preparedInput:record.preparedInput?.references?{references:record.preparedInput.references}:undefined
   if(preparedInput?.attachments?.length&&context.prepareHandoff)preparedInput=await context.prepareHandoff({sourceKey:record.materialSourceKey??caller,targetKey:target.key,ingressId:record.materialIngressId??message._ingressId,input:preparedInput})
-  const result=await submitProjectTask(service,owner,caller,{...args,text,requestId},{allowCurrent:true,title:step.title,dependencies,preparedInput})
+  const result=await submitProjectTask(service,owner,caller,{...args,text,requestId},{allowCurrent:true,title:step.title,dependencies,preparedInput:target.key===caller?{...preparedInput,chatIngressId:message._ingressId}:preparedInput})
   record.receipts??={};record.receipts[index]=result.data
   return result.status==='queued'?'':'任务未确认入队；未自动重试。'
  }

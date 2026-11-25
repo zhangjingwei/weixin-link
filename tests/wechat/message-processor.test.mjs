@@ -30,11 +30,11 @@ test('extracted message processor rejects unauthorized, cancelled and stale mess
  f.deps.jobs.rawCurrent=()=>false;await f.handle({userId:'owner',text:'ping',_ingressId:'stale'})
  assert.deepEqual(f.sent,[]);assert.deepEqual(f.acked,[]);assert.deepEqual(f.submitted,[])
 })
-test('extracted processor retains ping handling and durable ordinary submission',async()=>{
+test('ping and ordinary text both enter durable model submission',async()=>{
  const f=fixture();await f.handle({userId:'owner',text:'ping',_ingressId:'ping-id'})
- assert.deepEqual(f.sent,[['owner','pong 〔系统通知〕']]);assert.deepEqual(f.acked,['ping-id'])
+ assert.deepEqual(f.sent,[]);assert.deepEqual(f.acked,[])
  await f.handle({userId:'owner',text:'normal request',_ingressId:'request-id'})
- assert.equal(f.submitted.length,1);assert.equal(f.submitted[0][0],'owner');assert.equal(f.submitted[0][2],'request-id')
+ assert.equal(f.submitted.length,2);assert.equal(f.submitted[0][1].text,'ping');assert.equal(f.submitted[1][2],'request-id')
 })
 test('maintenance keeps persisted messages pending for replay after drain',async()=>{
  const f=fixture(),deferred=[]
@@ -52,10 +52,11 @@ test('inbound trace is retained through message logging and durable submission',
  assert.equal(events.find(e=>e.event==='message.received').trace_id,'message-trace-123')
  assert.equal(f.submitted[0][1].traceId,'message-trace-123')
 })
-test('retired diagnostic and maintenance phrases enter durable model intake',async()=>{
+test('ordinary management and native session requests enter durable model intake',async()=>{
  const f=fixture()
- for(const [index,text] of ['查看最近错误','重启','升级'].entries())await f.handle({userId:'owner',text,_ingressId:'request-'+index})
- assert.deepEqual(f.submitted.map(([,input])=>input.text),['查看最近错误','重启','升级'])
+ const requests=['查看最近错误','重启','升级','看看我的计划','代码审查','压缩上下文','分叉会话','开启快速模式','记忆']
+ for(const [index,text] of requests.entries())await f.handle({userId:'owner',text,_ingressId:'request-'+index})
+ assert.deepEqual(f.submitted.map(([,input])=>input.text),requests)
  assert.deepEqual(f.sent,[])
 })
 test('a new ordinary message resends a definitively rejected prior text result before submission',async()=>{
@@ -113,18 +114,26 @@ test('transcribed voice upgrade request enters durable model intake',async()=>{
  assert.equal(f.submitted[0][1].text,'升级。')
 })
 
-test('standalone greeting replies locally once, even when the model is unavailable',async()=>{
- const f=fixture(),claims=new Set()
- f.deps.manager.sessions.clear()
- f.deps.entryRouting={process:async()=>assert.fail('unexpected model routing')}
- f.deps.jobs.claimReceipt=id=>!claims.has(id)&&!!claims.add(id)
- f.deps.outgoing.deliver=async(id,text)=>{f.sent.push([id,text]);return {status:'unknown'}}
- const handle=createMessageProcessor(f.deps)
- const message={userId:'owner',text:'你好！',_ingressId:'hello'}
- await handle(message)
- await handle({...message,_recovered:true})
- assert.deepEqual(f.sent,[['owner','你好！有什么可以帮你？']])
- assert.deepEqual(f.submitted,[])
+test('standalone greetings reach the current model unchanged in first and existing sessions',async()=>{
+ for(const existing of [false,true]){
+  const f=fixture();if(!existing)f.deps.manager.sessions.clear()
+  f.deps.entryRouting={process:async()=>assert.fail('greeting must stay in current conversation')}
+  const handle=createMessageProcessor(f.deps)
+  for(const [i,text] of ['hi','hello','你好','您好！','嗨','哈喽','HI!','ping'].entries())await handle({userId:'owner',text,_ingressId:'greeting-'+i})
+  assert.deepEqual(f.submitted.map(args=>[args[0],args[1].text]),['hi','hello','你好','您好！','嗨','哈喽','HI!','ping'].map(text=>['owner',text]))
+  assert.deepEqual(f.sent,[]);assert.deepEqual(f.acked,[])
+ }
+})
+
+test('greetings retain permission and cancellation gates, while explicit stop stays a command',async()=>{
+ const f=fixture(),handled=[]
+ f.deps.manager.acceptMessage=async()=>true
+ f.deps.manager.handle=async(owner,text)=>handled.push([owner,text])
+ f.handle=createMessageProcessor(f.deps)
+ await f.handle({userId:'stranger',text:'hi'})
+ await f.handle({userId:'owner',text:'hello',_intakeToken:{current:()=>false}})
+ await f.handle({userId:'owner',text:'停止'})
+ assert.deepEqual(f.submitted,[]);assert.deepEqual(handled,[['owner','停止']])
 })
 
 test('greetings with requests, quotes or pending clarification retain normal routing',async()=>{
@@ -208,4 +217,9 @@ test('first message with no live session goes straight to durable intake',async(
  assert.equal(f.submitted.length,1)
  assert.equal(f.submitted[0][2],'cold-start')
  assert(!events.some(event=>event.startsWith('agent.readiness')))
+})
+
+test('thanks and short confirmations remain model input and never get a canned acknowledgement',async()=>{
+ const f=fixture();for(const text of ['谢谢','好的','收到','对','继续'])await f.handle({userId:'owner',text,_ingressId:text})
+ assert.deepEqual(f.submitted.map(args=>args[1].text),['谢谢','好的','收到','对','继续']);assert.deepEqual(f.sent,[])
 })

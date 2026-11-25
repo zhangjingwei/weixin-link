@@ -26,6 +26,7 @@ export async function recover(context,job,reply,token,{completedTurn,rpc}={}){
     else if(record.waitingAttachment?.task?.id===session.localTask.id)delete record.waitingAttachment
     // Delivery may have been accepted before a crash: preserve the result, never blindly resend.
     archiveTaskResult(record)
+    if(record.resultIdentity?.turnId!==turn.id||record.resultIdentity?.threadId!==job.thread_id)delete record.lastConversationUpdates
     if(context.manager.state.users[job.owner].lastTask?.id!==session.localTask.id)context.manager.state.users[job.owner].lastOutput=undefined;context.manager.state.users[job.owner].lastTask=session.localTask;context.manager.state.users[job.owner].recovery={task:session.localTask,execution:executionState(turn.status,waiting),delivery:'recovered'};context.manager.state.users[job.owner].lastReply=finalText;recordTaskResult(record,{taskId:job.id,threadId:job.thread_id,turnId:turn.id,execution:executionState(turn.status,waiting),delivery:'recovered'})
     const native=job.context?.nativeQueue
     if(native)record.resultIdentity.delivery=record.recovery.delivery='unknown'
