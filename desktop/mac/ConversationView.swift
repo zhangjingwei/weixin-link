@@ -10,6 +10,7 @@ private let surface = Color(nsColor: .controlBackgroundColor)
   @State private var snapshot: Snapshot?
   @State private var phone: String?
   @State private var online = false
+  @State private var editRevision:Int?
   @State private var writing = false
   @State private var drafts: [String: String] = [:]
   @State private var notices: [String: String] = [:]
@@ -71,7 +72,7 @@ private let surface = Color(nsColor: .controlBackgroundColor)
         ))
       struct Receipt: Decodable { let status: String }
       switch try JSONDecoder().decode(Receipt.self, from: data).status {
-      case "taken": notices[project] = "Mac 已接手。"
+      case "taken": editRevision=current.revision+1; notices[project] = "Mac 已接手。"
       case "queued", "accepted":
         notices[project] = action == "steer" ? "补充已提交给原任务。" : "消息已排队。"
         if drafts[target] == original { drafts.removeValue(forKey: target) }
@@ -191,7 +192,7 @@ private let surface = Color(nsColor: .controlBackgroundColor)
   }
   func content(_ view: Snapshot) -> some View {
     let active = view.project == view.activeProject
-    let writable = active && view.writer == "mac" && online
+    let writable = active && view.writer == "mac" && online && editRevision == view.revision
     return VStack(alignment: .leading, spacing: 0) {
       VStack(alignment: .leading, spacing: 4) {
         Text(view.name).font(.title2.bold())
@@ -242,13 +243,13 @@ private let surface = Color(nsColor: .controlBackgroundColor)
         }
         HStack {
           Image(systemName: "laptopcomputer")
-          Text(!online ? "服务未连接 · 只读" : !active ? "浏览其他会话 · 只读" : writable ? "Mac 正在操作" : "微信端正在操作")
+          Text(!online ? "服务未连接 · 只读" : !active ? "浏览其他会话 · 只读" : writable ? "Mac 正在操作" : view.writer == "mac" ? "Mac 持有操作权 · 当前只读" : "微信端正在操作")
           Spacer()
           if active && !writable && online {
             Button {
-              Task { await act("take", view) }
+              if view.writer == "mac" {editRevision=view.revision}else{Task { await act("take", view) }}
             } label: {
-              Text("在 Mac 接手").fontWeight(.medium).foregroundStyle(.white).padding(.horizontal, 12)
+              Text(view.writer == "mac" ? "继续在 Mac 操作":"在 Mac 接手").fontWeight(.medium).foregroundStyle(.white).padding(.horizontal, 12)
                 .padding(.vertical, 6).background(leaf, in: RoundedRectangle(cornerRadius: 6))
             }.buttonStyle(.plain).disabled(writing)
           }

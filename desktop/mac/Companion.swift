@@ -37,5 +37,5 @@ func call(_ request: Request) async throws -> Data {
 }
 
 @main struct CompanionApp: App {
-    var body: some Scene { Window("Weixin Link", id: "conversation") { ConversationView() }.defaultSize(width: 1120, height: 720).windowStyle(.hiddenTitleBar) }
+    var body: some Scene { Window("Weixin Link", id: "conversation") { SetupRoot() }.defaultSize(width: 1120, height: 720).windowStyle(.hiddenTitleBar) }
 }
