@@ -10,8 +10,9 @@ import {grade} from '../infrastructure/agents/evals/grade.mjs'
 const projectRoot=fileURLToPath(new URL('../..',import.meta.url))
 const skillRoot=join(projectRoot,'src/infrastructure/agents/skills')
 const codexCli=join(projectRoot,'node_modules/@openai/codex/bin/codex.js')
-const usage=`Usage: npm run eval:skills -- [--case ID] [--model MODEL] --codex-home DIR
-       npm run eval:skills -- [--case ID] --responses FILE
+const usage=`Usage: npm run eval:skills -- [--case ID] [--model MODEL] [--show-replies] --codex-home DIR
+       npm run eval:skills -- [--case ID] [--show-replies] --responses FILE
+       npm run eval:skills -- --list
 
 Live mode calls the model using an isolated, already signed-in Codex profile.
 Responses mode grades saved JSON: {"case-id": ["reply for step 1", "reply for step 2"]}.
@@ -22,6 +23,8 @@ function options(argv){
  for(let i=0;i<argv.length;i++){
   const key=argv[i]
   if(key==='--help'){result.help=true;continue}
+  if(key==='--list'){result.list=true;continue}
+  if(key==='--show-replies'){result.show_replies=true;continue}
   if(!['--case','--model','--codex-home','--responses'].includes(key)||!argv[i+1])throw Error(`Unknown or incomplete option: ${key}`)
   result[key.slice(2).replaceAll('-','_')]=argv[++i]
  }
@@ -73,6 +76,7 @@ async function liveAnswers(scenario,{model,codex_home}){
 async function main(){
  const args=options(process.argv.slice(2))
  if(args.help){console.log(usage);return}
+ if(args.list){for(const scenario of cases)console.log(scenario.id);return}
  const selected=args.case?cases.filter(item=>item.id===args.case):cases
  if(!selected.length)throw Error(`Unknown case: ${args.case}`)
  if(args.responses&&args.codex_home)throw Error('Choose --responses or --codex-home')
@@ -95,6 +99,7 @@ async function main(){
    const result=grade(answers[i],step.expect)
    if(!result.pass)failed++
    console.log(`${result.pass?'PASS':'FAIL'} ${scenario.id} step ${i+1}${result.failures.length?' — '+result.failures.join('；'):''}`)
+   if(args.show_replies)console.log(`--- reply ---\n${answers[i]}\n--- end reply ---`)
   }
  }
  console.log(`Evaluated ${selected.length} scenarios; ${failed} failed checks.`)

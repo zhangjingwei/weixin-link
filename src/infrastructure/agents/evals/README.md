@@ -12,7 +12,7 @@ CODEX_HOME=/tmp/zerolink-eval-codex node node_modules/@openai/codex/bin/codex.js
 npm run eval:skills -- --codex-home /tmp/zerolink-eval-codex
 ```
 
-可用 `--case discussion-consensus` 只跑一个场景，或用 `--model <模型名>` 指定模型。实际评测会调用模型，可能产生费用；不会调用微信 SDK。评测会话使用只读沙箱、临时工作目录，结束后删除。
+可用 `--list` 查看场景 ID，用 `--case discussion-consensus` 只跑一个场景，用 `--model <模型名>` 指定模型，或加 `--show-replies` 查看模型原文。实际评测会调用模型，可能产生费用；不会调用微信 SDK。评测会话使用只读沙箱、临时工作目录，结束后删除。
 
 ## 离线检查判定规则
 
@@ -21,6 +21,8 @@ npm run eval:skills -- --codex-home /tmp/zerolink-eval-codex
 ```sh
 npm run eval:skills -- --responses /path/to/responses.json
 ```
+
+单场景文件示例：`{"discussion-advice":["💡 Zero · 方案讨论\n先用表格。"]}`。
 
 可以配合 `--case` 只检查一个场景。失败时命令返回非零状态，并列出未满足的条件。离线模式只检查提供的文本，不证明技能已被模型正确选用。
 
