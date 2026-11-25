@@ -2,9 +2,10 @@ import SwiftUI
 import AppKit
 
 struct Snapshot: Decodable {
-    struct Message: Decodable { let role, text: String; let time: Double?; let legacyFooter: String?; let truncated: Bool?; let files: [File]? }
+    struct ResultLink: Decodable { let project, result: String }
+    struct Message: Decodable { let role, text: String; let time: Double?; let resultId, delivery, legacyFooter: String?; let updates: [String]?; let route: ResultLink?; let truncated: Bool?; let files: [File]? }
     struct Conversation: Decodable, Identifiable { let id, name: String; let group, groupLabel: String? }
-    struct File: Decodable, Hashable { let name, path: String; let root, sourcePath: String? }
+    struct File: Decodable, Hashable { let name, path: String; let root, sourcePath, delivery: String? }
     let name, project, thread, turn, writer: String
     let revision: Int
     let progress: [String]?
@@ -16,7 +17,7 @@ struct Snapshot: Decodable {
 
 struct Request: Encodable {
     var action: String
-    var project: String?, thread: String?, turn: String?, revision: Int?, text: String?, id: String?
+    var project: String?, thread: String?, turn: String?, revision: Int?, text: String?, id: String?, result: String?
 }
 
 enum ClientError: Error { case rejected, unavailable }
@@ -38,4 +39,15 @@ func call(_ request: Request) async throws -> Data {
 
 @main struct CompanionApp: App {
     var body: some Scene { Window("Weixin Link", id: "conversation") { SetupRoot() }.defaultSize(width: 1120, height: 720).windowStyle(.hiddenTitleBar) }
+}
+
+func wechatReceipt(_ state: String?) -> String? {
+    switch state {
+    case "failed": return "微信发送失败"
+    case "partial": return "部分内容未确认送达微信"
+    case "unknown", "sending": return "微信发送结果待确认"
+    case "pending", "deferred": return "等待发送到微信"
+    case "cancelled": return "微信发送已取消"
+    default: return nil
+    }
 }

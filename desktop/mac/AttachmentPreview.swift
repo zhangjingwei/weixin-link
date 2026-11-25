@@ -68,6 +68,7 @@ struct AttachmentRow: View {
             .resizable().frame(width: 34, height: 34)
         }
         VStack(alignment: .leading) {
+          if let receipt = wechatReceipt(file.delivery) { Text(receipt).font(.caption).foregroundStyle(.secondary) }
           if let caption { Text(verbatim:caption).font(.subheadline.weight(.medium)).fixedSize(horizontal:false,vertical:true) }
           Text(verbatim: file.name).lineLimit(1).truncationMode(.middle)
           if let url = file.url, let n = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {

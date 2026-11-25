@@ -11,6 +11,6 @@ export function archiveTaskResult(record,now=Date.now()){
  const identity=record.resultIdentity
  if(!identity||typeof record.lastReply!=='string')return
  const retained=(record.resultArchive??[]).filter(item=>item.identity.id!==identity.id&&Date.parse(item.identity.createdAt)>now-7*86400000)
- retained.push({identity:structuredClone(identity),lastReply:record.lastReply,...record.lastOutput?{lastOutput:structuredClone(record.lastOutput)}:{}})
+ retained.push({identity:structuredClone(identity),lastReply:record.lastReply,...record.lastConversationUpdates?.length?{updates:[...record.lastConversationUpdates]}:{},...record.lastOutput?{lastOutput:structuredClone(record.lastOutput)}:{}})
  record.resultArchive=retained.slice(-20)
 }

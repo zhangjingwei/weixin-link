@@ -20,9 +20,10 @@ private let surface = Color(nsColor: .controlBackgroundColor)
   @State private var preview: Snapshot.File?
   @State private var diffTurn: String?
   @FocusState private var searching: Bool
+  @State private var focusedResult: String?
   func refresh(_ project: String?) async {
     do {
-      let data = try await call(Request(action: "view", project: project))
+      let data = try await call(Request(action: "view", project: project,result:focusedResult))
       let view = try JSONDecoder().decode(Snapshot.self, from: data)
       guard !Task.isCancelled, selected == project, project == nil || project == view.project else {
         return
@@ -47,8 +48,9 @@ private let surface = Color(nsColor: .controlBackgroundColor)
     }
   }
 
-  func select(_ id: String) {
+  func select(_ id: String, result: String? = nil) {
     guard id != (selected ?? snapshot?.project) else { return }
+    focusedResult = result
     preview = nil
     diffTurn = nil
     snapshot = nil
@@ -188,11 +190,16 @@ private let surface = Color(nsColor: .controlBackgroundColor)
           let scoped = Dictionary(grouping:aliases,by:{ $0.0 }).compactMapValues { items in
             Set(items.map { $0.1 }).count == 1 ? items.first?.1 : nil
           }
+          if let updates=m.updates, !updates.isEmpty { ProgressSummary(steps:updates,title:"本轮最近的进展") }
           ReplyBody(text:m.text, paths:Set(scoped.keys), legacyFooter:m.legacyFooter) { key in
             if let f = scoped[key] { diffTurn = nil; preview = f }
           }.padding(14).background(
             RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.2)))
           if m.truncated == true { Text("仅显示长回复开头").font(.caption) }
+          if let receipt = wechatReceipt(m.delivery) { Label(receipt,systemImage:"info.circle").font(.caption).foregroundStyle(.secondary) }
+          if let route = m.route {
+            Button("查看会话 \(route.project) 的执行结果") { select(route.project,result:route.result) }
+          }
           files(m.files ?? [], captions:attachmentCaptions(m.text,paths:Set(scoped.keys)))
         } else {
           Text(verbatim: m.text).textSelection(.enabled).padding(12).background(
@@ -218,7 +225,8 @@ private let surface = Color(nsColor: .controlBackgroundColor)
       ScrollViewReader { reader in
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 22) {
-            ForEach(Array(view.messages.enumerated()), id: \.offset) { _, m in messageRow(m) }
+            Text("最近的会话记录").font(.caption).foregroundStyle(.secondary)
+            ForEach(Array(view.messages.enumerated()), id: \.offset) { i, m in messageRow(m).id(m.resultId ?? "line-\(i)") }
             if view.messages.allSatisfy({ $0.files == nil }) { files(view.files) }
             if view.diff != nil {
               Button {
@@ -233,9 +241,12 @@ private let surface = Color(nsColor: .controlBackgroundColor)
             }
             Color.clear.frame(height: 1).id("end")
           }.padding(18)
-        }.onAppear { reader.scrollTo("end", anchor: .bottom) }.onChange(
+        }.onAppear {
+          if let id = focusedResult, view.messages.contains(where: { $0.resultId == id }) { reader.scrollTo(id,anchor:.top) }
+          else { reader.scrollTo("end",anchor:.bottom) }
+        }.onChange(
           of: view.messages.last?.time
-        ) { _ in if preview == nil { reader.scrollTo("end", anchor: .bottom) } }
+        ) { _ in if preview == nil && focusedResult == nil { reader.scrollTo("end", anchor: .bottom) } }
       }.id(view.project)
       VStack(alignment: .leading, spacing: 7) {
         if writable {
@@ -258,8 +269,11 @@ private let surface = Color(nsColor: .controlBackgroundColor)
         }
         HStack {
           Image(systemName: "laptopcomputer")
-          Text(!online ? "服务未连接 · 只读" : !active ? "浏览其他会话 · 只读" : writable ? "Mac 正在操作" : view.writer == "mac" ? "Mac 持有操作权 · 当前只读" : "微信端正在操作")
+          Text(!online ? "服务未连接 · 只读" : !active ? "只读浏览会话 \(view.project) · 微信当前会话 \(view.activeProject)" : writable ? "Mac 正在操作" : view.writer == "mac" ? "Mac 持有操作权 · 当前只读" : "微信端正在操作")
           Spacer()
+          if !active {
+            Button("跟随微信会话") { focusedResult=nil; preview=nil; diffTurn=nil; snapshot=nil; selected=nil }
+          }
           if active && !writable && online {
             Button {
               if view.writer == "mac" {editRevision=view.revision}else{Task { await act("take", view) }}
@@ -339,6 +353,7 @@ private let surface = Color(nsColor: .controlBackgroundColor)
 
 private struct ProgressSummary: View {
   let steps: [String]
+  var title = "当前任务进展"
   @State private var expanded = false
   var body: some View {
     DisclosureGroup(isExpanded: $expanded) {
@@ -348,7 +363,7 @@ private struct ProgressSummary: View {
         }
       }.font(.callout).padding(.top, 6)
     } label: {
-      Label("当前任务进展 · \(steps.count) 项", systemImage: "list.bullet").font(.callout.weight(.medium))
+      Label("\(title) · \(steps.count) 项", systemImage: "list.bullet").font(.callout.weight(.medium))
     }.padding(10).background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
   }
 }

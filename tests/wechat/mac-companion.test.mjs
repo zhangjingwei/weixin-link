@@ -58,9 +58,10 @@ test('phone file, passive Mac view, contested takeover, same-turn supplement and
  const blocked=wire('停止');await inbound(blocked);assert.equal(received.length,1);assert.match(notices.at(-1),/Mac 正在操作/)
  const steer={...active,action:'steer',id:randomUUID(),text:'只看第二页'}
  assert.equal((await call(steer)).status,'accepted');assert.equal((await call(steer)).status,'unknown');assert.deepEqual(submitted,[{thread:'one',turn:'turn',text:'只看第二页'}])
+ await manager.event(session,{method:'item/completed',params:{threadId:'one',turnId:'turn',item:{id:'progress',type:'agentMessage',phase:'commentary',text:'正在核对第二页'}}})
  await manager.event(session,{method:'item/completed',params:{threadId:'one',turnId:'turn',item:{id:'answer',type:'agentMessage',phase:'final_answer',text:'第二页结果'}}})
  await manager.event(session,{method:'turn/completed',params:{threadId:'one',turn:{id:'turn',status:'completed'}}})
- assert.deepEqual(phoneReplies,['第二页结果\n\n✅ 本轮回答结束。']);assert.equal(calls.filter(method=>method==='turn/start').length,1);assert.ok(!calls.includes('turn/interrupt'))
+ assert.deepEqual((await call({action:'view'})).messages.find(m=>m.role==='助手').updates,['正在核对第二页']);assert.deepEqual(phoneReplies,['正在核对第二页','第二页结果\n\n✅ 本轮回答结束。']);assert.equal(calls.filter(method=>method==='turn/start').length,1);assert.ok(!calls.includes('turn/interrupt'))
  assert.equal((await call({action:'view'})).messages.some(item=>item.text==='第二页结果'),true)
  assert.equal((await call({action:'view'})).progress,undefined);assert.equal((await call({action:'view'})).diff,undefined)
  const reclaim=wire('微信接手 '+active.revision);await inbound(reclaim);await inbound(reclaim);assert.equal(access.read().writer,'wechat')
@@ -80,4 +81,23 @@ test('historical and current assistant display keep original results and scope s
  assert.deepEqual(old.files,[{name:'图.png',path:file.path,root,sourcePath:file.sourcePath}]);assert.deepEqual(current.files,[])
  assert.equal(record.lastReply,original+'\n\n'+marker);record.resultIdentity.footerOffset=null;record.lastReply=original
  assert.equal((await run({action:'view'})).messages.at(-1).text,original)
+})
+
+test('routed WeChat receipt links to the exact retained result; target files and delivery evidence stay in that thread',async()=>{
+ const entries=[{id:'5',key:'source',name:'来源'},{id:'8',key:'target',name:'开发'}],identity=(id,threadId)=>({id,taskId:'job'+id,threadId,createdAt:'2026-01-01T00:00:00Z'})
+ const root='/data/outgoing/'+createHash('sha256').update('target').digest('hex').slice(0,24)
+ const users={source:{threadId:'s',resultIdentity:identity('a','s'),lastReply:'任务已转交'},target:{threadId:'t',resultArchive:[{identity:{...identity('b','t'),delivery:'partial'},lastReply:'开发结果',lastOutput:{attachments:['accepted','failed','failed'].map((status,i)=>({path:root+'/'+i,status}))}}],resultIdentity:identity('c','t'),lastReply:'普通任务',supplements:Array.from({length:45},(_,i)=>({threadId:'t',created:'2026-01-02',text:String(i)}))}}
+ const op={owner:'account',caller:'source',projectId:'8',name:'route_conversation_request',status:'queued',sourceTaskId:'joba',data:{projectId:'8',taskId:'jobb'}}
+ const view=macCompanion({owner:'account',access:{read:()=>({writer:'wechat',revision:7})},conversations:{ensure:()=>({active:'5',entries})},manager:{state:{users,managementOperations:[op]},sessions:new Map()},jobs:{companionMessages:()=>[]},stateDir:'/data'})
+ const source=await view({action:'view',project:'5',result:'b'});assert.deepEqual(source.messages.map(m=>m.text),['任务已转交']);assert.deepEqual(source.files,[])
+ const link=source.messages[0].route;assert.deepEqual(link,{project:'8',result:'b'});const target=await view({action:'view',...link});assert.equal(target.activeProject,'5');assert.equal(target.writer,'wechat');const result=target.messages.find(m=>m.resultId==='b');assert.equal(result.delivery,'partial');assert.deepEqual(result.files.map(f=>f.delivery),['accepted','failed','failed']);assert.equal(target.messages.filter(m=>m.resultId==='b').length,1)
+ for(const change of [{status:'unknown'},{owner:'another'},{sourceTaskId:'unrelated'}]){const prior={...op};Object.assign(op,change);assert.equal((await view({action:'view'})).messages[0].route,undefined);Object.assign(op,prior)}
+ users.target.threadId='new';assert.equal((await view({action:'view'})).messages[0].route,undefined);users.target.threadId='t';entries[1].archived=true;assert.equal((await view({action:'view'})).messages[0].route,undefined)
+})
+
+test('a Mac-originated ordinary message appears once and its WeChat echo uses the same body',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'mac-send-')),jobs=new DurableJobs(join(dir,'inbox.sqlite'));t.after(async()=>{jobs.close();await rm(dir,{recursive:true,force:true})})
+ const notices=[],run=macCompanion({owner:'account',access:{read:()=>({writer:'mac',revision:1})},conversations:{ensure:()=>({active:'5',entries:[{id:'5',key:'source'}]})},manager:{state:{users:{source:{threadId:'thread'}}},sessions:new Map()},jobs,stateDir:dir,ready:()=>true,submit:(...args)=>jobs.add(...args),notice:async(owner,text)=>notices.push([owner,text])})
+ const args={action:'send',project:'5',thread:'thread',turn:'',revision:1,id:randomUUID(),text:'Mac 新问题'}
+ await run(args);await run(args);assert.deepEqual((await run({action:'view'})).messages.map(m=>m.text),[args.text]);assert.deepEqual(notices,[['account','Mac 发来：'+args.text]])
 })
