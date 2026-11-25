@@ -1,3 +1,4 @@
+import {taskProgress} from '../../domain/tasks/progress-state.mjs'
 import {createHash} from 'node:crypto'
 import {basename,join,resolve,sep} from 'node:path'
 import {entryRequestId,taskId} from '../../domain/messages/message-identity.mjs'
@@ -76,7 +77,7 @@ export function macCompanion({access,owner,conversations,manager,jobs,stateDir,s
    messages.sort((a,b)=>a.time-b.time)
    const window=messages.slice(-40),focus=typeof request.result==='string'&&messages.find(m=>m.resultId===request.result)
    if(focus&&!window.includes(focus))window.unshift(focus)
-   return {...identity,...state,progress,diff:turn&&session.threadId===thread&&session.companionDiff?.turn===turn?session.companionDiff.text:undefined,name:entry.name,activeProject:catalog.active,conversations:entries.map(({id,key,name})=>{const saved=manager.state.users[key];return {id,name,group:saved?.nativeProjectId??null,groupLabel:saved?.nativeProjectId?(basename(saved.workspace??'')||saved.nativeProjectId):null}}),messages:window,files:files.slice(-40)}
+   return {...identity,...state,taskStatus:taskProgress(session),progress,diff:turn&&session.threadId===thread&&session.companionDiff?.turn===turn?session.companionDiff.text:undefined,name:entry.name,activeProject:catalog.active,conversations:entries.map(({id,key,name})=>{const saved=manager.state.users[key];return {id,name,group:saved?.nativeProjectId??null,groupLabel:saved?.nativeProjectId?(basename(saved.workspace??'')||saved.nativeProjectId):null}}),messages:window,files:files.slice(-40)}
   }
   if(!ready()||manager.state.desktopHandoff||manager.desktopTransition)throw Error('COMPANION_UNAVAILABLE')
   if(request.project!==entry.id||request.thread!==thread||state.revision!==request.revision)stale()

@@ -1,3 +1,4 @@
+import {taskProgress,heartbeatDue} from '../../domain/tasks/progress-state.mjs'
 import {recordTaskResult,archiveTaskResult} from '../tasks/task-result.mjs'
 import {currentMaterials,hasAttachments} from '../../domain/messages/material-association.mjs'
 import {executionState} from '../../domain/tasks/execution-state.mjs'
@@ -109,20 +110,30 @@ export class SessionManager {
         this.diagnostic(session,'turn.waiting_progress',{duration_ms:quietMs})
       }
       const now=Date.now()
-      const sinceNotice=now-Math.max(session.progressStartedAt??now,session.lastUserNoticeAt??0)
-      const interval=session.lastWaitNoticeAt?120_000:90_000
       const waiting=!session.nativeActiveFlags?.length && ![...this.questions.values()].some(q=>q.session===session)
-      if(waiting && !session.contextRejected && sinceNotice>=interval){
-        const current=()=>this.sessions.get(session.userId)===session && session.turnId===turnId &&
+      if(waiting && !session.contextRejected && heartbeatDue(session,now)){
+        const current=()=>this.sessions.get(session.userId)===session && session.turnId===turnId && session.traceId===traceId &&
           session.busy && !session.finalReceived && !session.contextRejected && !session.exiting &&
-          session.state!=='stopping' && !session.rpcAttempt?.closing && session.workToken?.current()!==false
-        session.lastUserNoticeAt=now
+          !session.nativeActiveFlags?.length && !session.waitingAttachment && session.state!=='stopping' && !session.rpcAttempt?.closing && session.workToken?.current()!==false
         session.lastWaitNoticeAt=now
-        void this.emit(session,'仍在处理，结果完成后会继续回复。',current)
+        // Query the same execution connection; never infer work from service health.
+        void (async()=>{
+          try{
+            const thread=await this.protocol.read(session.rpc,session.threadId)
+            if(current()&&thread?.id===session.threadId){
+              session.nativeStatus=thread.status?.type
+              session.nativeActiveFlags=waitingFlags.filter(flag=>thread.status?.activeFlags?.includes(flag))
+              if(thread.status?.type==='active')session.executionEvidenceAt=Date.now()
+              else session.executionEvidenceAt=null
+            }
+          }catch{if(current())session.executionEvidenceAt=null}
+          if(current())await this.emit(session,taskProgress(session).phase==='running'
+            ?'任务仍在执行，暂无新的关键进展。':'暂未确认任务仍在执行，已核对执行连接；结果状态待确认。',current)
+        })()
       }
-      const untilNotice=(session.lastWaitNoticeAt?120_000:90_000)-(Date.now()-Math.max(session.progressStartedAt??Date.now(),session.lastUserNoticeAt??0))
-      const untilDiagnostic=quietMs<30_000?30_000-quietMs:30_000
-      session.progressTimer=setTimeout(report,Math.min(untilDiagnostic,Math.max(1,untilNotice)))
+      const due=Math.max((session.lastUserNoticeAt??session.progressStartedAt??now)+180_000,
+        session.lastWaitNoticeAt?session.lastWaitNoticeAt+300_000:0)
+      session.progressTimer=setTimeout(report,Math.min(quietMs<30_000?30_000-quietMs:30_000,due>now?due-now:30_000))
       session.progressTimer.unref?.()
     }
     session.progressTimer=setTimeout(report,30_000)
@@ -549,6 +560,7 @@ export class SessionManager {
       const flags=p.status?.type==='active' && Array.isArray(p.status.activeFlags)
         ? waitingFlags.filter(flag=>p.status.activeFlags.includes(flag)) : []
       const previous=session.nativeActiveFlags??[]
+      if(session.busy)session.executionEvidenceAt=p.status?.type==='active'?Date.now():null
       session.nativeStatus=p.status?.type
       session.nativeActiveFlags=flags
       if(previous.join()!==flags.join()){
@@ -558,7 +570,7 @@ export class SessionManager {
       return
     }
     if(message.method==='thread/closed'&&p.threadId===session.threadId){
-      session.nativeStatus='notLoaded';session.nativeActiveFlags=[]
+      session.nativeStatus='notLoaded';session.nativeActiveFlags=[];session.executionEvidenceAt=null
       if(!session.busy&&!session.finishing&&this.sessions.get(session.userId)===session){
         this.sessions.delete(session.userId);clearTimeout(session.idleReleaseTimer)
         transition(session,'closed');this.detachRpc(session,session.rpcAttempt)
@@ -660,7 +672,7 @@ export class SessionManager {
     if (message.method === 'turn/started' && session.busy) {
       if(session.turnReady&&session.turnId&&p.turn?.id!==session.turnId){this.diagnostic(session,'event.ignored',{reason:'other_turn',method:message.method});return}
       session.turnReady = true; session.turnStarted = true; session.turnId = p.turn.id
-      session.progressStartedAt=Date.now();session.lastUserNoticeAt=Date.now();session.lastWaitNoticeAt=0
+      session.progressStartedAt=Date.now();session.lastUserNoticeAt=Date.now();session.lastWaitNoticeAt=0;session.executionEvidenceAt=Date.now()
       session.executionModel=p.turn.model??session.executionModel
       this.watchTurnProgress(session)
       this.diagnostic(session,'turn.started',{provider:session.provider,model:session.executionModel,model_provider:session.modelProvider})
@@ -672,7 +684,7 @@ export class SessionManager {
         this.submissions.submitted(job.id,p.turnId)
         transition(session,'running')
         Object.assign(session,{taskId:job.id,traceId:job.context.flowNonce,turnId:p.turnId,turnReady:true,turnStarted:true,
-          nativeQueueTurn:true,modelRetry:null,startedAt:Date.now(),executionModel:session.model,tokenUsage:null,finalReceived:false,finals:[],displayFinals:[],
+          nativeQueueTurn:true,modelRetry:null,startedAt:Date.now(),progressStartedAt:Date.now(),lastUserNoticeAt:Date.now(),lastWaitNoticeAt:0,executionEvidenceAt:Date.now(),executionModel:session.model,tokenUsage:null,finalReceived:false,finals:[],displayFinals:[],
           localTask:job.context.task,requestText:job.input?.text??job.input,materials:job.context.materials??[],
           generatedOutputs:[],imageOutputIds:new Set(),waitingAttachment:false,attachmentContinuation:null,lastProgress:null})
         session.items.clear()
@@ -688,6 +700,7 @@ export class SessionManager {
           session.workToken?.current()===false || typeof p.delta!=='string' || !p.delta.length)return
       if(streamKind!=='commandOutput')this.reportModelRecovery(session)
       const now=Date.now()
+      session.executionEvidenceAt=now
       session.lastStageAt=now
       if(session.streamProgress?.turnId!==p.turnId)session.streamProgress={turnId:p.turnId,kinds:new Map()}
       const kinds=session.streamProgress.kinds
@@ -705,7 +718,7 @@ export class SessionManager {
       if (!session.busy || !session.turnReady || (session.finalReceived&&p.item?.type!=='imageGeneration')) { this.diagnostic(session,'event.ignored',{reason:'inactive_or_final',method:message.method}); return }
       if (p.turnId && p.turnId !== session.turnId) { this.diagnostic(session,'event.ignored',{reason:'old_turn',method:message.method}); return }
     }
-    if ((message.method==='item/started'||message.method==='item/completed') && p.item?.type && p.item.type!=='userMessage') this.watchTurnProgress(session)
+    if ((message.method==='item/started'||message.method==='item/completed') && p.item?.type && p.item.type!=='userMessage') {session.executionEvidenceAt=Date.now();this.watchTurnProgress(session)}
     if (['item/started','item/completed'].includes(message.method) && p.item?.type==='commandExecution' && p.item.id){
       const item=p.item
       if(session.commandProgress?.turnId!==session.turnId)
@@ -746,7 +759,7 @@ export class SessionManager {
         if (p.item.phase === 'commentary') {
           const turnId = session.turnId
           if(session.contextRejected){this.diagnostic(session,'notification.suppressed',{reason:'context_rejected'});return}
-          if(rest){
+          if(rest && !(session.lastProgress?.turnId===session.turnId&&session.lastProgress.updates?.includes(rest))){
             const delivered=await this.emit(session, rest, () => (session.workToken?.current()??true) && session.busy && !session.finalReceived && session.turnId === turnId)
             if(delivered&&session.turnId===turnId){this.recordProgress(session,turnId,rest,Date.now(),true);session.lastUserNoticeAt=Date.now()}
           }

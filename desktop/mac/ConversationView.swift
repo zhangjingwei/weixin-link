@@ -221,6 +221,14 @@ private let surface = Color(nsColor: .controlBackgroundColor)
         Text(groupName(rows.first { $0.id == view.project })).font(.subheadline)
           .foregroundStyle(.secondary)
       }.padding(18)
+      if let status=view.taskStatus, status.phase != "idle" {
+        VStack(alignment:.leading,spacing:4) {
+          Text(["running":"执行中","unknown":"执行状态待确认","waiting":"等待你处理","delivering":"整理与投递本轮回答","stopping":"正在请求停止"][status.phase] ?? "状态待确认").font(.subheadline.weight(.medium))
+          if let start=status.startedAt { Text("本轮已用时 \(max(0,Int((Date().timeIntervalSince1970*1000-start)/60000))) 分钟").font(.caption) }
+          if let at=status.confirmedAt { Text("最近执行确认：" + Date(timeIntervalSince1970:at/1000).formatted(date:.omitted,time:.standard)).font(.caption) }
+          if let summary=status.summary { Text(verbatim:summary).font(.caption).lineLimit(2) }
+        }.foregroundStyle(.secondary).padding(.horizontal,18).padding(.bottom,8)
+      }
       Divider()
       ScrollViewReader { reader in
         ScrollView {

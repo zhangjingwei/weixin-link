@@ -8,6 +8,8 @@ struct Snapshot: Decodable {
     struct File: Decodable, Hashable { let name, path: String; let root, sourcePath, delivery: String? }
     let name, project, thread, turn, writer: String
     let revision: Int
+    struct TaskStatus: Decodable { let phase: String; let startedAt, confirmedAt: Double?; let summary: String? }
+    let taskStatus: TaskStatus?
     let progress: [String]?
     let diff:String?
     let messages: [Message], files: [File]
