@@ -14,7 +14,14 @@ export class TextConversations{
  recipient(key){return this.entry(key)?.owner??key}
  find(owner,id){const r=this.ensure(owner);return id?r.entries.find(e=>e.id.toLowerCase()===id.toLowerCase()||this.manager.state.users[e.key]?.threadId===id):r.entries.find(e=>e.id===r.active)}
  // Called synchronously at message arrival, before any asynchronous work or download.
- bind(message){const owner=message.userId,r=this.ensure(owner);const media=message.images?.length||message.files?.length||message.videos?.length||message.voices?.length,waiting=media?null:r.prompt,parsed=this.parseInput(message.text,{pending:waiting}),command=media?null:parsed.command;let error;const priorActive=r.active;
+ bind(message){const owner=message.userId,r=this.ensure(owner);const media=message.images?.length||message.files?.length||message.videos?.length||message.voices?.length,waiting=media?null:r.prompt,parsed=this.parseInput(message.text,{pending:waiting});
+ // Claude has no Codex management MCP. Only a live, owned interaction enables this narrow reply path.
+ if(this.manager.protocol?.kind==='claude'&&!media&&!parsed.command&&!parsed.sessionCommand&&
+    [...this.manager.questions.values()].some(q=>this.recipient(q.session.userId)===owner)){
+  const decision={批准:'approve',拒绝:'reject',回答:'answer',approve:'approve',reject:'reject',answer:'answer'}[message.text?.trim().toLowerCase()]
+  if(decision)parsed.command={action:'prompt',target:'approvalChoice',decision}
+ }
+ const command=media?null:parsed.command;let error;const priorActive=r.active;
  const promptReply=!!waiting&&parsed.promptResult!=='keep';
  const messageId=message.raw?.message_id??message.raw?.client_id;r.bindings??={};const saved=messageId===undefined?null:r.bindings[String(messageId)];if(saved)return {...message,userId:saved.key,_conversationOwner:owner,_conversationCommand:Object.hasOwn(saved,'command')?saved.command:command,_sessionCommand:Object.hasOwn(saved,'sessionCommand')?saved.sessionCommand:parsed.sessionCommand,_promptReply:saved.promptReply??promptReply};
  if(parsed.promptResult==='done')delete r.prompt;

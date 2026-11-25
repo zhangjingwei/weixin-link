@@ -693,6 +693,10 @@ export class SessionManager {
         if(this.nativeQueueReply)session.reply=(value,options)=>this.nativeQueueReply(job.owner,value,options)
       }
     }
+    if(message.method==='agent/activity'){
+      if(session.busy&&p.turnId===session.turnId&&!session.finalReceived)session.executionEvidenceAt=Date.now()
+      return
+    }
     const streamKind=streamKinds.get(message.method)
     if(streamKind){
       if(!session.busy || !session.turnReady || session.finalReceived || p.turnId!==session.turnId ||
@@ -862,6 +866,7 @@ export class SessionManager {
     return true
   }
   async steer(userId, text, reply, token, expected, chatReceipt) {
+    if(this.protocol.kind==='claude'){await reply('Claude Code 首版尚未确认执行中补充能力；请等当前任务结束再发送新消息。本条未提交。');return {status:'not_sent'}}
     if(!text){await reply('请说明要补充的内容，以及要补充到哪个任务。');return}
     const session=this.sessions.get(userId)
     if(expected&&(!session||session.traceId!==expected.traceId||session.turnId!==expected.turnId))throw Error('MANAGEMENT_STALE_TASK')

@@ -4,6 +4,8 @@
 
 ## 直接 npm 依赖
 
+- `@anthropic-ai/claude-agent-sdk` 0.3.319：官方 npm 包，来源 https://github.com/anthropics/claude-agent-sdk-typescript；包标注 `SEE LICENSE IN README.md`，受上游 README 所链接 Anthropic Commercial Terms 等条款约束，不属于本项目 MIT 授权。仅作原版 Claude Code CLI 的宿主接口，不修改或重新授权该 CLI；锁文件记录来源与完整性。
+
 以下依据本仓库 package-lock.json 中声明的版本和 license 字段整理。它是清单，不替代各包随附的 LICENSE、NOTICE、源码提供要求或实际构建核查。
 
 - `@napi-rs/canvas` 1.0.11：MIT。

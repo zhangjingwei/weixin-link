@@ -105,6 +105,8 @@ Windows x64（PowerShell）：
 
 在电脑的 Codex CLI 或桌面端聊过后，可以在微信说“接着刚才那条聊”。近期有多条候选时，回复标题、文件夹名或序号即可。也可以说“看看电脑最近的会话”。
 
+可选接入个人订阅登录的 Claude Code CLI，配置方式与首版能力边界见 [Claude Code 接入](docs/features/claude-code.md)。Codex 保持默认；两种底座的会话和队列独立保存。
+
 微信助手供一个人使用，沿用个人 Codex 的登录和会话目录。卸载会保留微信数据和工作区。
 
 支持 Linux（x64、arm64）、macOS（Intel、Apple Silicon）和 Windows（x64）。
